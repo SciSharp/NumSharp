@@ -71,8 +71,10 @@ namespace NumSharp.Backends
             // before anything else, and with a string operand it either refuses (its text) or computes on text (the next
             // phase of the string support). Two typecode reads when no operand is a string.
             // (An empty broadcast of a computing string loop is decided by the shapes: BinaryGuard returns that result.)
+            // NumPy's ufunc returns a 0-d result without out= as a SCALAR (PyArray_Return: np.add(np.array(1), 1) is
+            // np.int64(2)): every exit below routes a fresh result through it; out= comes back as given.
             if (Strings.NDStringUfuncs.BinaryGuard(UfuncName(op), lhs, rhs, @out, dtype, where) is { } textResult)
-                return textResult;
+                return @out is null ? textResult.PyArray_Return() : textResult;
 
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -176,11 +178,13 @@ namespace NumSharp.Backends
             {
                 var patches = NumPyFMaxFMinPatches(lhs, rhs, op == BinaryOp.FMax, resultType, @out, where);
                 var result = ExecuteBinaryOpResolved(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
+                // The positions are written into the result first; only then does a 0-d one become the scalar.
                 patches?.ApplyTo(result, this);
-                return result;
+                return @out is null ? result.PyArray_Return() : result;
             }
 
-            return ExecuteBinaryOpResolved(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
+            var resolved = ExecuteBinaryOpResolved(lhs, rhs, op, lhsType, rhsType, resultType, @out, where);
+            return @out is null ? resolved.PyArray_Return() : resolved;
         }
 
         /// <summary>
@@ -235,9 +239,11 @@ namespace NumSharp.Backends
             // NumPy's ufunc output layout (parity QA-36): a fresh result follows the operands' K order, so a permuted or F
             // operand keeps its memory order. The routes below write C (or F for an all-F set), so when the K layout is
             // something else the operands are transposed into it (views: a dense permuted operand becomes C-contiguous) and
-            // the C result is relabelled. C-ordered operands (MayNeedKOrder) and an all-F pair, which the routes lay out F
-            // themselves (IsAllStrictF), skip it without a broadcast or a plan.
-            if (!kOrderResolved && MayNeedKOrder(lhs.Shape, rhs.Shape) && !IsAllStrictF(lhs.Shape, rhs.Shape))
+            // the C result is relabelled. C-ordered operands (MayNeedKOrder) and a set NumPy's trivial loop lays out F,
+            // which the routes lay out F themselves (plain F strides, TrivialLoopLaysOut), skip it without a broadcast or a
+            // plan; an F set with a cast N-D input or a broadcast is NpyIter's, whose extent-1 strides only the plan gives.
+            if (!kOrderResolved && MayNeedKOrder(lhs.Shape, rhs.Shape)
+                && !TrivialLoopLaysOut(lhs, rhs, lhsType != resultType, rhsType != resultType, out _))
             {
                 var (kl, _) = Broadcast(lhs.Shape, rhs.Shape);
                 if (TryKOrderPlan(kl.dimensions, new[] { lhs.Shape, rhs.Shape }, out var kLayout, out var kPerm))

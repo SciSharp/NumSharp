@@ -10,7 +10,9 @@ namespace NumSharp
         ///     <c>p[0]*x**n + p[1]*x**(n-1) + ... + p[n]</c>.
         /// </summary>
         /// <param name="p">Rank-1 array of polynomial coefficients.</param>
-        /// <returns>The roots — the eigenvalues of the companion matrix.</returns>
+        /// <returns>The roots — the eigenvalues of the companion matrix, then one zero per trailing zero coefficient: real
+        ///     (float64, float32 for a float32 polynomial) when the coefficients are real and every eigenvalue is — NumPy 2.5's
+        ///     <c>_to_real_if_imag_zero</c> over the always complex eigvals — complex otherwise.</returns>
         /// <exception cref="ValueError"><paramref name="p"/> is not rank 1 after <c>atleast_1d</c> (<c>Input must be a rank-1
         ///     array.</c>).</exception>
         /// <exception cref="ValueError">A text coefficient between the first and last non-empty one that does not parse as a

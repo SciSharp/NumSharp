@@ -62,7 +62,7 @@ namespace NumSharp.Interop.OpenBLAS
         #region Products (CBLAS inner / vdot / vecdot / matvec / vecmat)
 
         // The rest of what NumPy sends to cblas beyond dot/matmul. Each is a route-for-route port of
-        // NumPy 2.4.2's own dispatcher (cblasfuncs.c / matmul.c.src / vdot.c), so where the managed
+        // NumPy 2.5.4's own dispatcher (cblasfuncs.c / matmul.c.src / vdot.c), so where the managed
         // composition reassociates the sum differently — vecdot's Multiply+ReduceAdd, complex vdot's
         // conj-then-dotu, complex vecmat's conj-then-gemv — this computes the byte-identical answer.
         // They answer for float32/float64/complex128 (complex128 only when the complex products are

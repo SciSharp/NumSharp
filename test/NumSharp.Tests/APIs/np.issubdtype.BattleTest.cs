@@ -126,24 +126,18 @@ public class NpIsSubdtypeBattleTests
     #region NDArray Overload
 
     /// <summary>
-    /// NumSharp's array convenience takes a DTYPE string, as the second argument of every issubdtype overload does
-    /// (NumPy itself refuses an array argument; ported code writes <c>arr.dtype</c>).
+    /// An array is asked through its dtype: NumPy refuses an array argument (<c>np.issubdtype(arr, 'i4')</c> raises
+    /// <c>TypeError: Cannot construct a dtype from an array</c>), and NumSharp's NDArray convenience went in API-parity
+    /// batch 9, so a C# array argument no longer compiles. The second argument is still a dtype string or class.
     /// </summary>
     [TestMethod]
-    public void IsSubdtype_NDArray_String()
+    public void IsSubdtype_ArrayDtype_String()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        np.issubdtype(arr, "i4").Should().BeTrue();
-        np.issubdtype(arr, "f8").Should().BeFalse();
+        np.issubdtype(arr.dtype, "i4").Should().BeTrue();
+        np.issubdtype(arr.dtype, "f8").Should().BeFalse();
         np.issubdtype(arr.dtype, np.integer).Should().BeTrue();
         np.issubdtype(arr.dtype, np.floating).Should().BeFalse();
-    }
-
-    /// <summary>A null array is refused.</summary>
-    [TestMethod]
-    public void IsSubdtype_NDArray_Null_Throws()
-    {
-        new Action(() => np.issubdtype((NDArray)null!, "i4")).Should().Throw<ArgumentNullException>();
     }
 
     #endregion

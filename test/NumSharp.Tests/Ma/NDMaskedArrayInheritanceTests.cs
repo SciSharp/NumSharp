@@ -49,11 +49,12 @@ namespace NumSharp.Tests.Ma
             var r2 = np.ma.add(soft, X());
             Convert.ToDouble(r2.fill_value).Should().Be(3.0);
             r2.hardmask.Should().BeFalse();
-            // The fill value is RAW: an int64 operand's 7 stays an int64 on sqrt's float64 result (NumPy's getter says
-            // np.int64(7)), and a comparison FUNCTION keeps the float 7.5.
+            // Across a dtype change the inherited fill is CONVERTED to the result's dtype (NumPy 2.5.4's _update_from:
+            // _check_fill_value_or_default): an int64 operand's 7 is 7.0 on sqrt's float64 result, and a comparison
+            // FUNCTION's bool result stores True for 7.5 (NumPy 2.4 kept the raw np.int64(7) / 7.5).
             var xi = np.ma.array(L(1, 2), mask: M(1, 0), fill_value: 7L, hard_mask: true);
-            np.ma.sqrt(xi).fill_value.Should().Be(7L);
-            Convert.ToDouble(np.ma.greater(X(), 2.0).fill_value).Should().Be(7.5);
+            np.ma.sqrt(xi).fill_value.Should().Be(7.0);
+            np.ma.greater(X(), 2.0).fill_value.Should().Be(true);
         }
 
         [TestMethod]

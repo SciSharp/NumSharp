@@ -2,7 +2,7 @@
 """NumPy 1.26.4 oracle for np.find_common_type -> test/NumSharp.Tests/Logic/corpus/find_common_type.numpy1264.jsonl.
 
 np.find_common_type was deprecated in NumPy 1.25 and REMOVED in NumPy 2.0, so its last behaviour is NumPy 1.26.4's:
-the oracle needs that NumPy, not the repository's 2.4.2. Run it from a scratch environment:
+the oracle needs that NumPy, not the repository's pinned 2.5.4. Run it from a scratch environment:
 
     python -m venv <dir> && <dir>/Scripts/python -m pip install numpy==1.26.4    (Linux: <dir>/bin/python)
     <dir>/Scripts/python test/oracle/gen_find_common_type_oracle.py

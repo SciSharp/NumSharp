@@ -22,8 +22,25 @@ namespace NumSharp
     /// </remarks>
     public class DTypePromotionError : TypeError
     {
-        public DTypePromotionError() : base("DTypePromotionError") { }
+        /// <summary>
+        ///     Creates the error with Python's text for a bare <c>raise DTypePromotionError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(np.exceptions.DTypePromotionError())</c> is <c>''</c>.
+        /// </summary>
+        /// <remarks>Prefer one of NumPy's two texts listed on the class: they name the DTypes that found no common
+        ///     DType.</remarks>
+        public DTypePromotionError() : base(string.Empty) { }
+
+        /// <summary>Creates the error with NumPy's message.</summary>
+        /// <param name="message">The text NumPy raises, verbatim (<c>The DTypes ... do not have a common DType. ...</c>).</param>
         public DTypePromotionError(string message) : base(message) { }
+
+        /// <summary>
+        ///     Creates the error with NumPy's message and the exception that caused it: Python's <c>raise
+        ///     DTypePromotionError(message) from innerException</c>, the cause kept in
+        ///     <see cref="Exception.InnerException"/>.
+        /// </summary>
+        /// <param name="message">The text NumPy raises, verbatim.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
         public DTypePromotionError(string message, Exception innerException) : base(message, innerException) { }
     }
 }

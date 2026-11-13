@@ -173,7 +173,7 @@ namespace NumSharp.Backends.Unmanaged
             {
                 int isNull = Allocator.load(Address + index * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, out byte* buf, out long size);
                 if (isNull < 0)
-                    throw new OutOfMemoryException("Failed to load string in StringDType getitem");
+                    throw new MemoryError("Failed to load string in StringDType getitem");
                 if (isNull == 1)
                     return HasNAObject ? Descr.VString.na_object : string.Empty;
                 return Decode(buf, size);
@@ -217,7 +217,7 @@ namespace NumSharp.Backends.Unmanaged
                 {
                     int isNull = NDVStringCells.Load(cell, arena, out byte* buf, out long size);
                     if (isNull < 0)
-                        throw new OutOfMemoryException("Failed to load string in StringDType getitem");
+                        throw new MemoryError("Failed to load string in StringDType getitem");
                     destination[i] = isNull == 1 ? na : Decode(buf, size);
                 }
             }
@@ -237,7 +237,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <exception cref="ValueError">A value that is not text under <c>coerce=False</c>.</exception>
         /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c>.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>Failed to pack string during StringDType setitem</c>.</exception>
         [System.Runtime.CompilerServices.SkipLocalsInit]
         public void SetIndex(long index, object value)
         {
@@ -269,7 +269,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <exception cref="ValueError">A value that is not text under <c>coerce=False</c>.</exception>
         /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c> (or
+        /// <exception cref="MemoryError">NumPy's <c>Failed to pack string during StringDType setitem</c> (or
         ///     <c>Failed to pack null string during StringDType setitem</c> for an NA element).</exception>
         /// <remarks>
         ///     <para>
@@ -347,7 +347,7 @@ namespace NumSharp.Backends.Unmanaged
                     {
                         // A string equal to the NA object: pack_null of a fresh cell sets the missing flag, no arena.
                         if (Allocator.pack_null(cell) < 0)
-                            throw new OutOfMemoryException("Failed to pack null string during StringDType setitem");
+                            throw new MemoryError("Failed to pack null string during StringDType setitem");
                         continue;
                     }
                     if (TryWriteShortAscii(cell, text))
@@ -424,7 +424,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="text">The element's text.</param>
         /// <exception cref="UnicodeEncodeError">The text holds a lone surrogate (CPython's text, raised by the exact size).</exception>
         /// <exception cref="OverflowException">The UTF-8 form is longer than <see cref="int.MaxValue"/> bytes.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c>: the arena
+        /// <exception cref="MemoryError">NumPy's <c>Failed to pack string during StringDType setitem</c>: the arena
         ///     cannot grow.</exception>
         /// <remarks>
         ///     The bump pointer (<see cref="VStringAllocator.AppendFresh"/>) declines when the reservation is used up (an
@@ -442,7 +442,7 @@ namespace NumSharp.Backends.Unmanaged
             if (slot == null)
             {
                 if (Allocator.newemptysize(size, cell) < 0)
-                    throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
+                    throw new MemoryError("Failed to pack string during StringDType setitem");
                 slot = Allocator.VStringBuffer(cell);
             }
             NDUtf8.EncodeExact(text, slot, size);
@@ -577,19 +577,19 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="cell">The cell.</param>
         /// <param name="isNA">True to pack an NA cell.</param>
         /// <param name="utf8">The UTF-8 text (ignored for an NA cell).</param>
-        /// <exception cref="OutOfMemoryException">NumPy's setitem <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's setitem <c>MemoryError</c> texts.</exception>
         private void PackValue(byte* cell, bool isNA, ReadOnlySpan<byte> utf8)
         {
             if (isNA)
             {
                 if (Allocator.pack_null(cell) < 0)
-                    throw new OutOfMemoryException("Failed to pack null string during StringDType setitem");
+                    throw new MemoryError("Failed to pack null string during StringDType setitem");
                 return;
             }
             fixed (byte* b = utf8)
             {
                 if (Allocator.pack(cell, b, utf8.Length) < 0)
-                    throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
+                    throw new MemoryError("Failed to pack string during StringDType setitem");
             }
         }
 
@@ -626,7 +626,7 @@ namespace NumSharp.Backends.Unmanaged
         ///     per element, in order, so the copy's arena is compact); NA cells stay NA.
         /// </summary>
         /// <returns>The copy.</returns>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to allocate string in string to string cast</c>.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>Failed to allocate string in string to string cast</c>.</exception>
         public IArraySlice Clone()
         {
             var copy = Allocate(Descr, Count);

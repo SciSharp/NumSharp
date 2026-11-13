@@ -23,6 +23,8 @@ namespace NumSharp.Backends
                     return UnwrapImpl(p, discont, axis, l, periodIsInteger: true, periodInt: l);
                 case int i:
                     return UnwrapImpl(p, discont, axis, i, periodIsInteger: true, periodInt: i);
+                case NDArray array:
+                    return UnwrapArrayPeriod(p, discont, axis, array);
                 default:
                     throw new ArgumentException(
                         $"period must be a double (a Python float) or an integer (a Python int), not {period.GetType().Name}",
@@ -31,7 +33,75 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The statements behind both <c>np.unwrap</c> overloads, once <see cref="Unwrap"/> has read the period's
+        ///     np.unwrap with an <see cref="NDArray"/> period (the facade's one signature): a C# number is NumPy's WEAK
+        ///     Python scalar (the integer or the float path, as the old long / double overloads computed), anything else a
+        ///     STRONG period whose dtype joins the result: <c>dtype = result_type(diff(p), period)</c>.
+        /// </summary>
+        /// <param name="p">Input array.</param>
+        /// <param name="discont">Discontinuity threshold, or <c>null</c> for <c>period/2</c>.</param>
+        /// <param name="axis">Axis to unwrap along.</param>
+        /// <param name="period">The period: a 0-d array or a one-element array.</param>
+        /// <returns>The unwrapped array.</returns>
+        /// <exception cref="TypeError">A text period (<c>unsupported operand type(s) for /: 'str' and 'int'</c>: NumPy's
+        ///     default <c>discont = period/2</c>), or a complex one (the remainder ufunc's refusal).</exception>
+        /// <exception cref="NotSupportedException">A period of several elements (NumPy broadcasts it into the elementwise
+        ///     steps), or a Python bool period over a bool <paramref name="p"/> (NumPy computes that one in bool).</exception>
+        /// <exception cref="ValueError"><paramref name="p"/> is 0-D (from <see cref="UnwrapImpl"/>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="OverflowError">An integer interval bound that the computing dtype cannot hold.</exception>
+        private static NDArray UnwrapArrayPeriod(NDArray p, double? discont, int axis, NDArray period)
+        {
+            if (p is null) throw new ArgumentNullException(nameof(p));
+            // NumPy's first statement that reads the period is `discont = period/2` (when discont is None) - text has no
+            // `/` with an int; a complex period then dies in the remainder ufunc, as a complex p does.
+            if (Strings.NDStringUfuncs.IsText(period))
+                throw new TypeError("unsupported operand type(s) for /: 'str' and 'int'");
+            if (period.typecode == NPTypeCode.Complex)
+                throw new TypeError(
+                    "ufunc 'remainder' not supported for the input types, and the inputs " +
+                    "could not be safely coerced to any supported types according to the " +
+                    "casting rule ''safe''");
+            if (period.size != 1)
+                throw new NotSupportedException(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"np.unwrap: a period of {period.size} elements is not supported (NumPy broadcasts it into the elementwise steps); pass one number."));
+
+            object value = period.GetAtIndex(0);
+            bool integerKind = period.typecode is NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte or
+                NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or
+                NPTypeCode.UInt64 or NPTypeCode.Char;
+
+            // A C# number is NumPy's weak Python scalar: only its kind matters (an int / bool keeps the input's integer
+            // dtype, a float the input's float width), exactly the old overloads' two paths.
+            if (period.WasPythonLiteral || period.WasPythonBool)
+            {
+                if (period.WasPythonBool && p.typecode == NPTypeCode.Boolean)
+                    throw new NotSupportedException(
+                        "np.unwrap: a bool period over a bool array is not supported (NumPy computes it in bool).");
+                if (integerKind)
+                {
+                    long asLong = Convert.ToInt64(value is bool b ? (b ? 1 : 0) : value);
+                    return UnwrapImpl(p, discont, axis, asLong, periodIsInteger: true, periodInt: asLong);
+                }
+                return UnwrapImpl(p, discont, axis, Convert.ToDouble(value), periodIsInteger: false, periodInt: 0);
+            }
+
+            // A strong period (a NumPy scalar, a 0-d array): NumPy's dtype = result_type(dd, period), with dd = diff(p) in
+            // p's own dtype (diff of bool is bool). The integer path is taken iff that dtype is an integer.
+            var resultDtype = DTypePromotion.ResultType(p.dtype, period.dtype);
+            bool integerResult = resultDtype.typecode is NPTypeCode.Byte or NPTypeCode.SByte or NPTypeCode.Int16 or
+                NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 or
+                NPTypeCode.Char;
+            if (integerResult)
+            {
+                long asLong = Convert.ToInt64(value is bool b ? (b ? 1 : 0) : value);
+                return UnwrapImpl(p, discont, axis, asLong, periodIsInteger: true, periodInt: asLong, strongDtype: resultDtype);
+            }
+            double asDouble = value is bool bb ? (bb ? 1.0 : 0.0) : Convert.ToDouble(value);
+            return UnwrapImpl(p, discont, axis, asDouble, periodIsInteger: false, periodInt: 0, strongDtype: resultDtype);
+        }
+
+        /// <summary>
+        ///     The statements behind np.unwrap, once <see cref="Unwrap"/> has read the period's
         ///     Python type. Mirrors NumPy's composition exactly; np.unwrap.cs's file header has the algorithm and the
         ///     integer/float path rationale.
         /// </summary>
@@ -45,12 +115,15 @@ namespace NumSharp.Backends
         ///     takes the float path regardless (NumPy's <c>issubdtype(result_type(dd, period), integer)</c>).
         /// </param>
         /// <param name="periodInt">The integer period value (valid only when <paramref name="periodIsInteger"/>).</param>
+        /// <param name="strongDtype">A STRONG period's result dtype, <c>result_type(diff(p), period)</c> (a NumPy scalar or a
+        ///     0-d array period), or <c>null</c> for a weak Python-number period: the computation then runs in this dtype
+        ///     (diff in p's own dtype, then cast), the integer path exactly when it is an integer.</param>
         /// <returns>The unwrapped array (see the overloads for dtype/shape).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="p"/> is null.</exception>
         /// <exception cref="ValueError"><paramref name="p"/> is 0-D.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="p"/>'s rank.</exception>
         /// <exception cref="TypeError"><paramref name="p"/> is complex.</exception>
-        /// <exception cref="OverflowException">An integer interval bound or the period does not fit the input
+        /// <exception cref="OverflowError">An integer interval bound or the period does not fit the input
         ///     dtype (NumPy's OverflowError, see the public overloads).</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: <c>diff</c>, the fused correction, its cumulative sum, the
         ///     <c>p[1:]</c>/<c>up[1:]</c> views, the tail and its cast are released on return, and <c>up</c> is
@@ -59,7 +132,7 @@ namespace NumSharp.Backends
         ///     <c>diff</c> as soon as the int64 copy exists, so that full-size array is not held to the peak.</remarks>
         [NDScoped]
         private static NDArray UnwrapImpl(NDArray p, double? discont, int axis, double period,
-                                          bool periodIsInteger, long periodInt)
+                                          bool periodIsInteger, long periodInt, DType strongDtype = null)
         {
             if (p is null) throw new ArgumentNullException(nameof(p));
 
@@ -98,6 +171,10 @@ namespace NumSharp.Backends
                 tc == NPTypeCode.UInt32 || tc == NPTypeCode.Int64 || tc == NPTypeCode.UInt64 ||
                 tc == NPTypeCode.Char;
             bool integerPath = inputIntegerFamily && periodIsInteger;
+            // A strong period: NumPy's issubdtype(result_type(dd, period), integer) on the joined dtype.
+            if (strongDtype is not null)
+                integerPath = periodIsInteger && strongDtype.typecode is not (NPTypeCode.Boolean or NPTypeCode.Half or
+                    NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal or NPTypeCode.Complex);
 
             // discont defaults to period/2 — Python `period/2` is TRUE division, a float,
             // even on the integer path, so discont is always a real threshold.
@@ -117,6 +194,9 @@ namespace NumSharp.Backends
             else if (integerPath && tc != NPTypeCode.Boolean) { outdt = p.dtype; outTc = tc; }
             else if (integerPath) { outdt = np.int64; outTc = NPTypeCode.Int64; }   // bool -> int64
             else { outdt = np.float64; outTc = NPTypeCode.Double; }
+            // A strong period joins the result dtype (result_type(dd, period)) - e.g. an int8 p with np.int64(4) is int64,
+            // with np.float32(4) float32.
+            if (strongDtype is not null) { outdt = strongDtype; outTc = strongDtype.typecode; }
 
             // Interval half-width and the "boundary is ambiguous" flag.
             long intervalLowI = 0, intervalHighI = 0;
@@ -142,7 +222,7 @@ namespace NumSharp.Backends
                 // error, value and order up front so it fires for empty inputs too (NumPy's
                 // does) and the fused kernel is only ever built for representable scalars —
                 // interval_low is checked before period (the order NumPy hits them).
-                NPTypeCode computeTc = tc == NPTypeCode.Boolean ? NPTypeCode.Int64 : tc;
+                NPTypeCode computeTc = strongDtype is not null ? outTc : tc == NPTypeCode.Boolean ? NPTypeCode.Int64 : tc;
                 NDExprTypeRules.CheckIntLiteralFits(intervalLowI, computeTc);   // dd - interval_low
                 NDExprTypeRules.CheckIntLiteralFits(periodInt, computeTc);      // mod(., period)
             }
@@ -176,7 +256,15 @@ namespace NumSharp.Backends
             // weak interval scalars against bool (and reject the negative interval_low). Every
             // other integer dtype already equals its own compute dtype, so this only fires for
             // bool. The int64 dd, ph_correct, cumsum and int64 output all follow.
-            if (integerPath && tc == NPTypeCode.Boolean)
+            // A strong period's dtype: diff ran in p's own dtype (an unsigned diff wraps, as NumPy's does), and the rest
+            // computes in result_type(dd, period) - NumPy's ufuncs cast dd to it.
+            if (strongDtype is not null && dd.GetTypeCode != outTc)
+            {
+                var ddJoined = dd.astype(outdt);
+                dd.Dispose();
+                dd = ddJoined;
+            }
+            else if (integerPath && tc == NPTypeCode.Boolean)
             {
                 var ddPromoted = dd.astype(np.int64);
                 // A mid-method release of a full-size intermediate: the bool diff is dead the moment

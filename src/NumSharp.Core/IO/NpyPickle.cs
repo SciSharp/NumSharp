@@ -88,7 +88,7 @@ namespace NumSharp.IO
         /// <exception cref="ArgumentException"><paramref name="array"/> is not a <c>StringDType</c> array.</exception>
         /// <exception cref="NotSupportedException">The descriptor's missing-data object has no pickle form NumSharp writes
         ///     (only <c>None</c>, a float, a string, a bool and a Python int do).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt cell (NumPy's <c>Failed to load string in StringDType getitem</c>).</exception>
+        /// <exception cref="MemoryError">A corrupt cell (NumPy's <c>Failed to load string in StringDType getitem</c>).</exception>
         internal static void WriteStringDTypeArray(Stream stream, NDArray array)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
@@ -341,7 +341,7 @@ namespace NumSharp.IO
             /// <param name="slice">The cells' slice (for its allocator).</param>
             /// <param name="cell">The cell.</param>
             /// <param name="p">The descriptor's parameters.</param>
-            /// <exception cref="OutOfMemoryException">A corrupt cell (NumPy's getitem text).</exception>
+            /// <exception cref="MemoryError">A corrupt cell (NumPy's getitem text).</exception>
             private void SaveElement(VStringArraySlice slice, byte* cell, VStringParameters p)
             {
                 Boundary();
@@ -355,7 +355,7 @@ namespace NumSharp.IO
                 {
                     int isNull = allocator.load(cell, out byte* buf, out long size);
                     if (isNull < 0)
-                        throw new OutOfMemoryException("Failed to load string in StringDType getitem");
+                        throw new MemoryError("Failed to load string in StringDType getitem");
                     if (isNull == 1)
                     {
                         // A descriptor without an NA object reads an NA cell as '' (stringdtype_getitem).
@@ -898,7 +898,7 @@ namespace NumSharp.IO
         /// <exception cref="NotSupportedException">The graph is not that pickle.</exception>
         /// <exception cref="FormatException">The state is inconsistent (an element count that is not the shape's).</exception>
         /// <exception cref="ValueError">An element that is not text under <c>coerce=False</c> (setitem's refusal).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c>.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>Failed to pack string during StringDType setitem</c>.</exception>
         private static NDArray BuildArray(object root, PickleReader reader)
         {
             if (root is not PyCall call || call.Callable is not PyGlobalRef rec || rec.Name != "_reconstruct"
@@ -937,7 +937,7 @@ namespace NumSharp.IO
             // in the same order as in NumPy and the cells come out identical.
             bool fortran = isFortran && shape.Length > 1;
             NDArray result = fortran
-                ? np.empty(new Shape(shape, copy: false), 'F', descr)
+                ? np.empty(new Shape(shape, copy: false), descr, 'F')
                 : np.empty(new Shape(shape, copy: false), descr);
             try
             {
@@ -961,7 +961,7 @@ namespace NumSharp.IO
         /// <param name="shape">The array's dimensions.</param>
         /// <param name="fortran">True for an F array of two or more dimensions.</param>
         /// <exception cref="ValueError">A non-text element under <c>coerce=False</c>.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's setitem <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's setitem <c>MemoryError</c> texts.</exception>
         /// <remarks>
         ///     <para>
         ///     A text element is packed straight from the pickle's UTF-8 bytes. The reader validated them when it read the
@@ -1024,7 +1024,7 @@ namespace NumSharp.IO
                         ? allocator.pack_null(cell)
                         : allocator.pack(cell, text, item.Length);
                     if (rc < 0)
-                        throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
+                        throw new MemoryError("Failed to pack string during StringDType setitem");
                 }
             }
             finally

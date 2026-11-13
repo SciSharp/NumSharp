@@ -10,7 +10,7 @@ namespace NumSharp.Interop.OpenBLAS
     {
         // The CBLAS product family NumPy routes through cblas beyond dot/matmul —
         // np.inner / np.vdot / np.vecdot / np.matvec / np.vecmat. Ported route-for-route from NumPy
-        // 2.4.2, because the compositions the engine falls back to (Multiply+ReduceAdd for vecdot,
+        // 2.5.4, because the compositions the engine falls back to (Multiply+ReduceAdd for vecdot,
         // conj+dot for vdot/vecmat) reassociate the sum differently than NumPy's cblas dot and so are
         // NOT byte-identical for complex. The two dot flavours are the whole story here:
         //   • UNCONJUGATED  (?dotu / @name@_dot)  — np.inner, np.matvec, and dot/matmul's row·column.

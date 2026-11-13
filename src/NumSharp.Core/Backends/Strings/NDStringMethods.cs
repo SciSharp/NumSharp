@@ -111,17 +111,17 @@ namespace NumSharp.Backends.Strings
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="operands">The inputs, in order (null = a Python-int default).</param>
         /// <returns>The exception (not thrown).</returns>
-        internal static TypeError NoLoop(string ufunc, params NDArray[] operands)
+        internal static UFuncNoLoopError NoLoop(string ufunc, params NDArray[] operands)
         {
-            var classes = new string[operands.Length];
+            // The inputs' classes, then the one output None.
+            var classes = new object[operands.Length + 1];
             // NumPy marks a Python scalar weak only for a ufunc of two or more inputs (convert_ufunc_arguments stops at the
             // first input when nin == 1): a one-input ufunc (the whitespace strips) names a C# literal by its default DType.
-            for (int i = 0; i < classes.Length; i++)
-                classes[i] = operands[i] is null ? DTypeRegistry.PyLong.ToString()
-                    : classes.Length == 1 ? NDStringUfuncs.UnaryDispatchClass(operands[i])
-                    : NDStringUfuncs.DispatchClass(operands[i]);
-            string types = classes.Length == 1 ? classes[0] : "(" + string.Join(", ", classes) + ")";
-            return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {types} -> None");
+            for (int i = 0; i < operands.Length; i++)
+                classes[i] = operands[i] is null ? DTypeRegistry.PyLong
+                    : operands.Length == 1 ? NDStringUfuncs.UnaryDispatchMeta(operands[i])
+                    : NDStringUfuncs.DispatchMeta(operands[i]);
+            return new UFuncNoLoopError(ufunc, operands.Length, classes);
         }
 
         /// <summary>
@@ -157,7 +157,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">The operand cannot reach int64 by a same_kind cast: <c>Cannot cast ufunc
         ///     'find' input 2 from dtype('float64') to dtype('int64') with casting rule 'same_kind'</c> (a C# double literal
         ///     is NumPy's Python float, named float64).</exception>
-        /// <exception cref="OverflowException">A C# literal past int64: <c>Python int too large to convert to C long</c>
+        /// <exception cref="OverflowError">A C# literal past int64: <c>Python int too large to convert to C long</c>
         ///     (NumPy's LP64 text).</exception>
         internal static NDArray LoopInt64(string ufunc, int index, NDArray x, long fallback)
         {
@@ -168,11 +168,11 @@ namespace NumSharp.Backends.Strings
                 switch (x.Storage.GetAtIndex(0))
                 {
                     case double or float:
-                        throw InputCast(ufunc, index, "dtype('float64')");
+                        throw InputCast(ufunc, index, DType.Double);
                     case System.Numerics.Complex:
-                        throw InputCast(ufunc, index, "dtype('complex128')");
+                        throw InputCast(ufunc, index, DType.Complex);
                     case ulong u when u > long.MaxValue:
-                        throw new OverflowException("Python int too large to convert to C long");
+                        throw new OverflowError("Python int too large to convert to C long");
                     case var v:
                         return NDArray.Scalar(Convert.ToInt64(v));
                 }
@@ -180,17 +180,17 @@ namespace NumSharp.Backends.Strings
             if (x.typecode == NPTypeCode.Int64)
                 return x;
             if (!DTypeCasting.CanCastTypeTo(x.dtype, Int64Descr, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw InputCast(ufunc, index, x.dtype.ToString(true));
+                throw InputCast(ufunc, index, x.dtype);
             return x.astype(np.int64);
         }
 
-        /// <summary>NumPy's input-cast refusal text into an int64 slot.</summary>
+        /// <summary>NumPy's input-cast refusal into an int64 slot of a ufunc of several inputs (its index printed).</summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="index">The input position.</param>
-        /// <param name="from">The source descriptor's repr.</param>
+        /// <param name="from">The source descriptor (a <see cref="DType"/>, or a placeholder NumPy prints the same way).</param>
         /// <returns>The exception (not thrown).</returns>
-        private static TypeError InputCast(string ufunc, int index, string from)
-            => new TypeError(string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {index} from {from} to dtype('int64') with casting rule 'same_kind'"));
+        private static UFuncInputCastingError InputCast(string ufunc, int index, object from)
+            => new UFuncInputCastingError(ufunc, 2, "same_kind", NDStringUfuncs.RequireDescr(from), DType.Int64, index);
 
         /// <summary>Disposes a temporary the call made (never the caller's operand).</summary>
         /// <param name="temp">The possibly-temporary array.</param>
@@ -258,13 +258,12 @@ namespace NumSharp.Backends.Strings
             var loop = ResolveOne(x);
             // A one-input ufunc marks no Python scalar weak: a C# literal is named by its default DType (Int64DType).
             if (dtype is not null && dtype.Meta != Int64Descr.Meta)
-                throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> {dtype.Meta}");
+                throw new UFuncNoLoopError("str_len", 1, NDStringUfuncs.UnaryDispatchMeta(x), dtype.Meta);
             if (loop == TextLoop.None)
-                throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> " +
-                                    (dtype is null ? "None" : dtype.Meta.ToString()));
+                throw new UFuncNoLoopError("str_len", 1, NDStringUfuncs.UnaryDispatchMeta(x), dtype?.Meta);
+            // The output is operand 1 of the one-input str_len.
             if (@out is not null && !DTypeCasting.CanCastTypeTo(Int64Descr, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError(
-                    $"Cannot cast ufunc 'str_len' output from {Int64Descr.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError("str_len", 1, "same_kind", Int64Descr, @out.dtype, 1);
             var shapeError = NDStringUfuncs.BroadcastError(x, null, @out, where);
             if (shapeError is not null)
                 throw shapeError;
@@ -338,13 +337,12 @@ namespace NumSharp.Backends.Strings
                 loop = TextLoop.None;
             // A one-input ufunc marks no Python scalar weak: a C# literal is named by its default DType (Int64DType).
             if (dtype is not null && dtype.Meta != DType.Boolean.Meta)
-                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> {dtype.Meta}");
+                throw new UFuncNoLoopError(ufunc, 1, NDStringUfuncs.UnaryDispatchMeta(x), dtype.Meta);
             if (loop == TextLoop.None)
-                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> " +
-                                    (dtype is null ? "None" : dtype.Meta.ToString()));
+                throw new UFuncNoLoopError(ufunc, 1, NDStringUfuncs.UnaryDispatchMeta(x), dtype?.Meta);
+            // The output is operand 1 of the one-input predicate.
             if (@out is not null && !DTypeCasting.CanCastTypeTo(DType.Boolean, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError(
-                    $"Cannot cast ufunc '{ufunc}' output from {DType.Boolean.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError(ufunc, 1, "same_kind", DType.Boolean, @out.dtype, 1);
             var shapeError = NDStringUfuncs.BroadcastError(x, null, @out, where);
             if (shapeError is not null)
                 throw shapeError;
@@ -471,7 +469,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">No loop for the operand classes; two <c>StringDType</c> operands with different NA
         ///     objects (raised before the int64 casts, NumPy's resolve_descriptors).</exception>
         /// <exception cref="TypeError">A start / end that cannot reach int64 by a same_kind cast.</exception>
-        /// <exception cref="OverflowException">A start / end literal past int64.</exception>
+        /// <exception cref="OverflowError">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The four operands do not broadcast.</exception>
         /// <exception cref="ValueError"><c>index</c> / <c>rindex</c> found no match; a <c>StringDType</c> NA its rule
         ///     refuses; a chararray input of the user's call that NumPy's trivial loop copies into <c>StringDType()</c> (0-d,
@@ -630,7 +628,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The sliced strings.</returns>
         /// <exception cref="TypeError">A non-text operand.</exception>
         /// <exception cref="TypeError">An index that cannot reach intp by a same_kind cast.</exception>
-        /// <exception cref="OverflowException">An index literal past int64.</exception>
+        /// <exception cref="OverflowError">An index literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> NA (<c>Cannot slice null string</c>).</exception>
         internal static NDArray Slice(NDArray a, NDArray start, NDArray stop, NDArray step)
@@ -790,7 +788,7 @@ namespace NumSharp.Backends.Strings
         {
             var loop = ResolveOne(a);
             if (loop is TextLoop.None or TextLoop.VString)
-                throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {NDStringUfuncs.DispatchClass(a)} -> None");
+                throw new UFuncNoLoopError("str_len", 1, NDStringUfuncs.DispatchMeta(a), null);
             // np.maximum(str_len(a), width): the shapes of str_len(a) (= a's) and width.
             return NDTextLoop.BroadcastDims(a, width);
         }
@@ -873,7 +871,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">A non-text operand (<c>_expandtabs_length</c>'s no-loop text).</exception>
         /// <exception cref="TypeError">A tab size that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="OverflowException">An expansion past 2^31 - 1 (<c>new string is too long</c>).</exception>
+        /// <exception cref="OverflowError">An expansion past 2^31 - 1 (<c>new string is too long</c>).</exception>
         /// <exception cref="ValueError">An empty broadcast.</exception>
         [ArrayWrap("a")]
         internal static NDArray ExpandTabs(NDArray a, NDArray tabsize)
@@ -892,7 +890,7 @@ namespace NumSharp.Backends.Strings
                 var sizeKey = new TextMethodKey(TextMethodOp.ExpandTabsSize, UnitOf(loop), a.dtype.itemsize);
                 NDTextLoop.ExecuteInputs(sizeKey, new[] { a, t64 }, acc);
                 if (acc[1] != 0)
-                    throw new OverflowException("new string is too long");
+                    throw new OverflowError("new string is too long");
                 if (NDTextLoop.Size(dims) == 0)
                     throw ZeroSizeMaximum();
                 var outDescr = np.strings.OutputDescriptor(a.dtype, acc[0], floatSizes: false);
@@ -921,7 +919,7 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     The fixed-width part of NumPy's <c>replace</c> after its T branch, statement for statement where a statement
-        ///     can fail: <c>old.astype(old_dtype or a_dt)</c>, <c>new.astype(...)</c>, <c>_count_ufunc(arr, old, 0, MAX)</c>,
+        ///     can fail: <c>old.astype(old_dtype or a_dt.char)</c>, <c>new.astype(...)</c>, <c>_count_ufunc(arr, old, 0, MAX)</c>,
         ///     <c>np.minimum(counts, count)</c>, <c>str_len(new) - str_len(old)</c>, <c>counts * …</c>,
         ///     <c>str_len(arr) + …</c>, <c>buffersizes.max()</c>, the descriptor, then <c>_replace</c>'s loop resolution and
         ///     the loop. The sizes themselves are one fused pass.
@@ -930,7 +928,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="old">The searched strings (<c>np.asanyarray</c>'d).</param>
         /// <param name="new">The replacements (<c>np.asanyarray</c>'d).</param>
         /// <param name="oldHasDtype">False when the caller's <c>old</c> was a Python str / bytes / number (no
-        ///     <c>dtype</c> attribute): NumPy then casts it to <c>arr</c>'s descriptor, truncating to its width.</param>
+        ///     <c>dtype</c> attribute): NumPy then casts it to <c>arr</c>'s string CLASS (<c>a_dt.char</c>: <c>'U'</c> /
+        ///     <c>'S'</c>, the unsized descriptor), keeping its own width — NumPy 2.5.4 (gh-32600); NumPy 2.4 cast it to
+        ///     <c>arr</c>'s descriptor and truncated it to <c>arr</c>'s width.</param>
         /// <param name="newHasDtype">The same for <c>new</c>.</param>
         /// <param name="count">The integer counts (<c>np.asanyarray</c>'d).</param>
         /// <returns>The replaced strings, laid out like <paramref name="arr"/>.</returns>
@@ -947,9 +947,11 @@ namespace NumSharp.Backends.Strings
             NDArray o = null, n = null, c64 = null;
             try
             {
-                // old = old.astype(old_dtype or a_dt, copy=False); new = new.astype(new_dtype or a_dt, copy=False)
-                o = oldHasDtype || old.dtype == aDt ? old : old.astype(aDt);
-                n = newHasDtype || @new.dtype == aDt ? @new : @new.astype(aDt);
+                // old = old.astype(old_dtype or a_dt.char, copy=False); new = new.astype(new_dtype or a_dt.char, copy=False):
+                // the unsized class descriptor ('U' / 'S'), which the cast adapts to the operand's own width (no truncation).
+                var unsized = aDt.Meta.singleton;
+                o = oldHasDtype || ReferenceEquals(old.dtype.Meta, aDt.Meta) ? old : old.astype(unsized, copy: false);
+                n = newHasDtype || ReferenceEquals(@new.dtype.Meta, aDt.Meta) ? @new : @new.astype(unsized, copy: false);
                 // counts = _count_ufunc(arr, old, 0, max_int64)
                 var loop = ResolvePair(arr, o);
                 if (loop is TextLoop.None or TextLoop.VString)
@@ -963,7 +965,7 @@ namespace NumSharp.Backends.Strings
                 bool floatSizes = count.typecode == NPTypeCode.UInt64;
                 // buffersizes = str_len(arr) + counts * (str_len(new) - str_len(old))
                 if (ResolveOne(n) is TextLoop.None)
-                    throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {NDStringUfuncs.DispatchClass(n)} -> None");
+                    throw new UFuncNoLoopError("str_len", 1, NDStringUfuncs.DispatchMeta(n), null);
                 long[] diffDims = BroadcastShapes(n.Shape.dimensions ?? Array.Empty<long>(), o);
                 long[] prodDims = BroadcastShapes(minDims, diffDims);
                 long[] dims = BroadcastShapes(arr.Shape.dimensions ?? Array.Empty<long>(), prodDims);
@@ -978,9 +980,8 @@ namespace NumSharp.Backends.Strings
                     // (no shape error is left: the checks above ran them in order).
                     using (var largest = MixedReplaceLargest(arr, o, n, count))
                         np.strings.OutputDescriptor(aDt, largest);
-                    throw new TypeError(
-                        $"ufunc '_replace' did not contain a loop with signature matching types ({NDStringUfuncs.DispatchClass(arr)}, " +
-                        $"{NDStringUfuncs.DispatchClass(o)}, {NDStringUfuncs.DispatchClass(n)}, {DType.From(NPTypeCode.Int64).Meta}) -> None");
+                    throw new UFuncNoLoopError("_replace", 4, NDStringUfuncs.DispatchMeta(arr), NDStringUfuncs.DispatchMeta(o),
+                        NDStringUfuncs.DispatchMeta(n), DType.From(NPTypeCode.Int64).Meta, null);
                 }
                 c64 = count.typecode == NPTypeCode.Int64 ? count : count.astype(np.int64);
                 long* acc = stackalloc long[1];
@@ -1078,7 +1079,8 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     The fixed-width part of NumPy's <c>partition</c> / <c>rpartition</c> after its T branch:
-        ///     <c>sep.astype(a.dtype)</c> (truncated to <paramref name="a"/>'s width), <c>_find_ufunc</c> /
+        ///     <c>sep.astype(a.dtype.char)</c> (<paramref name="a"/>'s string class, the separator keeping its own width:
+        ///     NumPy 2.5.4; 2.4 truncated it to <paramref name="a"/>'s width), <c>_find_ufunc</c> /
         ///     <c>_rfind_ufunc</c>'s resolution and broadcast, the three widths of the structured out= (the before-part's
         ///     maximum, 1 when no separator is found anywhere else the separators' longest, the after-part's maximum), the
         ///     loop's <c>ValueError: empty separator</c>, then the three parts.
@@ -1095,7 +1097,8 @@ namespace NumSharp.Backends.Strings
         ///     at width 0 (<c>'U0'</c>) is width 1.</remarks>
         internal static (NDArray Before, NDArray Separator, NDArray After) Partition(NDArray a, NDArray sep, bool back)
         {
-            var s = sep.dtype == a.dtype ? sep : sep.astype(a.dtype);
+            // sep = sep.astype(a.dtype.char, copy=False): the unsized class descriptor, adapted to sep's own width.
+            var s = ReferenceEquals(sep.dtype.Meta, a.dtype.Meta) ? sep : sep.astype(a.dtype.Meta.singleton, copy: false);
             try
             {
                 string find = back ? "rfind" : "find";

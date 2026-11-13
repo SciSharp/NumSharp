@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace NumSharp.Tests.APIs;
 
@@ -139,9 +140,12 @@ public class NpIInfoBattleTests
     }
 
     [TestMethod]
-    public void IInfo_NullArray_Throws()
+    public void IInfo_HasNoArrayOverload_AsNumPyRefusesAnArray()
     {
-        new Action(() => np.iinfo((NDArray)null!)).Should().Throw<Exception>();
+        // NumPy 2.4.2: np.iinfo(np.arange(3)) is "Invalid integer data type 'O'." (an array is not a dtype); API-parity
+        // batch 7 removed the NDArray form, so a C# array argument does not compile: pass arr.dtype.
+        typeof(np).GetMethods().Where(m => m.Name == "iinfo")
+            .Any(m => m.GetParameters().Any(p => p.ParameterType == typeof(NDArray))).Should().BeFalse();
     }
 
     [TestMethod]
@@ -158,44 +162,67 @@ public class NpIInfoBattleTests
 
     #endregion
 
-    #region Generic Overload Tests
+    #region C# type spellings (the generic iinfo<T> went in API-parity batch 9, OD7)
 
+    /// <summary>
+    ///     The generic <c>iinfo&lt;int&gt;()</c> went (OD7): <c>np.iinfo(typeof(int))</c> is NumPy's
+    ///     <c>np.iinfo(np.int32)</c> (32 bits, int.MinValue..int.MaxValue).
+    /// </summary>
     [TestMethod]
-    public void IInfo_Generic_Int()
+    public void IInfo_TypeofInt()
     {
-        var info = np.iinfo<int>();
+        // NumPy: np.iinfo(np.int32) bits 32, min -2147483648, max 2147483647.
+        var info = np.iinfo(typeof(int));
         info.bits.Should().Be(32);
         info.min.Should().Be(int.MinValue);
         info.max.Should().Be(int.MaxValue);
     }
 
+    /// <summary>
+    ///     <c>np.iinfo(typeof(byte))</c> is NumPy's <c>np.iinfo(np.uint8)</c> (8 bits, max 255).
+    /// </summary>
     [TestMethod]
-    public void IInfo_Generic_Byte()
+    public void IInfo_TypeofByte()
     {
-        var info = np.iinfo<byte>();
+        // NumPy: np.iinfo(np.uint8).max == 255.
+        var info = np.iinfo(typeof(byte));
         info.bits.Should().Be(8);
         info.max.Should().Be(255);
     }
 
+    /// <summary>
+    ///     <c>np.iinfo(typeof(long))</c> is NumPy's <c>np.iinfo(np.int64)</c> (64 bits).
+    /// </summary>
     [TestMethod]
-    public void IInfo_Generic_Long()
+    public void IInfo_TypeofLong()
     {
-        var info = np.iinfo<long>();
+        var info = np.iinfo(typeof(long));
         info.bits.Should().Be(64);
     }
 
+    /// <summary>
+    ///     <c>np.iinfo(typeof(bool))</c>, the C# type spelling the removed generic <c>iinfo&lt;bool&gt;()</c> migrated to:
+    ///     NumSharp's bool extension answers it (bits 8, max 1) where NumPy raises <c>ValueError: Invalid integer data type
+    ///     'b'.</c>; that divergence is the open pin in OpenBugs.Surface, so this test keeps the old assertion.
+    /// </summary>
     [TestMethod]
-    public void IInfo_Generic_Bool()
+    public void IInfo_TypeofBool()
     {
-        var info = np.iinfo<bool>();
+        // The removed generic iinfo<bool>() answered this, and the dtype form still does: NumSharp's bool extension (bits 8,
+        // max 1). NumPy raises ValueError: Invalid integer data type 'b'. — pinned in OpenBugs.Surface (np.iinfo(np.@bool)).
+        var info = np.iinfo(typeof(bool));
         info.bits.Should().Be(8);
         info.max.Should().Be(1);
     }
 
+    /// <summary>
+    ///     A float type is NumPy's <c>ValueError: Invalid integer data type 'f'.</c>, the kind character.
+    /// </summary>
     [TestMethod]
-    public void IInfo_Generic_Float_Throws()
+    public void IInfo_TypeofFloat_IsNumPysValueError()
     {
-        new Action(() => np.iinfo<float>()).Should().Throw<Exception>();
+        // NumPy: np.iinfo(np.float32) -> ValueError: Invalid integer data type 'f'.
+        new Action(() => np.iinfo(typeof(float))).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'f'.");
     }
 
     #endregion
@@ -203,27 +230,28 @@ public class NpIInfoBattleTests
     #region NDArray Overload Tests
 
     [TestMethod]
-    public void IInfo_NDArray_Int32()
+    public void IInfo_ArrayDtype_Int32()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        var info = np.iinfo(arr);
+        var info = np.iinfo(arr.dtype);
         info.bits.Should().Be(32);
         info.dtype.Should().Be(NPTypeCode.Int32);
     }
 
     [TestMethod]
-    public void IInfo_NDArray_Byte()
+    public void IInfo_ArrayDtype_Byte()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
-        var info = np.iinfo(arr);
+        var info = np.iinfo(arr.dtype);
         info.bits.Should().Be(8);
     }
 
     [TestMethod]
-    public void IInfo_NDArray_Float_Throws()
+    public void IInfo_ArrayDtype_Float_Throws()
     {
+        // NumPy 2.4.2: np.iinfo(np.float32) names the KIND character.
         var arr = np.array(new float[] { 1.0f, 2.0f });
-        new Action(() => np.iinfo(arr)).Should().Throw<Exception>();
+        new Action(() => np.iinfo(arr.dtype)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'f'.");
     }
 
     #endregion

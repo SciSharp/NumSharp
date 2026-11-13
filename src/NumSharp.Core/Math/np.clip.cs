@@ -23,7 +23,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A <paramref name="min"/> / <paramref name="max"/> keyword is given together with both positional bounds ("Passing `min` or `max` keyword argument when `a_min` and `a_max` are provided is forbidden."). Or <paramref name="out"/> is read-only (checked before every ufunc argument). Or the operands do not broadcast together, or <paramref name="out"/> would have to be stretched (NumPy's two iterator texts).</exception>
         /// <exception cref="TypeError">A <paramref name="dtype"/> the inputs cannot reach, or an <paramref name="out"/> the result cannot be cast into, under the same_kind rule (NumPy's UFuncTypeError texts, naming the routed ufunc).</exception>
         /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool ("Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'").</exception>
-        /// <exception cref="OverflowException">An integer bound that is kept does not fit the integer dtype the computation runs in, for example <c>np.clip(int8_array, 1000, 2000)</c>: "Python integer 1000 out of bounds for int8" (NumPy's OverflowError). It is raised before any element is read, so an empty array raises too.</exception>
+        /// <exception cref="OverflowError">An integer bound that is kept does not fit the integer dtype the computation runs in, for example <c>np.clip(int8_array, 1000, 2000)</c>: "Python integer 1000 out of bounds for int8" (NumPy's OverflowError). It is raised before any element is read, so an empty array raises too.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.clip.html
         ///     <para>
@@ -108,7 +108,10 @@ namespace NumSharp
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
 
-            return a.TensorEngine.ClipNDArray(a, lo, hi, dtype, @out, where);
+            // np.clip is the clip ufunc: a fresh 0-d result is NumPy's scalar (PyArray_Return; np.clip(np.array(2.5), 0, 1)
+            // is np.float64(1.0)); out= comes back as given.
+            var clipped = a.TensorEngine.ClipNDArray(a, lo, hi, dtype, @out, where);
+            return @out is null ? clipped.PyArray_Return() : clipped;
         }
     }
 }

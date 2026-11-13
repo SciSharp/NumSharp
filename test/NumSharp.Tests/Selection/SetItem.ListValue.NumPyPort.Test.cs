@@ -33,13 +33,13 @@ namespace NumSharp.Tests.Selection
         {
             var mask = np.array(new[] { true, false, true, false });
             Action view = () => np.zeros(new Shape(4), np.uint8).__setitem__("0:2", L(1, -1));
-            view.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            view.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
             Action fancy = () => np.zeros(new Shape(4), np.uint8).__setitem__(new long[] { 0, 1 }, L(1, -1));
-            fancy.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            fancy.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
             Action masked = () => np.zeros(new Shape(4), np.uint8).__setitem__(mask, L(1, -1));
-            masked.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            masked.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
             Action int8 = () => np.zeros(new Shape(4), np.int8).__setitem__("0:2", L(1, 1000));
-            int8.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            int8.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
             Action none = () => np.zeros(new Shape(4), np.int8).__setitem__("0:2", L(1, null));
             none.Should().Throw<TypeError>()

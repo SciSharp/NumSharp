@@ -14,6 +14,26 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
+        ///     Whether NumPy's trivial loop lays out a fresh comparison result (see
+        ///     <see cref="TrivialLoopLaysOut(NDArray, NDArray, bool, bool, out bool)"/>): the comparison loop reads the
+        ///     comparison dtype, so an operand of another dtype is cast, except the int64 / uint64 pair, which has exact
+        ///     loops of its own.
+        /// </summary>
+        /// <param name="lhs">The first operand.</param>
+        /// <param name="rhs">The second operand.</param>
+        /// <param name="lhsType">The first operand's dtype.</param>
+        /// <param name="rhsType">The second operand's dtype.</param>
+        /// <returns>True when the trivial loop runs (the routes then lay the result out themselves).</returns>
+        private static bool ComparisonTrivialLoopLaysOut(NDArray lhs, NDArray rhs, NPTypeCode lhsType, NPTypeCode rhsType)
+        {
+            var comparisonType = ComparisonKernelKey.GetComparisonType(lhsType, rhsType);
+            bool exactPair = (lhsType == NPTypeCode.Int64 && rhsType == NPTypeCode.UInt64)
+                             || (lhsType == NPTypeCode.UInt64 && rhsType == NPTypeCode.Int64);
+            return TrivialLoopLaysOut(lhs, rhs, !exactPair && lhsType != comparisonType,
+                                      !exactPair && rhsType != comparisonType, out _);
+        }
+
+        /// <summary>
         /// Execute a comparison operation using IL-generated kernels.
         /// Handles type promotion, broadcasting, and kernel dispatch.
         /// Result is always NDArray&lt;bool&gt;.
@@ -33,7 +53,13 @@ namespace NumSharp.Backends
             // empty result compares nothing); any other pair with a string operand has no comparison loop (NumPy's
             // class-named UFuncTypeError).
             if (Strings.NDStringUfuncs.BinaryGuard(UfuncName(op), lhs, rhs) is { } textResult)
-                return textResult.AsGeneric<bool>();
+            {
+                // A 0-d comparison is NumPy's np.True_ / np.False_ scalar (PyArray_Return); the typed wrapper keeps its own
+                // reference while the seam returns the same object.
+                var typed = textResult.AsGeneric<bool>();
+                typed.PyArray_Return();
+                return typed;
+            }
 
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -41,14 +67,19 @@ namespace NumSharp.Backends
             // Handle scalar × scalar case
             if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
             {
-                return ExecuteComparisonScalarScalar(lhs, rhs, op);
+                // NumPy's comparison of two 0-d operands is its np.True_ / np.False_ scalar (PyArray_Return).
+                var scalar = ExecuteComparisonScalarScalar(lhs, rhs, op);
+                scalar.PyArray_Return();
+                return scalar;
             }
 
             // NumPy's ufunc output layout (parity QA-36): the bool result follows the operands' K order. The routes below
             // write C (or F for an all-F pair), so a permuted operand is computed over the operands transposed into the K
-            // order (views) and the C result relabelled; C-ordered operands and an all-F pair skip it (MayNeedKOrder,
-            // IsAllStrictF).
-            if (!kOrderResolved && MayNeedKOrder(lhs.Shape, rhs.Shape) && !IsAllStrictF(lhs.Shape, rhs.Shape))
+            // order (views) and the C result relabelled; C-ordered operands and a set NumPy's trivial loop lays out F skip
+            // it (MayNeedKOrder, TrivialLoopLaysOut). The loop reads the comparison dtype, so an input of another dtype is
+            // a cast, which keeps an N-D input off the trivial loop - except int64 against uint64, which NumPy compares
+            // with exact loops of their own (qQ / Qq).
+            if (!kOrderResolved && MayNeedKOrder(lhs.Shape, rhs.Shape) && !ComparisonTrivialLoopLaysOut(lhs, rhs, lhsType, rhsType))
             {
                 var (kl, _) = Broadcast(lhs.Shape, rhs.Shape);
                 if (TryKOrderPlan(kl.dimensions, new[] { lhs.Shape, rhs.Shape }, out var kLayout, out var kPerm))

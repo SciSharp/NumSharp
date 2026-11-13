@@ -15,10 +15,11 @@ namespace NumSharp.Tests.Math
     [TestClass]
     public class UfuncCastRefusalTests
     {
-        /// <summary>Asserts the call raises exactly <see cref="TypeError"/> with NumPy's text.</summary>
+        /// <summary>Asserts the call raises NumPy's casting refusal (<see cref="UFuncInputCastingError"/> or
+        ///     <see cref="UFuncOutputCastingError"/>, both a <see cref="UFuncCastingError"/>) with NumPy's text.</summary>
         /// <param name="call">The refused call.</param>
         /// <param name="text">NumPy's <c>UFuncTypeError</c> text, verbatim.</param>
-        private static void Refuses(Action call, string text) => call.Should().ThrowExactly<TypeError>().WithMessage(text);
+        private static void Refuses(Action call, string text) => call.Should().Throw<UFuncCastingError>().WithMessage(text);
 
         /// <summary>np.around of a bool array with decimals != 0 multiplies (or divides) in float64 and cannot cast back.</summary>
         [TestMethod]
@@ -87,7 +88,7 @@ namespace NumSharp.Tests.Math
                 caught = e;
             }
 
-            caught.Should().BeOfType<TypeError>();
+            caught.Should().BeOfType<UFuncOutputCastingError>();
             caught.Should().NotBeAssignableTo<ArgumentException>();
         }
     }

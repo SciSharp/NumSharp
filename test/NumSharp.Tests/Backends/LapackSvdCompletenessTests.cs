@@ -303,18 +303,84 @@ namespace NumSharp.Tests.Backends
 
         #region NaN / inf / singular
 
+        /// <summary>
+        ///     NumPy 2.5's svd gufuncs check every matrix before <c>gesdd</c> (<c>all_finite</c>, gh-32591 / gh-32719): a NaN
+        ///     or an inf is "SVD did not converge" for svd, svdvals, pinv, matrix_rank and the SVD norms, and one non-finite
+        ///     matrix fails a whole stack. NumPy 2.4 left an inf to LAPACK, which "converged" to NaN singular values. lstsq
+        ///     checks its coefficient matrix the same way, never its right-hand sides. Expected values: NumPy 2.5.4.
+        /// </summary>
         [TestMethod]
-        public void Svd_NaN_DoesNotConverge_Inf_ProducesNaNValues()
+        public void Svd_NonFinite_DoesNotConverge()
         {
             RequireLapack();
             var nan = np.array(new double[,] { { double.NaN, 0 }, { 0, 1 } });
-            new Action(() => np.linalg.svd(nan)).Should().Throw<LinAlgError>().WithMessage("SVD did not converge");
-            new Action(() => np.linalg.svdvals(nan)).Should().Throw<LinAlgError>().WithMessage("SVD did not converge");
-            new Action(() => np.linalg.matrix_rank(nan)).Should().Throw<LinAlgError>().WithMessage("SVD did not converge");
+            var inf = np.array(new double[,] { { 1, double.PositiveInfinity }, { 0, 1 } });
+            foreach (var (m, what) in new[] { (nan, "nan"), (inf, "inf") })
+            {
+                new Action(() => np.linalg.svd(m)).Should().Throw<LinAlgError>().WithMessage("SVD did not converge", what);
+                new Action(() => np.linalg.svdvals(m)).Should().Throw<LinAlgError>().WithMessage("SVD did not converge", what);
+                new Action(() => np.linalg.matrix_rank(m)).Should().Throw<LinAlgError>().WithMessage("SVD did not converge", what);
+                new Action(() => np.linalg.pinv(m)).Should().Throw<LinAlgError>().WithMessage("SVD did not converge", what);
+                new Action(() => np.linalg.norm(m, "nuc")).Should().Throw<LinAlgError>().WithMessage("SVD did not converge", what);
+                new Action(() => np.linalg.lstsq(m, np.array(new[] { 1.0, 2.0 }))).Should().Throw<LinAlgError>()
+                    .WithMessage("SVD did not converge in Linear Least Squares", what);
+            }
 
-            // An infinite matrix CONVERGES (info == 0) but the singular values are NaN — no raise.
-            var s = np.linalg.svdvals(np.array(new double[,] { { double.PositiveInfinity, 0 }, { 0, 1 } }));
-            AssertClose(s, Tol, double.NaN, double.NaN);
+            // One non-finite matrix fails the stack; a NaN right-hand side solves to NaN.
+            var good = np.array(new double[,] { { 2, 1 }, { 1, 3 } });
+            new Action(() => np.linalg.svd(np.stack(new[] { good, nan }), compute_uv: false)).Should().Throw<LinAlgError>()
+                .WithMessage("SVD did not converge");
+            var x = np.linalg.lstsq(np.eye(2), np.array(new[] { double.NaN, 2.0 })).Solution;
+            double.IsNaN(x.GetDouble(0)).Should().BeTrue();
+            double.IsNaN(x.GetDouble(1)).Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     NumPy 2.5's cond reads the singular values with <c>_cond_svdvals</c> (gh-32591): a matrix the SVD refuses gives
+        ///     NaN values instead of svd's error, and the NaN-to-inf tail decides the answer — NaN for a matrix holding a NaN,
+        ///     inf for one holding only infinities, each matrix of a stack on its own; <c>'nuc'</c> sums those values for x and
+        ///     its inverse, so a singular matrix is inf. NumPy 2.4 raised "SVD did not converge" for all of these but the
+        ///     inf matrix under ±2 and None. Expected values: NumPy 2.5.4.
+        /// </summary>
+        [TestMethod]
+        public void Cond_NonFiniteAndNuclear_AreNumPy25sReadings()
+        {
+            RequireLapack();
+            var good = np.array(new double[,] { { 2, 1 }, { 1, 3 } });
+            var nan = np.array(new double[,] { { 1, double.NaN }, { 0, 1 } });
+            var inf = np.array(new double[,] { { 1, double.PositiveInfinity }, { 0, 1 } });
+            var singular = np.array(new double[,] { { 1, 2 }, { 2, 4 } });
+
+            var r = np.linalg.cond(nan);
+            r.dtype.Should().Be(np.float64);
+            r.ndim.Should().Be(0);
+            double.IsNaN(r.GetDouble()).Should().BeTrue();
+            np.linalg.cond(inf).GetDouble().Should().Be(double.PositiveInfinity);
+            double.IsNaN(np.linalg.cond(np.array(new double[,] { { 1, 2 }, { double.NaN, 1 }, { 0, 1 } })).GetDouble())
+                .Should().BeTrue("a non-square NaN matrix under the default order");
+
+            var stack = np.linalg.cond(np.stack(new[] { good, nan }));
+            stack.GetDouble(0).Should().Be(2.6180339887498953);
+            double.IsNaN(stack.GetDouble(1)).Should().BeTrue();
+            var minus2 = np.linalg.cond(np.stack(new[] { good, inf }), -2);
+            minus2.GetDouble(0).Should().Be(0.3819660112501051);
+            minus2.GetDouble(1).Should().Be(double.PositiveInfinity);
+
+            np.linalg.cond(good, "nuc").GetDouble().Should().Be(5.0);
+            np.linalg.cond(singular, "nuc").GetDouble().Should().Be(double.PositiveInfinity);
+            np.linalg.cond(inf, "nuc").GetDouble().Should().Be(double.PositiveInfinity);
+            double.IsNaN(np.linalg.cond(nan, "nuc").GetDouble()).Should().BeTrue();
+            var nucStack = np.linalg.cond(np.stack(new[] { good, nan }), "nuc");
+            nucStack.GetDouble(0).Should().Be(5.0);
+            double.IsNaN(nucStack.GetDouble(1)).Should().BeTrue();
+
+            // The result keeps _realType(result_t): float32 for a float32 matrix, float64 for complex128.
+            var f32 = np.linalg.cond(nan.astype(np.float32));
+            f32.dtype.Should().Be(np.float32);
+            float.IsNaN(f32.GetSingle()).Should().BeTrue();
+            var c128 = np.linalg.cond(nan.astype(np.complex128));
+            c128.dtype.Should().Be(np.float64);
+            double.IsNaN(c128.GetDouble()).Should().BeTrue();
         }
 
         [TestMethod]

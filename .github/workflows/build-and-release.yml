@@ -201,10 +201,10 @@ jobs:
     # delay-) signature. It inspects the PACKED artifact because that is what users install; a
     # compile gate cannot see "builds fine, ships with no identity". Publishes nothing.
     #
-    # The loop also names the UNRELEASED package (ParquetNet: <IsPackable>false</IsPackable> in its csproj,
-    # "Unreleased packages" in .claude/rules/interop-packages.md). Its `dotnet pack` is a silent no-op that writes no
-    # .nupkg, so today it adds nothing to verify; the day it is released by deleting that property, it is packed and
-    # verified here with no edit to this step, as OnnxRuntime and MLNet are since 0.80.0.
+    # The loop also names the UNRELEASED package (ParquetNet: <IsPackable>false</IsPackable> in its csproj, "Unreleased
+    # packages" in .claude/rules/interop-packages.md). Its `dotnet pack` is a silent no-op that writes no .nupkg, so
+    # today it adds nothing to verify; the day it is released by deleting that property, it is packed and verified
+    # here with no edit to this step, as OnnxRuntime and MLNet are since 0.80.0 and TorchSharp since 0.81.0.
     #
     # Why it is cheap here: the Build steps above already built NumSharp.Core (compiled, woven and
     # re-signed), NumSharp.Bitmap, NumSharp.Interop.OpenBLAS and NumSharp.Build in Release with the
@@ -236,6 +236,7 @@ jobs:
                     src/NumSharp.Interop.MLNet/NumSharp.Interop.MLNet.csproj \
                     src/NumSharp.Interop.System.Numerics.Tensors/NumSharp.Interop.System.Numerics.Tensors.csproj \
                     src/NumSharp.Interop.ParquetNet/NumSharp.Interop.ParquetNet.csproj \
+                    src/NumSharp.Interop.TorchSharp/NumSharp.Interop.TorchSharp.csproj \
                     tools/NumSharp.Build/NumSharp.Build.csproj; do
           # Tolerate absence: the interop packages do not exist on every branch.
           [ -f "$proj" ] || { echo "skip (absent): $proj"; continue; }
@@ -260,7 +261,7 @@ jobs:
 
   # ── Interop: every NumSharp.Interop.* bridge, one job per OS ─────────────────────────────────────
   #
-  # This job gates all six interop packages, suite after suite:
+  # This job gates all seven interop packages, suite after suite:
   #   1. NumSharp.Interop.pythonnet  — NumSharp.Tests.Interop, run TWICE, each time embedding a
   #      different Python environment (see "Python environments" below).
   #   2. NumSharp.Interop.OnnxRuntime — its suite against the package's FLOOR ORT on both TFMs, then
@@ -268,14 +269,16 @@ jobs:
   #   3. NumSharp.Interop.MLNet      — the same, floor ML.NET then current.
   #   4. NumSharp.Interop.System.Numerics.Tensors — its suite on both TFMs.
   #   5. NumSharp.Interop.ParquetNet — its suite against the package's floor Parquet.Net, both TFMs.
-  #   6. NumSharp.Interop.OpenBLAS   — the nupkg-CONSUMER gate ("Package consumer:" steps), LAST.
+  #   6. NumSharp.Interop.TorchSharp — its suite against the package's floor TorchSharp (Windows and
+  #      Linux), then against the current TorchSharp, both TFMs.
+  #   7. NumSharp.Interop.OpenBLAS   — the nupkg-CONSUMER gate ("Package consumer:" steps), LAST.
   # Until 2026-09-23 the first, second, third and last were four separate 3-OS jobs (interop-test,
   # onnxruntime-interop-test, mlnet-interop-test, package-consumer-smoke). Building is itself part
   # of the gate: this is the ONLY place CI compiles the pythonnet, OnnxRuntime, MLNet,
-  # System.Numerics.Tensors and ParquetNet packages, whose sources reach into NumSharp.Core internals
-  # through keyed friend grants and would otherwise break unnoticed. That holds for the UNRELEASED
-  # one too (ParquetNet — "Unreleased packages" in .claude/rules/interop-packages.md): it is merged code that
-  # nothing packs, so this job is all that keeps it building and passing until it ships.
+  # System.Numerics.Tensors, ParquetNet and TorchSharp packages, whose sources reach into NumSharp.Core
+  # internals through keyed friend grants and would otherwise break unnoticed. That holds for the
+  # UNRELEASED one too (ParquetNet — "Unreleased packages" in .claude/rules/interop-packages.md):
+  # it is merged code that nothing packs, so this job is all that keeps it building and passing until it ships.
   #
   # Why one job:
   #   - Slots. The SciSharp org is on the GitHub Free plan: 5 concurrent macOS jobs ORG-WIDE. This
@@ -309,7 +312,7 @@ jobs:
   #   FAILS the ecosystem install instead of silently moving the oracle. The collision is not
   #   hypothetical: onnxruntime==1.16.0 — the Python twin of the ORT floor below — publishes no
   #   cp312 wheel and was compiled against NumPy 1.x ("A module that was compiled using NumPy 1.x
-  #   cannot be run in NumPy 2.4.2"), so a Python that needs it must be a different interpreter.
+  #   cannot be run in NumPy 2.5.4"), so a Python that needs it must be a different interpreter.
   #   make_env.py builds each environment per interpreter (.venvs/<name>-py<maj><min>), so one
   #   machine holds several side by side; the .NET suites here need none of them.
   #   PythonSession embeds the environment named by NUMSHARP_PYTHONNET_PYTHON — binding (never falls
@@ -368,7 +371,7 @@ jobs:
 
     # The BASE interpreter the Python environments are built from (make_env.py builds from the
     # interpreter that runs it). 3.12 sits inside pythonnet 3.0.5's range (PythonSession rejects
-    # anything outside 3.7-3.13) and numpy 2.4.2's (cp311+). "Stage OpenBLAS" and the "Package
+    # anything outside 3.7-3.13) and numpy 2.5.4's (cp312+). "Stage OpenBLAS" and the "Package
     # consumer:" steps use it directly — they are stdlib-only (fetch_openblas.py, the nupkg listing,
     # the macOS realpath compares). The pip cache is keyed on exactly the files that decide what the
     # environments hold (the requirement files + the numpy pin in the OpenBLAS manifest), so torch's
@@ -545,7 +548,8 @@ jobs:
     # package brings for every runner RID. It runs against the package's FLOOR (1.16.0 — the ORT a bare
     # consumer resolves, and the version the package compiles against) on both TFMs, then against the
     # CURRENT release, so both ends of the dependency range are exercised. Its build needs nothing the
-    # pythonnet suite set up, so it only waits for cancellation; NumSharp.Core is already built.
+    # pythonnet suite set up, so it only waits for cancellation; NumSharp.Core is already built. Every
+    # step excludes the OpenBugs category (known-failing reproductions), as the unit-suite steps do.
     - name: "ONNX Runtime: Build (floor)"
       id: ort_build
       if: ${{ !cancelled() }}
@@ -557,7 +561,8 @@ jobs:
       shell: bash
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
-          --configuration Release --no-build --framework net8.0 --logger "trx;LogFileName=onnxruntime-floor-net8.0.trx"
+          --configuration Release --no-build --framework net8.0 --logger "trx;LogFileName=onnxruntime-floor-net8.0.trx" \
+          --filter "TestCategory!=OpenBugs"
 
     - name: "ONNX Runtime: Test floor (net10.0)"
       if: ${{ !cancelled() && steps.ort_build.outcome == 'success' }}
@@ -565,7 +570,8 @@ jobs:
       shell: bash
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
-          --configuration Release --no-build --framework net10.0 --logger "trx;LogFileName=onnxruntime-floor-net10.0.trx"
+          --configuration Release --no-build --framework net10.0 --logger "trx;LogFileName=onnxruntime-floor-net10.0.trx" \
+          --filter "TestCategory!=OpenBugs"
 
     # The current ORT release. Keep the version in lockstep with the one the README's "Verified against"
     # banner names; bumping it here is the whole of "support a newer ORT". The -p: global property
@@ -584,7 +590,7 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
           --configuration Release --framework net10.0 --logger "trx;LogFileName=onnxruntime-current-net10.0.trx" \
-          -p:OnnxRuntimeVersion=1.31.1 -p:NoWarn=${{ env.DOTNET_NOWARN }}
+          --filter "TestCategory!=OpenBugs" -p:OnnxRuntimeVersion=1.31.1 -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # The NEWEST ONNX Runtime on nuget.org, whatever it is - the floating version `*-*` resolves the highest
     # release, prereleases included. The package depends on Microsoft.ML.OnnxRuntime.Managed 1.16.0 or later
@@ -599,7 +605,7 @@ jobs:
       run: |
         dotnet test test/NumSharp.Tests.Interop.OnnxRuntime/NumSharp.Tests.Interop.OnnxRuntime.csproj \
           --configuration Release --framework net10.0 --logger "trx;LogFileName=onnxruntime-newest-net10.0.trx" \
-          "-p:OnnxRuntimeVersion=*-*" -p:NoWarn=${{ env.DOTNET_NOWARN }}
+          --filter "TestCategory!=OpenBugs" "-p:OnnxRuntimeVersion=*-*" -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # ── ML.NET interop (NumSharp.Interop.MLNet) ────────────────────────────────────────────────────
     #
@@ -729,6 +735,79 @@ jobs:
           --configuration Release --no-build --framework net10.0 --filter "TestCategory!=OpenBugs" \
           --logger "trx;LogFileName=parquet-floor-net10.0.trx"
 
+    # ── TorchSharp interop (NumSharp.Interop.TorchSharp) ───────────────────────────────────────────
+    #
+    # No Python: the suite hands NumSharp buffers to libtorch and views libtorch tensors through
+    # TorchSharp, with the CPU libtorch for the runner only (the suite references the RID-specific
+    # libtorch-cpu-<rid> package instead of TorchSharp-cpu, which would restore all three OSes'
+    # natives, ~1.2 GB per version). The package COMPILES against its floor (TorchSharp 0.100.0, libtorch
+    # 2.0.1) in both legs; the suite is recompiled per leg:
+    #   - floor (0.100.0 / 2.0.1.1): the 6-argument native THSTensor_new. Windows and Linux only - libtorch
+    #     2.0.1 ships no osx-arm64 natives, and every macOS runner is arm64.
+    #   - current (0.107.0 / 2.10.0): the 9-argument THSTensor_new, and the binary-compatibility gate for
+    #     every managed member the floor-compiled package binds (the Tensor.to overloads that changed in
+    #     between are why the package never calls them). Its sparse, quantized and libtorch-uint16 tests
+    #     are Inconclusive on the floor leg (those APIs arrived later) and run here.
+    # Released from 0.81.0 (build-nuget packs it); this suite is still its only test gate, with the same
+    # OpenBugs filter. On macOS the current leg needs Homebrew's libomp first (the step below says why).
+    - name: "TorchSharp: Build (floor)"
+      id: torchsharp_build_floor
+      if: ${{ !cancelled() && matrix.os != 'macos-latest' }}
+      run: dotnet build test/NumSharp.Tests.Interop.TorchSharp/NumSharp.Tests.Interop.TorchSharp.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
+
+    - name: "TorchSharp: Test floor (net8.0)"
+      if: ${{ !cancelled() && steps.torchsharp_build_floor.outcome == 'success' }}
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.TorchSharp/NumSharp.Tests.Interop.TorchSharp.csproj \
+          --configuration Release --no-build --framework net8.0 --filter "TestCategory!=OpenBugs" \
+          --logger "trx;LogFileName=torchsharp-floor-net8.0.trx"
+
+    - name: "TorchSharp: Test floor (net10.0)"
+      if: ${{ !cancelled() && steps.torchsharp_build_floor.outcome == 'success' }}
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.TorchSharp/NumSharp.Tests.Interop.TorchSharp.csproj \
+          --configuration Release --no-build --framework net10.0 --filter "TestCategory!=OpenBugs" \
+          --logger "trx;LogFileName=torchsharp-floor-net10.0.trx"
+
+    # libtorch's osx-arm64 libtorch_cpu.dylib links OpenMP by Homebrew's ABSOLUTE path
+    # (/opt/homebrew/opt/libomp/lib/libomp.dylib, its LC_LOAD_DYLIB in libtorch 2.10.0), so the libomp.dylib the
+    # libtorch-cpu-osx-arm64 package ships beside it is never found, and TorchSharp's native load fails ("Failed to
+    # load native component ... libLibTorchSharp.dylib") on a runner without Homebrew's libomp: every test of the
+    # current leg failed that way on macos-26-arm64 (PR #635, 2026-11-13). A macOS TorchSharp user needs the same
+    # step (docs/website-src/docs/interop/torchsharp.md, "TorchSharp versions").
+    - name: "TorchSharp: libomp (macOS)"
+      if: ${{ !cancelled() && matrix.os == 'macos-latest' }}
+      run: brew list libomp >/dev/null 2>&1 || brew install libomp
+
+    - name: "TorchSharp: Build (current)"
+      id: torchsharp_build_current
+      if: ${{ !cancelled() }}
+      run: dotnet build test/NumSharp.Tests.Interop.TorchSharp/NumSharp.Tests.Interop.TorchSharp.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }} -p:TorchSharpVersion=0.107.0 -p:LibTorchVersion=2.10.0
+
+    - name: "TorchSharp: Test current (net8.0)"
+      if: ${{ !cancelled() && steps.torchsharp_build_current.outcome == 'success' }}
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.TorchSharp/NumSharp.Tests.Interop.TorchSharp.csproj \
+          --configuration Release --no-build --framework net8.0 --filter "TestCategory!=OpenBugs" \
+          -p:TorchSharpVersion=0.107.0 -p:LibTorchVersion=2.10.0 \
+          --logger "trx;LogFileName=torchsharp-current-net8.0.trx"
+
+    - name: "TorchSharp: Test current (net10.0)"
+      if: ${{ !cancelled() && steps.torchsharp_build_current.outcome == 'success' }}
+      timeout-minutes: 10
+      shell: bash
+      run: |
+        dotnet test test/NumSharp.Tests.Interop.TorchSharp/NumSharp.Tests.Interop.TorchSharp.csproj \
+          --configuration Release --no-build --framework net10.0 --filter "TestCategory!=OpenBugs" \
+          -p:TorchSharpVersion=0.107.0 -p:LibTorchVersion=2.10.0 \
+          --logger "trx;LogFileName=torchsharp-current-net10.0.trx"
+
     # ── Package consumer: the nupkg-CONSUMER gate for NumSharp.Interop.OpenBLAS ──────────────────
     #
     # Every other suite consumes the package by ProjectReference, where a Content item copies files
@@ -808,7 +887,7 @@ jobs:
   validate-release:
     # Interop now ships as packages, so a broken bridge must block the release — and so must a
     # package that restores but cannot load its own bundled binary. interop-test gates all of it:
-    # the pythonnet, ONNX Runtime, ML.NET, System.Numerics.Tensors and ParquetNet suites and the
+    # the pythonnet, ONNX Runtime, ML.NET, System.Numerics.Tensors, ParquetNet and TorchSharp suites and the
     # "Package consumer:" steps (formerly the onnxruntime-interop-test, mlnet-interop-test and
     # package-consumer-smoke jobs), so needing it covers every interop package, released or not.
     needs: [test, interop-test]
@@ -934,11 +1013,12 @@ jobs:
           -p:SourceRevisionId=${{ github.sha }} \
           -p:ContinuousIntegrationBuild=true
 
-        # The UNRELEASED package (ParquetNet) is built here and named in the Pack step below like every
-        # other package, but its csproj sets <IsPackable>false</IsPackable>, which makes its `dotnet pack` a
-        # silent no-op: no .nupkg, so nothing is uploaded, published or listed in the release notes.
+        # The UNRELEASED package (ParquetNet) is built here and named in the Pack step below like every other
+        # package, but its csproj sets <IsPackable>false</IsPackable>, which makes its `dotnet pack` a silent
+        # no-op: no .nupkg, so nothing is uploaded, published or listed in the release notes.
         # Releasing it is that property deleted ("Unreleased packages" in .claude/rules/interop-packages.md); this
-        # step and the Pack step then need no edit, as for OnnxRuntime and MLNet, released from 0.80.0.
+        # step and the Pack step then need no edit, as for OnnxRuntime and MLNet (released from 0.80.0) and
+        # TorchSharp (released from 0.81.0).
         # The build stays so that switch keeps working: the Pack step runs --no-build and needs this
         # Rebuild's output the moment the package is released.
         #
@@ -975,6 +1055,17 @@ jobs:
         # Parquet interop: managed-only (depends on the fully managed Parquet.Net, no native asset),
         # so a plain Rebuild is the whole build. Unreleased: see the note above.
         dotnet build src/NumSharp.Interop.ParquetNet/NumSharp.Interop.ParquetNet.csproj \
+          --configuration Release \
+          -t:Rebuild \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
+        # TorchSharp interop: managed-only (depends on the managed TorchSharp package, whose LibTorchSharp
+        # it binds; the consumer brings libtorch), so a plain Rebuild is the whole build. Released from
+        # 0.81.0: the Pack step packs it like every other package.
+        dotnet build src/NumSharp.Interop.TorchSharp/NumSharp.Interop.TorchSharp.csproj \
           --configuration Release \
           -t:Rebuild \
           -p:NoWarn=${{ env.DOTNET_NOWARN }} \
@@ -1054,6 +1145,16 @@ jobs:
           -p:ContinuousIntegrationBuild=true
 
         dotnet pack src/NumSharp.Interop.ParquetNet/NumSharp.Interop.ParquetNet.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ github.sha }} \
+          -p:ContinuousIntegrationBuild=true
+
+        # Unreleased like ParquetNet (IsPackable=false): writes no .nupkg until it is released.
+        dotnet pack src/NumSharp.Interop.TorchSharp/NumSharp.Interop.TorchSharp.csproj \
           --configuration Release \
           --no-build \
           --output artifacts/nuget \
@@ -1209,13 +1310,22 @@ jobs:
     needs: [validate-release, build-nuget]
     if: needs.validate-release.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
+    # The `nuget` environment holds this irreversible push until a required reviewer approves it on the
+    # run ("Review deployments"; GitHub notifies the reviewer). Configured in Settings -> Environments ->
+    # nuget: the one reviewer is Nucs (self-review allowed, so a tag the owner pushes is approved by the
+    # owner), only `v*` tags may deploy to it, and admins cannot bypass the review. It is also named by the
+    # Trusted Publishing policy below, so only a job running in this environment can obtain a publish key:
+    # a workflow edited on any branch, or this job without the environment, is refused by nuget.org. The
+    # tests, build-nuget and create-release run unattended; only this job waits (a pending review expires
+    # after 30 days, and "Re-run failed jobs" on the run asks for the review again).
+    environment: nuget
 
     # Trusted Publishing (OIDC) - no long-lived API key. GitHub mints a short-lived, signed OIDC
     # token for this job (id-token: write); NuGet/login POSTs it to nuget.org's token endpoint, which
-    # validates the token's repository-owner / repository / workflow-file claims against the Trusted
-    # Publishing policy registered under the SciSharp owner (workflow file build-and-release.yml - nuget.org
-    # takes the file name only - no environment, scope "Push new packages and package versions", glob
-    # *NumSharp*) and returns a temporary API key valid for 1 hour. The push then uses that key.
+    # validates the token's repository-owner / repository / workflow-file / environment claims against the
+    # Trusted Publishing policy registered under the SciSharp owner (workflow file build-and-release.yml -
+    # nuget.org takes the file name only - environment `nuget`, scope "Push new packages and package
+    # versions", glob *NumSharp*) and returns a temporary API key valid for 1 hour. The push then uses that key.
     #
     # A job-level permissions block REPLACES the top-level `write-all` for THIS job, so id-token is
     # granted explicitly (write-all's coverage of id-token is not something to rely on) and the rest
@@ -1243,7 +1353,9 @@ jobs:
     # Exchange the GitHub OIDC token for a short-lived nuget.org API key. `user` is the nuget.org USERNAME
     # (profile name, NOT an email) of the account that CREATED the Trusted Publishing policy - not the SciSharp
     # organization that owns it (NuGet/login's own error text says so) - read from the NUGET_USER repository
-    # secret: without it the login fails and nothing is pushed. Requested here, immediately before the push, so
+    # secret (`elibelash`, the policy's owner): without it the login fails and nothing is pushed. A wrong name
+    # fails as "Token exchange failed (HTTP 401) ... No matching trust policy owned by user" (0.80.0's first
+    # attempt); fix the secret and re-run the failed job - build-nuget's artifact is reused. Requested here, immediately before the push, so
     # the 1-hour key cannot expire before use. NuGet/login masks the key (core.setSecret) before it becomes
     # steps.nuget-login.outputs.NUGET_API_KEY, so the rendered push script never prints it.
     - name: NuGet login (OIDC trusted publishing)
@@ -1256,7 +1368,7 @@ jobs:
     # stopping at the first refusal (the shell's -e) left every package after it unpublished and named only the
     # first problem (F25 / P9 of the 0.80.0-beta1 bridge QA). What the temporary key may push is decided by the
     # policy's scope and glob: a policy that allows only new versions of EXISTING packages refuses a NEW id - and
-    # the ONNX Runtime, ML.NET and ParquetNet bridges are new ids the day they are released. Before tagging a
+    # the ONNX Runtime, ML.NET, ParquetNet and TorchSharp bridges are new ids the day they are released. Before tagging a
     # release that adds a package id, check the policy on nuget.org (Account > Trusted Publishing): active, scope
     # "Push new packages and package versions", a glob that matches the new id.
     - name: Push to NuGet

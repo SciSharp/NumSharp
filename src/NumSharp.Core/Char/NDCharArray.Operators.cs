@@ -419,7 +419,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A count that is not an integer, the C# <c>null</c> (NumPy's <c>None</c>) included
         ///     (<c>Can only multiply by integers</c>), or an empty result (<c>zero-size array to reduction operation maximum
         ///     which has no identity</c>).</exception>
-        /// <exception cref="OverflowException">A repetition longer than <c>sys.maxsize</c>.</exception>
+        /// <exception cref="OverflowError">A repetition longer than <c>sys.maxsize</c>.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         [NDScoped]
         private static NDCharArray MultiplyOperator(object left, object right)
@@ -491,7 +491,7 @@ namespace NumSharp
             if (result.ndim == 0 && result.Storage.IsFixedString)
             {
                 var scalar = new NDCharArray(result.Storage.Alias()) { IsScalarStandIn = true, TensorEngine = result.TensorEngine };
-                scalar.MarkReductionScalar();   // read-only, as the immutable Python value it stands for
+                scalar.PyArray_Return();   // read-only, as the immutable Python value it stands for
                 return scalar;
             }
             return new NDCharArray(result.Storage.Alias()) { TensorEngine = result.TensorEngine };
@@ -524,7 +524,7 @@ namespace NumSharp
         ///     types, ...</c>). Any other left operand: <c>unsupported operand type(s) for %: 'int' and 'chararray'</c>.
         /// </exception>
         /// <exception cref="ValueError">A malformed format; <c>int()</c> / <c>float()</c> of text that spells no number.</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> argument out of range.</exception>
+        /// <exception cref="OverflowError">An infinity under an integer conversion; a <c>%c</c> argument out of range.</exception>
         /// <exception cref="IndexError">A <c>%(key)</c> lookup on an ndarray or a NumPy scalar.</exception>
         /// <exception cref="KeyError">A <c>%(key)</c> missing from a dict.</exception>
         /// <exception cref="IncorrectShapeException">A chararray on the left whose values do not broadcast.</exception>
@@ -924,7 +924,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A count that is not an integer, the C# <c>null</c> (NumPy's <c>None</c>) included
         ///     (<c>Can only multiply by integers</c>), or an empty result (<c>zero-size array to reduction operation maximum
         ///     which has no identity</c>).</exception>
-        /// <exception cref="OverflowException">A repetition longer than <c>sys.maxsize</c>.</exception>
+        /// <exception cref="OverflowError">A repetition longer than <c>sys.maxsize</c>.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         public static NDCharArray operator *(NDCharArray left, NDCharArray right) => MultiplyOperator(left, right);
 
@@ -970,7 +970,7 @@ namespace NumSharp
         ///     'int' and 'chararray'</c>.</exception>
         /// <exception cref="ValueError">A malformed format (<c>incomplete format</c>); a NaN under an integer conversion;
         ///     <c>int()</c> / <c>float()</c> of text that spells no number.</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> argument out of
+        /// <exception cref="OverflowError">An infinity under an integer conversion; a <c>%c</c> argument out of
         ///     range.</exception>
         /// <exception cref="IndexError">A <c>%(key)</c> lookup on a NumPy scalar or an ndarray.</exception>
         /// <exception cref="KeyError">A <c>%(key)</c> missing from a dict.</exception>

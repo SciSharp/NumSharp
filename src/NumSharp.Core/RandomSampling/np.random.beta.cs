@@ -30,7 +30,7 @@ namespace NumSharp
         ///     <c>Ga / (Ga + Gb)</c> of two legacy gammas — byte-identical to <c>np.random.RandomState(seed).beta</c>.
         ///     Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray beta(double a, double b, Shape size)
+        public NDArray beta(double a, double b, Shape? size)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(b, "b", ConstraintType.CONS_POSITIVE);
@@ -38,7 +38,7 @@ namespace NumSharp
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyBetaSetup(a, b);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -46,11 +46,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyBeta(ref one, in setup));
+                        return NDArray.WritableScalar(LegacyBeta(ref one, in setup));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

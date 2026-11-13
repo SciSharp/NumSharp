@@ -81,15 +81,16 @@ namespace NumSharp
 
             if (left.ndim == 0 || right.ndim == 0)
             {
-                // An explicit 0-d ARRAY (np.array(2), np.asarray(2): NDArray.IsExplicitZeroDimArray) is an ndarray
-                // to NumPy, and matrix.__mul__ tests isinstance(other, ndarray) before isscalar(other).
-                if (right.ndim == 0 && left.ndim != 0 && right is not NDMatrix && right.IsExplicitZeroDimArray)
+                // An explicit 0-d ARRAY (np.array(2), np.asarray(2): a 0-d array that is no NumPy scalar,
+                // !NDArray.IsNumPyScalar) is an ndarray to NumPy, and matrix.__mul__ tests isinstance(other, ndarray)
+                // before isscalar(other).
+                if (right.ndim == 0 && left.ndim != 0 && right is not NDMatrix && !right.IsNumPyScalar)
                 {
                     // __mul__: N.dot(self, asmatrix(other)). asmatrix makes the 0-d array a 1 x 1 matrix, so this
                     // is a matrix product: "shapes (2,3) and (1,1) not aligned" unless self has one column.
                     return From(np.dot(NDSubclass.PlainView(left), PlainMatrixView(right)), left, right);
                 }
-                if (left.ndim == 0 && right.ndim != 0 && left is not NDMatrix && left.IsExplicitZeroDimArray)
+                if (left.ndim == 0 && right.ndim != 0 && left is not NDMatrix && !left.IsNumPyScalar)
                 {
                     // __rmul__: N.dot(other, self), where np.dot takes a 0-d array as a scalar. It is the scalar
                     // route below (0 + scalar * x into a new C-contiguous owner), not the elementwise ufunc a

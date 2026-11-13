@@ -49,7 +49,7 @@ namespace NumSharp.Tests.Fuzz
                 {
                     np.@char.array("");
                 }
-                catch (DivideByZeroException)
+                catch (ZeroDivisionError)
                 {
                 }
                 return np.@char.array(new byte[] { 97, 98, 99, 100 }, 2);
@@ -158,7 +158,7 @@ namespace NumSharp.Tests.Fuzz
                 catch (ValueError)
                 {
                 }
-                return c.astype(np.int8, true, 'C', "unsafe");
+                return c.astype(np.int8, 'C');
             });
             E(l, "NDCharArray.copy", "C and F", f =>
             {
@@ -217,7 +217,7 @@ namespace NumSharp.Tests.Fuzz
                 using var c = np.@char.array(new[,] { { "a ", "b" }, { "c", "d" } });
                 return c.swapaxes(0, -1);
             });
-            E(l, "NDCharArray.reshape", "every overload: long[], int[], Shape, Shape + order, ref Shape, a span", f =>
+            E(l, "NDCharArray.reshape", "every spelling: loose ints, an int[] (Shape's conversion), Shape, Shape + order, Shape + copy, a span", f =>
             {
                 using var c = np.@char.array(new[] { "a", "b", "c", "d" });
                 using var a = c.reshape(2, 2);
@@ -225,7 +225,7 @@ namespace NumSharp.Tests.Fuzz
                 using var d = c.reshape(new Shape(4, 1));
                 using var e = c.reshape(new Shape(2, 2), 'F');
                 var shape = new Shape(1, 4);
-                using var g = c.reshape(ref shape);
+                using var g = c.reshape(shape, copy: true); // the always-copy mode (the ref Shape form went in API-parity batch 9)
                 return c.reshape((ReadOnlySpan<long>)new long[] { 2, 2 });
             });
             E(l, "NDCharArray.ravel", "a view of a contiguous chararray, a copy in F order", f =>

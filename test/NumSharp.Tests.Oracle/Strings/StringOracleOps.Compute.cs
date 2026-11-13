@@ -42,8 +42,8 @@ namespace NumSharp.Tests.Strings
                     bool keepdims = p["keepdims"].GetBoolean();
                     result = Str(p, "name") switch
                     {
-                        "any" => np.any(ops[0], axis, keepdims),
-                        "all" => np.all(ops[0], axis, keepdims),
+                        "any" => np.any(ops[0], axis, keepdims: keepdims),
+                        "all" => np.all(ops[0], axis, keepdims: keepdims),
                         "count_nonzero" => np.count_nonzero(ops[0], axis, keepdims),
                         var other => throw new InvalidOperationException($"the string oracle has no truth reduction '{other}'"),
                     };

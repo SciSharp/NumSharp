@@ -8,7 +8,8 @@ namespace NumSharp
         ///     Draw samples from a standard Gamma distribution (scale = 1).
         /// </summary>
         /// <param name="shape">The shape parameter; sign bit must be clear (<c>-0.0</c> rejected), NaN propagates.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value; <c>()</c> returns a 0-d array.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single value;
+        ///     <c>()</c> returns a 0-d array.</param>
         /// <param name="dtype">Native <c>float64</c> (default) or <c>float32</c>.</param>
         /// <param name="out">Optional C-CONTIGUOUS output array (NumPy's <c>cont</c>/<c>cont_f</c> reject F order), returned when given.</param>
         /// <returns>The draws; a float64 0-d array for <c>size=None</c> even when <paramref name="dtype"/> is float32.</returns>
@@ -20,7 +21,7 @@ namespace NumSharp
         ///     first inside <c>cont</c>) → the <c>shape</c> constraint, so a call that is wrong in several ways
         ///     reports NumPy's first error.
         /// </remarks>
-        public NDArray standard_gamma(double shape, Shape size = default, DType dtype = null, NDArray @out = null)
+        public NDArray standard_gamma(double shape, Shape? size = null, DType dtype = null, NDArray @out = null)
         {
             dtype ??= DType.Double;
             NPTypeCode tc = ResolveFloatDtype(dtype, "standard_gamma");
@@ -43,11 +44,11 @@ namespace NumSharp
                 if (IsNoSize(size))
                     // size=None returns a float64 scalar even for dtype=float32 (NumPy cont_f returns the C
                     // float, which Python widens to a float); only sized/()/out= stay float32.
-                    return f32 ? NDArray.Scalar((double)NextStandardGammaF(shapeF)) : NDArray.Scalar(NextStandardGamma(shape));
+                    return f32 ? NDArray.WritableScalar((double)NextStandardGammaF(shapeF)) : NDArray.WritableScalar(NextStandardGamma(shape));
 
                 return f32
-                    ? FillFloatDist(size, () => NextStandardGammaF(shapeF))
-                    : FillDoubleDist(size, () => NextStandardGamma(shape));
+                    ? FillFloatDist(size.GetValueOrDefault(), () => NextStandardGammaF(shapeF))
+                    : FillDoubleDist(size.GetValueOrDefault(), () => NextStandardGamma(shape));
             }
         }
 
@@ -56,14 +57,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">The shape parameter; sign bit must be clear (<c>-0.0</c> rejected), NaN propagates.</param>
         /// <param name="scale">The scale parameter (default 1); sign bit must be clear, NaN propagates.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The float64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="shape"/> or <paramref name="scale"/> is negative (checked in that order).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.gamma.html
         ///     <br/><c>scale * standard_gamma(shape)</c>, byte-identical to NumPy.
         /// </remarks>
-        public NDArray gamma(double shape, double scale = 1.0, Shape size = default)
+        public NDArray gamma(double shape, double scale = 1.0, Shape? size = null)
         {
             CheckNonNegative(shape, "shape");
             CheckNonNegative(scale, "scale");
@@ -71,9 +73,9 @@ namespace NumSharp
             lock (_bitGenerator.@lock)
             {
                 if (IsNoSize(size))
-                    return NDArray.Scalar(scale * NextStandardGamma(shape));
+                    return NDArray.WritableScalar(scale * NextStandardGamma(shape));
 
-                return FillDoubleDist(size, () => scale * NextStandardGamma(shape));
+                return FillDoubleDist(size.GetValueOrDefault(), () => scale * NextStandardGamma(shape));
             }
         }
     }

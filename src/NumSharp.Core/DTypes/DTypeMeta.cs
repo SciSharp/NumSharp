@@ -412,7 +412,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A value <see cref="setitem"/> refuses (a text that is not a number of a numeric
         ///     class's kind, a non-text value into a <c>coerce=False</c> <c>StringDType</c>).</exception>
         /// <exception cref="TypeError">A value the class cannot convert (None into an integer class).</exception>
-        /// <exception cref="OverflowException">A value that does not fit an integer class.</exception>
+        /// <exception cref="OverflowError">A value that does not fit an integer class.</exception>
         /// <exception cref="UnicodeEncodeError">A text the class cannot encode.</exception>
         /// <exception cref="UnicodeDecodeError">Bytes the class cannot decode.</exception>
         /// <remarks>
@@ -468,6 +468,26 @@ namespace NumSharp
         ///     references (NumPy refuses a buffer for such a dtype).</exception>
         internal virtual unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
             => throw NoSlot(nameof(copyswapn));
+
+        /// <summary>
+        ///     Whether this class's <see cref="copyswapn"/> is usable: NumPy's <c>PyArray_ArrFuncs.copyswapn != NULL</c>, the
+        ///     test <c>PyArray_Byteswap</c> makes (after an in-place call's writeable check) before it copies or swaps
+        ///     anything, raising <see cref="MissingCopyswap"/> when it fails — for an empty array too. True for every class
+        ///     with element storage but <c>StringDType</c>, whose cells hold references into their buffer's allocator, so
+        ///     NumPy leaves the slot NULL (NumPy 2.4 called the NULL slot and crashed).
+        /// </summary>
+        /// <remarks>A class without element storage keeps <see cref="copyswapn"/>'s NotSupportedException; the question asked
+        ///     here is NumPy's, about a class that has items.</remarks>
+        internal virtual bool HasCopyswapn => true;
+
+        /// <summary>
+        ///     NumPy 2.5's <c>raise_missing_copyswap</c>: the TypeError a caller raises for a class whose
+        ///     <see cref="HasCopyswapn"/> is false — <c>dtype StringDType() does not implement copyswap</c>, the descriptor's
+        ///     <c>str()</c> (its NA object included: <c>StringDType(na_object=None)</c>).
+        /// </summary>
+        /// <param name="descr">The descriptor the swap was asked of.</param>
+        /// <returns>The exception to throw (returned, so the caller's <c>throw</c> keeps its stack).</returns>
+        internal static TypeError MissingCopyswap(DType descr) => new TypeError($"dtype {descr} does not implement copyswap");
 
         /// <summary>
         ///     NumPy's <c>PyArray_ArrFuncs.fill</c>, which <c>PyArray_Arange</c> fills through: given the first two elements

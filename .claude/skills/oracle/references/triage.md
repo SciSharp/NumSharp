@@ -17,7 +17,7 @@ Everything else — including signed zero (`-0.0` ≠ `0.0`), integer wrap, floa
 
 1. **Reproduce and read the shrunk case.** The harness prints the operand(s), the op+params, NumPy's expected
    bytes, and NumSharp's actual bytes. Rebuild the exact call in a `dotnet run` script (see the project
-   `dotnet-run-script` guidance) and run the SAME call in Python against numpy 2.4.2. Confirm which side is "right"
+   `dotnet-run-script` guidance) and run the SAME call in Python against numpy 2.5.4. Confirm which side is "right"
    — or whether the question is ill-posed, see 5.
 
 2. **NumSharp is wrong → it's a real bug.** Fix the op. If you can't fix it now, carve the shrunk case into an

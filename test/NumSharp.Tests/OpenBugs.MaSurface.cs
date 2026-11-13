@@ -110,7 +110,7 @@ namespace NumSharp.Tests
         [TestMethod]
         public void MaSurface_ZerosLike_KeepsThePrototypesMask()
         {
-            var a = np.ma.array(np.array(new[] { 1.0, 2.0, 3.0 }), np.array(new[] { false, true, false }));
+            var a = np.ma.array(np.array(new[] { 1.0, 2.0, 3.0 }), mask: np.array(new[] { false, true, false }));
 
             var r = np.ma.zeros_like(a);
 
@@ -124,7 +124,7 @@ namespace NumSharp.Tests
         [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS4")]
         public void MaSurface_ResizeToZeroD_DropsTheMask()
         {
-            var a = np.ma.array(np.array(new[] { 1.0 }), np.array(new[] { true }));
+            var a = np.ma.array(np.array(new[] { 1.0 }), mask: np.array(new[] { true }));
 
             var r = np.ma.resize(a, new Shape(Array.Empty<long>()));
 
@@ -288,7 +288,7 @@ namespace NumSharp.Tests
         {
             Action act = () => np.ma.arange(0, 10, 0);
 
-            act.Should().Throw<DivideByZeroException>().WithMessage("division by zero");
+            act.Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
         }
 
         /// <summary>
@@ -328,7 +328,7 @@ namespace NumSharp.Tests
         [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS24")]
         public void MaSurface_ClumpMasked_OfZeroDWithAMask_RaisesIndexError()
         {
-            var a = np.ma.array(NDArray.Scalar(1.0), NDArray.Scalar(true));
+            var a = np.ma.array(NDArray.Scalar(1.0), mask: NDArray.Scalar(true));
             Action act = () => np.ma.clump_masked(a);
 
             act.Should().Throw<Exception>().Which.Message.Should()
@@ -410,7 +410,7 @@ namespace NumSharp.Tests
         [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS31")]
         public void MaSurface_HardMaskSetitem_IntIntoBool_RaisesSameKindTypeError()
         {
-            var a = np.ma.array(np.array(new[] { true, false, true }), np.array(new[] { false, true, false }));
+            var a = np.ma.array(np.array(new[] { true, false, true }), mask: np.array(new[] { false, true, false }));
             a.harden_mask();
             Action act = () => a["0:2"] = 99;
 
@@ -426,9 +426,9 @@ namespace NumSharp.Tests
         [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS32")]
         public void MaSurface_HardMaskSetitem_BroadcastError_IsNumPysText()
         {
-            var a = np.ma.array(np.arange(6.0).reshape(2, 3), np.zeros(new Shape(2, 3), np.@bool));
+            var a = np.ma.array(np.arange(6.0).reshape(2, 3), mask: np.zeros(new Shape(2, 3), np.@bool));
             a.harden_mask();
-            var v = np.ma.array(np.array(new[] { 5.0, 6.0 }), np.array(new[] { true, false }));
+            var v = np.ma.array(np.array(new[] { 5.0, 6.0 }), mask: np.array(new[] { true, false }));
             Action act = () => a["1:3"] = v;
 
             act.Should().Throw<Exception>().Which.Message.Should()
@@ -458,7 +458,7 @@ namespace NumSharp.Tests
         public void MaSurface_Corrcoef_MaskedSlotKeepsCovsData()
         {
             var x = np.ma.array(np.array(new[,] { { 1.0, 2.0 }, { 3.0, 5.0 } }),
-                                np.array(new[,] { { false, true }, { false, true } }));
+                                mask: np.array(new[,] { { false, true }, { false, true } }));
 
             var r = np.ma.corrcoef(x, rowvar: false);
 

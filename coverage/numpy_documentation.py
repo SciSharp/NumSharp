@@ -25,7 +25,6 @@ SNAPSHOT_PATH = Path(__file__).with_name("numpy_documentation_inventory.json")
 API_ALIASES = {
     "numpy.abs": "numpy.absolute",
     "numpy.bitwise_not": "numpy.invert",
-    "numpy.row_stack": "numpy.vstack",
     "numpy.test": "numpy.testing",
     "numpy.polynomial.Polynomial": "numpy.polynomial.polynomial.Polynomial",
     "numpy.polynomial.Chebyshev": "numpy.polynomial.chebyshev.Chebyshev",

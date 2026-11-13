@@ -26,10 +26,11 @@ namespace NumSharp
         /// <param name="nd">Source array.</param>
         /// <param name="copy">When <c>true</c> (default) the data is copied as described above; when <c>false</c> the
         ///     storage is shared (alias), flags included. For "copy only if needed" semantics use
-        ///     <see cref="asarray(NDArray, DType, char, bool?, NDArray, string)"/>.</param>
+        ///     <see cref="asarray(NDArray, DType, char?, bool?, NDArray, string)"/>.</param>
         /// <returns>A new array object, a plain array whatever <paramref name="nd"/>'s class (NumPy's <c>subok=False</c>).
         ///     A 0-d source that was built as an explicit 0-d ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>) gives an
-        ///     explicit 0-d array again, as NumPy's <c>np.array(np.array(2))</c> is a 0-d array.</returns>
+        ///     explicit 0-d array again, as NumPy's <c>np.array(np.array(2))</c> is a 0-d array; so does the copy of a NumPy
+        ///     scalar (a read-only 0-d array that is no explicit array), as <c>np.array(np.float64(1.5))</c> is.</returns>
         /// <exception cref="NullReferenceException"><paramref name="nd"/> is <c>null</c>.</exception>
         /// <remarks>
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.array.html</para>
@@ -45,8 +46,11 @@ namespace NumSharp
             var result = copy
                 ? np.copy(nd, 'K')
                 : new NDArray(nd.Storage) { TensorEngine = nd.TensorEngine };
-            // The mark is per object, so a new object must receive it explicitly.
-            return nd.IsExplicitZeroDimArray ? result.MarkExplicitZeroDimArray() : result;
+            // The mark is per object, so a new object must receive it explicitly. A copy of a NumPy SCALAR (a read-only 0-d
+            // array that is no explicit array: a reduction's result, NDArray.Scalar(...)) is an explicit 0-d ARRAY too:
+            // np.array(np.float64(1.5)) is array(1.5), which np.isscalar rejects (probed 2.4.2).
+            bool explicitResult = nd.IsExplicitZeroDimArray || (copy && nd.IsNumPyScalar && !nd.Shape.IsWriteable);
+            return explicitResult ? result.MarkExplicitZeroDimArray() : result;
         }
 
         /// <summary>
@@ -87,7 +91,7 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         [MethodImpl(OptimizeAndInline)]
-        public static NDArray array<T>(T scalar) where T : unmanaged => NDArray.Scalar(scalar).MarkExplicitZeroDimArray();
+        public static NDArray array<T>(T scalar) where T : unmanaged => NDArray.WritableScalar(scalar).MarkExplicitZeroDimArray();
 
         /// <summary>
         ///     Creates an <see cref="NDArray"/> from an array with an unknown size or dtype.
@@ -243,38 +247,50 @@ namespace NumSharp
         ///     pair counts once); an empty value is <c>&lt;U1</c>, NumPy's minimum.
         /// </summary>
         /// <param name="value">The text.</param>
-        /// <returns>A 0-d <c>U</c> array.</returns>
+        /// <returns>A 0-d <c>U</c> array, marked an explicit ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>): NumPy's
+        ///     ndarray, not an <c>np.str_</c> scalar.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
         /// <remarks>
         ///     <b>Breaking (NumPy parity):</b> this overload used to build a 1-D <see cref="char"/> vector of the characters.
         ///     That conversion remains available as <see cref="NDArray.FromString(string)"/> and
         ///     <c>np.array(value.ToCharArray())</c>.
+        ///     <para>The result is an ndarray as <c>np.array('x')</c> is (API-parity batch 12's finding, fixed in batch 13):
+        ///     <c>np.isscalar(np.array("x"))</c> is False, and a reader of NumPy's scalar / array difference (np.interp's
+        ///     <c>float()</c> of a fill value, the scalar-type <c>isinstance</c> rule) sees the array NumPy has. A C# string
+        ///     LITERAL converted implicitly stays NumPy's Python <c>str</c> (<see cref="NDArray.WasPythonStr"/>).</para>
         /// </remarks>
         [MethodImpl(Inline)]
         public static NDArray array(string value)
         {
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
-            return UnmanagedStorage.FromAnyScalar(value, null);
+            // np.array's other scalar forms mark their 0-d result an explicit array (np.array<T>(T)); the text form is the
+            // same call in NumPy, so it carries the same mark.
+            return UnmanagedStorage.FromAnyScalar(value, null).MarkExplicitZeroDimArray();
         }
 
         /// <summary>
         ///     Creates a 0-d fixed-width string array holding <paramref name="value"/> with the given string dtype —
-        ///     NumPy's <c>np.array('abc', dtype='U5')</c> / <c>dtype='S'</c>.
+        ///     NumPy's <c>np.array('abc', dtype='U5')</c> / <c>dtype='S'</c>. Under the character dtype
+        ///     <c>np.dtype("c")</c> a text whose length is not 1 is a sequence, as NumPy reads it: <c>np.array("abc",
+        ///     np.dtype("c"))</c> is the (3,) <c>|S1</c> array of its characters.
         /// </summary>
         /// <param name="value">The text.</param>
-        /// <param name="dtype">A string dtype (<c>"U"</c>, <c>"U5"</c>, <c>"S"</c>, <c>np.str_</c>, <c>np.bytes_</c>) or null to discover.</param>
-        /// <returns>A 0-d <c>S</c>/<c>U</c> array.</returns>
+        /// <param name="dtype">A string dtype (<c>"U"</c>, <c>"U5"</c>, <c>"S"</c>, <c>"c"</c>, <c>np.str_</c>,
+        ///     <c>np.bytes_</c>) or null to discover.</param>
+        /// <returns>A 0-d <c>S</c>/<c>U</c> array, or the 1-D character array under <c>"c"</c> (0-d for one character); a
+        ///     0-d result is marked an explicit ARRAY (<see cref="NDArray.IsExplicitZeroDimArray"/>), NumPy's ndarray.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="ValueError">A numeric dtype and text that does not parse as that number (<c>could not convert
         ///     string to float: 'x'</c>, NumPy's <c>int()</c> / <c>float()</c> texts).</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer dtype's range.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer dtype's range.</exception>
         public static NDArray array(string value, DType dtype)
         {
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
-            return UnmanagedStorage.FromAnyScalar(value, dtype);
+            // An explicit 0-d array as np.array's other forms make (MarkExplicitZeroDimArray leaves a 1-D result unmarked).
+            return UnmanagedStorage.FromLoneText(value, dtype).MarkExplicitZeroDimArray();
         }
 
         /// <summary>

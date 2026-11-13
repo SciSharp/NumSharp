@@ -332,7 +332,7 @@ namespace NumSharp.Tests.Backends.Strings
             ((IList)bytes.tolist()).Cast<byte[]>().Should().BeEquivalentTo(new[] { Bytes("ab"), Bytes("cd") }, o => o.WithStrictOrdering());
 
             Action empty = () => np.@char.array("");
-            empty.Should().Throw<DivideByZeroException>().Where(e => e.Message == "integer division or modulo by zero");
+            empty.Should().Throw<ZeroDivisionError>().Where(e => e.Message == "integer division or modulo by zero");
         }
 
         /// <summary>

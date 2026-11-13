@@ -49,9 +49,9 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>StringDType</c> operand, or a <c>StringDType</c> request over another operand,
         ///     without <c>refs_ok</c> (checked per operand, before the iteration shape, as NumPy checks it; an output the
         ///     iterator allocates is not checked); a refused cast, or a cast operand neither copied nor buffered.</exception>
-        /// <exception cref="OverflowException">A text read into an integer dtype by a copy or the first buffer fill holds a
+        /// <exception cref="OverflowError">A text read into an integer dtype by a copy or the first buffer fill holds a
         ///     number outside that dtype (NumPy's OverflowError).</exception>
-        /// <exception cref="OutOfMemoryException">A NEP 55 <c>StringDType</c> copy or buffer transfer cannot allocate a string
+        /// <exception cref="MemoryError">A NEP 55 <c>StringDType</c> copy or buffer transfer cannot allocate a string
         ///     (NumPy's <c>MemoryError</c> texts).</exception>
         /// <remarks>
         ///     Fixed-width strings (<c>S</c>, <c>U</c>) iterate like any dtype: each step yields 0-d <c>&lt;U3</c> views (1-D
@@ -246,22 +246,24 @@ namespace NumSharp
             /// <exception cref="TypeError">A malformed <paramref name="op_dtypes"/> sequence, a <c>StringDType</c> operand or
             ///     request without <c>refs_ok</c> (before the shape pass), a refused cast, or a cast operand neither copied
             ///     nor buffered.</exception>
-            /// <exception cref="OverflowException">A text read into an integer dtype by a copy or the first buffer fill holds
+            /// <exception cref="OverflowError">A text read into an integer dtype by a copy or the first buffer fill holds
             ///     a number outside that dtype.</exception>
-            /// <exception cref="OutOfMemoryException">A <c>StringDType</c> copy or buffer transfer cannot allocate a string
+            /// <exception cref="MemoryError">A <c>StringDType</c> copy or buffer transfer cannot allocate a string
             ///     (NumPy's <c>MemoryError</c> texts).</exception>
             /// <remarks>NumPy's <c>np.nditer(...)</c> constructor, the one <c>np.nditer</c> calls; a subclass of the iterator
-            ///     chains to it. The iterator holds native buffers: dispose it (or use it in a <c>using</c>) when done.</remarks>
+            ///     chains to it. Every parameter after <paramref name="op"/> has NumPy's default (since API-parity batch 12),
+            ///     so <c>new np.NDIterator(new[] { a })</c> is NumPy's <c>np.nditer([a])</c>. The iterator holds native
+            ///     buffers: dispose it (or use it in a <c>using</c>) when done.</remarks>
             public NDIterator(
                 NDArray[] op,
-                string[] flags,
-                string[][] op_flags,
-                DType[] op_dtypes,
-                char order,
-                string casting,
-                int[][] op_axes,
-                long[] itershape,
-                long buffersize)
+                string[] flags = null,
+                string[][] op_flags = null,
+                DType[] op_dtypes = null,
+                char order = 'K',
+                string casting = "safe",
+                int[][] op_axes = null,
+                long[] itershape = null,
+                long buffersize = 0)
             {
                 // PyArg_ParseTupleAndKeywords' converters, in NumPy's argument order. They run while NumPy parses the
                 // arguments, before npyiter_prepare_ops looks at the operand list, so a bad flag, order or casting is the
@@ -1402,7 +1404,7 @@ namespace NumSharp
                     // The engine sets the range and resets to its start (NpyIter_Reset: the buffer is written back and
                     // refilled for the new range unless NumPy's early return keeps it, delayed buffers are allocated).
                     if (!it.ResetToIterIndexRange(value.Start, value.End))
-                        throw new OutOfMemoryException("Could not allocate the iterator's delayed buffers");
+                        throw new MemoryError("Could not allocate the iterator's delayed buffers");
 
                     _cachedNext = it.PeekCachedIterNext();
                     // NumPy's npyiter_iterrange_set: an empty range is finished at once, any other starts fresh, and the
@@ -1468,7 +1470,7 @@ namespace NumSharp
             /// <exception cref="IndexError">No operand <paramref name="i"/>: "Iterator operand index i is out of
             ///     bounds".</exception>
             /// <exception cref="RuntimeError">Setting a read-only operand: "Iterator operand i is not writeable".</exception>
-            /// <exception cref="OverflowException">Setting a C# number literal that does not fit the operand's dtype (NumPy's
+            /// <exception cref="OverflowError">Setting a C# number literal that does not fit the operand's dtype (NumPy's
             ///     OverflowError texts: "Python integer 300 out of bounds for int8", "cannot convert float infinity to
             ///     integer").</exception>
             /// <exception cref="TypeError">Setting null (Python's <c>None</c>) or a complex literal into an integer operand
@@ -1646,12 +1648,12 @@ namespace NumSharp
             ///     start is left as it is (NumPy's <c>NpyIter_Reset</c>).
             /// </summary>
             /// <exception cref="ValueError">The iterator is closed ("Iterator is invalid").</exception>
-            /// <exception cref="OutOfMemoryException">Delayed buffers could not be allocated.</exception>
+            /// <exception cref="MemoryError">Delayed buffers could not be allocated.</exception>
             public void reset()
             {
                 var it = Borrow();
                 if (!it.Reset())
-                    throw new OutOfMemoryException("Could not allocate the iterator's delayed buffers");
+                    throw new MemoryError("Could not allocate the iterator's delayed buffers");
                 _cachedNext = it.PeekCachedIterNext();
                 // npyiter_reset: an empty iteration is finished again at once, and the multi-index getter exists now.
                 _started = _finished = it.IterSize == 0;

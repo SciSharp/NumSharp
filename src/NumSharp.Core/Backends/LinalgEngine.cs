@@ -117,9 +117,9 @@ namespace NumSharp
         ///     symmetric) matrix, or of each matrix in a stack.
         /// </summary>
         /// <param name="a">The square matrix or stack; it must hold no inf or NaN.</param>
-        /// <returns><c>(eigenvalues, eigenvectors)</c>, the columns of the second being the vectors. The dtype is
-        ///     DATA-dependent: real (float64, float32 kept) for a real operand whose eigenvalues are all real, else
-        ///     complex128; a float32 operand's complex result carries NumPy's complex64 values.</returns>
+        /// <returns><c>(eigenvalues, eigenvectors)</c>, the columns of the second being the vectors. Always complex128
+        ///     (NumPy 2.5: a real matrix with real eigenvalues gives zero imaginary parts, where NumPy 2.4 returned a real
+        ///     dtype); a float32 operand's result carries NumPy's complex64 values.</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, an operand holding inf / NaN
         ///     (<c>Array must not contain infs or NaNs</c>), or no convergence.</exception>
         /// <exception cref="TypeError">A text operand (<c>isfinite</c> has no string loop), or a float16, decimal or char
@@ -150,7 +150,7 @@ namespace NumSharp
         ///     NumPy's <c>np.linalg.eigvals(a)</c>: <see cref="Eig"/>'s eigenvalues without the eigenvectors.
         /// </summary>
         /// <param name="a">The square matrix or stack; it must hold no inf or NaN.</param>
-        /// <returns>The eigenvalues: real for a real operand whose eigenvalues are all real, else complex128.</returns>
+        /// <returns>The eigenvalues, always complex128 (NumPy 2.5), as <see cref="Eig"/>'s.</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, an operand holding inf / NaN, or no
         ///     convergence.</exception>
         /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
@@ -455,7 +455,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.linalg.tensordot(x1, x2, axes=(axesA, axesB))</c>, the Array-API spelling of
-        ///     <see cref="np.tensordot(NDArray, NDArray, int[], int[])"/>: <paramref name="axesA"/> of
+        ///     <see cref="np.tensordot(NDArray, NDArray, ValueTuple{int[], int[]})"/>: <paramref name="axesA"/> of
         ///     <paramref name="x1"/> contracted element by element with <paramref name="axesB"/> of <paramref name="x2"/>.
         /// </summary>
         /// <param name="x1">The first tensor.</param>

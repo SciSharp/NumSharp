@@ -53,11 +53,16 @@ namespace NumSharp
         ///     size 4</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.take.html
+        ///     <para>One overload, NumPy's signature (2026-11-11): a C# integer index converts to a 0-d index array (the
+        ///     result has the taken element's shape, a 0-d one without an axis), so the former <c>(long index)</c>
+        ///     overload is gone.</para>
         ///     <para>The work is <see cref="UnmanagedStorage.TakeFrom"/>, NumPy's <c>PyArray_TakeFrom</c>, which also fixes the order of the
         ///     checks above.</para>
+        ///     <para>[NDScoped] reclaims the int64 index copy, the C-order source copy and the natural-result temp on the out=
+        ///     path.</para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        [NDScoped] // reclaims the int64 index copy, the C-order source copy and the natural-result temp on the out= path
+        [NDScoped]
         public static NDArray take(NDArray a, NDArray indices, int? axis = null, NDArray @out = null, string mode = "raise")
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
@@ -66,31 +71,6 @@ namespace NumSharp
             // array_take converts the mode (and parses the axis) with its arguments, before PyArray_TakeFrom runs.
             int modeInt = ClipModes.ClipmodeConverter(mode);
             return UnmanagedStorage.TakeFrom(a, indices, axis, @out, modeInt);
-        }
-
-        /// <summary>
-        ///     Scalar convenience overload — take a single element by flat index.
-        /// </summary>
-        /// <param name="a">Source array.</param>
-        /// <param name="index">The index (a 0-d index: the result has the shape of the taken element).</param>
-        /// <param name="axis">As in <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</param>
-        /// <param name="out">As in <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</param>
-        /// <param name="mode">As in <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</param>
-        /// <returns>The taken element(s).
-        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result; a 0-d result without
-        ///     <paramref name="out"/> is the element's UNSTRIPPED NumPy scalar (<c>PyArray_Return</c>), NumSharp's
-        ///     read-only stand-in.</returns>
-        /// <exception cref="ValueError">See <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</exception>
-        /// <exception cref="AxisError">See <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</exception>
-        /// <exception cref="IndexError">See <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</exception>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        [NDScoped] // the 0-d index wrapper is built in THIS frame, before the array overload's scope opens
-        public static NDArray take(NDArray a, long index, int? axis = null, NDArray @out = null, string mode = "raise")
-        {
-            // Wrap the scalar in a 0-d NDArray so the array overload's shape-preserving
-            // logic emits a 0-d result (NumPy semantic for scalar input).
-            var idxArr = NDArray.Scalar(index);
-            return take(a, idxArr, axis, @out, mode);
         }
     }
 }

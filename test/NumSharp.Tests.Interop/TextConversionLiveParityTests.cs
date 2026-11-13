@@ -43,10 +43,11 @@ namespace NumSharp.Tests.Interop
             num_TN[19] = None
 
             def _t2c(x):
-                # numpy 2.4.2's StringDType -> complex cast writes the parsed REAL part into the imaginary part too
-                # (stringdtype/casts.cpp string_to_complex_float: npy_csetimagfunc(out, complex_value.real)), so '3' is
-                # 3+3j; the cast means complex(text), which NumSharp gives. No text here has an imaginary part, so the
-                # reference is numpy's own cast with the imaginary part set to complex(text).imag = +0.0.
+                # numpy 2.4.2's StringDType -> complex cast wrote the parsed REAL part into the imaginary part too
+                # (stringdtype/casts.cpp string_to_complex_float: npy_csetimagfunc(out, complex_value.real)), so '3' was
+                # 3+3j; the cast means complex(text), which NumSharp gives and numpy 2.5 computes. No text here has an
+                # imaginary part, so the reference is numpy's own cast with the imaginary part set to complex(text).imag =
+                # +0.0, which under numpy 2.5 changes nothing.
                 r = x.astype('complex128')
                 r.imag = 0.0
                 return r

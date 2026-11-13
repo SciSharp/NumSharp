@@ -25,7 +25,7 @@ namespace NumSharp.Backends
         ///     coordinate out of range in mode raise, a failed cast) returns the result's buffer to the pool at
         ///     once.</para>
         /// </remarks>
-        public override unsafe NDArray<long> RavelMultiIndex(NDArray[] multi_index, int[] dims, object mode = null, char order = 'C')
+        public override unsafe NDArray<long> RavelMultiIndex(NDArray[] multi_index, long[] dims, object mode = null, char order = 'C')
         {
             if (multi_index == null) throw new ArgumentNullException(nameof(multi_index));
             if (dims == null) throw new ArgumentNullException(nameof(dims));
@@ -48,7 +48,7 @@ namespace NumSharp.Backends
             if (ndim == 0)
             {
                 var zero = NewArray<long>(Shape.NewScalar(), true);
-                zero.MarkReductionScalar();
+                zero.PyArray_Return();
                 return zero;
             }
 
@@ -119,7 +119,7 @@ namespace NumSharp.Backends
 
             // NumPy's PyArray_Return: an all-0-d result is a numpy scalar — read-only, owning its value.
             if (result.ndim == 0)
-                result.MarkReductionScalar();
+                result.PyArray_Return();
             return result;
         }
 
@@ -195,7 +195,7 @@ namespace NumSharp.Backends
         ///     array</c> — NumPy names neither the axis nor the value).</exception>
         /// <exception cref="NotSupportedException">The IL kernel cannot be emitted.</exception>
         private static unsafe void ExecuteRavelMultiIndex(
-            ReadOnlySpan<nint> coordPtrs, long count, int[] dims, long[] ravelStrides, int[] modes, long* outPtr)
+            ReadOnlySpan<nint> coordPtrs, long count, long[] dims, long[] ravelStrides, int[] modes, long* outPtr)
         {
             int ndim = coordPtrs.Length;
 
@@ -226,7 +226,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentNullException">Either argument is null.</exception>
         /// <exception cref="ValueError">The counts differ (NumPy's <c>parameter multi_index must be a sequence of length
         ///     N</c>).</exception>
-        private static int ValidateRavelInputs(NDArray[] multi_index, int[] dims)
+        private static int ValidateRavelInputs(NDArray[] multi_index, long[] dims)
         {
             if (multi_index == null) throw new ArgumentNullException(nameof(multi_index));
             if (dims == null) throw new ArgumentNullException(nameof(dims));
@@ -271,7 +271,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError"><c>'A'</c> / <c>'K'</c> (<c>only 'C' or 'F' order is permitted</c>), or a product
         ///     that overflows int64 (<c>invalid dims: array size defined by dims is larger than the maximum possible
         ///     size.</c>).</exception>
-        internal static long[] RavelStrides(int[] dims, NPY_ORDER order)
+        internal static long[] RavelStrides(long[] dims, NPY_ORDER order)
         {
             bool cOrder = OrderResolver.RequireCOrFOrder(order);
             int ndim = dims.Length;
@@ -281,8 +281,10 @@ namespace NumSharp.Backends
             {
                 int d = cOrder ? ndim - 1 - i : i;
                 ravelStrides[d] = s;
-                long next = unchecked(s * dims[d]);
-                if (dims[d] != 0 && next / dims[d] != s)
+                // npy_mul_sizes_with_overflow: the exact 128-bit product must fit a long (a divide-back test would throw on
+                // long.MinValue / -1, which int64 dimensions reach).
+                long high = Math.BigMul(s, dims[d], out long next);
+                if (high != (next >> 63))
                     throw new ValueError("invalid dims: array size defined by dims is larger than the maximum possible size.");
                 s = next;
             }
@@ -296,7 +298,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A zero dimension (<c>cannot unravel if shape has zero entries (is empty).</c>).</exception>
         /// <remarks>NumPy makes it only when there is a coordinate to fold (an empty broadcast skips the loop), in every
         ///     mode: wrap would otherwise divide by the zero dimension.</remarks>
-        internal static void ThrowIfZeroDimension(int[] dims)
+        internal static void ThrowIfZeroDimension(long[] dims)
         {
             for (int d = 0; d < dims.Length; d++)
                 if (dims[d] == 0)

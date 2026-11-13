@@ -184,6 +184,41 @@ namespace NumSharp.Generic
         public NDArray(Shape shape, bool fillZeros, TensorEngine engine) : base(InfoOf<TDType>.NPTypeCode, shape, fillZeros, engine) { }
 
         /// <summary>
+        ///     A new typed array under a GIVEN descriptor of <typeparamref name="TDType"/>'s element type: the constructor for
+        ///     a result that must keep a C-type class the type code alone does not name (an <c>np.intc</c> item, char
+        ///     <c>'i'</c>, where <see cref="NDArray{TDType}(Shape, bool)"/> picks the type code's default class).
+        /// </summary>
+        /// <param name="dtype">The descriptor; its storage type must be <typeparamref name="TDType"/>.</param>
+        /// <param name="shape">The dimensions (a view's layout is laid out again in C order, as for every allocation).</param>
+        /// <param name="fillZeros">Zero the buffer; false leaves pool noise the caller must overwrite completely.</param>
+        /// <exception cref="ArgumentException"><paramref name="dtype"/> stores another element type than
+        ///     <typeparamref name="TDType"/> (a typed wrapper over it would read the wrong number of bytes per element).</exception>
+        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows.</exception>
+        /// <remarks>Footgun: <paramref name="fillZeros"/> <c>false</c> hands out whatever bytes the buffer pool held - the
+        ///     caller must overwrite every element before anything reads the array.</remarks>
+        internal NDArray(DType dtype, Shape shape, bool fillZeros) : base(CheckedDescr(dtype), shape, fillZeros) { }
+
+        /// <summary>
+        ///     The guard of the descriptor constructor: a typed array must store exactly <typeparamref name="TDType"/>.
+        /// </summary>
+        /// <param name="dtype">The descriptor to allocate under.</param>
+        /// <returns><paramref name="dtype"/>, unchanged.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="dtype"/>'s element type is not <typeparamref name="TDType"/>.</exception>
+        private static DType CheckedDescr(DType dtype)
+        {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            // Checked before the base constructor allocates: a mismatch would hand out a typed view of differently sized
+            // elements, every typed read past the element it means.
+            if (dtype.typecode != InfoOf<TDType>.NPTypeCode)
+                throw new ArgumentException(
+                    $"An NDArray<{typeof(TDType).Name}> cannot be allocated under dtype {dtype}: its elements are not {typeof(TDType).Name}.",
+                    nameof(dtype));
+            return dtype;
+        }
+
+        /// <summary>
         /// Clone the array while preserving the typed NDArray wrapper.
         /// </summary>
         public override NDArray Clone() => new NDArray<TDType>(Storage.Clone()) { TensorEngine = TensorEngine };
@@ -216,9 +251,10 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="key">The index tuple, as for <see cref="NDArray.this[object[]]"/>.</param>
         /// <value>
-        ///     GET: the selection as an <see cref="NDArray{TDType}"/> — a view for an index of integers and slices (a 0-d view
-        ///     for one integer per axis: read the element with a cast, <c>(double)typed[0]</c>, or
-        ///     <see cref="NDArray.GetValue{T}(long[])"/>), a new array for an advanced index.
+        ///     GET: the selection as an <see cref="NDArray{TDType}"/> — for one integer per axis NumPy's scalar, a read-only
+        ///     0-d COPY of the element (read its value with a cast, <c>(double)typed[0]</c>, or
+        ///     <see cref="NDArray.GetValue{T}(long[])"/>; write an element through the setter); a view for any other index of
+        ///     integers and slices (a 0-d one is an explicit 0-d array); a new array for an advanced index.
         ///     SET (inherited): the value is stored by NumPy's rules. Through an <see cref="NDArray{TDType}"/> variable the
         ///     value must be an <see cref="NDArray{TDType}"/> or a <typeparamref name="TDType"/> (which converts implicitly
         ///     to a 0-d array); assign any other value through an <see cref="NDArray"/> reference or
@@ -240,8 +276,9 @@ namespace NumSharp.Generic
         ///     <para>
         ///     Virtual dispatch reaches this getter also through an <see cref="NDArray"/> reference: the selection of a typed
         ///     array is a typed array object at run time, with the same elements and the same view relationship as the
-        ///     untyped selection (the basic index builds ONE typed view of the storage; an advanced index wraps the untyped
-        ///     result's own storage object, so a gather still owns its data, and disposes the untyped wrapper).
+        ///     untyped selection (the basic index builds ONE typed object, an item's scalar copy or a view of the storage; an
+        ///     advanced index wraps the untyped result's own storage object, so a gather still owns its data, and disposes
+        ///     the untyped wrapper).
         ///     </para>
         /// </remarks>
         public override NDArray<TDType> this[params object[] key]
@@ -250,17 +287,86 @@ namespace NumSharp.Generic
             {
                 if (key is null)
                     throw new ArgumentNullException(nameof(key));
+                // NDArray's three indexing rules, typed (see NDArray.this[object[]]): every key of a NumPy scalar indexes a
+                // copy of its value (gentype_subscript), an item is NumPy's scalar (a read-only copy), and any other 0-d
+                // view is an explicit 0-d array.
+                if (IsScalarSubscript)
+                    return TypedScalarSubscript(key);
                 if (TryBasicIndex(key, out Slice[] slices))
                 {
+                    if (IsItemIndex(slices))
+                        return TypedItemScalar(slices);
                     UnmanagedStorage view = Storage.GetView(slices);
                     // A trivial index may hand the storage itself back; the result must be its own object, or a reshape of
                     // it would relabel this array too.
                     if (ReferenceEquals(view, Storage))
                         view = Storage.Alias();
-                    return new NDArray<TDType>(view);
+                    var typedView = new NDArray<TDType>(view);
+                    if (typedView.ndim == 0)
+                        typedView.MarkExplicitZeroDimArray();
+                    return typedView;
                 }
                 return TypedSelection(key);
             }
+        }
+
+        /// <summary>
+        ///     The typed item path: NumPy's scalar of the element a full integer index selects (<see cref="NDArray.ItemScalar"/>),
+        ///     built directly as an <see cref="NDArray{TDType}"/> around the shared element copy
+        ///     (<see cref="NDArray.CopyItem"/>), so an element read allocates one object, as the untyped path does.
+        /// </summary>
+        /// <param name="slices">One integer <see cref="Slice"/> per dimension (none for a 0-d array).</param>
+        /// <returns>A new read-only 0-d typed array holding a copy of the element, under the descriptor of the element's
+        ///     class (<see cref="NDArray.ScalarDescr"/>).</returns>
+        /// <exception cref="IndexError">An integer is out of bounds for its axis (the storage's NumPy text).</exception>
+        /// <remarks>
+        ///     Anchored for the reason <see cref="NDArray.ItemScalar"/> is: the element's bytes are read after this array's last
+        ///     use in the body. <see cref="NDArray.PyArray_Return"/> runs as a statement: it returns this same object (see its
+        ///     remarks on the typed wrappers), and the typed reference is the one handed out.
+        /// </remarks>
+        [NDAnchored]
+        private unsafe NDArray<TDType> TypedItemScalar(Slice[] slices)
+        {
+            // The offset (and NumPy's bounds error) before the allocation, as the untyped item path does: no view storage
+            // is built for the one element read.
+            long offset = ItemOffset(slices);
+            // An NDArray<TDType> holds TDType's own type code (TypedSelection enforces it), never text. The descriptor is
+            // the element CLASS's own (an np.intc item stays 'i'), not the type code's default class.
+            var scalar = new NDArray<TDType>(ScalarDescr(Storage.Descr), Shape.Scalar, false);
+            CopyItem(Storage, offset, (byte*)scalar.Address);
+            scalar.PyArray_Return();
+            return scalar;
+        }
+
+        /// <summary>
+        ///     The typed <see cref="NDArray.ScalarSubscript"/>: any index of a read-only scalar indexes a writeable copy of
+        ///     its value, typed as this array's element type.
+        /// </summary>
+        /// <param name="key">The index tuple (any key: basic or advanced).</param>
+        /// <returns>What the 0-d array of the value gives for <paramref name="key"/> (a view of the copy, an item's scalar,
+        ///     a gather): itself when the route already produced a typed array (the copy of a typed array may keep the
+        ///     class, and its index re-enters this getter), else a typed wrapper over the SAME storage object the untyped
+        ///     route returned.</returns>
+        /// <exception cref="IndexError">The 0-d array of the value rejects the key: NumPy's
+        ///     <c>invalid index to scalar variable.</c> (see <see cref="NDArray.ScalarSubscript"/>).</exception>
+        /// <remarks>
+        ///     Shares the untyped result's storage object and disposes the untyped wrapper, as <see cref="TypedSelection"/>
+        ///     does: the result is this call's own, held by no one else, and the typed wrapper takes its own counted
+        ///     reference before the untyped one is released. The result derives from a fresh copy, never this array's
+        ///     storage, so no alias is needed. The explicit 0-d mark is per object, so it is carried over to the typed
+        ///     wrapper exactly when the untyped result had it (a view's 0-d result is an explicit array, the item of
+        ///     <c>s[()]</c> stays NumPy's scalar).
+        /// </remarks>
+        private NDArray<TDType> TypedScalarSubscript(object[] key)
+        {
+            NDArray result = ScalarSubscript(key);
+            if (result is NDArray<TDType> typed)
+                return typed;
+            var wrapped = new NDArray<TDType>(result.Storage);
+            if (result.IsExplicitZeroDimArray)
+                wrapped.MarkExplicitZeroDimArray();
+            result.Dispose();
+            return wrapped;
         }
 
         /// <summary>

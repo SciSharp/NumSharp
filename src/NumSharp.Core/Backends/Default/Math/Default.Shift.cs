@@ -159,7 +159,9 @@ namespace NumSharp.Backends
             // NumPy's ufunc output layout for the fresh result (parity QA-36): every route below writes C (F for an all-F
             // pair), so operands whose K order is anything else are shifted transposed into it and the result relabelled.
             return KOrderBinary(lhs, rhs, (engine: this, isLeftShift),
-                static (s, a, b) => s.engine.ExecuteShiftBare(a, b, s.isLeftShift));
+                static (s, a, b) => s.engine.ExecuteShiftBare(a, b, s.isLeftShift),
+                // The shift loop reads the result dtype: an operand of another dtype is cast (trivial loop refused for N-D).
+                lhs.GetTypeCode != resultType, rhs.GetTypeCode != resultType);
         }
 
         /// <summary>

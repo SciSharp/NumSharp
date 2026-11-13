@@ -245,7 +245,7 @@ namespace NumSharp
             }
 
             // The value in this array's dtype (a scalar's conversion runs before the index is resolved, as in NumPy).
-            var converted = same ? value : value.astype(dtype, true, 'K', "unsafe");
+            var converted = same ? value : value.astype(dtype);
             try
             {
                 using var units = UnitArray();

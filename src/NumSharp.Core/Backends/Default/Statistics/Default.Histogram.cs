@@ -808,14 +808,14 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A NaN quotient (<c>cannot convert float NaN to integer</c>, an infinite delta over an
         ///     infinite width); an edge count whose float64 value exceeds 2^63 (np.arange's <c>Maximum allowed size
         ///     exceeded</c>); an edge count whose bytes exceed int64 (<c>array is too big; …</c>).</exception>
-        /// <exception cref="OverflowException">An infinite quotient (<c>cannot convert float infinity to integer</c>).</exception>
+        /// <exception cref="OverflowError">An infinite quotient (<c>cannot convert float infinity to integer</c>).</exception>
         /// <exception cref="IndexError">An edge count whose float64 value is exactly 2^63: np.arange's length cast wraps to a
         ///     negative number, the arange is empty, and linspace's <c>y[-1] = stop</c> fails (<c>index -1 is out of bounds
         ///     for axis 0 with size 0</c>).</exception>
-        /// <exception cref="OutOfMemoryException">An edge count NumSharp's int bin count cannot hold: NumPy's MemoryError for
-        ///     the arange (<c>Unable to allocate 64.0 GiB for an array with shape (8589934593,) and data type float64</c>).
-        ///     NumPy raises it when the memory is not there; with enough memory it allocates and goes on, which NumSharp's
-        ///     histogram (an int bin count) does not.</exception>
+        /// <exception cref="ArrayMemoryError">An edge count NumSharp's int bin count cannot hold: NumPy's
+        ///     <c>_ArrayMemoryError</c> for the arange (<c>Unable to allocate 64.0 GiB for an array with shape (8589934593,)
+        ///     and data type float64</c>). NumPy raises it when the memory is not there; with enough memory it allocates and
+        ///     goes on, which NumSharp's histogram (an int bin count) does not.</exception>
         /// <remarks>
         ///     Reachable by real data: integer data whose estimated width is clamped to 1 count one bin per unit of their
         ///     range (int64 nanosecond timestamps clustered in time give billions), and float data with a tiny
@@ -828,7 +828,7 @@ namespace NumSharp.Backends
             if (double.IsNaN(count))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(count))
-                throw new OverflowException("cannot convert float infinity to integer");
+                throw new OverflowError("cannot convert float infinity to integer");
             if (count < int.MaxValue)
                 return (int)count; // count + 1 edges fit an int
 
@@ -844,52 +844,12 @@ namespace NumSharp.Backends
                 throw new IndexError("index -1 is out of bounds for axis 0 with size 0");
 
             // The allocation of length elements: a byte count past intp is "array is too big", anything else NumPy's
-            // MemoryError when the memory is not there.
+            // _ArrayMemoryError when the memory is not there (its size text is ArrayMemoryError.SizeToString, the port of
+            // _size_to_string that used to live here). length is below 2^63 here, so it fits the shape's long.
             var nbytes = new System.Numerics.BigInteger(length) * linspaceDtype.SizeOf();
             if (nbytes > long.MaxValue)
                 throw new ValueError(AllocationGuard.TooBigMessage);
-            throw new OutOfMemoryException(
-                string.Create(CultureInfo.InvariantCulture, $"Unable to allocate {NumPySizeString(nbytes)} for an array with shape ({new System.Numerics.BigInteger(length)},) " +
-                $"and data type {linspaceDtype.AsNumpyDtypeName()}"));
-        }
-
-        /// <summary>
-        ///     NumPy's <c>_ArrayMemoryError._size_to_string</c>: a byte count in binary units (bytes, KiB, … EiB), with three
-        ///     significant figures in Python's alternate form (<c>'#.3g'</c>: <c>8.00</c>, <c>16.0</c>, <c>149.</c>) below 1000
-        ///     units and every integer digit (<c>'#.0f'</c>) from there on.
-        /// </summary>
-        /// <param name="numBytes">The byte count (positive).</param>
-        /// <returns>The size text, e.g. <c>64.0 GiB</c>.</returns>
-        private static string NumPySizeString(System.Numerics.BigInteger numBytes)
-        {
-            const int log2Step = 10, step = 1024;
-            string[] units = { "bytes", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB" };
-
-            int unitI = (int)(Math.Max(numBytes.GetBitLength() - 1, 1) / log2Step);
-            // n_units = num_bytes / unit_val: Python's int / int, correctly rounded.
-            double nUnits = PyScalar.IntTrueDivide(numBytes, System.Numerics.BigInteger.One << (unitI * log2Step));
-
-            // Ensure the unit is right after rounding (Python's round() is half-to-even).
-            if (Math.Round(nUnits, MidpointRounding.ToEven) == step)
-            {
-                unitI++;
-                nUnits /= step;
-            }
-            // Sizes too large for the units: scale back to the last one.
-            if (unitI >= units.Length)
-            {
-                int newUnitI = units.Length - 1;
-                nUnits *= Math.Pow(2, (unitI - newUnitI) * log2Step);
-                unitI = newUnitI;
-            }
-
-            string unitName = units[unitI];
-            string number = unitI == 0
-                ? Backends.Printing.PrintfFormatter.Format("%.0f", nUnits, Backends.Printing.PercentFormat.PyObject)
-                : Math.Round(nUnits, MidpointRounding.ToEven) < 1000
-                    ? Backends.Printing.PrintfFormatter.Format("%#.3g", nUnits, Backends.Printing.PercentFormat.PyObject)
-                    : Backends.Printing.PrintfFormatter.Format("%#.0f", nUnits, Backends.Printing.PercentFormat.PyObject);
-            return number + " " + unitName;
+            throw new ArrayMemoryError(new[] { (long)length }, linspaceDtype);
         }
 
         /// <summary>
@@ -1139,7 +1099,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The single-dtype linspace core: float64 defers to <see cref="np.linspace(double,double,int,bool,DType,string)"/> (already double-internal),
+        ///     The single-dtype linspace core: float64 defers to <see cref="TensorEngine.Linspace(double,double,long,bool,DType,string)"/> (already double-internal),
         ///     while float32/float16 run the arithmetic in their OWN width (widen-op-narrow for float16, matching
         ///     NumPy's npy_half ufuncs) so a strong-endpoint narrow-float histogram is bit-exact rather than the
         ///     ~1 ULP off a double-internal linspace would give.

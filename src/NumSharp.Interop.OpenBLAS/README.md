@@ -22,7 +22,7 @@ var c = np.dot(a, b);
 
 Console.WriteLine(OpenBlasEngine.Info);
 // …\runtimes\win-x64\native\libscipy_openblas64_.dll [symbols scipy_*64_, ILP64, threads 24]
-// OpenBLAS 0.3.31.dev  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24
+// OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24
 
 OpenBlasEngine.Disable();   // clears engine.Blas — back to NumSharp's managed SIMD GEMM
 ```
@@ -40,12 +40,12 @@ OpenBlasEngine.Disable();   // clears engine.Blas — back to NumSharp's managed
 not build its own: its wheels bundle the prebuilt `scipy-openblas32` / `scipy-openblas64` artifacts
 published on PyPI by the [openblas-libs](https://github.com/MacPython/openblas-libs) project, pinned
 in numpy's `requirements/ci_requirements.txt`. This package bundles those same artifacts at the same
-pinned version, **verified byte-for-byte**: the DLL here and the one in numpy 2.4.2's `numpy.libs/`
-have the identical SHA-256 (`74a40872…`, which is also where NumPy's mangled file name comes from —
+pinned version, **verified byte-for-byte**: the DLL here and the one in numpy 2.5.4's `numpy.libs/`
+have the identical SHA-256 (`ed4f167a…`, which is also where NumPy's mangled file name comes from —
 `delvewheel` names the file by its hash).
 
 So bit-parity no longer depends on having Python installed, or on which copy of a BLAS won a loader
-race. Bundled version: **scipy-openblas 0.3.31.22.0** (OpenBLAS 0.3.31.dev), matching **numpy 2.4.2**.
+race. Bundled version: **scipy-openblas 0.3.34.106.0** (OpenBLAS 0.3.34), matching **numpy 2.5.4** (and 2.5.3).
 
 | RID | distribution | RID | distribution |
 |---|---|---|---|
@@ -152,7 +152,7 @@ The override is configured **on the `PackageReference`** — no second package:
 
 ```xml
 <PackageReference Include="NumSharp.Interop.OpenBLAS" Version="0.60.0">
-  <OpenBlasVersion>0.3.31.22.0</OpenBlasVersion>              <!-- scipy-openblas version, enforced -->
+  <OpenBlasVersion>0.3.31.188.0</OpenBlasVersion>             <!-- scipy-openblas version, enforced -->
   <!-- optional: read-from / download-to directory (relative resolves against the project) -->
   <!-- <OpenBlasPath>native/openblas</OpenBlasPath> -->
 </PackageReference>
@@ -235,7 +235,7 @@ Writing your own backend needs no access to NumSharp's internals: read operands 
 `a.GetData<T>().Address` — it densifies a non-contiguous view, so pairing it with `Shape.Strides`
 reads outside the buffer.
 
-The two entry points are a **route-for-route port of NumPy 2.4.2's two matrix-product dispatchers** —
+The two entry points are a **route-for-route port of NumPy 2.5.4's two matrix-product dispatchers** —
 `cblas_matrixproduct` (behind `np.dot`) and the `@TYPE@_matmul` gufunc (behind `np.matmul` and
 `@`). They are genuinely different C code and disagree on some inputs, so both are mirrored:
 gemm (with the `a @ a.T` **syrk** shortcut and NumPy's copy-if-not-blasable rule), both gemv

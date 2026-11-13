@@ -43,18 +43,30 @@ namespace NumSharp.Tests
     ///       Bug 3:         AsNDArray accesses shape[3] before reshaping flat array
     ///       Bug 4:         ToBitmap non-contiguous sliced array fails in MultiIterator
     ///       Bug 5:         ToBitmap no dtype validation (only byte arrays work)
-    ///       Bugs 6, 7:     ToBitmap stride padding concat logic crashes
-    ///       Bug 8:         ToBitmap 24bpp round-trip with even narrow widths corrupts data
+    ///       Bug 6:         ToBitmap stride padding concat logic crashes
+    ///       Bug 7:         24bpp round-trip with even narrow widths corrupts data
+    ///       Bug 8:         ToBitmap with an unsupported channel count gives GDI+'s generic error
     ///
-    ///     GitHub issues: #396, #440, #475, #491
+    ///     GitHub issues: #396 (Bugs 1a-1c), #440 (Bugs 2, 6), #475 (Bug 4), #491 (Bug 5)
     ///
-    ///     Total: 8 distinct bugs, 10 test methods.
+    ///     Total: 8 distinct bugs, 12 test methods.
     /// </summary>
     /// <remarks>
+    ///     <para>
     ///     The class had no <c>[TestClass]</c> from the TUnit → MSTest migration (ac020336, 2026-04-15) until 2026-10-05,
     ///     so MSTest never discovered these pins (MSTest's <c>TestClassAttribute</c> is not inherited from
     ///     <see cref="TestClass"/>). The 2026-10-05 run of the whole OpenBugs category added the attribute: all 11 tests
     ///     run under <c>TestCategory=OpenBugs</c> now, and all 11 still fail, so every <c>[OpenBugs]</c> tag stays.
+    ///     </para>
+    ///     <para>
+    ///     The 2026-11-08 issue triage after the 0.80.0 release re-ran each GitHub issue's own repro against the published
+    ///     NumSharp.Bitmap 0.80.0 package. All four still reproduce: #396 IncorrectShapeException, #440
+    ///     ArgumentOutOfRangeException (it returned a wrong pixel when reported), #475 IncorrectShapeException, and #491
+    ///     InvalidCastException. The triage added Bug 1c (#396's exact 227x227 image, which no pin covered and the root
+    ///     cause analysis wrongly called working) and gave Bug 5 an int32 operand again (its <c>np.arange</c> operand had
+    ///     become int64, so it failed at its precondition instead of in <c>ToBitmap</c>). Each pin now fails inside the
+    ///     call it is about, so it turns green when that call is fixed.
+    ///     </para>
     /// </remarks>
     [TestClass]
     [WindowsOnly]
@@ -77,14 +89,16 @@ namespace NumSharp.Tests
         //  (1, H, W, 4) instead of (1, H, W, 3). The no-copy path uses
         //  ReshapeFlatData() which handles this correctly.
         //
-        //  For wider odd-width images (e.g. 227px), the stride/width division
-        //  truncates to 2 instead of 3, causing the reshape to fail entirely
-        //  with IncorrectShapeException because stride*height bytes don't
-        //  divide evenly into (1, H, W, 2).
+        //  When stride/width does truncate to 3 (wider odd widths such as the
+        //  issue's 227px image, and 5px), the bpp is right but the copy still
+        //  holds stride*height bytes, padding included, so the reshape to
+        //  (1, H, W, 3) fails with IncorrectShapeException: a 227x227 image
+        //  copies 684*227 = 155,268 bytes for a shape that holds 154,587.
         //
-        //  VERIFICATION:
+        //  VERIFICATION (re-run on the published NumSharp.Bitmap 0.80.0, 2026-11-08):
         //    3px wide 24bpp: stride=12, stride/width=4, shape becomes (1,H,3,4)
-        //    227px wide 24bpp: stride=684, stride/width=3 (happens to work)
+        //    227px wide 24bpp: stride=684, stride/width=3, the reshape of 155,268
+        //      bytes into (1,227,227,3) throws IncorrectShapeException (Bug 1c)
         //    5px wide 24bpp: stride=16, stride/width=3 (but 16*H != H*5*3)
         //
         // ================================================================
@@ -94,7 +108,7 @@ namespace NumSharp.Tests
         ///     stride=12, width=3, stride/width=4 → shape (1,2,3,4) instead of (1,2,3,3).
         ///     The image has 3 channels (RGB) but gets reshaped as 4 channels.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/396")]
         public void Bug1a_ToNDArray_CopyTrue_OddWidth24bpp_WrongShape()
         {
             var bmp = new Bitmap(3, 2, PixelFormat.Format24bppRgb);
@@ -117,7 +131,7 @@ namespace NumSharp.Tests
         ///     The division happens to give 3 (correct bpp), but stride*height=32
         ///     does not equal height*width*3=30, so the reshape may produce wrong data.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/396")]
         public void Bug1b_ToNDArray_CopyTrue_5pxWide24bpp_ExtraPaddingBytes()
         {
             var bmp = new Bitmap(5, 2, PixelFormat.Format24bppRgb);
@@ -136,6 +150,35 @@ namespace NumSharp.Tests
             nd.size.Should().Be(30,
                 "5x2 24bpp image has 30 pixels total (5*2*3), " +
                 "but copy path copies stride*height=32 bytes including padding.");
+        }
+
+        /// <summary>
+        ///     BUG 1c: GitHub #396's own image - <c>ToNDArray(copy: true)</c> of a 227x227 24bpp bitmap throws
+        ///     <c>IncorrectShapeException</c> ("cannot reshape array of size 155268 into shape (1,227,227,3)") instead of
+        ///     returning its (1, 227, 227, 3) pixels, so every RGB image whose row is not a multiple of 4 bytes fails.
+        /// </summary>
+        /// <remarks>
+        ///     GDI+ pads each 681-byte row to a 684-byte stride. The copy path keeps those 3 padding bytes on every row, and
+        ///     the reshape to (1, H, W, 3) then has 691 bytes too many. Here the bytes-per-pixel guess is right
+        ///     (684 / 227 truncates to 3), unlike Bug 1a, so this pin holds the second half of the fix: the copy has to drop
+        ///     each row's padding, not only take bpp from the pixel format. Bug 1a / 1b alone would let a fix that corrects
+        ///     only the bpp guess pass while the reporter's image still throws. Still throws on the published
+        ///     NumSharp.Bitmap 0.80.0 package (2026-11-08).
+        /// </remarks>
+        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/396")]
+        public void Bug1c_ToNDArray_CopyTrue_227pxWide24bpp_Issue396Repro()
+        {
+            using var bmp = new Bitmap(227, 227, PixelFormat.Format24bppRgb);
+            bmp.SetPixel(226, 226, Color.FromArgb(10, 20, 30));
+
+            var nd = bmp.ToNDArray(copy: true, discardAlpha: false);
+
+            nd.Should().BeShaped(1, 227, 227, 3);
+            // The last pixel of the last row reads back in GDI+'s BGR order: a padding byte left in the copy would
+            // shift it, so its value is checked as well as the shape.
+            nd.GetByte(0, 226, 226, 0).Should().Be(30);
+            nd.GetByte(0, 226, 226, 1).Should().Be(20);
+            nd.GetByte(0, 226, 226, 2).Should().Be(10);
         }
 
         // ================================================================
@@ -160,7 +203,7 @@ namespace NumSharp.Tests
         ///     stride=8, width=2, stride/width=4 → shape (1,2,2,4) instead of (1,2,2,3).
         ///     Round-trip pixel values are corrupted because channel boundaries shift.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/440")]
         public void Bug2_ToNDArray_CopyTrue_2pxWide24bpp_WrongBpp()
         {
             var bmp = new Bitmap(2, 2, PixelFormat.Format24bppRgb);
@@ -271,7 +314,7 @@ namespace NumSharp.Tests
         ///     BUG 4: ToBitmap with sliced (non-contiguous) NDArray throws
         ///     IncorrectShapeException from MultiIterator broadcast.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/475")]
         public void Bug4_ToBitmap_SlicedNDArray_BroadcastMismatch()
         {
             var full = np.arange(0, 4 * 4 * 4).reshape(1, 4, 4, 4).astype(NPTypeCode.Byte);
@@ -312,10 +355,17 @@ namespace NumSharp.Tests
         ///     BUG 5: ToBitmap with int32 NDArray throws cryptic InvalidCastException
         ///     instead of a helpful error or auto-converting to byte.
         /// </summary>
-        [TestMethod, OpenBugs]
+        /// <remarks>
+        ///     The operand is cast to int32 explicitly. <c>np.arange</c> returns int64 now (NumPy 2's default integer), so the
+        ///     earlier <c>np.arange(...)</c> operand made the <c>typeof(int)</c> precondition below fail before
+        ///     <c>ToBitmap</c> ran. That pin was red for the wrong reason and would have stayed red after a fix. With the cast
+        ///     it fails inside <c>ToBitmap</c> again, with the InvalidCastException of GitHub #491, re-verified on the
+        ///     published NumSharp.Bitmap 0.80.0 package (2026-11-08).
+        /// </remarks>
+        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/491")]
         public void Bug5_ToBitmap_NonByteDtype_InvalidCastException()
         {
-            var nd = np.arange(0, 1 * 3 * 4 * 3).reshape(1, 3, 4, 3); // int32
+            var nd = np.arange(0, 1 * 3 * 4 * 3).astype(np.int32).reshape(1, 3, 4, 3);
             nd.dtype.Should().Be(typeof(int));
 
             // Expected: either auto-convert to byte, or throw helpful ArgumentException
@@ -359,7 +409,7 @@ namespace NumSharp.Tests
         ///     BUG 6a: ToBitmap crashes on 1px wide 24bpp image.
         ///     stride=4 (1*3=3, padded to 4), width*bpp=3 → concat triggers.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/440")]
         public void Bug6a_ToBitmap_1pxWide24bpp_StridePaddingCrash()
         {
             var nd = np.ones(new Shape(1, 2, 1, 3)).astype(NPTypeCode.Byte);
@@ -382,7 +432,7 @@ namespace NumSharp.Tests
         ///     BUG 6b: ToBitmap crashes on 5px wide 24bpp image.
         ///     stride=16 (5*3=15, padded to 16), width*bpp=15 → concat triggers.
         /// </summary>
-        [TestMethod, OpenBugs]
+        [TestMethod, OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/440")]
         public void Bug6b_ToBitmap_5pxWide24bpp_StridePaddingCrash()
         {
             var nd = np.ones(new Shape(1, 2, 5, 3)).astype(NPTypeCode.Byte);

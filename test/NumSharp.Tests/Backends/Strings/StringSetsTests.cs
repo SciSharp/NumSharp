@@ -295,7 +295,7 @@ namespace NumSharp.Tests.Backends.Strings
             Ints(np.histogram(data, edges).hist).Should().Equal(21846L, 43692L);
             Ints(np.histogram(data, edges, weights: (np.arange(65538) % 3).astype(np.int64)).hist).Should().Equal(0L, 65538L);
             Action boolWeights = () => np.histogram(U("a", "b"), U("a", "c"), weights: np.array(new[] { true, false }));
-            boolWeights.Should().ThrowExactly<TypeError>()
+            boolWeights.Should().ThrowExactly<UFuncOutputCastingError>()
                 .WithMessage("Cannot cast ufunc 'add' output from dtype('int64') to dtype('bool') with casting rule 'same_kind'");
         }
 
@@ -351,8 +351,9 @@ namespace NumSharp.Tests.Backends.Strings
         /// <summary>
         ///     NumPy's errors in its order: keepdims over a 0-d text result indexes NumPy's scalar (<c>string indices must be
         ///     integers, not 'tuple'</c> for <c>U</c>, <c>byte indices must be integers or slices, not tuple</c> for <c>S</c>);
-        ///     a 0-d out that does not cast safely is a "scalar"; several reduced axes beside a kept axis of length 0 cannot
-        ///     merge; an interpolating method over an empty line reports its first neighbour (-1 for linear at q = 0 and
+        ///     a 0-d out of another text width is written by the take's writeback; several reduced axes beside a kept axis of length 0 merge
+        ///     since NumPy 2.5.4 (an empty <c>U1</c> result; NumPy 2.4 raised its reshape error there); an interpolating
+        ///     method over an empty line reports its first neighbour (-1 for linear at q = 0 and
         ///     weibull at q = 1, 0 otherwise); a selection method its take's index (inverted_cdf clips -1 to 0).
         /// </summary>
         [TestMethod]
@@ -363,13 +364,16 @@ namespace NumSharp.Tests.Backends.Strings
             kdU.Should().Throw<TypeError>().WithMessage("string indices must be integers, not 'tuple'");
             Action kdS = () => np.quantile(t.astype("S"), 0.5, method: "lower", keepdims: true);
             kdS.Should().Throw<TypeError>().WithMessage("byte indices must be integers or slices, not tuple");
-            Action out0d = () => np.quantile(t, 0.5, method: "lower", @out: np.zeros(new Shape(), np.dtype("U4")));
-            out0d.Should().Throw<TypeError>().WithMessage("Cannot cast scalar from dtype('<U4') to dtype('<U1') according to the rule 'safe'");
+            // NumPy 2.5's take writes a wider 0-d text out through its writeback (2.4's safe U4 -> U1 check is gone).
+            var out4 = np.zeros(new Shape(), np.dtype("U4"));
+            ReferenceEquals(np.quantile(t, 0.5, method: "lower", @out: out4), out4).Should().BeTrue();
+            ((string)out4.item()).Should().Be("c");
             var o = np.zeros(new Shape(), np.dtype("U1"));
             ReferenceEquals(np.quantile(t, 0.5, method: "lower", @out: o), o).Should().BeTrue();
             ((string)o.item()).Should().Be("c");
-            Action merge = () => np.quantile(np.zeros(new Shape(0, 2, 3), np.dtype("U1")), 0.5, new[] { 1, 2 }, method: "lower");
-            merge.Should().Throw<IncorrectShapeException>().WithMessage("cannot reshape array of size 0 into shape (0,newaxis)");
+            var merged = np.quantile(np.zeros(new Shape(0, 2, 3), np.dtype("U1")), 0.5, new[] { 1, 2 }, method: "lower");
+            merged.dtype.Should().Be(np.dtype("U1"));
+            merged.shape.Should().Equal(0L);
             var e0 = np.zeros(new Shape(0), np.dtype("U1"));
             Action lin0 = () => np.quantile(e0, 0.0);
             lin0.Should().Throw<IndexError>().WithMessage("index -1 is out of bounds for axis 0 with size 0");

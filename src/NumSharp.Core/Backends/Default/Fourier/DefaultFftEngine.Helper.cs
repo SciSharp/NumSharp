@@ -26,7 +26,7 @@ namespace NumSharp.Backends
             // validates the device before it rejects a negative length.
             double nd = (double)n * d;
             if (nd == 0.0)
-                throw new DivideByZeroException("float division by zero");
+                throw new ZeroDivisionError("float division by zero");
             DeviceArguments.ValidateDevice(device);
             if (n < 0)
                 throw new ValueError("negative dimensions are not allowed");
@@ -57,7 +57,7 @@ namespace NumSharp.Backends
             // (rfftfreq(-5) -> [] rather than an error; unlike fftfreq, which calls empty(n)).
             double nd = (double)n * d;
             if (nd == 0.0)
-                throw new DivideByZeroException("float division by zero");
+                throw new ZeroDivisionError("float division by zero");
             DeviceArguments.ValidateDevice(device);
             double val = 1.0 / nd;
             // N = n//2 + 1. Arithmetic right-shift is floor-division-by-2 for two's-complement ints

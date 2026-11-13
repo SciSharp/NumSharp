@@ -24,7 +24,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The values whose standard deviation is desired.</param>
         /// <param name="axis">The axis to compute along (negative counts from the end); <c>null</c> uses every element. A 0-d
-        ///     array takes no axis unless <paramref name="where"/> is a mask.</param>
+        ///     array takes no axis unless <paramref name="where"/> is a mask. A tuple (<c>(0, 2)</c>) reduces every
+        ///     axis it names together, in one pass (NumPy's tuple axis; the empty tuple reduces none, and a tuple item
+        ///     gets no 0-d allowance).</param>
         /// <param name="dtype">The loop of both sums (see <see cref="var"/>). An integer or bool dtype with a result that has
         ///     dimensions is NumPy's sqrt output-cast error; a 0-d result truncates the root instead.</param>
         /// <param name="out">The FLOAT or complex array the result is written into and returned. NumPy runs the variance into
@@ -41,7 +43,8 @@ namespace NumSharp
         ///     result has no dimensions.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="ValueError">A nonzero <paramref name="ddof"/> together with <paramref name="correction"/> (raised
-        ///     first); a read-only or misshapen <paramref name="out"/>.</exception>
+        ///     first); a read-only or misshapen <paramref name="out"/>. Also a tuple that names an axis twice
+        ///     (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> with a result that has dimensions,
         ///     or an integer or bool <paramref name="out"/>: NumPy's <c>Cannot cast ufunc 'sqrt' output from
@@ -54,7 +57,7 @@ namespace NumSharp
         ///     <paramref name="where"/> or <paramref name="mean"/>.</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.std.html</remarks>
-        public static NDArray std(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0,
+        public static NDArray std(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, int ddof = 0,
             bool keepdims = false, NDArray @where = null, NDArray mean = null, int? correction = null)
         {
             if (a is null)
@@ -63,5 +66,26 @@ namespace NumSharp
             // The whole call is the engine's: TensorEngine.ReduceStd of a's engine takes every keyword, correction= first.
             return a.TensorEngine.ReduceStd(a, axis, keepdims, ddof, dtype, @out, @where, mean, correction);
         }
+
+        /// <summary>
+        ///     <see cref="std(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/> with the axis as
+        ///     one <c>int</c>: the overload a C# integer binds (its identity conversion beats NDAxis' implicit one),
+        ///     forwarding to the NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="std(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>
+        public static NDArray std(NDArray a, int axis, DType dtype = null, NDArray @out = null, int ddof = 0, bool keepdims = false, NDArray @where = null, NDArray mean = null, int? correction = null)
+            => std(a, (NDAxis?)axis, dtype, @out, ddof, keepdims, @where, mean, correction);
+
+        /// <summary>
+        ///     <see cref="std(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/> with the axes as
+        ///     an <c>int[]</c>: the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to
+        ///     <c>int[]</c> better than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any
+        ///     other array NumPy's tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="std(NDArray, NDAxis?, DType, NDArray, int, bool, NDArray, NDArray, int?)"/>
+        public static NDArray std(NDArray a, int[] axis, DType dtype = null, NDArray @out = null, int ddof = 0, bool keepdims = false, NDArray @where = null, NDArray mean = null, int? correction = null)
+            => std(a, (NDAxis?)axis, dtype, @out, ddof, keepdims, @where, mean, correction);
     }
 }

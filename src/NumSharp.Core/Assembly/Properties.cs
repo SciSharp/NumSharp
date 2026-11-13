@@ -58,6 +58,13 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NumSharp.Interop.ParquetNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
 [assembly: InternalsVisibleTo("NumSharp.Tests.Interop.ParquetNet, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
+// The TorchSharp interop bridge reads the same internal view (Storage.InternalArray for the ARC pin that keeps an
+// NDArray's buffer alive while libtorch holds a tensor over it, Shape's dimensions/strides/offset for the from_blob +
+// as_strided export and the strided import view over a tensor's storage) to share memory with TorchSharp tensors both
+// ways - and its test assembly exercises those internals.
+[assembly: InternalsVisibleTo("NumSharp.Interop.TorchSharp, PublicKey=" + NumSharpFriendKey.PublicKey)]
+[assembly: InternalsVisibleTo("NumSharp.Tests.Interop.TorchSharp, PublicKey=" + NumSharpFriendKey.PublicKey)]
+
 [assembly: InternalsVisibleTo("NumSharp.Benchmark, PublicKey=" + NumSharpFriendKey.PublicKey)]
 
 // The BenchmarkDotNet suite (benchmark/NumSharp.Benchmark.CSharp, signed through Directory.Build.props like every repo

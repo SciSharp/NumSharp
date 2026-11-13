@@ -117,7 +117,7 @@ namespace NumSharp.Backends.Strings
         /// <returns><paramref name="out"/> itself.</returns>
         /// <exception cref="ArgumentException">The operands are not one string and one integer array, or there is no
         ///     <paramref name="out"/> (caller bugs).</exception>
-        /// <exception cref="OverflowException">An element's <c>reps * len</c> exceeds 2^63 - 1 (NumPy's OverflowError,
+        /// <exception cref="OverflowError">An element's <c>reps * len</c> exceeds 2^63 - 1 (NumPy's OverflowError,
         ///     raised after the loop; that element is left untouched, every other one written).</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> repeat cast into a <c>U</c> <paramref name="out"/> meets a
         ///     byte ≥ 0x80 in a selected element.</exception>
@@ -164,7 +164,7 @@ namespace NumSharp.Backends.Strings
                     : RunBinary(kernel, reps, text, @out, where, loop, &overflow);
                 // NumPy raises after the whole loop: every other element is written, an overflowing one is left as it was.
                 if (overflow != 0)
-                    throw new OverflowException(RepeatOverflowMessage);
+                    throw new OverflowError(RepeatOverflowMessage);
                 return result;
             }
             finally

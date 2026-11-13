@@ -87,7 +87,7 @@ namespace NumSharp.Tests.Backends.Strings
             using (var a = np.array(new sbyte[] { 1, 2 }))
             {
                 Action wide = () => a.__setitem__(0, 300);
-                wide.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+                wide.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
                 V(a).Should().Equal((sbyte)1, (sbyte)2);
             }
             using (var a = np.array(new[] { 1, 2 })) { a.__setitem__(0, 2.9); V(a).Should().Equal(2, 2); }

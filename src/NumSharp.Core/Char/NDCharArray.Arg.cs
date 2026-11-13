@@ -41,38 +41,43 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>chararray.argmax(axis, keepdims=...)</c>: the finalize error, after NumPy's axis and empty-sequence
-        ///     checks.
-        /// </summary>
-        /// <param name="axis">The axis (checked as NumPy checks it).</param>
-        /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
-        /// <returns>Never returns.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank (rank 1 for a 0-d chararray).</exception>
-        /// <exception cref="ValueError">The reduced length is 0 (<c>attempt to get argmax of an empty sequence</c>); else
-        ///     <c>Can only create a chararray from string data.</c></exception>
-        public new NDArray argmax(int axis, bool keepdims = false) => argmax((int?)axis, null, keepdims);
-
-        /// <summary>
         ///     NumPy's <c>chararray.argmax(axis=None, out=None, *, keepdims=False)</c>: with <paramref name="out"/> the
         ///     indices are written into it and it is returned (nothing is created as the subclass); without it, the
         ///     finalize error after NumPy's checks.
         /// </summary>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="axis">The axis, or null for the flattened array. NumPy's axis here is ONE integer: a tuple is
+        ///     ndarray.argmax's TypeError, raised before anything else.</param>
         /// <param name="out">The output array, or null.</param>
         /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
         /// <returns><paramref name="out"/>.</returns>
+        /// <exception cref="TypeError">A tuple <paramref name="axis"/> (<c>'tuple' object cannot be interpreted as an
+        ///     integer</c>), first.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
         /// <exception cref="ValueError">The reduced length is 0, <paramref name="out"/> has another shape (<c>output array
         ///     does not match result of np.argmax.</c>), or — without <paramref name="out"/> — always <c>Can only create a
         ///     chararray from string data.</c></exception>
         /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64.</exception>
-        public new NDArray argmax(int? axis = null, NDArray @out = null, bool keepdims = false)
+        public new NDArray argmax(NDAxis? axis = null, NDArray @out = null, bool keepdims = false)
         {
             if (@out is not null)
                 return base.argmax(axis, @out, keepdims);
             base.argmax(axis, null, keepdims).Dispose();
             throw FinalizeError();
         }
+
+        /// <summary>
+        ///     <see cref="argmax(NDAxis?, NDArray, bool)"/> with the axis as an <c>int?</c>: the overload a C# integer, an
+        ///     <c>int?</c>, a bare <c>null</c> and <c>default</c> bind (NumPy's axis here is ONE integer, so there is no
+        ///     <c>int[]</c> form), forwarding to the NDAxis? form, so its errors and its <paramref name="out"/> answer are that
+        ///     one's.
+        /// </summary>
+        /// <param name="axis">The axis, or <c>null</c> for the flattened array.</param>
+        /// <param name="out">The output array, or null.</param>
+        /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
+        /// <returns><paramref name="out"/>.</returns>
+        /// <inheritdoc cref="argmax(NDAxis?, NDArray, bool)"/>
+        public new NDArray argmax(int? axis, NDArray @out = null, bool keepdims = false)
+            => argmax(NDAxis.FromNullable(axis), @out, keepdims);
 
         /// <summary>NumPy's <c>chararray.argmin()</c>: always the finalize error, after the empty-sequence check.</summary>
         /// <returns>Never returns.</returns>
@@ -84,33 +89,42 @@ namespace NumSharp
             throw FinalizeError();
         }
 
-        /// <summary>NumPy's <c>chararray.argmin(axis, keepdims=...)</c>: the finalize error after NumPy's checks.</summary>
-        /// <param name="axis">The axis.</param>
-        /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
-        /// <returns>Never returns.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
-        /// <exception cref="ValueError">The reduced length is 0; else <c>Can only create a chararray from string data.</c></exception>
-        public new NDArray argmin(int axis, bool keepdims = false) => argmin((int?)axis, null, keepdims);
-
         /// <summary>
         ///     NumPy's <c>chararray.argmin(axis=None, out=None, *, keepdims=False)</c>: computes into <paramref name="out"/>;
         ///     without it, the finalize error after NumPy's checks.
         /// </summary>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="axis">The axis, or null for the flattened array. NumPy's axis here is ONE integer: a tuple is
+        ///     ndarray.argmax's TypeError, raised before anything else.</param>
         /// <param name="out">The output array, or null.</param>
         /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
         /// <returns><paramref name="out"/>.</returns>
+        /// <exception cref="TypeError">A tuple <paramref name="axis"/> (<c>'tuple' object cannot be interpreted as an
+        ///     integer</c>), first.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
         /// <exception cref="ValueError">The reduced length is 0, <paramref name="out"/> has another shape, or — without
         ///     <paramref name="out"/> — always <c>Can only create a chararray from string data.</c></exception>
         /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64.</exception>
-        public new NDArray argmin(int? axis = null, NDArray @out = null, bool keepdims = false)
+        public new NDArray argmin(NDAxis? axis = null, NDArray @out = null, bool keepdims = false)
         {
             if (@out is not null)
                 return base.argmin(axis, @out, keepdims);
             base.argmin(axis, null, keepdims).Dispose();
             throw FinalizeError();
         }
+
+        /// <summary>
+        ///     <see cref="argmin(NDAxis?, NDArray, bool)"/> with the axis as an <c>int?</c>: the overload a C# integer, an
+        ///     <c>int?</c>, a bare <c>null</c> and <c>default</c> bind (NumPy's axis here is ONE integer, so there is no
+        ///     <c>int[]</c> form), forwarding to the NDAxis? form, so its errors and its <paramref name="out"/> answer are that
+        ///     one's.
+        /// </summary>
+        /// <param name="axis">The axis, or <c>null</c> for the flattened array.</param>
+        /// <param name="out">The output array, or null.</param>
+        /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
+        /// <returns><paramref name="out"/>.</returns>
+        /// <inheritdoc cref="argmin(NDAxis?, NDArray, bool)"/>
+        public new NDArray argmin(int? axis, NDArray @out = null, bool keepdims = false)
+            => argmin(NDAxis.FromNullable(axis), @out, keepdims);
 
         #endregion
 

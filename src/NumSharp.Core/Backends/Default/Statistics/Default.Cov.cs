@@ -76,9 +76,10 @@ namespace NumSharp.Backends
         ///     <c>StringDType</c> request with weights.</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> (the in-place centring's cast
         ///     refusal).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero.</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
-        ///     arithmetic out of range.</exception>
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowException">Decimal arithmetic out of range (.NET's own, decimal has no NumPy
+        ///     dtype).</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <exception cref="InvalidOperationException">Not reached (see <see cref="CovOfText"/>).</exception>
@@ -300,7 +301,7 @@ namespace NumSharp.Backends
         ///     <c>(0, 0)</c> covariance NumPy returns when there are no variables.</returns>
         /// <exception cref="ValueError">A text element that does not parse into a numeric <paramref name="dtype"/>
         ///     (<c>could not convert string to float: np.str_('ab')</c>; <paramref name="m"/>'s before <paramref name="y"/>'s).</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <exception cref="ValueError">The variables of <paramref name="m"/> and <paramref name="y"/> do not have the same
@@ -329,7 +330,7 @@ namespace NumSharp.Backends
             {
                 // X = array(m, ndmin=2, dtype=dtype): np.array with a dtype casts unsafely, so text is parsed (a number is
                 // left for the numeric path's own cast).
-                var xm = Backends.Strings.NDStringUfuncs.IsText(m) ? m.astype(dtype, true, 'K', "unsafe") : m;
+                var xm = Backends.Strings.NDStringUfuncs.IsText(m) ? m.astype(dtype) : m;
                 long[] parsedDims = AtLeast2dDims(xm);
                 if (!rowvar && xm.ndim != 1)
                     Array.Reverse(parsedDims);
@@ -337,7 +338,7 @@ namespace NumSharp.Backends
                 if (parsedDims[0] == 0)
                     return EmptyCovariance();
                 // y = array(y, ndmin=2, dtype=dtype): the same parse for text y; then the covariance of the numbers.
-                var ym = y is not null && Backends.Strings.NDStringUfuncs.IsText(y) ? y.astype(dtype, true, 'K', "unsafe") : y;
+                var ym = y is not null && Backends.Strings.NDStringUfuncs.IsText(y) ? y.astype(dtype) : y;
                 return CovFunction(xm, ym, rowvar, bias, ddof, fweights, aweights, dtype);
             }
             if (dtype is null)
@@ -365,7 +366,7 @@ namespace NumSharp.Backends
             // X = array(m, ndmin=2, dtype=dtype): numbers are formatted and text converted (np.array with a dtype casts
             // unsafely); only a text-to-text conversion can fail, and only on its content (U -> S encodes ASCII, S -> U
             // decodes it).
-            NDArray X = NDArray.atleast_2d(m).astype(xd, true, 'K', "unsafe");
+            NDArray X = NDArray.atleast_2d(m).astype(xd);
             if (!rowvar && m.ndim != 1)
                 X = X.T;
             if (X.Shape.dimensions[0] == 0)
@@ -376,7 +377,7 @@ namespace NumSharp.Backends
                 // y = array(y, copy=None, ndmin=2, dtype=dtype), then X = np.concatenate((X, y), axis=0): the observation
                 // counts must agree. NumPy's concatenate raises a ValueError there; NumSharp's raises its house
                 // IncorrectShapeException with the same text, so the check is made here with NumPy's type.
-                NDArray Y = NDArray.atleast_2d(y).astype(yd, true, 'K', "unsafe");
+                NDArray Y = NDArray.atleast_2d(y).astype(yd);
                 if (!rowvar && Y.Shape.dimensions[0] != 1)
                     Y = Y.T;
                 if (Y.Shape.dimensions[1] != X.Shape.dimensions[1])

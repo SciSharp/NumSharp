@@ -39,7 +39,7 @@ namespace NumSharp.Backends
         ///     "remapped shapes" text, under the house broadcast-error type).</exception>
         /// <exception cref="TypeError">NumPy's loop refusal for text (a text input, a text out or a string request without a
         ///     loop), or a detailed / new-style <c>dtype=</c> request.</exception>
-        /// <exception cref="OverflowException">A string repeat past <c>2^63 - 1</c> characters, or an integer text outside an
+        /// <exception cref="OverflowError">A string repeat past <c>2^63 - 1</c> characters, or an integer text outside an
         ///     integer loop or out.</exception>
         /// <remarks>
         ///     <para>The result is computed fresh in the loop dtype and copied into <paramref name="out"/> (NDIter's unsafe
@@ -100,7 +100,7 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="TypeError">NumPy's loop refusal (its resolved-dtypes, no-loop and mixed-string texts), or a
         ///     detailed or new-style <c>dtype=</c>.</exception>
-        /// <exception cref="OverflowException">A repeat past <c>2^63 - 1</c> characters, or an integer text outside an
+        /// <exception cref="OverflowError">A repeat past <c>2^63 - 1</c> characters, or an integer text outside an
         ///     integer loop or out.</exception>
         private bool ReduceTextIntoOut(string op, NDArray arr, int? axis, bool keepdims, DType dtype, NDArray @out)
         {
@@ -147,15 +147,27 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>_count_reduce_items(arr, axis)</c> without a mask, the count <c>_mean</c> and <c>_var</c> divide by:
-        ///     the size for every axis, else the extent of the normalized axis.
+        ///     the size for every axis, else the product of the extents of the named axes (an integer is a tuple of one; the
+        ///     empty tuple counts 1).
         /// </summary>
         /// <param name="arr">The reduced array.</param>
-        /// <param name="axis">The axis, or null for every axis.</param>
+        /// <param name="axis">The axis, a tuple of axes, or null for every axis.</param>
         /// <returns>The number of elements each result element combines.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds — for a 0-d input every axis is
-        ///     (<c>normalize_axis_index</c>, unlike <c>ufunc.reduce</c>'s rule).</exception>
-        private static long ReduceItemCount(NDArray arr, int? axis)
-            => axis is null ? arr.size : arr.Shape.dimensions[NormalizeAxis(axis.Value, arr.ndim)];
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple, checked in order) is out of bounds —
+        ///     for a 0-d input every axis is (<c>normalize_axis_index</c>, unlike <c>ufunc.reduce</c>'s rule).</exception>
+        /// <remarks>Footgun: a repeated axis is counted twice and NOT refused here, as in NumPy, whose
+        ///     <c>_count_reduce_items</c> has no repeat check: the sum that follows raises <c>duplicate value in 'axis'</c>
+        ///     (after its own out check), so a caller must run that sum before it trusts the count.</remarks>
+        private static long ReduceItemCount(NDArray arr, NDAxis? axis)
+        {
+            if (axis is not { } given)
+                return arr.size;
+            // `for ax in axis: items *= arr.shape[mu.normalize_axis_index(ax, arr.ndim)]`.
+            long items = 1;
+            for (int i = 0; i < given.Count; i++)
+                items *= arr.Shape.dimensions[NormalizeAxis(given[i], arr.ndim)];
+            return items;
+        }
 
         /// <summary>
         ///     NumPy's <c>_mean(arr, axis, dtype, out, keepdims)</c> with an <c>out=</c> argument: <c>umr_sum(arr, axis, dtype,
@@ -270,7 +282,7 @@ namespace NumSharp.Backends
                     throw new ValueError("output array is read-only");
                 DType deviations = code == NPTypeCode.Complex ? np.float64 : arr.dtype;
                 throw Strings.NDStringUfuncs.IsVString(@out)
-                    ? Strings.NDStringUfuncs.VStringNoLoop("add", new[] { Strings.NDStringUfuncs.DispatchClass(@out), deviations.Meta.ToString() })
+                    ? Strings.NDStringUfuncs.VStringNoLoop("add", new[] { Strings.NDStringUfuncs.DispatchMeta(@out), deviations.Meta })
                     : Strings.NDStringUfuncs.ReduceOutError("add", deviations, @out.dtype, accumulate: false);
             }
 

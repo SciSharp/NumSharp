@@ -75,7 +75,7 @@ namespace NumSharp.Backends.Printing
         private static void RequireStringFits(long length)
         {
             if (length > MaxNetStringLength)
-                throw new OutOfMemoryException();
+                throw new MemoryError();
         }
 
         /// <summary>Compiles a Python <c>%</c> format once, for a writer that applies it many times.</summary>
@@ -97,7 +97,7 @@ namespace NumSharp.Backends.Printing
         /// <exception cref="PrintfArgumentException">CPython's <c>TypeError</c>s (see
         ///     <see cref="PercentFormat.FormatInto"/>).</exception>
         /// <exception cref="ValueError">CPython's <c>ValueError</c>s (see <see cref="PercentFormat.FormatInto"/>).</exception>
-        /// <exception cref="OverflowException">CPython's <c>OverflowError</c>s (see
+        /// <exception cref="OverflowError">CPython's <c>OverflowError</c>s (see
         ///     <see cref="PercentFormat.FormatInto"/>).</exception>
         /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
         public static string Format(string format, object value, NPTypeCode kind)
@@ -146,7 +146,7 @@ namespace NumSharp.Backends.Printing
         ///     integer is required, not numpy.float64</c>, <c>%c requires int or char</c>, <c>%d format: a real number is
         ///     required, not numpy.str_</c>, <c>must be real number, not numpy.bytes_</c>.</exception>
         /// <exception cref="ValueError"><c>cannot convert float NaN to integer</c>.</exception>
-        /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>; <c>%c arg not in
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; <c>%c arg not in
         ///     range(0x110000)</c>; <c>precision too large</c> (an integer conversion past <c>INT_MAX - 3</c>).</exception>
         /// <exception cref="OutOfMemoryException">A result longer than .NET's longest string.</exception>
         internal static string ApplyNumPyScalar(char conv, bool left, bool plus, bool space, bool zero, bool alt,
@@ -249,7 +249,7 @@ namespace NumSharp.Backends.Printing
         /// <param name="tc">Its dtype.</param>
         /// <returns>The integer.</returns>
         /// <exception cref="ValueError"><c>cannot convert float NaN to integer</c>.</exception>
-        /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>.</exception>
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>.</exception>
         private static BigInteger NumPyScalarToInteger(object value, NPTypeCode tc)
         {
             switch (tc)
@@ -309,13 +309,13 @@ namespace NumSharp.Backends.Printing
         /// <param name="d">The value.</param>
         /// <returns>The integer.</returns>
         /// <exception cref="ValueError"><c>cannot convert float NaN to integer</c>.</exception>
-        /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>.</exception>
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>.</exception>
         private static BigInteger TruncateReal(double d)
         {
             if (double.IsNaN(d))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(d))
-                throw new OverflowException("cannot convert float infinity to integer");
+                throw new OverflowError("cannot convert float infinity to integer");
             return new BigInteger(Math.Truncate(d));
         }
 
@@ -325,12 +325,12 @@ namespace NumSharp.Backends.Printing
         /// </summary>
         /// <param name="cp">The code point.</param>
         /// <returns>Its character.</returns>
-        /// <exception cref="OverflowException"><c>%c arg not in range(0x110000)</c> for a negative value or one past
+        /// <exception cref="OverflowError"><c>%c arg not in range(0x110000)</c> for a negative value or one past
         ///     U+10FFFF (CPython's test also catches an overflow of the C <c>long</c>).</exception>
         private static string CodePointText(BigInteger cp)
         {
             if (cp.Sign < 0 || cp > 0x10FFFF)
-                throw new OverflowException("%c arg not in range(0x110000)");
+                throw new OverflowError("%c arg not in range(0x110000)");
             int code = (int)cp;
             return code >= 0xD800 && code <= 0xDFFF ? ((char)code).ToString() : char.ConvertFromUtf32(code);
         }
@@ -504,7 +504,7 @@ namespace NumSharp.Backends.Printing
         /// <param name="width">The minimum width.</param>
         /// <param name="precision">The minimum number of digits (-1 for none).</param>
         /// <returns>The text.</returns>
-        /// <exception cref="OverflowException"><c>precision too large</c>: CPython refuses a precision past
+        /// <exception cref="OverflowError"><c>precision too large</c>: CPython refuses a precision past
         ///     <c>INT_MAX - 3</c> before it computes a digit.</exception>
         /// <exception cref="ValueError">A decimal conversion of a Python int with more than 4300 digits (CPython's
         ///     <c>sys.get_int_max_str_digits()</c>; base 16 and 8 have no limit).</exception>
@@ -513,7 +513,7 @@ namespace NumSharp.Backends.Printing
             bool left, bool plus, bool space, bool zero, bool alt, int width, int precision)
         {
             if (precision > int.MaxValue - 3)
-                throw new OverflowException("precision too large");
+                throw new OverflowError("precision too large");
 
             bool neg = big.Sign < 0;
             BigInteger mag = BigInteger.Abs(big);
@@ -596,7 +596,7 @@ namespace NumSharp.Backends.Printing
         private static string FormatDigits(double abs, char format, int precision)
         {
             if (precision > MaxNetPrecision)
-                throw new OutOfMemoryException();
+                throw new MemoryError();
             return abs.ToString(format == 'F' ? "F" + precision.ToString(CI) : "E" + precision.ToString(CI), CI);
         }
 

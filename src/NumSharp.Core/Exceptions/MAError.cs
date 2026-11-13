@@ -11,8 +11,12 @@ namespace NumSharp
     /// </summary>
     public class MAError : Exception
     {
-        /// <summary>Creates the error with no message.</summary>
-        public MAError() { }
+        /// <summary>
+        ///     Creates the error with Python's text for a bare <c>raise MAError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(np.ma.MAError())</c> is <c>''</c> (not .NET's default
+        ///     "Exception of type 'NumSharp.MAError' was thrown.").
+        /// </summary>
+        public MAError() : base(string.Empty) { }
 
         /// <summary>Creates the error with a human-readable <paramref name="message"/>.</summary>
         /// <param name="message">The error text.</param>
@@ -31,8 +35,11 @@ namespace NumSharp
     /// </summary>
     public class MaskError : MAError
     {
-        /// <summary>Creates the error with no message.</summary>
-        public MaskError() { }
+        /// <summary>
+        ///     Creates the error with Python's text for a bare <c>raise MaskError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(np.ma.MaskError())</c> is <c>''</c>.
+        /// </summary>
+        public MaskError() : base(string.Empty) { }
 
         /// <summary>Creates the error with a human-readable <paramref name="message"/>.</summary>
         /// <param name="message">The error text.</param>

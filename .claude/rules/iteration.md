@@ -44,7 +44,8 @@ are `long` (intp), and every step yields a fresh index array.
   takes both spellings (`np.ndindex(3, 2)`, `np.ndindex(arr.shape)`); an `int[]` overload exists because array covariance
   will not widen it (not `params`, or `np.ndindex()` would be ambiguous). `ndindex()` and an empty shape yield ONE empty
   index; a zero-length dimension yields nothing; a negative dimension raises `ArgumentException "negative dimensions are
-  not allowed"` at construction. Not NDIter-backed (NumPy's ndindex is `itertools.product`). `.AsSpans()` →
+  not allowed"` at construction. The class constructor takes the dimensions the same way (`new np.NDIndex(2, 3)` is
+  `params long[]`). Not NDIter-backed (NumPy's ndindex is `itertools.product`). `.AsSpans()` →
   `np.NDIndexSpans` is the allocation-free form: a `ref struct` enumerator yielding the index as a `ReadOnlySpan<long>`
   over a reused buffer (valid until the next step); it restarts on each `foreach`. `Indexing/np.ndindex.cs`.
 - `np.ndenumerate(arr)` → `np.NDEnumerate` yields `(index, value)` in LOGICAL C order whatever the layout (NumPy's
@@ -64,7 +65,8 @@ are `long` (intp), and every step yields a fresh index array.
   zero-sized operands is not enabled`, `Must provide at least one operand`). Properties `nop`, `ndim`, `shape`,
   `itersize`, `operands`, `dtypes`, `value`, `it[i]`, `index`, `multi_index`, `iterindex`, `iterrange`, `itviews`,
   `finished`, `has_index`, `has_multi_index`, `has_delayed_bufalloc`, `iterationneedsapi`; methods `iternext`, `reset`,
-  `close`, `copy`, `remove_axis`, `remove_multi_index`, `enable_external_loop`, `debug_print`. `APIs/np.nditer.cs`.
+  `close`, `copy`, `remove_axis`, `remove_multi_index`, `enable_external_loop`, `debug_print`. The class constructor
+  has NumPy's defaults after `op` (`new np.NDIterator(new[] { a })` is `np.nditer([a])`). `APIs/np.nditer.cs`.
   - An ALLOCATE operand with no `op_dtypes` entry infers its dtype by promoting the operands that have one
     (`np.nditer([a, null])` allocates int64 for an int64 input; `np.nditer([int_a, float_b, null])` float64); the
     inference lives in the wrapper, where NumPy puts it.
@@ -107,7 +109,7 @@ are `long` (intp), and every step yields a fresh index array.
     `operand_different_than_broadcast` ValueError, an explicit reduction axis of extent other than 1, the reduction rule);
     the wrapper hands its shape to the engine (`AdvancedNew(..., shapeValidated: true)`), which then skips its own
     broadcast computation.
-  - Buffered iteration is a statement-for-statement port of NumPy 2.4.2's buffering
+  - Buffered iteration is a statement-for-statement port of NumPy 2.5.4's buffering
     (`Backends/Iterators/NDIterBufferManager.Buffering.cs`), for `np.nditer` and every internal buffered iterator (the
     ufunc `out=` / `where=` routes, the clip / power iterator routes, buffered casts): `npyiter_find_buffering_setup` (the
     core / outer split by the cost model `(1 + buffered operands) / elements per fill`, per-operand BUFNEVER /
@@ -189,7 +191,7 @@ are `long` (intp), and every step yields a fresh index array.
   fancy (`int[]`/`long[]`/`NDArray`) and slice-string (`"1:4"`, `"::2"`) get/set, the `index`/`coords` cursor (past the
   end `coords` leaves the slowest axis unwrapped: index == size on `(2,3)` → `(2,0)`), `Base`, `size`, `copy()`, and
   C-order iteration sharing the cursor (a second pass resumes). Scalar assignment into an integer dtype: an in-range
-  value truncates toward zero, an out-of-range WEAK scalar (a C# primitive) raises `OverflowException` ("Python integer
+  value truncates toward zero, an out-of-range WEAK scalar (a C# primitive) raises `OverflowError` ("Python integer
   300 out of bounds for int8"; floats truncate first, NaN/inf raise; a bool target never raises), a STRONG scalar (an
   `NDArray`, the fancy/slice setters) wraps. Into float/complex/decimal it uses `Convert`.
 - `np.flat<T>(a, writeable=false)` / `a.flatiter.AsTyped<T>(writeable=false)` → `np.FlatRefIter<T>` yields `ref T` in

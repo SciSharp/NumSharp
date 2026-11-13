@@ -89,21 +89,42 @@ namespace NumSharp.Tests.Fuzz
                         : np.apply_over_axes(f, ops[0], axes.GetInt32()));
                 }
                 case "bmat": return Bmat(p, ops);
+                // A numeric dtype's result; a text dtype's case is the text kind (ApplySurfaceText's "fromiter").
+                case "fromiter": return FromIterCall(p);
+                case "fromfunction":
+                    // numpy.ma's menu (FromFunctionFunc, OpRegistry.MaSurface). No scope, as np.ma.fromfunction's replay:
+                    // the menu callbacks dispose their own temporaries and np.fromfunction releases its grids, so a leak
+                    // inside np.fromfunction itself stays visible to the leak sweep.
+                    return np.fromfunction(FromFunctionFunc(SurfStr(p, "func")),
+                                           new Shape(p["shape"].EnumerateArray().Select(x => x.GetInt64()).ToArray()),
+                                           SurfDType(p, "dtype"));
+                case "sliding_window_view":
+                {
+                    var window = new Shape(p["window"].EnumerateArray().Select(x => x.GetInt64()).ToArray());
+                    var axisElement = p["axis"];
+                    NDAxis? axis = axisElement.ValueKind switch
+                    {
+                        JsonValueKind.Null => null,
+                        JsonValueKind.Array => (NDAxis?)axisElement.EnumerateArray().Select(x => x.GetInt32()).ToArray(),
+                        _ => (NDAxis?)axisElement.GetInt32(),
+                    };
+                    return np.lib.stride_tricks.sliding_window_view(ops[0], window, axis);
+                }
                 case "ndarray.shape": return np.array(ops[0].shape);
-                // numpy.shape(a): NumSharp has no top-level function; the inventory credits the shape property.
-                case "shape": return np.array(ops[0].shape);
+                // numpy.shape(a): NumSharp's np.shape, the tuple as an int64 array.
+                case "shape": return np.array(np.shape(ops[0]));
+                // numpy.ndim(a): NumSharp's np.ndim, the rank as an int64 0-d array.
+                case "ndim": return NDArray.Scalar((long)np.ndim(ops[0]));
                 case "cumulative_sum":
                 case "cumulative_prod":
                 {
-                    // NumSharp has no cumulative_sum / cumulative_prod: the coverage inventory aliases them to
-                    // np.cumsum / np.cumprod, and these cases gate that alias. include_initial has no counterpart, so
-                    // the port of a call that passes it has nothing to call.
-                    if (p.TryGetValue("include_initial", out var ii) && ii.GetBoolean())
-                        throw new NotSupportedException(
-                            $"numpy.{op}(include_initial=True) has no NumSharp counterpart (the alias is np.{(op == "cumulative_sum" ? "cumsum" : "cumprod")})");
+                    // NumSharp's own np.cumulative_sum / np.cumulative_prod (NumPy's _cumulative_func), keyword for keyword.
                     int? axis = SurfNullableInt(p, "axis");
                     DType dtype = SurfDType(p, "dtype");
-                    return op == "cumulative_sum" ? np.cumsum(ops[0], axis, dtype) : np.cumprod(ops[0], axis, dtype);
+                    bool include = p.TryGetValue("include_initial", out var ii) && ii.GetBoolean();
+                    return op == "cumulative_sum"
+                        ? np.cumulative_sum(ops[0], axis: axis, dtype: dtype, include_initial: include)
+                        : np.cumulative_prod(ops[0], axis: axis, dtype: dtype, include_initial: include);
                 }
                 case "ndarray.tofile":
                 {
@@ -283,6 +304,13 @@ namespace NumSharp.Tests.Fuzz
                     return "(" + PyRepr(unit) + ", " + PyRepr(count) + ")";
                 }
                 case "ndarray.tolist": return PyRepr(ops[0].tolist());
+                case "fromiter":
+                {
+                    // np.fromiter into a U / S dtype: the case records NumPy's repr of the result (values and dtype in one
+                    // text, since the array record reads numeric dtypes only); np.array_repr is NumSharp's twin of it.
+                    using var result = FromIterCall(p);
+                    return np.array_repr(result);
+                }
                 case "ndarray.tofile":
                 {
                     using var stream = new MemoryStream();
@@ -523,6 +551,82 @@ namespace NumSharp.Tests.Fuzz
         }
 
         // ---- the function menus -----------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     np.fromiter over one gen_batch7 case: the decoded item list (or a Python str, which iterates its
+        ///     characters), NumPy's dtype spelling (null is None, float64) and count. Shared by the array kind (a numeric
+        ///     dtype) and the text kind (a U / S dtype, rendered by the caller).
+        /// </summary>
+        /// <param name="p">The case params: <c>items</c> (see <see cref="FromIterItem"/>) or <c>text</c>, <c>dtype</c>,
+        ///     <c>count</c>.</param>
+        /// <returns>np.fromiter's result (owned by the caller).</returns>
+        /// <exception cref="Exception">np.fromiter's own refusal (TypeError, ValueError, OverflowError …), which an error
+        ///     case expects.</exception>
+        /// <remarks>The ndarray items this decoder builds (the menu's <c>arr0d</c> / <c>arr1</c> / <c>arr2</c>) are the
+        ///     replay's own inputs, not operands the harness releases, so they are released here after the call, on a
+        ///     refusal too: the leak sweep (UndisposedIntermediateTests) then sees only what np.fromiter itself leaves
+        ///     behind. The result never aliases an item (np.fromiter packs every item into a fresh buffer).</remarks>
+        private static NDArray FromIterCall(IReadOnlyDictionary<string, JsonElement> p)
+        {
+            if (p.TryGetValue("text", out var text))
+                return np.fromiter(text.GetString(), SurfDType(p, "dtype"), p["count"].GetInt64());
+            object[] items = p["items"].EnumerateArray().Select(FromIterItem).ToArray();
+            try
+            {
+                return np.fromiter(items, SurfDType(p, "dtype"), p["count"].GetInt64());
+            }
+            finally
+            {
+                foreach (var item in items)
+                    (item as NDArray)?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     One np.fromiter item of gen_batch7's menu, decoded as the generator's <c>_fromiter_item</c> builds its Python
+        ///     value: an integral number is a Python int (<see cref="long"/>), any other number a float, a string a str, null
+        ///     None, a bool a bool, a list a Python list (<c>object[]</c>), <c>{"tuple": [a, b]}</c> a 2-tuple,
+        ///     <c>{"float": "nan"}</c> a non-finite float, <c>{"complex": [re, im]}</c> a complex and
+        ///     <c>{"array": v, "dtype": "int64"}</c> an int64 array item (0-d for a scalar <c>v</c>).
+        /// </summary>
+        /// <param name="v">The item's JSON.</param>
+        /// <returns>The C# value standing in for the Python item.</returns>
+        /// <exception cref="FormatException">An object of another form (a corpus bug).</exception>
+        private static object FromIterItem(JsonElement v)
+        {
+            switch (v.ValueKind)
+            {
+                case JsonValueKind.Null:
+                    return null;
+                case JsonValueKind.True:
+                    return true;
+                case JsonValueKind.False:
+                    return false;
+                case JsonValueKind.String:
+                    return v.GetString();
+                case JsonValueKind.Number:
+                    return PyNumber(v);
+                case JsonValueKind.Array:
+                    return v.EnumerateArray().Select(FromIterItem).ToArray();
+            }
+            if (v.TryGetProperty("tuple", out var tuple))
+            {
+                var items = tuple.EnumerateArray().Select(FromIterItem).ToArray();
+                return (items[0], items[1]);
+            }
+            if (v.TryGetProperty("float", out var special))
+                return PyFloat(special);
+            if (v.TryGetProperty("complex", out var complex))
+            {
+                var parts = complex.EnumerateArray().ToArray();
+                return new Complex(parts[0].GetDouble(), parts[1].GetDouble());
+            }
+            if (v.TryGetProperty("array", out var array))
+                return array.ValueKind == JsonValueKind.Array
+                    ? np.array(array.EnumerateArray().Select(x => x.GetInt64()).ToArray())
+                    : np.asarray(array.GetInt64());
+            throw new FormatException($"fromiter item '{v.GetRawText()}'");
+        }
 
         /// <summary>
         ///     The generator's <c>APPLY_FUNCS</c> menu as NumSharp computations on a 1-D slice. Each entry is the C# spelling
@@ -819,8 +923,15 @@ namespace NumSharp.Tests.Fuzz
             : v.GetDouble();
 
         /// <summary>A Python number param as its C# literal: an integral JSON number as long, any other as double.</summary>
+        /// <param name="v">The JSON number.</param>
+        /// <returns>A boxed <see cref="long"/> (a Python int) or <see cref="double"/> (a Python float).</returns>
+        /// <exception cref="InvalidOperationException">The element is not a JSON number (a corpus bug).</exception>
+        /// <remarks>The long arm is cast to <see cref="object"/>: a bare <c>cond ? l : v.GetDouble()</c> is typed
+        ///     <c>double</c>, which boxed every Python int as a float (ndarray.setfield's value and np.fromiter's items then
+        ///     reached NumSharp as floats: <c>'0.0'</c> for NumPy's <c>'0'</c>, no OverflowError for an out-of-range int).
+        /// </remarks>
         private static object PyNumber(JsonElement v)
-            => v.TryGetInt64(out long l) ? l : v.GetDouble();
+            => v.TryGetInt64(out long l) ? (object)l : v.GetDouble();
 
     }
 }

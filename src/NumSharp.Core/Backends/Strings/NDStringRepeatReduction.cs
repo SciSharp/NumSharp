@@ -65,9 +65,9 @@ namespace NumSharp.Backends.Strings
         ///     at most one axis may be specified</c>), an out of the wrong rank or length, or an empty reduced axis
         ///     (<c>zero-size array to reduction operation multiply which has no identity</c>).</exception>
         /// <exception cref="IncorrectShapeException">The out does not broadcast against the result.</exception>
-        /// <exception cref="OverflowException">A repeat whose size passes <c>2^63 - 1</c> (NumPy's two texts, see the class
+        /// <exception cref="OverflowError">A repeat whose size passes <c>2^63 - 1</c> (NumPy's two texts, see the class
         ///     remarks).</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> text that cannot be allocated (<c>Failed to allocate
+        /// <exception cref="MemoryError">A <c>StringDType</c> text that cannot be allocated (<c>Failed to allocate
         ///     string in multiply</c>) or packed (<c>Failed to pack string in multiply</c>).</exception>
         internal static NDArray ReduceNumPy(NDArray counts, int? axis, bool keepdims, NDArray @out)
         {
@@ -101,7 +101,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">The checks of <see cref="ReduceNumPy(NDArray, int?, bool, NDArray)"/>, or a repeated
         ///     text that does not parse into a numeric out.</exception>
         /// <exception cref="IncorrectShapeException">The out does not broadcast against the result.</exception>
-        /// <exception cref="OverflowException">A repeat whose size passes <c>2^63 - 1</c>, or an integer text outside the
+        /// <exception cref="OverflowError">A repeat whose size passes <c>2^63 - 1</c>, or an integer text outside the
         ///     out's integer type.</exception>
         /// <remarks>
         ///     NumPy writes the text back at the end of every buffer fill and reads it again at the next, so a lane longer than
@@ -153,7 +153,7 @@ namespace NumSharp.Backends.Strings
             if (counts.Shape.dimensions[axis] < 2)
                 return;
             // The fill's read of the out into the loop's text, the repeat in that text, the write-back through its cast.
-            NDArray text = outLanes.astype(loopText, true, 'K', "unsafe");
+            NDArray text = outLanes.astype(loopText);
             RunLanes(counts, axis, text);
             UnmanagedStorage.Copyto(outLanes, text, NPY_CASTING.NPY_UNSAFE_CASTING);
         }
@@ -204,7 +204,7 @@ namespace NumSharp.Backends.Strings
             long n = counts.Shape.dimensions[axis];
             // The later counts as the loop reads them: int64 (a uint64 count's bits read as int64 — the fixed-width loop's
             // cast; the StringDType uint64 loop reads the same 64 bits as size_t, which is what the fold does with them).
-            NDArray counts64 = counts.typecode == NPTypeCode.Int64 ? counts : counts.astype(np.int64, true, 'K', "unsafe");
+            NDArray counts64 = counts.typecode == NPTypeCode.Int64 ? counts : counts.astype(np.int64);
             NDArray @out = outLanes;
             bool vstring = NDStringUfuncs.IsVString(@out);
             var ctx = new RepeatContext
@@ -274,7 +274,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="lane">The lane's first int64 count.</param>
         /// <param name="cell">The lane's out cell.</param>
         /// <param name="ctx">The call's context.</param>
-        /// <exception cref="OverflowException"><c>Overflow detected in string multiply</c>.</exception>
+        /// <exception cref="OverflowError"><c>Overflow detected in string multiply</c>.</exception>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void FixedLane(byte* lane, byte* cell, RepeatContext ctx)
         {
@@ -304,7 +304,7 @@ namespace NumSharp.Backends.Strings
                 }
                 // npy_mul_with_overflow_size_t(count, len) or a product past PY_SSIZE_T_MAX: exact as one division.
                 if (count > long.MaxValue / len)
-                    throw new OverflowException("Overflow detected in string multiply");
+                    throw new OverflowError("Overflow detected in string multiply");
                 len = Math.Min(count * len, width);
             }
             if (len == period)
@@ -332,14 +332,14 @@ namespace NumSharp.Backends.Strings
         /// <param name="lane">The lane's first int64 count.</param>
         /// <param name="cell">The lane's out cell (its allocator locked).</param>
         /// <param name="ctx">The call's context.</param>
-        /// <exception cref="OverflowException"><c>Overflow encountered in string multiply</c>.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts of the loop.</exception>
+        /// <exception cref="OverflowError"><c>Overflow encountered in string multiply</c>.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts of the loop.</exception>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void VStringLane(byte* lane, byte* cell, RepeatContext ctx)
         {
             var alloc = ctx.Out;
             if (alloc.load(cell, out byte* buf, out long size0) < 0)
-                throw new OutOfMemoryException("Failed to load string in multiply");
+                throw new MemoryError("Failed to load string in multiply");
             ulong size = (ulong)size0;
             for (long k = 1; k < ctx.N; k++)
             {
@@ -350,11 +350,11 @@ namespace NumSharp.Backends.Strings
                 ulong factor = (ulong)*(long*)(lane + k * ctx.CountStride);
                 ulong high = Math.BigMul(size, factor, out ulong newsize);
                 if (high != 0 || newsize > long.MaxValue)
-                    throw new OverflowException("Overflow encountered in string multiply");
+                    throw new OverflowError("Overflow encountered in string multiply");
                 // NumPy allocates each intermediate text (the in-place temporary): past every host's address space its
                 // PyMem_RawMalloc fails at this step.
                 if (newsize > MaxAllocatableTextSize)
-                    throw new OutOfMemoryException("Failed to allocate string in multiply");
+                    throw new MemoryError("Failed to allocate string in multiply");
                 size = newsize;
             }
             if (size == (ulong)size0)
@@ -363,7 +363,7 @@ namespace NumSharp.Backends.Strings
             {
                 // A count of 0: the empty text (NpyString_free leaves an empty string in the cell).
                 if (alloc.free(cell) < 0)
-                    throw new OutOfMemoryException("Failed to deallocate string in multiply");
+                    throw new MemoryError("Failed to deallocate string in multiply");
                 return;
             }
             // The repetition is built in a temporary (the cell's own text may live in the arena the pack reallocates), then
@@ -375,7 +375,7 @@ namespace NumSharp.Backends.Strings
             }
             catch (OutOfMemoryException)
             {
-                throw new OutOfMemoryException("Failed to allocate string in multiply");
+                throw new MemoryError("Failed to allocate string in multiply");
             }
             try
             {
@@ -388,7 +388,7 @@ namespace NumSharp.Backends.Strings
                     done += chunk;
                 }
                 if (alloc.pack(cell, tmp, total) < 0)
-                    throw new OutOfMemoryException("Failed to pack string in multiply");
+                    throw new MemoryError("Failed to pack string in multiply");
             }
             finally
             {

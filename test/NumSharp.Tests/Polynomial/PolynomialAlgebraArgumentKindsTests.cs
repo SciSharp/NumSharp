@@ -10,10 +10,10 @@ namespace NumSharp.Tests.Polynomial
     ///     The wholeness pass over the <c>numpy.polynomial</c> series algebra (plan U2): the C# spellings of its
     ///     arguments that the byte oracle (<c>polyalgebra.jsonl</c>, which replays only <c>object[]</c>,
     ///     <c>ValueTuple</c>, Python scalars, np.float16 and NDArrays) cannot express — <c>List&lt;T&gt;</c>, LINQ,
-    ///     <c>NDArray[]</c>, jagged and multi-dimensional arrays, decimal / char / BigInteger powers and limits, typed
-    ///     C# arrays as powers and limits; the object / str series refusal deferred to where NumPy computes with Python
-    ///     objects; and the complex dotfunc behind <c>np.convolve</c> (zdotu's C99 result construction, CDOUBLE_dot's
-    ///     plain loop for a one-element operand). Every expected value is NumPy 2.4.2's, the Python spelling beside it.
+    ///     <c>NDArray[]</c>, jagged and multi-dimensional arrays; pow's integer power and limit (typed since API-parity
+    ///     batch 11); the object / str series refusal deferred to where NumPy computes with Python objects; and the
+    ///     complex dotfunc behind <c>np.convolve</c> (zdotu's C99 result construction, CDOUBLE_dot's plain loop for a
+    ///     one-element operand). Every expected value is NumPy 2.4.2's, the Python spelling beside it.
     /// </summary>
     [TestClass]
     public class PolynomialAlgebraArgumentKindsTests
@@ -125,112 +125,49 @@ namespace NumSharp.Tests.Polynomial
             Raises<ValueError>(() => C.cheb2poly(new List<bool> { true, false }), "Coefficient arrays have no common type", "List<bool>");
             Raises<ValueError>(() => np.polynomial.hermite_e.poly2herme(Enumerable.Empty<object>()), "Coefficient array is empty",
                                "an empty LINQ sequence");
-            Raises<DivideByZeroException>(() => P.polydiv(c2, 0), "", "polydiv(c, 0)");
+            Raises<ZeroDivisionError>(() => P.polydiv(c2, 0), "", "polydiv(c, 0)");
         }
 
         /// <summary>
-        ///     Any power argument through the object-typed overloads: <c>power = int(pow)</c> with Python's semantics — a
-        ///     bool is 0 / 1, np.float16 / decimal truncate like a float, a str parses with int()'s grammar and then fails
-        ///     <c>power != pow</c>, a 0-d NDArray converts its element — and NumPy's error for everything int() refuses.
+        ///     The power and the limit of <c>{p}pow</c> are NumPy's integers, typed: <c>(c, int pow, int? maxpower)</c> is
+        ///     every basis' one signature since API-parity batch 11 (the owner's decision 2, typed parameters only). NumPy's
+        ///     statements over them still run in NumPy's order - <c>power != pow or power &lt; 0</c>, then
+        ///     <c>power &gt; maxpower</c> for a limit that is not None, then the product - while NumPy's <c>int()</c> of a
+        ///     bool, float, str, decimal, BigInteger or array power and its comparisons with a float, complex, str or array
+        ///     limit have no C# call: the compiler refuses those arguments.
         /// </summary>
         [TestMethod]
-        public void Pow_AnyPowerArgument_IsPythonsInt()
+        public void Pow_PowerAndLimit_AreNumPysIntegers()
         {
             var c = C12();
-            IsChebPow(C.chebpow(c, true), 1, "chebpow(c, True)");
-            IsChebPow(C.chebpow(c, false), 0, "chebpow(c, False)");
-            IsChebPow(C.chebpow(c, (Half)2), 2, "chebpow(c, np.float16(2.0))");
-            IsChebPow(C.chebpow(c, (object)'\u0002'), 2, "chebpow(c, np.uint16(2)) — char through the object overload");
-            IsChebPow(C.chebpow(c, 2m), 2, "a decimal power truncates like a float");
-            IsChebPow(C.chebpow(c, new BigInteger(3)), 3, "a BigInteger power is a Python int");
-            IsChebPow(C.chebpow(c, NDArray.Scalar(3L)), 3, "chebpow(c, np.array(3))");
-            IsChebPow(C.chebpow(c, NDArray.Scalar(true)), 1, "chebpow(c, np.array(True))");
-            IsChebPow(C.chebpow(c, NDArray.Scalar((Half)2)), 2, "chebpow(c, np.array(2, np.float16))");
-
-            const string NotInt = "Power must be a non-negative integer.";
-            Raises<ValueError>(() => C.chebpow(c, 2.5m), NotInt, "a fractional decimal");
-            Raises<ValueError>(() => C.chebpow(c, (Half)2.5), NotInt, "np.float16(2.5)");
-            Raises<ValueError>(() => C.chebpow(c, NDArray.Scalar(2.5)), NotInt, "np.array(2.5)");
-            Raises<ValueError>(() => C.chebpow(c, NDArray.Scalar((sbyte)-1)), NotInt, "np.array(-1, np.int8)");
-            Raises<ValueError>(() => C.chebpow(c, "3"), NotInt, "'3' parses, but 3 != '3'");
-            Raises<ValueError>(() => C.chebpow(c, " 3 "), NotInt, "' 3 ' parses too");
-            Raises<ValueError>(() => C.chebpow(c, "x"), "invalid literal for int() with base 10: 'x'", "chebpow(c, 'x')");
-            Raises<ValueError>(() => C.chebpow(c, ""), "invalid literal for int() with base 10: ''", "chebpow(c, '')");
-            Raises<ValueError>(() => C.chebpow(c, Half.NaN), "cannot convert float NaN to integer", "np.float16('nan')");
-            Raises<OverflowException>(() => C.chebpow(c, Half.PositiveInfinity), "cannot convert float infinity to integer",
-                                      "np.float16('inf')");
-            Raises<ValueError>(() => C.chebpow(c, BigInteger.Pow(2, 70)), "Power is too large", "chebpow(c, 2**70)");
-            Raises<ValueError>(() => C.chebpow(c, NDArray.Scalar((byte)250)), "Power is too large", "np.array(250, np.uint8)");
-            Raises<OverflowException>(() => P.polypow(c, BigInteger.Pow(2, 70)),
-                                      "power 1180591620717411303424 is beyond int64: NumPy would run out of memory computing it",
-                                      "polypow has no limit: NumPy would multiply until memory runs out");
-
-            const string IntArg = "int() argument must be a string, a bytes-like object or a real number, not ";
-            Raises<TypeError>(() => C.chebpow(c, null), IntArg + "'NoneType'", "chebpow(c, None)");
-            Raises<TypeError>(() => C.chebpow(c, new object[] { 3 }), IntArg + "'list'", "chebpow(c, [3])");
-            Raises<TypeError>(() => C.chebpow(c, new List<int> { 3 }), IntArg + "'list'", "a List<int> is a Python list");
-            Raises<TypeError>(() => C.chebpow(c, ValueTuple.Create(3)), IntArg + "'tuple'", "chebpow(c, (3,))");
-            Raises<TypeError>(() => C.chebpow(c, new Complex(2, 0)), IntArg + "'complex'", "chebpow(c, 2+0j)");
-            Raises<TypeError>(() => C.chebpow(c, NDArray.Scalar(new Complex(2, 0))), IntArg + "'complex'", "np.array(2+0j)");
-            const string ZeroDim = "only 0-dimensional arrays can be converted to Python scalars";
-            Raises<TypeError>(() => C.chebpow(c, np.array(new[] { 3 })), ZeroDim, "np.array([3])");
-            Raises<TypeError>(() => C.chebpow(c, new[] { 3 }), ZeroDim, "an int[] is an ndarray of one dim");
-            Raises<TypeError>(() => C.chebpow(c, Array.Empty<double>()), ZeroDim, "an empty double[]");
-            Raises<TypeError>(() => C.chebpow(c, np.array(new[,] { { 3 } })), ZeroDim, "np.array([[3]])");
-        }
-
-        /// <summary>
-        ///     Any limit through the three-argument object overload: <c>power &gt; maxpower</c> as NumPy evaluates it —
-        ///     exact for Python numbers, decimal, char and BigInteger; NaN never exceeded, -inf always; in float16 for
-        ///     np.float16 (2049 rounds to 2048: not exceeded); an ndarray's comparison in its dtype, then tested for truth
-        ///     (one element only); and the weak int's conversion errors (past 2**1024 into a float loop, past int64 into a
-        ///     bool one) before that test.
-        /// </summary>
-        [TestMethod]
-        public void Pow_AnyMaxpower_ComparesAsNumPy()
-        {
-            var c = C12();
+            for (int k = 0; k <= 3; k++)
+                IsChebPow(C.chebpow(c, k), k, $"chebpow(c, {k})");
             const string TooLarge = "Power is too large";
-            IsChebPow(C.chebpow(c, 2, 2.5), 2, "chebpow(c, 2, 2.5)");
-            Raises<ValueError>(() => C.chebpow(c, 3, 2.5), TooLarge, "chebpow(c, 3, 2.5)");
-            C.chebpow(c, 20, double.NaN).size.Should().Be(21, "power > nan is False: no limit");
-            Raises<ValueError>(() => C.chebpow(c, 0, double.NegativeInfinity), TooLarge, "0 > -inf");
-            IsChebPow(C.chebpow(c, 2, 2.5m), 2, "a decimal limit compares exactly");
-            Raises<ValueError>(() => C.chebpow(c, 3, 2.5m), TooLarge, "3 > 2.5 (decimal)");
-            IsChebPow(C.chebpow(c, (object)3, (object)'\u0005'), 3, "chebpow(c, 3, np.uint16(5))");
-            Raises<ValueError>(() => C.chebpow(c, (object)3, (object)'\u0002'), TooLarge, "chebpow(c, 3, np.uint16(2))");
-            IsChebPow(C.chebpow(c, 3, new BigInteger(5)), 3, "a BigInteger limit");
-            IsChebPow(C.chebpow(c, 3, new[] { 5.0 }), 3, "a one-element double[] compares, then is true or false");
-            AssertBytes(P.polypow(c, 3, np.array(new[] { 5 })), "float64", new long[] { 4 },
-                        "000000000000f03f000000000000184000000000000028400000000000002040", "polypow(c, 3, np.array([5]))");
-            // 2049 rounds to float16 2048, so NumPy computes the power; 2050 is representable and exceeds it.
-            AssertBytes(P.polypow(new[] { 1.5 }, 2049, (Half)2048), "float64", new long[] { 1 }, "000000000000f07f",
-                        "polypow([1.5], 2049, np.float16(2048))");
-            Raises<ValueError>(() => P.polypow(new[] { 1.5 }, 2050, (Half)2048), TooLarge, "polypow([1.5], 2050, np.float16(2048))");
+            IsChebPow(C.chebpow(c, 2, 2), 2, "chebpow(c, 2, 2): the limit is inclusive");
+            Raises<ValueError>(() => C.chebpow(c, 3, 2), TooLarge, "chebpow(c, 3, 2)");
+            Raises<ValueError>(() => C.chebpow(c, 17), TooLarge, "chebpow(c, 17) at the default maxpower 16");
+            Raises<ValueError>(() => C.chebpow(c, 0, -1), TooLarge, "chebpow(c, 0, -1): 0 > -1");
+            C.chebpow(c, 20, null).size.Should().Be(21, "maxpower=None: no limit");
+            Raises<ValueError>(() => C.chebpow(c, -1), "Power must be a non-negative integer.", "chebpow(c, -1)");
+            AssertBytes(P.polypow(c, 3, 5), "float64", new long[] { 4 },
+                        "000000000000f03f000000000000184000000000000028400000000000002040", "polypow(c, 3, 5)");
+            // The limit decides before the object series' refusal (NumPy's object arithmetic) - exceeding raises first.
+            Raises<ValueError>(() => P.polypow(new object[] { null }, 3, 2), TooLarge, "polypow([None], 3, 2)");
+            ((Action)(() => P.polypow(new object[] { null }, 3, 5))).Should().Throw<NotSupportedException>(
+                "polypow([None], 3, 5) passes the limit and reaches the object product");
 
-            const string Cmp = "'>' not supported between instances of 'int' and ";
-            Raises<TypeError>(() => C.chebpow(c, 2, new Complex(5, 0)), Cmp + "'complex'", "a complex limit");
-            Raises<TypeError>(() => C.chebpow(c, 2, "5"), Cmp + "'str'", "a str limit");
-            Raises<TypeError>(() => C.chebpow(c, 2, new object[] { 5 }), Cmp + "'list'", "a list limit");
-            Raises<TypeError>(() => C.chebpow(c, 2, ValueTuple.Create(5)), Cmp + "'tuple'", "a tuple limit");
-            Raises<ValueError>(() => P.polypow(c, 3, np.array(new[] { 1, 5 })),
-                               "The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()",
-                               "a two-element limit array");
-            Raises<ValueError>(() => P.polypow(c, 3, np.zeros(0)),
-                               "The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.",
-                               "an empty limit array");
-
-            // The comparison dtype decides what passes; an OBJECT series then shows which way it went without computing:
-            // passing reaches the object refusal (NumPy: its object arithmetic's TypeError), exceeding raises first.
-            var obj = new object[] { null };
-            var p = BigInteger.Pow(2, 60) + BigInteger.Pow(2, 36) + 1;
-            ((Action)(() => P.polypow(obj, p, NDArray.Scalar((float)System.Math.Pow(2, 60))))).Should().Throw<NotSupportedException>(
-                "the power rounds to float32 2**60 (through a double first): not exceeded");
-            Raises<ValueError>(() => P.polypow(obj, p, System.Math.Pow(2, 60)), TooLarge, "a Python float compares exactly");
-            Raises<OverflowException>(() => P.polypow(obj, BigInteger.Pow(2, 63), NDArray.Scalar(true)), "int too big to convert",
-                                      "a bool limit compares in int64");
-            Raises<OverflowException>(() => P.polypow(obj, BigInteger.Pow(2, 1100), NDArray.Scalar(1.0)),
-                                      "int too large to convert to float", "a float64 limit converts the power to a double");
+            foreach (var (module, name) in new[]
+                     {
+                         (typeof(PowerSeriesModule), "polypow"), (typeof(ChebyshevModule), "chebpow"),
+                         (typeof(LegendreModule), "legpow"), (typeof(LaguerreModule), "lagpow"),
+                         (typeof(HermiteModule), "hermpow"), (typeof(HermiteEModule), "hermepow"),
+                     })
+            {
+                var forms = module.GetMethods().Where(m => m.Name == name).ToArray();
+                forms.Should().ContainSingle(name);
+                forms[0].GetParameters().Select(p => p.ParameterType).Should()
+                    .Equal(new[] { typeof(object), typeof(int), typeof(int?) }, name);
+            }
         }
 
         /// <summary>
@@ -249,8 +186,8 @@ namespace NumSharp.Tests.Polynomial
             Raises<ValueError>(() => P.polymul(null, new object[] { new object[] { 1, 2 }, new object[] { 3 } }),
                                "setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 " +
                                "dimensions. The detected shape was (2,) + inhomogeneous part.", "polymul(None, [[1, 2], [3]])");
-            Raises<DivideByZeroException>(() => P.polydiv(null, new[] { 0.0 }), "", "polydiv(None, [0.])");
-            Raises<DivideByZeroException>(() => P.polydiv(new object[] { null }, new[] { false }), "",
+            Raises<ZeroDivisionError>(() => P.polydiv(null, new[] { 0.0 }), "", "polydiv(None, [0.])");
+            Raises<ZeroDivisionError>(() => P.polydiv(new object[] { null }, new[] { false }), "",
                                           "polydiv([None], [False]): the zero test runs on the object copies");
             ((Action)(() => P.polydiv(null, new[] { 1.0 }))).Should().Throw<NotSupportedException>("None / 1.0 is object arithmetic");
             Raises<ValueError>(() => P.polypow(null, -1), "Power must be a non-negative integer.", "polypow(None, -1)");

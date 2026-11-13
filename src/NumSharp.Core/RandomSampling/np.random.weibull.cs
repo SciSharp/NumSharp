@@ -35,11 +35,11 @@ namespace NumSharp
         ///     place); <c>a == 0</c> returns zeros WITHOUT drawing, exactly as NumPy's early return does. Byte-identical to
         ///     <c>np.random.RandomState(seed).weibull</c>; holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray weibull(double a, Shape size)
+        public NDArray weibull(double a, Shape? size)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -47,14 +47,14 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyWeibull(ref one, a));
+                        return NDArray.WritableScalar(LegacyWeibull(ref one, a));
                 }
             }
 
             if (a == 0.0)
-                return np.zeros(size.AsClean(), NPTypeCode.Double); // legacy_weibull(0) draws nothing; dims only (NumPy's np.empty(size))
+                return np.zeros(size.GetValueOrDefault().AsClean(), NPTypeCode.Double); // legacy_weibull(0) draws nothing; dims only (NumPy's np.empty(size.GetValueOrDefault()))
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

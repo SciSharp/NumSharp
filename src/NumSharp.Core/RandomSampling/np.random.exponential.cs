@@ -40,11 +40,11 @@ namespace NumSharp
         ///     output and transformed in place — the same stream as NumPy's per-value calls, with no intermediate arrays.
         ///     Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray exponential(double scale = 1.0, Shape size = default)
+        public NDArray exponential(double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -52,11 +52,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyExponential(ref one, scale));
+                        return NDArray.WritableScalar(LegacyExponential(ref one, scale));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

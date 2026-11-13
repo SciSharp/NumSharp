@@ -13,10 +13,47 @@ namespace NumSharp
     public abstract partial class TensorEngine
     {
         // NaN-aware reductions
+        /// <summary>
+        ///     NumPy's <c>np.nansum</c>: <c>a, mask = _replace_nan(a, 0); return np.sum(a, axis, dtype, out, keepdims, initial,
+        ///     where)</c> - the sum with every NaN counted as zero (a complex element with a NaN in either part included); an
+        ///     input that cannot hold NaN is <c>np.sum</c>'s, keywords included.
+        /// </summary>
+        /// <param name="a">The array, a plain one (the facade decides the <c>numpy.matrix</c> class first).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
+        /// <param name="dtype">np.sum's <c>dtype=</c>: the accumulator / result dtype, or null.</param>
+        /// <param name="out">np.sum's <c>out=</c>: the destination (returned), or null.</param>
+        /// <param name="initial">np.sum's <c>initial=</c>: the start value (a Python scalar), or null for none.</param>
+        /// <param name="where">np.sum's <c>where=</c>: the bool mask of the elements that take part, or null.</param>
+        /// <returns>The sum; <paramref name="out"/> itself when given; 0-d for a flat reduction without
+        ///     <paramref name="keepdims"/>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
+        /// <remarks>The engine order (axis, keepdims, dtype, out, initial, where) is <see cref="ReduceAdd"/>'s; np.nansum
+        ///     takes NumPy's. The keywords beyond axis / keepdims arrived with API-parity batch 3 (2026-11-11).</remarks>
         [ReducesThrough("sum")]
-        public abstract NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false);
+        public abstract NDArray NanSum(NDArray a, NDAxis? axis = null, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            object initial = null, NDArray @where = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.nanprod</c>: <c>a, mask = _replace_nan(a, 1); return np.prod(a, axis, dtype, out, keepdims,
+        ///     initial, where)</c> - the product with every NaN counted as one; an input that cannot hold NaN is
+        ///     <c>np.prod</c>'s, keywords included.
+        /// </summary>
+        /// <param name="a">The array, a plain one (the facade decides the <c>numpy.matrix</c> class first).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
+        /// <param name="dtype">np.prod's <c>dtype=</c>, or null.</param>
+        /// <param name="out">np.prod's <c>out=</c> (returned), or null.</param>
+        /// <param name="initial">np.prod's <c>initial=</c>, or null for none.</param>
+        /// <param name="where">np.prod's <c>where=</c> mask, or null.</param>
+        /// <returns>The product; <paramref name="out"/> itself when given; 0-d for a flat reduction without
+        ///     <paramref name="keepdims"/>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
+        /// <remarks>The engine order is <see cref="ReduceProduct"/>'s; np.nanprod takes NumPy's. The keywords beyond axis /
+        ///     keepdims arrived with API-parity batch 3 (2026-11-11).</remarks>
         [ReducesThrough("prod")]
-        public abstract NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false);
+        public abstract NDArray NanProd(NDArray a, NDAxis? axis = null, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            object initial = null, NDArray @where = null);
         /// <summary>
         ///     NumPy's <c>np.nanmin</c>, the whole call: the minimum ignoring NaNs, which on an ndarray IS
         ///     <c>np.fmin.reduce</c> (NumPy's "All-NaN slice" RuntimeWarning is not modeled), with NumPy's <c>out=</c>,
@@ -38,14 +75,14 @@ namespace NumSharp
         ///     reduction operation fmin which has no identity</c>, NumPy's ValueError); a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
         ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.80.0
         ///     (the np-layer dtype plan, phase PE, E5). This is NumPy's branch for a BASE ndarray: np.nanmin asks the
         ///     operand's class first (<see cref="NDArray.NanMin"/>, virtual), which calls this member for an ndarray and
         ///     takes NumPy's branch for subclasses in a matrix's or chararray's override.</remarks>
-        public abstract NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+        public abstract NDArray NanMin(NDArray a, NDAxis? axis = null, bool keepdims = false, NDArray @out = null,
             object initial = null, NDArray @where = null);
 
         /// <summary>
@@ -69,14 +106,14 @@ namespace NumSharp
         ///     reduction operation fmax which has no identity</c>, NumPy's ValueError); a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
         ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.80.0
         ///     (the np-layer dtype plan, phase PE, E5). This is NumPy's branch for a BASE ndarray: np.nanmax asks the
         ///     operand's class first (<see cref="NDArray.NanMax"/>, virtual), which calls this member for an ndarray and
         ///     takes NumPy's branch for subclasses in a matrix's or chararray's override.</remarks>
-        public abstract NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+        public abstract NDArray NanMax(NDArray a, NDAxis? axis = null, bool keepdims = false, NDArray @out = null,
             object initial = null, NDArray @where = null);
 
         /// <summary>
@@ -139,13 +176,17 @@ namespace NumSharp
         ///     input.
         /// </param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
+        /// <param name="out">NumPy's <c>out=</c>: the sum and the division land in it (returned), or null.</param>
+        /// <param name="where">NumPy's <c>where=</c>: the bool mask of the elements that take part (both the count and the
+        ///     sum read it), or null.</param>
         /// <returns>
-        ///     The mean in the sum's dtype; 0-d (NumPy's scalar) for a flat reduction without
-        ///     <paramref name="keepdims"/>.
+        ///     The mean in the sum's dtype (<paramref name="out"/> itself when given); 0-d (NumPy's scalar) for a flat
+        ///     reduction without <paramref name="keepdims"/>.
         /// </returns>
         /// <exception cref="TypeError">
         ///     An inexact input with a non-inexact <paramref name="dtype"/>: "If a is inexact, then dtype must be inexact"
-        ///     (raised before the axis is checked, as in NumPy).
+        ///     (raised before the axis is checked, as in NumPy); or with a non-inexact <paramref name="out"/>: "If a is
+        ///     inexact, then out must be inexact".
         /// </exception>
         /// <exception cref="AxisError">
         ///     <paramref name="axis"/> outside the operand, except 0 and -1 on a 0-d inexact operand, which reduce flat
@@ -159,7 +200,8 @@ namespace NumSharp
         ///     plan, phase PE).
         /// </remarks>
         [ReducesThrough("mean", InexactMethod = "sum")]
-        public abstract NDArray NanMean(NDArray a, int? axis = null, DType dtype = null, bool keepdims = false);
+        public abstract NDArray NanMean(NDArray a, NDAxis? axis = null, DType dtype = null, bool keepdims = false, NDArray @out = null,
+            NDArray @where = null);
 
         /// <summary>
         ///     NumPy's <c>np.nanvar</c>: the variance of the non-NaN elements. It differs from <c>np.var</c> in three
@@ -174,13 +216,23 @@ namespace NumSharp
         /// </param>
         /// <param name="ddof">Delta degrees of freedom: the divisor is the non-NaN count minus <paramref name="ddof"/>.</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
+        /// <param name="out">NumPy's <c>out=</c>: the variance's sum and division land in it (returned), or null.</param>
+        /// <param name="where">NumPy's <c>where=</c>: the bool mask of the elements that take part, or null.</param>
+        /// <param name="mean">NumPy's <c>mean=</c>: the mean to subtract (shaped as with <c>keepdims=True</c>) instead of the
+        ///     computed one, or null.</param>
+        /// <param name="correction">NumPy's <c>correction=</c>, the Array-API name of <paramref name="ddof"/>; giving both
+        ///     (a non-zero ddof) raises.</param>
         /// <returns>
-        ///     The variance: the loop dtype, float64 for a complex input without <paramref name="dtype"/>; 0-d (NumPy's
-        ///     scalar) for a flat reduction without <paramref name="keepdims"/>.
+        ///     The variance: the loop dtype, float64 for a complex input without <paramref name="dtype"/>
+        ///     (<paramref name="out"/> itself when given); 0-d (NumPy's scalar) for a flat reduction without
+        ///     <paramref name="keepdims"/>.
         /// </returns>
         /// <exception cref="TypeError">
-        ///     An inexact input with a non-inexact <paramref name="dtype"/>: "If a is inexact, then dtype must be inexact".
+        ///     An inexact input with a non-inexact <paramref name="dtype"/>: "If a is inexact, then dtype must be inexact";
+        ///     with a non-inexact <paramref name="out"/>: "If a is inexact, then out must be inexact".
         /// </exception>
+        /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/>: "ddof and
+        ///     correction can't be provided simultaneously.".</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
         /// <remarks>
         ///     An input that cannot hold NaN (integer, bool, char, decimal, text) is <c>np.var</c>'s, keywords included.
@@ -189,7 +241,8 @@ namespace NumSharp
         ///     that changes one should change both. New in 0.80.0 (the np-layer dtype plan, phase PE).
         /// </remarks>
         [ReducesThrough("var", InexactMethod = "sum")]
-        public abstract NDArray NanVar(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false);
+        public abstract NDArray NanVar(NDArray a, NDAxis? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
+            NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null);
 
         /// <summary>
         ///     NumPy's <c>np.nanstd</c>: the square root of <see cref="NanVar"/>, in the variance's dtype.
@@ -202,20 +255,30 @@ namespace NumSharp
         /// </param>
         /// <param name="ddof">Delta degrees of freedom: the divisor is the non-NaN count minus <paramref name="ddof"/>.</param>
         /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
+        /// <param name="out">NumPy's <c>out=</c>: the variance's sum and division land in it (returned), or null.</param>
+        /// <param name="where">NumPy's <c>where=</c>: the bool mask of the elements that take part, or null.</param>
+        /// <param name="mean">NumPy's <c>mean=</c>: the mean to subtract (shaped as with <c>keepdims=True</c>) instead of the
+        ///     computed one, or null.</param>
+        /// <param name="correction">NumPy's <c>correction=</c>, the Array-API name of <paramref name="ddof"/>; giving both
+        ///     (a non-zero ddof) raises.</param>
         /// <returns>
-        ///     The standard deviation: the loop dtype, float64 for a complex input without <paramref name="dtype"/>; 0-d for
-        ///     a flat reduction without <paramref name="keepdims"/>.
+        ///     The standard deviation: the loop dtype, float64 for a complex input without <paramref name="dtype"/>
+        ///     (<paramref name="out"/> itself when given, its variance square-rooted in place); 0-d for a flat reduction
+        ///     without <paramref name="keepdims"/>.
         /// </returns>
         /// <exception cref="TypeError">
-        ///     An inexact input with a non-inexact <paramref name="dtype"/>: "If a is inexact, then dtype must be inexact".
+        ///     An inexact input with a non-inexact <paramref name="dtype"/>: "If a is inexact, then dtype must be inexact";
+        ///     with a non-inexact <paramref name="out"/>: "If a is inexact, then out must be inexact".
         /// </exception>
+        /// <exception cref="ValueError">A non-zero <paramref name="ddof"/> with <paramref name="correction"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
         /// <remarks>
         ///     An input that cannot hold NaN is <c>np.std</c>'s, keywords included. New in 0.80.0 (the np-layer dtype plan,
         ///     phase PE).
         /// </remarks>
         [ReducesThrough("var", InexactMethod = "sum")]
-        public abstract NDArray NanStd(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false);
+        public abstract NDArray NanStd(NDArray a, NDAxis? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false,
+            NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null);
 
         /// <summary>
         ///     NumPy's <c>np.nanquantile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=False, *,
@@ -248,7 +311,7 @@ namespace NumSharp
         /// <exception cref="IndexError">Data that is not empty, under keepdims, with an out NumPy cannot index
         ///     (<c>_ureduce</c>'s prologue), before the text refusals.</exception>
         /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
-        /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype.</exception>
+        /// <exception cref="OverflowError">An integer q array whose virtual indexes leave its dtype.</exception>
         /// <remarks>
         ///     NumPy writes nanquantile in Python; DefaultEngine's override runs its statements in NumPy's order.
         ///     <c>np.nanquantile</c> calls it after its class rule; an override replaces it for every array whose engine it
@@ -348,7 +411,7 @@ namespace NumSharp
         ///     result of np.argmax.</c>); a <c>StringDType</c> line of two or more elements holding an NA that is neither a
         ///     string nor NaN-like.</exception>
         /// <exception cref="TypeError">An out whose dtype does not cast safely to int64.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
         ///     text).</exception>
         /// <remarks>The result cannot be trusted when a slice holds only NaNs and infinities of the losing sign (NumPy's
         ///     caveat).</remarks>
@@ -378,7 +441,7 @@ namespace NumSharp
         ///     result of np.argmin.</c>); a <c>StringDType</c> line of two or more elements holding an NA that is neither a
         ///     string nor NaN-like.</exception>
         /// <exception cref="TypeError">An out whose dtype does not cast safely to int64.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
         ///     text).</exception>
         /// <remarks>The result cannot be trusted when a slice holds only NaNs and infinities of the losing sign (NumPy's
         ///     caveat).</remarks>

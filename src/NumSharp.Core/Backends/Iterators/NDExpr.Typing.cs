@@ -387,7 +387,7 @@ namespace NumSharp.Backends.Iteration
         {
             if (adopted == NPTypeCode.UInt64 || !(IsIntegerKind(adopted) || adopted == NPTypeCode.Boolean))
                 return;
-            throw new OverflowException(
+            throw new OverflowError(
                 string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {adopted.AsNumpyDtypeName()}"));
         }
 
@@ -411,7 +411,7 @@ namespace NumSharp.Backends.Iteration
         internal static void CheckIntLiteralFits(long value, NPTypeCode adopted)
         {
             if (!IntLiteralFits(value, adopted))
-                throw new OverflowException(
+                throw new OverflowError(
                     string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {adopted.AsNumpyDtypeName()}"));
         }
 
@@ -424,7 +424,7 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         /// <param name="value">The Python int's value. 128 bits hold every C# integer literal, int64 and uint64 alike.</param>
         /// <param name="loop">The ufunc's resolved loop dtype, which the value must be packed into.</param>
-        /// <exception cref="OverflowException">
+        /// <exception cref="OverflowError">
         /// The value does not fit an integer <paramref name="loop"/>: NumPy's <c>OverflowError</c>
         /// "Python integer {value} out of bounds for {dtype}". When the value is past long.MaxValue the
         /// text is CPython's "Python int too large to convert to C long" instead, because NumPy first
@@ -450,7 +450,7 @@ namespace NumSharp.Backends.Iteration
                 // A Python int never adapts to a bool loop (the dtype= cast check reports it as int64),
                 // but NumPy still converts it to int64 first, which only a value past long.MaxValue fails.
                 if (value > long.MaxValue)
-                    throw new OverflowException("Python int too large to convert to C long");
+                    throw new OverflowError("Python int too large to convert to C long");
                 return;
             }
 
@@ -464,9 +464,9 @@ namespace NumSharp.Backends.Iteration
             // NumPy converts through PyLong_AsLong for every integer loop except uint32 and uint64, and a
             // C# value can only miss the 64-bit C long on the high side (ulong past long.MaxValue).
             if (value > long.MaxValue && loop != NPTypeCode.UInt32 && loop != NPTypeCode.UInt64)
-                throw new OverflowException("Python int too large to convert to C long");
+                throw new OverflowError("Python int too large to convert to C long");
 
-            throw new OverflowException(
+            throw new OverflowError(
                 string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {loop.AsNumpyDtypeName()}"));
         }
     }
@@ -842,17 +842,23 @@ namespace NumSharp.Backends.Iteration
             throw NoLoopDidNotContain(op, lt.IsWeak ? lt.DefaultCode : lt.Code, rt.IsWeak ? rt.DefaultCode : rt.Code);
         }
 
-        /// <summary>The coercion-form no-loop TypeError NumPy raises for shift/fmod/copysign-family cells
-        /// (verbatim, minus the input-dtype tuple — the same simplification the bitwise branch uses).</summary>
-        private static NotSupportedException NoLoopNotSupported(BinaryOp op)
+        /// <summary>The coercion-form no-loop refusal NumPy's legacy type resolver raises for shift/fmod/copysign-family
+        /// cells (verbatim; NumPy's class is a plain <see cref="TypeError"/>, not a <see cref="UFuncTypeError"/>).</summary>
+        /// <param name="op">The binary operation.</param>
+        /// <returns>The exception (not thrown).</returns>
+        private static TypeError NoLoopNotSupported(BinaryOp op)
             => new($"ufunc '{UfuncName(op)}' not supported for the input types, and the inputs could not " +
                    "be safely coerced to any supported types according to the casting rule ''safe''");
 
-        /// <summary>The signature-specific no-loop TypeError NumPy raises for gcd/lcm, carrying the two
-        /// INPUT dtype class names (e.g. <c>(Float32DType, Float64DType) -> None</c>).</summary>
-        private static NotSupportedException NoLoopDidNotContain(BinaryOp op, NPTypeCode l, NPTypeCode r)
-            => new($"ufunc '{UfuncName(op)}' did not contain a loop with signature matching types " +
-                   $"(<class 'numpy.dtypes.{NumPyDTypeClassName(l)}'>, <class 'numpy.dtypes.{NumPyDTypeClassName(r)}'>) -> None");
+        /// <summary>The signature-specific no-loop refusal NumPy raises for gcd/lcm (its
+        /// <see cref="UFuncNoLoopError"/>), carrying the two INPUT dtype classes (e.g. <c>(Float32DType, Float64DType)
+        /// -> None</c>).</summary>
+        /// <param name="op">The binary operation.</param>
+        /// <param name="l">The left input's dtype.</param>
+        /// <param name="r">The right input's dtype.</param>
+        /// <returns>The exception (not thrown).</returns>
+        private static UFuncNoLoopError NoLoopDidNotContain(BinaryOp op, NPTypeCode l, NPTypeCode r)
+            => new(UfuncName(op), 2, ((DType)l).Meta, ((DType)r).Meta, null);
 
         /// <summary>NumPy's ufunc name for the Phase-4 binary ops (used only in the no-loop error texts).</summary>
         private static string UfuncName(BinaryOp op) => op switch
@@ -871,28 +877,6 @@ namespace NumSharp.Backends.Iteration
             _ => op.ToString().ToLowerInvariant(),
         };
 
-        /// <summary>The <c>numpy.dtypes.*DType</c> class name for a dtype (the speller NumPy's no-loop
-        /// error messages use). Byte→UInt8 / SByte→Int8 mirror NumPy's naming; the NumSharp-only Char /
-        /// Decimal keep their own names (they never appear in an oracle-gated message).</summary>
-        private static string NumPyDTypeClassName(NPTypeCode tc) => (tc switch
-        {
-            NPTypeCode.Boolean => "Bool",
-            NPTypeCode.Byte => "UInt8",
-            NPTypeCode.SByte => "Int8",
-            NPTypeCode.Int16 => "Int16",
-            NPTypeCode.UInt16 => "UInt16",
-            NPTypeCode.Int32 => "Int32",
-            NPTypeCode.UInt32 => "UInt32",
-            NPTypeCode.Int64 => "Int64",
-            NPTypeCode.UInt64 => "UInt64",
-            NPTypeCode.Half => "Float16",
-            NPTypeCode.Single => "Float32",
-            NPTypeCode.Double => "Float64",
-            NPTypeCode.Complex => "Complex128",
-            NPTypeCode.Decimal => "Decimal",
-            NPTypeCode.Char => "Char",
-            _ => tc.ToString(),
-        }) + "DType";
     }
 
     public sealed partial class UnaryNode
@@ -1010,14 +994,10 @@ namespace NumSharp.Backends.Iteration
                     UnaryOp.Negate => throw new TypeError(
                         "The numpy boolean negative, the `-` operator, is not supported, " +
                         "use the `~` operator or the logical_not function instead."),
-                    UnaryOp.Sign => throw new NotSupportedException(
-                        "ufunc 'sign' did not contain a loop with signature matching types " +
-                        "<class 'numpy.dtypes.BoolDType'> -> None"),
+                    UnaryOp.Sign => throw new UFuncNoLoopError("sign", 1, DType.Boolean.Meta, null),
                     // np.positive has NO bool loop (probed 2.4.2) and there is no dtype= escape in the
                     // fused tier, so a bool child is a hard error — the same shape as sign's rejection.
-                    UnaryOp.Positive => throw new NotSupportedException(
-                        "ufunc 'positive' did not contain a loop with signature matching types " +
-                        "<class 'numpy.dtypes.BoolDType'> -> None"),
+                    UnaryOp.Positive => throw new UFuncNoLoopError("positive", 1, DType.Boolean.Meta, null),
                     // np.conjugate PROMOTES bool → int8 (probed 2.4.2), it does not stay bool.
                     UnaryOp.Conjugate => NPTypeCode.SByte,
                     UnaryOp.Square or UnaryOp.Reciprocal => NPTypeCode.SByte,
@@ -1069,9 +1049,8 @@ namespace NumSharp.Backends.Iteration
             // positive decimals, divide for negative). Reproduced verbatim (probed 2.4.2). Bool with
             // decimals == 0 never reaches here — the factory routes it to the UnaryOp.Round node (→ f16).
             if (childType == NPTypeCode.Boolean)
-                throw new TypeError(
-                    $"Cannot cast ufunc '{(_decimals > 0 ? "multiply" : "divide")}' output from dtype('float64') " +
-                    "to dtype('bool') with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError(_decimals > 0 ? "multiply" : "divide", 1, "same_kind", DType.Double,
+                    DType.Boolean, 2);
 
             // Otherwise np.round PRESERVES the input dtype (float/complex/integer/char/decimal). A WEAK
             // child resolves to its own default first (np.round rounds an int64/float64 array).

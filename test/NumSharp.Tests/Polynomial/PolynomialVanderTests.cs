@@ -10,23 +10,23 @@ namespace NumSharp.Tests.Polynomial
     ///     six bases. Three kinds of test live here: NumPy 2.4.2's own <c>TestVander</c> suites ported (a column is the basis
     ///     polynomial, a 2-D / 3-D matrix times the flattened coefficients is <c>{p}val2d</c> / <c>{p}val3d</c>); byte dumps
     ///     NumPy produced (the probe inputs are spelled out next to each test — the signalling-NaN and NaN-pair dumps pin the
-    ///     NaN BITS the byte oracle tokenizes); and what the oracle (<c>polyvander.jsonl</c>) cannot see — error texts NumPy
-    ///     raises machine-dependently (MemoryError), the str / object refusals, decimal and char, the int / object overloads,
-    ///     the kernel's block loop driven with tiny blocks, and its vector lanes.
+    ///     NaN BITS the byte oracle tokenizes); and what the oracle (<c>polyvander.jsonl</c>) cannot see — the size errors
+    ///     of a huge 2-D / 3-D degree, the str / object refusals, decimal and char, the typed degree, the kernel's block
+    ///     loop driven with tiny blocks, and its vector lanes.
     /// </summary>
     [TestClass]
     public class PolynomialVanderTests
     {
         /// <summary>One basis's Vandermonde family plus its evaluators.</summary>
         /// <param name="Name">The basis prefix NumPy uses (<c>poly</c>, <c>cheb</c>, ...).</param>
-        /// <param name="Vander"><c>{p}vander(x, deg)</c> — the object overload.</param>
-        /// <param name="VanderInt"><c>{p}vander(x, deg)</c> — the int overload.</param>
+        /// <param name="Vander"><c>{p}vander(x, deg)</c> — the one signature (an <see cref="int"/> degree since API-parity
+        ///     batch 11).</param>
         /// <param name="Vander2d"><c>{p}vander2d(x, y, deg)</c>.</param>
         /// <param name="Vander3d"><c>{p}vander3d(x, y, z, deg)</c>.</param>
         /// <param name="Val"><c>{p}val(x, c, tensor)</c>.</param>
         /// <param name="Val2d"><c>{p}val2d(x, y, c)</c>.</param>
         /// <param name="Val3d"><c>{p}val3d(x, y, z, c)</c>.</param>
-        private sealed record Basis(string Name, Func<object, object, NDArray> Vander, Func<object, int, NDArray> VanderInt,
+        private sealed record Basis(string Name, Func<object, int, NDArray> Vander,
             Func<object, object, object, NDArray> Vander2d, Func<object, object, object, object, NDArray> Vander3d,
             Func<object, object, bool, NDArray> Val, Func<object, object, object, NDArray> Val2d,
             Func<object, object, object, object, NDArray> Val3d);
@@ -34,22 +34,22 @@ namespace NumSharp.Tests.Polynomial
         /// <summary>The six bases, in NumPy's module order.</summary>
         private static readonly Basis[] Bases =
         {
-            new("poly", np.polynomial.polynomial.polyvander, np.polynomial.polynomial.polyvander, np.polynomial.polynomial.polyvander2d,
+            new("poly", np.polynomial.polynomial.polyvander, np.polynomial.polynomial.polyvander2d,
                 np.polynomial.polynomial.polyvander3d, np.polynomial.polynomial.polyval, np.polynomial.polynomial.polyval2d,
                 np.polynomial.polynomial.polyval3d),
-            new("cheb", np.polynomial.chebyshev.chebvander, np.polynomial.chebyshev.chebvander, np.polynomial.chebyshev.chebvander2d,
+            new("cheb", np.polynomial.chebyshev.chebvander, np.polynomial.chebyshev.chebvander2d,
                 np.polynomial.chebyshev.chebvander3d, np.polynomial.chebyshev.chebval, np.polynomial.chebyshev.chebval2d,
                 np.polynomial.chebyshev.chebval3d),
-            new("leg", np.polynomial.legendre.legvander, np.polynomial.legendre.legvander, np.polynomial.legendre.legvander2d,
+            new("leg", np.polynomial.legendre.legvander, np.polynomial.legendre.legvander2d,
                 np.polynomial.legendre.legvander3d, np.polynomial.legendre.legval, np.polynomial.legendre.legval2d,
                 np.polynomial.legendre.legval3d),
-            new("lag", np.polynomial.laguerre.lagvander, np.polynomial.laguerre.lagvander, np.polynomial.laguerre.lagvander2d,
+            new("lag", np.polynomial.laguerre.lagvander, np.polynomial.laguerre.lagvander2d,
                 np.polynomial.laguerre.lagvander3d, np.polynomial.laguerre.lagval, np.polynomial.laguerre.lagval2d,
                 np.polynomial.laguerre.lagval3d),
-            new("herm", np.polynomial.hermite.hermvander, np.polynomial.hermite.hermvander, np.polynomial.hermite.hermvander2d,
+            new("herm", np.polynomial.hermite.hermvander, np.polynomial.hermite.hermvander2d,
                 np.polynomial.hermite.hermvander3d, np.polynomial.hermite.hermval, np.polynomial.hermite.hermval2d,
                 np.polynomial.hermite.hermval3d),
-            new("herme", np.polynomial.hermite_e.hermevander, np.polynomial.hermite_e.hermevander, np.polynomial.hermite_e.hermevander2d,
+            new("herme", np.polynomial.hermite_e.hermevander, np.polynomial.hermite_e.hermevander2d,
                 np.polynomial.hermite_e.hermevander3d, np.polynomial.hermite_e.hermeval, np.polynomial.hermite_e.hermeval2d,
                 np.polynomial.hermite_e.hermeval3d),
         };
@@ -163,8 +163,7 @@ namespace NumSharp.Tests.Polynomial
         {
             foreach (var b in Bases)
             {
-                Raises<ValueError>(() => b.VanderInt(np.arange(3), -1), "deg must be non-negative");
-                Raises<ValueError>(() => b.Vander(np.arange(3), -1L), "deg must be non-negative");
+                Raises<ValueError>(() => b.Vander(np.arange(3), -1), "deg must be non-negative");
             }
         }
 
@@ -243,59 +242,32 @@ namespace NumSharp.Tests.Polynomial
         // =========================================================================================================
 
         /// <summary>
-        ///     <c>polyutils._as_int</c> — Python's <c>operator.index</c> — decides the degree, and its TypeError formats the refused
-        ///     value as NumPy's f-string does (<c>format(x, '')</c>: a NumPy scalar / 0-d array as <c>float(x)</c>, an array as its
-        ///     str, a list / tuple as its repr). Every text probed against NumPy 2.4.2.
+        ///     The degree is NumPy's integer, typed: <c>{p}vander(x, int deg)</c> is every basis' one signature since
+        ///     API-parity batch 11 (the owner's decision 2, typed parameters only). NumPy's <c>polyutils._as_int</c> - Python's
+        ///     <c>operator.index</c> - over a bool, float, complex, str, None, array or BigInteger degree (and its
+        ///     <c>deg must be an integer, received …</c> TypeError) has no C# call: the compiler refuses those arguments. What
+        ///     stays NumPy's runtime check is the sign, before x is read.
         /// </summary>
         [TestMethod]
-        public void Vander_DegreeKinds_OperatorIndexAndNumPysTexts()
+        public void Vander_Degree_IsNumPysTypedInteger()
         {
             var P = np.polynomial.polynomial;
             var x = np.array(new[] { 0.5, -1.5, 2.0 });
-            // Accepted: Python ints of any C# width, bool (True is 1), BigInteger, char (NumSharp's integer dtype), 0-d integers.
-            foreach (object d in new object[] { 2, 2L, (byte)2, (ulong)2, new BigInteger(2), np.array(2), np.array((sbyte)2), np.array((ulong)2) })
-                Hex(P.polyvander(x, d)).Should().Be(Hex(P.polyvander(x, 2)), $"{d.GetType().Name}");
-            P.polyvander(x, true).shape.Should().Equal(new long[] { 3, 2 });
-            P.polyvander(x, false).shape.Should().Equal(new long[] { 3, 1 });
-            P.polyvander(x, '\u0002').shape.Should().Equal(new long[] { 3, 3 });
-
-            string received = "deg must be an integer, received ";
-            Raises<TypeError>(() => P.polyvander(x, 1.0), received + "1.0");
-            Raises<TypeError>(() => P.polyvander(x, 1.5), received + "1.5");
-            Raises<TypeError>(() => P.polyvander(x, -0.0), received + "-0.0");
-            Raises<TypeError>(() => P.polyvander(x, 1e20), received + "1e+20");
-            Raises<TypeError>(() => P.polyvander(x, double.PositiveInfinity), received + "inf");
-            Raises<TypeError>(() => P.polyvander(x, double.NaN), received + "nan");
-            Raises<TypeError>(() => P.polyvander(x, (Half)1000), received + "1000.0");                 // np.float16's __format__ is float(self)
-            Raises<TypeError>(() => P.polyvander(x, new Complex(2, 0)), received + "(2+0j)");
-            Raises<TypeError>(() => P.polyvander(x, new Complex(0, 1)), received + "1j");
-            Raises<TypeError>(() => P.polyvander(x, "2"), received + "2");
-            Raises<TypeError>(() => P.polyvander(x, (object)null), received + "None");
-            Raises<TypeError>(() => P.polyvander(x, np.array(true)), received + "True");              // 0-d bool: no __index__
-            Raises<TypeError>(() => P.polyvander(x, np.array(2.5f)), received + "2.5");
-            Raises<TypeError>(() => P.polyvander(x, np.array(new Complex(2, 0))), received + "(2+0j)");
-            Raises<TypeError>(() => P.polyvander(x, np.array(new[] { 2 })), received + "[2]");
-            Raises<TypeError>(() => P.polyvander(x, new[] { 1, 2 }), received + "[1 2]");               // a typed C# array is an ndarray
-            Raises<TypeError>(() => P.polyvander(x, new object[] { 1, "a", null, 2.5 }), received + "[1, 'a', None, 2.5]");
-            Raises<TypeError>(() => P.polyvander(x, ValueTuple.Create(2)), received + "(2,)");
-            Raises<TypeError>(() => P.polyvander(x, (1, 2)), received + "(1, 2)");
-            Raises<TypeError>(() => P.polyvander(x, new object[] { np.array(new[] { 1.5 }) }), received + "[array([1.5])]");
-            Raises<TypeError>(() => P.polyvander(x, new object[] { (Half)2 }), received + "[np.float16(2.0)]");
-
-            // Negative / too large, NumPy's order: the sign before x, the npy_intp conversion and the byte count at np.empty.
-            Raises<ValueError>(() => P.polyvander(x, -BigInteger.Pow(2, 70)), "deg must be non-negative");
-            Raises<ValueError>(() => P.polyvander(x, np.array(-1)), "deg must be non-negative");
-            Raises<ValueError>(() => P.polyvander(x, long.MaxValue), "Maximum allowed dimension exceeded");
-            Raises<ValueError>(() => P.polyvander(x, BigInteger.Pow(2, 64)), "Maximum allowed dimension exceeded");
-            Raises<ValueError>(() => P.polyvander(x, long.MaxValue - 1), "array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.");
-            Raises<ValueError>(() => P.polyvander(np.zeros(0), 1L << 62), "array is too big;");
-            // np.empty((2**56 + 1, 3)): ~1.5 EiB — NumPy's MemoryError (the text is machine-dependent, so the oracle skips it).
-            // The size is chosen past ANY user address space (47-bit, or 57-bit with 5-level paging), so every OS refuses it
-            // when it is reserved. A merely huge request is host-dependent: 2**40 rows (26 TB) is refused up front only where
-            // commit is accounted (Windows, Linux overcommit_memory=0/2). macOS and Linux overcommit_memory=1 reserve it lazily,
-            // the kernel then writes it, and the OS kills the test host: the macOS CI leg died here after 3,809 tests on
-            // 2026-10-02 (reproduced in WSL: "Out of memory: Killed process (dotnet) total-vm:26046099528kB").
-            FluentActions.Invoking(() => P.polyvander(x, 1L << 56)).Should().Throw<OutOfMemoryException>();
+            P.polyvander(x, 0).shape.Should().Equal(new long[] { 3, 1 });
+            P.polyvander(x, 2).shape.Should().Equal(new long[] { 3, 3 });
+            Raises<ValueError>(() => P.polyvander(x, -1), "deg must be non-negative");
+            Raises<ValueError>(() => P.polyvander(x, int.MinValue), "deg must be non-negative");
+            foreach (var (module, name) in new[]
+                     {
+                         (typeof(PowerSeriesModule), "polyvander"), (typeof(ChebyshevModule), "chebvander"),
+                         (typeof(LegendreModule), "legvander"), (typeof(LaguerreModule), "lagvander"),
+                         (typeof(HermiteModule), "hermvander"), (typeof(HermiteEModule), "hermevander"),
+                     })
+            {
+                var forms = module.GetMethods().Where(m => m.Name == name).ToArray();
+                forms.Should().ContainSingle(name);
+                forms[0].GetParameters().Select(p => p.ParameterType).Should().Equal(new[] { typeof(object), typeof(int) }, name);
+            }
         }
 
         /// <summary>
@@ -308,7 +280,6 @@ namespace NumSharp.Tests.Polynomial
         {
             var L = np.polynomial.legendre;
             Raises<ValueError>(() => L.legvander("abc", -1), "deg must be non-negative");
-            Raises<TypeError>(() => L.legvander("abc", 1.5), "deg must be an integer, received 1.5");
             Raises<ValueError>(() => L.legvander(new object[] { new object[] { 1, 2 }, new object[] { 3 } }, -1), "deg must be non-negative");
             Raises<ValueError>(() => L.legvander(new object[] { new object[] { 1, 2 }, new object[] { 3 } }, 2),
                 "setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. " +
@@ -464,9 +435,9 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     The <c>int</c> and <c>object</c> overloads are one function: every integer spelling of a degree (C# int / long,
-        ///     BigInteger, a 0-d array) gives the same bytes, and x in any layout (strided, reversed, F-order, transposed —
-        ///     read in place or copied) gives the bytes of its contiguous copy.
+        ///     x in any layout (strided, reversed, F-order, transposed — read in place or copied) gives the bytes of its
+        ///     contiguous copy. (The degree's other integer spellings - long, BigInteger, a 0-d array - went with the object
+        ///     overload in API-parity batch 11.)
         /// </summary>
         [TestMethod]
         public void Vander_OverloadsAndLayouts_AgreeBitForBit()
@@ -474,18 +445,15 @@ namespace NumSharp.Tests.Polynomial
             foreach (var b in Bases)
             {
                 var x = np.array(new[] { 0.3, -1.7, 2.9, 0.0, -0.0, 1e-3, 5.5, -2.25, 0.75 });
-                string expect = Hex(b.VanderInt(x, 6));
-                Hex(b.Vander(x, 6L)).Should().Be(expect, b.Name);
-                Hex(b.Vander(x, new BigInteger(6))).Should().Be(expect, b.Name);
-                Hex(b.Vander(x, np.array(6))).Should().Be(expect, b.Name);
+                string expect = Hex(b.Vander(x, 6));
 
                 var wide = np.zeros(18);
                 wide["::2"] = x;
-                Hex(b.VanderInt(wide["::2"], 6)).Should().Be(expect, $"{b.Name} strided");
-                Hex(b.VanderInt(x["::-1"]["::-1"], 6)).Should().Be(expect, $"{b.Name} double reverse");
+                Hex(b.Vander(wide["::2"], 6)).Should().Be(expect, $"{b.Name} strided");
+                Hex(b.Vander(x["::-1"]["::-1"], 6)).Should().Be(expect, $"{b.Name} double reverse");
                 var m = x.reshape(3, 3);
-                Hex(b.VanderInt(m.T, 5)).Should().Be(Hex(b.VanderInt(m.T.copy(), 5)), $"{b.Name} transposed");
-                Hex(b.VanderInt(np.asfortranarray(m), 5)).Should().Be(Hex(b.VanderInt(m, 5)), $"{b.Name} F-order");
+                Hex(b.Vander(m.T, 5)).Should().Be(Hex(b.Vander(m.T.copy(), 5)), $"{b.Name} transposed");
+                Hex(b.Vander(np.asfortranarray(m), 5)).Should().Be(Hex(b.Vander(m, 5)), $"{b.Name} F-order");
                 Hex(b.Vander2d(m.T, m, new[] { 2, 3 })).Should().Be(Hex(b.Vander2d(m.T.copy(), m.copy(), new[] { 2, 3 })), $"{b.Name} 2-D layouts");
             }
         }
@@ -516,13 +484,13 @@ namespace NumSharp.Tests.Polynomial
                 foreach (var x in xs)
                 {
                     var y = x["::-1"].copy();
-                    string v1 = Hex(b.VanderInt(x, 7)), v2 = Hex(b.Vander2d(x, y, new[] { 4, 3 })), v3 = Hex(b.Vander3d(x, y, x, new[] { 2, 3, 2 }));
+                    string v1 = Hex(b.Vander(x, 7)), v2 = Hex(b.Vander2d(x, y, new[] { 4, 3 })), v3 = Hex(b.Vander3d(x, y, x, new[] { 2, 3, 2 }));
                     foreach (long blk in new long[] { 1, 3, 16, 17 })
                     {
                         NDPolyVander.BlockOverride = blk;
                         try
                         {
-                            Hex(b.VanderInt(x, 7)).Should().Be(v1, $"{b.Name} {x.dtype.name} 1-D block {blk}");
+                            Hex(b.Vander(x, 7)).Should().Be(v1, $"{b.Name} {x.dtype.name} 1-D block {blk}");
                             Hex(b.Vander2d(x, y, new[] { 4, 3 })).Should().Be(v2, $"{b.Name} {x.dtype.name} 2-D block {blk}");
                             Hex(b.Vander3d(x, y, x, new[] { 2, 3, 2 })).Should().Be(v3, $"{b.Name} {x.dtype.name} 3-D block {blk}");
                         }
@@ -645,7 +613,7 @@ namespace NumSharp.Tests.Polynomial
                 foreach (var t in new[] { NPTypeCode.Boolean, NPTypeCode.SByte, NPTypeCode.Byte, NPTypeCode.Int16, NPTypeCode.UInt16, NPTypeCode.Int32,
                                           NPTypeCode.UInt32, NPTypeCode.Int64, NPTypeCode.UInt64, NPTypeCode.Char, NPTypeCode.Half, NPTypeCode.Single,
                                           NPTypeCode.Double, NPTypeCode.Complex, NPTypeCode.Decimal })
-                    b.VanderInt(np.arange(19).astype(t), 3);
+                    b.Vander(np.arange(19).astype(t), 3);
                 b.Vander2d(np.arange(19).astype(np.float16), np.arange(19).astype(np.int8), new[] { 2, 2 });
                 b.Vander2d(np.arange(19).astype(np.float32), np.arange(19).astype(np.int16), new[] { 2, 2 });
                 b.Vander3d(np.arange(19).astype(np.complex128), np.arange(19).astype(np.float64), np.arange(19).astype(np.int32), new[] { 1, 2, 1 });

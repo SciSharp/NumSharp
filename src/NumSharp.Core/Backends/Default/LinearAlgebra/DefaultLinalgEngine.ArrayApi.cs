@@ -23,10 +23,12 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's two statements: <c>if x1.shape[axis] != 3 or x2.shape[axis] != 3: raise ValueError(...)</c> (Python's
-        ///     tuple indexing, so an axis out of range is an IndexError) and <c>return _core_cross(x1, x2, axis=axis)</c>,
-        ///     which is <see cref="np.cross"/>, computed by the member its facade dispatches to,
-        ///     <see cref="TensorEngine.Cross(NDArray, NDArray, int, int, int, int?)"/> of <paramref name="x1"/>'s engine.
+        ///     NumPy 2.5's one statement <c>return _core_cross(x1, x2, axis=axis)</c>, which is <see cref="np.cross"/>,
+        ///     computed by the member its facade dispatches to,
+        ///     <see cref="TensorEngine.Cross(NDArray, NDArray, int, int, int, int?)"/> of <paramref name="x1"/>'s engine:
+        ///     the 3-component check is np.cross's own (the same text), and an axis out of range is its <c>AxisError</c>
+        ///     (<c>axisa: axis 3 is out of bounds for array of dimension 3</c>), where NumPy 2.4 checked the lengths first
+        ///     by tuple indexing (an <c>IndexError</c>).
         ///     The core cross promotes the two dtypes STRONGLY (an int8 matrix against an int32 row is int32, a bool one int32
         ///     too) and fills a fresh array whose component axis it moves to the requested axis last, so the result is a view
         ///     in NumPy's layout (C order for the last axis, F order for the first axis of a matrix).
@@ -34,19 +36,10 @@ namespace NumSharp.Backends
         [NDScoped] // reclaims the core cross's temporaries (its own scope) - the call is the body's one computation
         public override NDArray Cross(NDArray x1, NDArray x2, int axis = -1)
         {
-            // `if x1.shape[axis] != 3 or x2.shape[axis] != 3` is NumPy's first statement: Python tuple indexing, so an
-            // axis out of range for either operand is an IndexError (x1's first), not an AxisError.
-            int a1 = ShapeIndex(axis, x1.ndim);
-            int a2 = ShapeIndex(axis, x2.ndim);
-
-            if (x1.Shape.dimensions[a1] != 3 || x2.Shape.dimensions[a2] != 3)
-                throw new ValueError(
-                    "Both input arrays must be (arrays of) 3-dimensional vectors, but they are " +
-                    string.Create(CultureInfo.InvariantCulture, $"{x1.Shape.dimensions[a1]} and {x2.Shape.dimensions[a2]} dimensional instead."));
-
             // `return _core_cross(x1, x2, axis=axis)`: np.cross's engine member with the call np.cross makes for it -
             // axisa / axisb / axisc at their -1 defaults and axis set, which the member's `if axis is not None` then
-            // spreads over the three (its own text refusal, its broadcast and its axisc check included).
+            // spreads over the three (its axis checks, its 3-component check, its text refusal, its broadcast and its
+            // axisc check included).
             return x1.TensorEngine.Cross(x1, x2, -1, -1, -1, axis);
         }
 
@@ -75,7 +68,7 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>NumPy's one statement <c>return _core_tensordot(x1, x2, axes=axes)</c> with the pair of axis lists: the
-        ///     member <see cref="np.tensordot(NDArray, NDArray, int[], int[])"/> dispatches to,
+        ///     member <see cref="np.tensordot(NDArray, NDArray, ValueTuple{int[], int[]})"/> dispatches to,
         ///     <see cref="TensorEngine.Tensordot(NDArray, NDArray, int[], int[])"/> of <paramref name="x1"/>'s engine.</remarks>
         public override NDArray Tensordot(NDArray x1, NDArray x2, int[] axesA, int[] axesB)
             => x1.TensorEngine.Tensordot(x1, x2, axesA, axesB);

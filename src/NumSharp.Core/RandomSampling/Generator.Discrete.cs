@@ -7,9 +7,10 @@ namespace NumSharp
     {
         /// <summary>
         ///     The Generator's binomial setup cache (NumPy's <c>self._binomial</c>), shared by <see cref="binomial"/> and
-        ///     <see cref="multinomial(long, double[], Shape)"/> exactly as in NumPy (see <see cref="BinomialState"/>).
+        ///     <see cref="multinomial(long, double[], Shape)"/> exactly as in NumPy (see <see cref="BinomialState"/>). Modern
+        ///     family: both draw through <c>random_binomial</c>, whose BTPE has NumPy 2.5's corrected Stirling bound.
         /// </summary>
-        private readonly BinomialState _binomial = new BinomialState();
+        private readonly BinomialState _binomial = new BinomialState(legacyBtpe: false);
 
         /// <summary>
         ///     NumPy's <c>POISSON_LAM_MAX</c> for the Generator: <c>int64 max - sqrt(int64 max) * 10</c>, the largest mean whose
@@ -22,7 +23,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="n">Number of trials, non-negative (a fractional count truncates, as NumPy's <c>&lt;int64_t&gt;n</c>).</param>
         /// <param name="p">Probability of success, in <c>[0, 1]</c> (NaN rejected).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The int64 draws.</returns>
         /// <exception cref="ValueError">In NumPy's order: <paramref name="p"/> outside <c>[0, 1]</c> or NaN
         ///     (<c>p &lt; 0, p &gt; 1 or p is NaN</c>), then <paramref name="n"/> negative (<c>n &lt; 0</c>).</exception>
@@ -32,7 +34,7 @@ namespace NumSharp
         ///     sampler for <c>n*min(p,1-p) &lt;= 30</c> and BTPE above, over this Generator's own setup cache. Byte-identical to
         ///     <c>default_rng(seed).binomial</c>.
         /// </remarks>
-        public NDArray binomial(long n, double p, Shape size = default)
+        public NDArray binomial(long n, double p, Shape? size = null)
         {
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_0_1);
             RandomConstraints.Check((double)n, "n", ConstraintType.CONS_NON_NEGATIVE);
@@ -44,7 +46,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Distributions.RandomBinomial(ref one, p, n, _binomial));
+                        return NDArray.WritableScalar(Distributions.RandomBinomial(ref one, p, n, _binomial));
                 }
             }
 
@@ -84,7 +86,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="n">Parameter of the distribution, positive and not NaN (need not be an integer).</param>
         /// <param name="p">Probability of success, in <c>(0, 1]</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The int64 draws (the number of failures before <paramref name="n"/> successes).</returns>
         /// <exception cref="ValueError">In NumPy's order: <paramref name="n"/> is NaN (<c>n must not be NaN</c>) or not
         ///     positive (<c>n &lt;= 0</c>); <paramref name="p"/> outside <c>(0, 1]</c>; or the implied Poisson mean
@@ -95,7 +98,7 @@ namespace NumSharp
         ///     <br/>NumPy's modern <c>random_negative_binomial</c>: a Poisson whose mean is a gamma draw of shape
         ///     <paramref name="n"/> and scale <c>(1 - p) / p</c>. Byte-identical to <c>default_rng(seed).negative_binomial</c>.
         /// </remarks>
-        public NDArray negative_binomial(double n, double p, Shape size = default)
+        public NDArray negative_binomial(double n, double p, Shape? size = null)
         {
             RandomConstraints.Check(n, "n", ConstraintType.CONS_POSITIVE_NOT_NAN);
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_GT_0_1);
@@ -114,7 +117,7 @@ namespace NumSharp
                     ulong word;
                     var one = new DrawBuffer64(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(NegativeBinomial(ref one, in gamma, scale));
+                        return NDArray.WritableScalar(NegativeBinomial(ref one, in gamma, scale));
                 }
             }
 
@@ -139,7 +142,8 @@ namespace NumSharp
         ///     Draw samples from a Poisson distribution.
         /// </summary>
         /// <param name="lam">Expected number of events, non-negative, not NaN, at most <c>int64 max - 10*sqrt(int64 max)</c>. Default 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The int64 draws.</returns>
         /// <exception cref="ValueError"><paramref name="lam"/> is negative or NaN (<c>lam &lt; 0 or lam is NaN</c>, checked
         ///     first) or too large (<c>lam value too large</c>).</exception>
@@ -148,7 +152,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>random_poisson</c>: 0 without drawing for <c>lam == 0</c>, the product method below 10 and
         ///     PTRS above, its setup evaluated once per call. Byte-identical to <c>default_rng(seed).poisson</c>.
         /// </remarks>
-        public NDArray poisson(double lam = 1.0, Shape size = default)
+        public NDArray poisson(double lam = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(lam, "lam", ConstraintType.CONS_POISSON);
             var setup = new PoissonSetup(lam, hoistRejectionLog: !IsNoSize(size));
@@ -160,7 +164,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Distributions.RandomPoisson(ref one, in setup));
+                        return NDArray.WritableScalar(Distributions.RandomPoisson(ref one, in setup));
                 }
             }
 
@@ -185,7 +189,8 @@ namespace NumSharp
         ///     Draw samples from a Zipf distribution.
         /// </summary>
         /// <param name="a">Distribution parameter, greater than 1 (NaN rejected).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The int64 draws (<c>&gt;= 1</c>).</returns>
         /// <exception cref="ValueError"><paramref name="a"/> is not greater than 1 or is NaN (<c>a &lt;= 1 or a is NaN</c>).</exception>
         /// <remarks>
@@ -193,7 +198,7 @@ namespace NumSharp
         ///     <br/>NumPy's modern <c>random_zipf</c>: candidates are drawn from a window that keeps them within int64, and
         ///     <c>a &gt;= 1025</c> (infinity included) returns 1 without drawing. Byte-identical to <c>default_rng(seed).zipf</c>.
         /// </remarks>
-        public NDArray zipf(double a, Shape size = default)
+        public NDArray zipf(double a, Shape? size = null)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_GT_1);
             var setup = new ZipfSetup(a);
@@ -205,7 +210,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Zipf(ref one, in setup, null));
+                        return NDArray.WritableScalar(Zipf(ref one, in setup, null));
                 }
             }
 
@@ -237,7 +242,8 @@ namespace NumSharp
         ///     Draw samples from the geometric distribution.
         /// </summary>
         /// <param name="p">The probability of success of an individual trial, in <c>(0, 1]</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The int64 draws (the trial of the first success, <c>&gt;= 1</c>).</returns>
         /// <exception cref="ValueError"><paramref name="p"/> is outside <c>(0, 1]</c> or NaN.</exception>
         /// <remarks>
@@ -246,7 +252,7 @@ namespace NumSharp
         ///     <c>ceil(-E / log1p(-p))</c> over a ziggurat exponential, clamped to <c>INT64_MAX</c>. Byte-identical to
         ///     <c>default_rng(seed).geometric</c>.
         /// </remarks>
-        public NDArray geometric(double p, Shape size = default)
+        public NDArray geometric(double p, Shape? size = null)
         {
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_GT_0_1);
             bool search = p >= 0.333333333333333333333333;
@@ -262,11 +268,11 @@ namespace NumSharp
                         {
                             double word;
                             var one = new DrawBufferDouble(_bitGenerator, &word, 1);
-                            return NDArray.Scalar(Distributions.RandomGeometricSearch(ref one, p));
+                            return NDArray.WritableScalar(Distributions.RandomGeometricSearch(ref one, p));
                         }
                         ulong unit;
                         var one64 = new DrawBuffer64(_bitGenerator, &unit, 1);
-                        return NDArray.Scalar(GeometricInversion(ref one64, log1pNegP));
+                        return NDArray.WritableScalar(GeometricInversion(ref one64, log1pNegP));
                     }
                 }
             }
@@ -308,7 +314,8 @@ namespace NumSharp
         /// <param name="ngood">Number of ways to make a good selection, non-negative and below <c>10^9</c>.</param>
         /// <param name="nbad">Number of ways to make a bad selection, non-negative and below <c>10^9</c>.</param>
         /// <param name="nsample">Number of items sampled, <c>0 &lt;= nsample &lt;= ngood + nbad</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The int64 draws (good items in the sample).</returns>
         /// <exception cref="ValueError">In NumPy's order: <paramref name="ngood"/> or <paramref name="nbad"/> is at least
         ///     <c>10^9</c>; <c>ngood + nbad &lt; nsample</c>; then a negative <paramref name="ngood"/>,
@@ -319,7 +326,7 @@ namespace NumSharp
         ///     <c>logfactorial</c>) for <c>10 &lt;= nsample &lt;= ngood + nbad - 10</c>, else an urn simulation over
         ///     <c>random_interval</c>. Byte-identical to <c>default_rng(seed).hypergeometric</c>.
         /// </remarks>
-        public NDArray hypergeometric(long ngood, long nbad, long nsample, Shape size = default)
+        public NDArray hypergeometric(long ngood, long nbad, long nsample, Shape? size = null)
         {
             const long HypergeomMax = 1000000000;
             if (ngood >= HypergeomMax || nbad >= HypergeomMax)
@@ -339,7 +346,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Hypergeometric(ref one, _bitGenerator, ngood, nbad, nsample));
+                        return NDArray.WritableScalar(Hypergeometric(ref one, _bitGenerator, ngood, nbad, nsample));
                 }
             }
 
@@ -381,7 +388,8 @@ namespace NumSharp
         ///     Draw samples from a logarithmic series distribution.
         /// </summary>
         /// <param name="p">Shape parameter, in <c>[0, 1)</c> (NaN rejected).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) returns a single value.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) returns a single
+        ///     value.</param>
         /// <returns>The int64 draws (<c>&gt;= 1</c>).</returns>
         /// <exception cref="ValueError"><paramref name="p"/> is outside <c>[0, 1)</c> or NaN (<c>p &lt; 0, p &gt;= 1 or p is NaN</c>).</exception>
         /// <remarks>
@@ -390,7 +398,7 @@ namespace NumSharp
         ///     count can differ only where Windows NumPy's <c>expm1</c> and <see cref="Expm1"/> part by an ulp AND a
         ///     uniform lands inside that ulp of a boundary (see <see cref="Logseries"/>).
         /// </remarks>
-        public NDArray logseries(double p, Shape size = default)
+        public NDArray logseries(double p, Shape? size = null)
         {
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_LT_0_1);
             double r = Log1p(-p);
@@ -402,7 +410,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(_bitGenerator, &word, 1);
                     lock (_bitGenerator.@lock)
-                        return NDArray.Scalar(Logseries(ref one, p, r));
+                        return NDArray.WritableScalar(Logseries(ref one, p, r));
                 }
             }
 

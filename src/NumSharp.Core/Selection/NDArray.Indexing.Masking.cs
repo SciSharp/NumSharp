@@ -154,7 +154,7 @@ namespace NumSharp
         ///     is true</c>), or a value that does not broadcast.</exception>
         /// <exception cref="TypeError">A value of two or more dimensions through a mask of this array's own shape.</exception>
         /// <exception cref="IndexError">The mask does not fit this array (<see cref="BooleanIndexError"/>).</exception>
-        /// <exception cref="OverflowException">A C# literal outside this array's integer dtype.</exception>
+        /// <exception cref="OverflowError">A C# literal outside this array's integer dtype.</exception>
         [SuppressMessage("ReSharper", "CoVariantArrayConversion")]
         private void SetMasked(NDArray<bool> mask, NDArray value)
         {

@@ -203,7 +203,7 @@ namespace NumSharp.Tests.Backends.Strings
             np.nonzero(T())[0].ToArray<long>().Should().Equal(1L, 3L, 4L, 5L);
             np.count_nonzero(T()).Should().Be(4L);
             np.count_nonzero(T().reshape(2, 3), 0).ToArray<long>().Should().Equal(1L, 2L, 1L);
-            np.any(T().reshape(2, 3), 1, true).ToArray<bool>().Should().Equal(true, true);
+            np.any(T().reshape(2, 3), 1, keepdims: true).ToArray<bool>().Should().Equal(true, true);
             np.all(T()).Should().BeFalse();
             np.argwhere(T().reshape(2, 3)).ToArray<long>().Should().Equal(0L, 1L, 1L, 0L, 1L, 1L, 1L, 2L);
             np.flatnonzero(T()).ToArray<long>().Should().Equal(1L, 3L, 4L, 5L);

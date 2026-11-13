@@ -5,29 +5,9 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Remove values along a dimension which are zero along all other dimensions. Mirrors NumPy's
-        ///     <c>numpy.trim_zeros(filt, trim='fb', axis=None)</c> exactly: <paramref name="axis"/> is a single
-        ///     axis, or <c>null</c> for the whole-array bounding box. Pass an <c>int[]</c> to trim several axes.
-        /// </summary>
-        /// <param name="filt">Input array.</param>
-        /// <param name="trim">'f' trims from the front, 'b' from the back; "fb" (default) trims both. Case-insensitive.</param>
-        /// <param name="axis">The single dimension to trim; <c>null</c> trims the whole-array bounding box.</param>
-        /// <returns>A view of <paramref name="filt"/> (see the <c>int[]</c> overload).
-        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
-        ///     subclass), owning its data exactly when the plain result would.</returns>
-        /// <exception cref="ValueError"><paramref name="trim"/> contains unexpected characters.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="filt"/> ("axis: axis … is
-        ///     out of bounds for array of dimension …", NumPy names the argument).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html. A string array is trimmed by its
-        ///     truth values (an empty string is a zero), as NumPy's <c>argwhere</c> reads them.</remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray trim_zeros(NDArray filt, string trim = "fb", int? axis = null)
-            => trim_zeros(filt, trim, axis.HasValue ? new[] {axis.Value} : null);
-
-        /// <summary>
-        ///     Remove values which are zero along all other dimensions, trimming the given sequence of axes.
-        ///     <paramref name="trim"/> is required on this overload so it does not collide with the single-axis
-        ///     primary above on calls like <c>trim_zeros(filt)</c> / <c>trim_zeros(filt, "f")</c>.
+        ///     NumPy's <c>np.trim_zeros(filt, trim='fb', axis=None)</c>: remove the leading and/or trailing hyperplanes that
+        ///     are zero along all other dimensions - over every axis (the smallest bounding box that still holds every non-zero
+        ///     value) by default, or only along the given axes.
         /// </summary>
         /// <param name="filt">Input array.</param>
         /// <param name="trim">
@@ -35,30 +15,57 @@ namespace NumSharp
         ///     zeros are trimmed on both sides ("fb"). Case-insensitive; "bf" is accepted as an alias of "fb".
         /// </param>
         /// <param name="axis">
-        ///     If <c>null</c>, <paramref name="filt"/> is cropped to the smallest bounding box that still
-        ///     contains all non-zero values. If axes are specified, <paramref name="filt"/> is sliced in
-        ///     those dimensions only, on the sides selected by <paramref name="trim"/>. An empty array of
-        ///     axes leaves the input unmodified.
+        ///     NumPy's <c>axis</c>: <c>null</c> (None, the default) crops <paramref name="filt"/> to the smallest bounding box
+        ///     that still contains all non-zero values; one axis (<c>0</c>, <c>-1</c>) or a tuple (<c>(0, 1)</c>,
+        ///     <c>new[] { 0, 1 }</c>) slices only those dimensions, on the sides <paramref name="trim"/> selects. The empty
+        ///     tuple leaves the input unmodified.
         /// </param>
         /// <returns>
         ///     A view of <paramref name="filt"/> with leading/trailing all-zero hyperplanes removed. The number
         ///     of dimensions and the input dtype are preserved.
-        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
-        ///     subclass), owning its data exactly when the plain result would.</returns>
-        /// <exception cref="ValueError">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated
-        ///     (NumPy's ValueError texts).</exception>
-        /// <exception cref="AxisError">If an axis is out of bounds for <paramref name="filt"/> (checked for every axis before
-        ///     the repeat check).</exception>
+        ///     A <c>numpy.char.chararray</c> or <c>numpy.matrix</c> operand gives its class over the result (NumPy creates it
+        ///     as the subclass), owning its data exactly when the plain result would.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="filt"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="trim"/> contains unexpected characters, an axis is repeated
+        ///     (<c>repeated axis in `axis` argument</c>), or a <c>numpy.matrix</c> operand's result cannot be a matrix (more
+        ///     than two axes longer than 1: <c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="AxisError">An axis is out of bounds for <paramref name="filt"/> (<c>axis: axis 2 is out of
+        ///     bounds for array of dimension 2</c>: NumPy names the argument; every axis is checked before the repeat
+        ///     check).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trim_zeros.html. A string array is trimmed by its
         ///     truth values (an empty string — all NULs — is a zero): NumPy's <c>_arg_trim_zeros</c> runs <c>np.argwhere</c>,
-        ///     the dtype's nonzero route, which never raises; the result is a view of the text itself.</remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="filt"/> is null.</exception>
+        ///     the dtype's nonzero route, which never raises; the result is a view of the text itself.
+        ///     <para>One signature since API-parity batch 4 (2026-11-12): it replaces <c>(filt, trim = "fb", int? axis)</c>
+        ///     and <c>(filt, string trim, int[] axis)</c>, which made <c>np.trim_zeros(filt, "fb", null)</c> ambiguous
+        ///     (CS0121) and had no tuple literal.</para></remarks>
         [NDScoped]
-        public static NDArray trim_zeros(NDArray filt, string trim, int[] axis)
+        public static NDArray trim_zeros(NDArray filt, string trim = "fb", NDAxis? axis = null)
         {
             if (filt is null) throw new ArgumentNullException(nameof(filt));
-            return filt.TensorEngine.TrimZeros(filt, trim, axis);
+            // NumPy's statements (trim's check, normalize_axis_tuple(axis, filt.ndim, "axis"), the slices) are the engine's;
+            // an integer axis is the one-element tuple there, as NumPy's normalize_axis_tuple makes it.
+            return filt.TensorEngine.TrimZeros(filt, trim, axis?.ToArray());
         }
+
+        /// <summary>
+        ///     <see cref="trim_zeros(NDArray, string, NDAxis?)"/> with the axis as one <c>int</c>: the overload a C#
+        ///     integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the NDAxis form, so
+        ///     every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="trim_zeros(NDArray, string, NDAxis?)"/>
+        public static NDArray trim_zeros(NDArray filt, string trim, int axis)
+            => trim_zeros(filt, trim, (NDAxis?)axis);
+
+        /// <summary>
+        ///     <see cref="trim_zeros(NDArray, string, NDAxis?)"/> with the axes as an <c>int[]</c>: the overload an
+        ///     <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better than to NDAxis),
+        ///     forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's tuple (<c>new
+        ///     int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="trim_zeros(NDArray, string, NDAxis?)"/>
+        public static NDArray trim_zeros(NDArray filt, string trim, int[] axis)
+            => trim_zeros(filt, trim, (NDAxis?)axis);
     }
 }

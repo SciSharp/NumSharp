@@ -102,13 +102,14 @@ namespace NumSharp.Backends
         ///     non-int of type 'float'</c>, <c>unsupported operand type(s) for *: 'float' and 'NoneType'</c>).</exception>
         /// <exception cref="IndexError">The coordinates of an empty axis (NumPy's <c>diffx[0]</c> of an empty
         ///     diff).</exception>
-        /// <exception cref="DivideByZeroException">A zero step that is a Python number with second-order edges (CPython's
+        /// <exception cref="ZeroDivisionError">A zero step that is a Python number with second-order edges (CPython's
         ///     ZeroDivisionError of <c>-1.5 / ax_dx</c>: <c>float division by zero</c>, or <c>complex division by zero</c>
-        ///     for a complex step; a NumPy-scalar or 0-d array zero step gives inf / nan instead, as in NumPy); a decimal
-        ///     input or step divided by zero (decimal has no inf).</exception>
-        /// <exception cref="OverflowException">A Python int step past the float range (a <c>BigInteger</c>: CPython's
-        ///     <c>int too large to convert to float</c> in <c>2. * ax_dx</c>); a decimal result past decimal's
-        ///     range.</exception>
+        ///     for a complex step; a NumPy-scalar or 0-d array zero step gives inf / nan instead, as in NumPy).</exception>
+        /// <exception cref="DivideByZeroException">A decimal input or step divided by zero (.NET's own: decimal has no
+        ///     inf).</exception>
+        /// <exception cref="OverflowError">A Python int step past the float range (a <c>BigInteger</c>: CPython's
+        ///     <c>int too large to convert to float</c> in <c>2. * ax_dx</c>).</exception>
+        /// <exception cref="OverflowException">A decimal result past decimal's range.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: every slice view, coefficient array and edge temporary is released when the call
         ///     returns, and the output components are yielded to the caller through the returned
@@ -250,7 +251,7 @@ namespace NumSharp.Backends
                 if (uniform && Backends.Strings.NDStringUfuncs.IsVString(work))
                 {
                     // StringDType: a new-style DType in the key, so NumPy's dispatcher names every operand's class.
-                    string t = work.dtype.Meta.ToString();
+                    var t = work.dtype.Meta;
                     throw Backends.Strings.NDStringUfuncs.VStringNoLoop("subtract", new[] { t, t });
                 }
                 if (uniform && Backends.Strings.NDStringUfuncs.IsString(work))
@@ -311,8 +312,8 @@ namespace NumSharp.Backends
                         // boolean negative). The port named float64 for every coordinate dtype.
                         if (Backends.Strings.NDStringUfuncs.IsVString(work))
                         {
-                            string t = work.dtype.Meta.ToString();
-                            throw Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { a.dtype.Meta.ToString(), t });
+                            var t = work.dtype.Meta;
+                            throw Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { a.dtype.Meta, t });
                         }
                         if (Backends.Strings.NDStringUfuncs.IsString(work))
                             throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", a.dtype, work.dtype);
@@ -484,13 +485,13 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>f[tuple(slice)]</c> with an integer at <paramref name="axis"/>: the hyperplane at index
-        ///     <paramref name="k"/>, one rank lower than <paramref name="a"/> (a 0-d view of a 1-D array).
+        ///     <paramref name="k"/>, one rank lower than <paramref name="a"/> (for a 1-D array the item, NumPy's scalar).
         /// </summary>
         /// <param name="a">The array.</param>
         /// <param name="axis">The indexed axis.</param>
         /// <param name="N">The array's rank.</param>
         /// <param name="k">The index (negative counts from the end, as in Python).</param>
-        /// <returns>A view.</returns>
+        /// <returns>A view; for a 1-D array the item, a read-only 0-d copy (the indexer's full integer index).</returns>
         /// <exception cref="IndexError"><paramref name="k"/> is outside the axis: NumPy's <c>index {k} is out of bounds for
         ///     axis {axis} with size {M}</c>, the index as given.</exception>
         private static NDArray AtAxis(NDArray a, int axis, int N, long k) => a[BuildAxisIndex(N, axis, k)];
@@ -500,7 +501,7 @@ namespace NumSharp.Backends
         ///     on), of an N-D array an (N-1)-D array (ufuncs).
         /// </summary>
         /// <param name="v">The indexed hyperplane (<see cref="AtAxis"/>).</param>
-        /// <returns>A NumPy scalar for a 0-d view, else the array.</returns>
+        /// <returns>A NumPy scalar for a 0-d item, else the array.</returns>
         private static PolyNumber EdgeOperand(NDArray v) => v.ndim == 0 ? PolyNumber.ScalarOf(v) : PolyNumber.FromArray(v);
 
         /// <summary>NumPy's unit step <c>1.0</c> (the <c>dx</c> list's entry when no spacing is given): a Python float,
@@ -581,7 +582,7 @@ namespace NumSharp.Backends
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
         /// <returns>The quotient.</returns>
-        /// <exception cref="DivideByZeroException">Two Python numbers with a zero divisor (CPython's ZeroDivisionError:
+        /// <exception cref="ZeroDivisionError">Two Python numbers with a zero divisor (CPython's ZeroDivisionError:
         ///     <c>float division by zero</c>); a NumPy scalar divisor gives inf / nan instead.</exception>
         private static PolyNumber GradientDiv(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Divide, a, b);
 

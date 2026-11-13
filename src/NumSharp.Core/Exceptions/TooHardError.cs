@@ -17,11 +17,23 @@ namespace NumSharp
     /// </remarks>
     public class TooHardError : RuntimeError
     {
-        /// <summary>Creates a <see cref="TooHardError"/> with the default "TooHardError" message.</summary>
-        public TooHardError() : base("TooHardError") { }
+        /// <summary>
+        ///     Creates a <see cref="TooHardError"/> with Python's text for a bare <c>raise TooHardError</c>: an empty
+        ///     <see cref="Exception.Message"/>, as <c>str(np.exceptions.TooHardError())</c> is <c>''</c>.
+        /// </summary>
+        /// <remarks>NumSharp's own raise site passes NumPy's text, "Exceeded max_work".</remarks>
+        public TooHardError() : base(string.Empty) { }
 
         /// <summary>Creates a <see cref="TooHardError"/> with a specific message.</summary>
         /// <param name="message">The message that describes the error (NumPy uses "Exceeded max_work").</param>
         public TooHardError(string message) : base(message) { }
+
+        /// <summary>
+        ///     Creates a <see cref="TooHardError"/> with a message and the exception that caused it: Python's <c>raise
+        ///     TooHardError(message) from innerException</c>, the cause kept in <see cref="Exception.InnerException"/>.
+        /// </summary>
+        /// <param name="message">The message that describes the error.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        public TooHardError(string message, Exception innerException) : base(message, innerException) { }
     }
 }

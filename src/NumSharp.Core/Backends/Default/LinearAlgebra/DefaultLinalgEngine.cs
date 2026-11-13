@@ -137,7 +137,7 @@ namespace NumSharp.Backends
                 // one) is refused by the legacy type resolver.
                 // A StringDType operand puts a new-style DType into the dispatch key: the dispatcher names its class.
                 if (Backends.Strings.NDStringUfuncs.IsVString(a))
-                    throw Backends.Strings.NDStringUfuncs.VStringNoLoop("isfinite", new[] { Backends.Strings.NDStringUfuncs.UnaryDispatchClass(a) });
+                    throw Backends.Strings.NDStringUfuncs.VStringNoLoop("isfinite", new[] { Backends.Strings.NDStringUfuncs.UnaryDispatchMeta(a) });
                 if (Backends.Strings.NDStringUfuncs.IsString(a))
                     throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("isfinite");
                 bool floaty = a.typecode is NPTypeCode.Half or NPTypeCode.Single
@@ -180,12 +180,10 @@ namespace NumSharp.Backends
             }
             if (first < 0)
                 return;
-            // _commonType: any complex operand makes the loop complex128, a string or any other operand float64.
-            string target = complex ? "complex128" : "float64";
-            string input = operands.Length > 1 ? string.Create(CultureInfo.InvariantCulture, $"input {first}") : "input";
-            throw new TypeError(
-                $"Cannot cast ufunc '{gufunc}' {input} from {operands[first].dtype.ToString(true)} to dtype('{target}') " +
-                "with casting rule 'same_kind'");
+            // _commonType: any complex operand makes the loop complex128, a string or any other operand float64. NumPy names
+            // the input's index only for a gufunc of several inputs.
+            DType target = complex ? DType.Complex : DType.Double;
+            throw new UFuncInputCastingError(gufunc, operands.Length, "same_kind", operands[first].dtype, target, first);
         }
 
         /// <summary>

@@ -105,7 +105,7 @@ namespace NumSharp
         ///     Either descriptor is not a datetime64 / timedelta64 one, or the units have no common divisor (a timedelta
         ///     years/months unit against a time unit: NumPy's "Cannot get a common metadata divisor …" text).
         /// </exception>
-        /// <exception cref="OverflowException">The common divisor overflows (NumPy's "Integer overflow getting a common metadata divisor …").</exception>
+        /// <exception cref="OverflowError">The common divisor overflows (NumPy's "Integer overflow getting a common metadata divisor …").</exception>
         public override DType common_instance(DType descr1, DType descr2)
         {
             if (descr1 == null) throw new ArgumentNullException(nameof(descr1));

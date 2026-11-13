@@ -406,8 +406,8 @@ namespace NumSharp.Tests.Polynomial
             foreach (var b in Bases)
             {
                 string text = b.Name == "herm" ? "int too large to convert to float" : "integer division result too large for a float";
-                Raises<OverflowException>(() => b.Companion(new object[] { huge, 1 }), text, b.Name);
-                Raises<OverflowException>(() => b.Roots(new object[] { huge, 1 }), text, b.Name);
+                Raises<OverflowError>(() => b.Companion(new object[] { huge, 1 }), text, b.Name);
+                Raises<OverflowError>(() => b.Roots(new object[] { huge, 1 }), text, b.Name);
                 b.Invoking(x => x.Roots(new object[] { null, 1 })).Should().Throw<NotSupportedException>(b.Name);
             }
         }
@@ -452,8 +452,8 @@ namespace NumSharp.Tests.Polynomial
                          })
                 {
                     string text = hermFamily ? conv : plain;
-                    Raises<OverflowException>(() => b.Roots(c), text, b.Name);
-                    Raises<OverflowException>(() => b.Companion(c), text, b.Name);
+                    Raises<OverflowError>(() => b.Roots(c), text, b.Name);
+                    Raises<OverflowError>(() => b.Companion(c), text, b.Name);
                 }
                 // A too-large LEADING term only Hermite / HermiteE meet again (2.0 * c[-1], / c[-1]); a quotient that fits
                 // (2**1024 / 2) raises nowhere else.
@@ -461,7 +461,7 @@ namespace NumSharp.Tests.Polynomial
                              new object[] { BigInteger.Pow(2, 1024), 1, 2 } })
                 {
                     if (hermFamily)
-                        Raises<OverflowException>(() => b.Roots(c), conv, b.Name);
+                        Raises<OverflowError>(() => b.Roots(c), conv, b.Name);
                     else
                         Raises<TypeError>(() => b.Roots(c), isFinite, b.Name);
                 }
@@ -493,9 +493,13 @@ namespace NumSharp.Tests.Polynomial
         // =========================================================================================================
 
         /// <summary>
-        ///     NumPy's result objects: the companion is a fresh C-contiguous owning matrix; real roots of a float64 series are a
-        ///     VIEW of the real parts of eigvals' complex result (<c>w.real</c>, kept by <c>astype(copy=False)</c>, sorted in
-        ///     place) — not contiguous, not owning, stride 16 bytes; a float32 series' real roots are a fresh cast.
+        ///     NumPy 2.5's result objects: the companion is a fresh C-contiguous owning matrix. eigvals is always complex, so
+        ///     polyroots, lagroots and hermroots keep real roots through <c>_to_real_if_imag_zero</c>: a VIEW of the real
+        ///     parts of eigvals' complex result (<c>w.real</c>, kept by <c>astype(copy=False)</c>, sorted in place) — not
+        ///     contiguous, not owning — of stride 16 bytes for a float64 series and 8 for a float32 one (the complex64
+        ///     result's real lane; NumPy 2.4 returned a fresh float32 cast there). chebroots, legroots and hermeroots return
+        ///     the complex eigenvalues themselves, C-contiguous and owning (complex64 for a float32 series in NumPy, whose
+        ///     values NumSharp carries in complex128).
         /// </summary>
         [TestMethod]
         public void Roots_RealRootsAreAViewOfTheComplexEigenvalues()
@@ -508,16 +512,31 @@ namespace NumSharp.Tests.Polynomial
                 (k.flags.c_contiguous && k.flags.owndata).Should().BeTrue(b.Name);
 
                 var r = b.Roots(c);
-                r.dtype.name.Should().Be("float64", b.Name);
-                r.flags.c_contiguous.Should().BeFalse(b.Name);
-                r.flags.f_contiguous.Should().BeFalse(b.Name);
-                r.flags.owndata.Should().BeFalse(b.Name);
-                r.strides.Should().Equal(new long[] { 16 }, b.Name);
-                AlmostEqual(r, new[] { -2.0, 0.5, 1.0 }, 7, b.Name);
-
                 var r32 = b.Roots(c.astype(np.float32));
-                r32.dtype.name.Should().Be("float32", b.Name);
-                (r32.flags.c_contiguous && r32.flags.owndata).Should().BeTrue(b.Name);
+                if (b.Name is "poly" or "lag" or "herm")
+                {
+                    r.dtype.name.Should().Be("float64", b.Name);
+                    r.flags.c_contiguous.Should().BeFalse(b.Name);
+                    r.flags.f_contiguous.Should().BeFalse(b.Name);
+                    r.flags.owndata.Should().BeFalse(b.Name);
+                    r.strides.Should().Equal(new long[] { 16 }, b.Name);
+                    AlmostEqual(r, new[] { -2.0, 0.5, 1.0 }, 7, b.Name);
+
+                    r32.dtype.name.Should().Be("float32", b.Name);
+                    r32.flags.c_contiguous.Should().BeFalse(b.Name);
+                    r32.flags.owndata.Should().BeFalse(b.Name);
+                    r32.strides.Should().Equal(new long[] { 8 }, b.Name);
+                }
+                else
+                {
+                    r.dtype.name.Should().Be("complex128", b.Name);
+                    (r.flags.c_contiguous && r.flags.owndata).Should().BeTrue(b.Name);
+                    r.strides.Should().Equal(new long[] { 16 }, b.Name);
+                    np.real(r).ToArray<double>().Select(x => System.Math.Round(x, 7)).Should().Equal(new[] { -2.0, 0.5, 1.0 }, b.Name);
+
+                    r32.dtype.name.Should().Be("complex128", b.Name);
+                    (r32.flags.c_contiguous && r32.flags.owndata).Should().BeTrue(b.Name);
+                }
             }
         }
 

@@ -22,8 +22,9 @@ namespace NumSharp.Backends
         //  Routes here:
         //      float16 / float32 / float64 / complex128 with an index or an inverse (and every float16 call, complex128
         //          counts): those statements over NumPy's stable argsort order (uniqueFlatArgsorted).
-        //      float32 / float64 values only or counts only: the NaNs partitioned to the tail, the prefix radix-sorted,
-        //          NumPy's sort NaN written; complex values only: NumPy's hash path (a high-cardinality line, and above
+        //      float32 / float64 values only or counts only: the NaNs partitioned to the tail in the order NumPy's sort
+        //          leaves them (x86-simd-sort's swap pass, every NaN's bits kept since NumPy 2.5), the prefix radix-sorted;
+        //          complex values only: NumPy's hash path (a high-cardinality line, and above
         //          2^28 elements every line, gets the same answer from the stable argsort).
         //      the integer family, char, bool: the hash paths for values or counts alone (Default.Unique.Hash.cs), a
         //          stable radix argsort of keys and permutation for an index or an inverse; decimal: the BCL sort.
@@ -168,8 +169,8 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     The flat unique of a float64 operand, by NumPy's two routes: a values-only or counts-only call is NumPy's
-        ///     in-place sort (the NaNs partitioned to the tail and written as NumPy's sort NaN, the non-NaN prefix
-        ///     radix-sorted, no permutation); a call with an index or an inverse is NumPy's argsort and gather
+        ///     in-place sort (the NaNs partitioned to the tail in the order NumPy's sort leaves them, each with its bits, the
+        ///     non-NaN prefix radix-sorted, no permutation); a call with an index or an inverse is NumPy's argsort and gather
         ///     (<see cref="uniqueFlatArgsorted{T}"/>).
         /// </summary>
         /// <param name="a">The operand (any layout; only read).</param>
@@ -177,8 +178,9 @@ namespace NumSharp.Backends
         /// <param name="return_inverse">Also return the reconstruction indices.</param>
         /// <param name="return_counts">Also return the counts.</param>
         /// <param name="equal_nan">True: every NaN is one value (with an index or an inverse the first NaN in input
-        ///     order, its bits kept; on the values-only and counts-only routes NumPy's sort NaN,
-        ///     <see cref="WriteSortNaNs(double[], long, long)"/>); false: each NaN is a value of its own.</param>
+        ///     order; on the values-only and counts-only routes the first NaN of the sorted tail, as NumPy's in-place sort
+        ///     leaves it, <see cref="PartitionNaN_DoubleKeysOnly"/>; its bits kept either way); false: each NaN is a value of
+        ///     its own.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="uniqueFlatKwargs"/>).</returns>
         /// <remarks>
         ///     On the values-only and counts-only routes the radix key orders <c>-0.0</c> below <c>+0.0</c>, so a run of
@@ -205,7 +207,6 @@ namespace NumSharp.Backends
                 var kc = ExtractKeysOnly<double>(a, n);
                 long fn = PartitionNaN_DoubleKeysOnly(kc, n);
                 RadixSortValues(kc, (int)fn);
-                WriteSortNaNs(kc, fn, n);   // NumPy's in-place ar.sort() rewrites every NaN (see WriteSortNaNs)
                 return EmitValuesAndCountsFloat<double>(kc, n, fn, equal_nan);
             }
 
@@ -223,8 +224,8 @@ namespace NumSharp.Backends
         /// <param name="a">The float64 operand (any layout; only read).</param>
         /// <param name="n">Its element count (positive).</param>
         /// <param name="equal_nan">True keeps one NaN, false every NaN.</param>
-        /// <returns>The sorted distinct values (NaNs last), a fresh 1-D float64 array. With two or more elements every NaN
-        ///     is NumPy's sort NaN <c>0x7FF8000000000000</c> (NumPy sorts the array in place first).</returns>
+        /// <returns>The sorted distinct values (NaNs last, each with its bits, in the order NumPy's in-place sort leaves
+        ///     them), a fresh 1-D float64 array.</returns>
         private unsafe NDArray uniqueValuesOnlyDouble(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
@@ -236,7 +237,6 @@ namespace NumSharp.Backends
             var keys = ExtractKeysOnly<double>(a, n);
             long firstNaN = PartitionNaN_DoubleKeysOnly(keys, n);
             RadixSortValues(keys, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
-            WriteSortNaNs(keys, firstNaN, n);       // NumPy's in-place ar.sort() rewrites every NaN (see WriteSortNaNs)
             return EmitValuesOnlyFloat<double>(keys, n, firstNaN, equal_nan);
         }
 
@@ -264,7 +264,6 @@ namespace NumSharp.Backends
                 var kc = ExtractKeysOnly<float>(a, n);
                 long fn = PartitionNaN_FloatKeysOnly(kc, n);
                 RadixSortValues(kc, (int)fn);
-                WriteSortNaNs(kc, fn, n);   // NumPy's in-place ar.sort() rewrites every NaN (see WriteSortNaNs)
                 return EmitValuesAndCountsFloat<float>(kc, n, fn, equal_nan);
             }
 
@@ -282,8 +281,8 @@ namespace NumSharp.Backends
         /// <param name="a">The float32 operand (any layout; only read).</param>
         /// <param name="n">Its element count (positive).</param>
         /// <param name="equal_nan">True keeps one NaN, false every NaN.</param>
-        /// <returns>The sorted distinct values (NaNs last), a fresh 1-D float32 array. With two or more elements every NaN
-        ///     is NumPy's sort NaN <c>0x7FC00000</c> (NumPy sorts the array in place first).</returns>
+        /// <returns>The sorted distinct values (NaNs last, each with its bits, in the order NumPy's in-place sort leaves
+        ///     them), a fresh 1-D float32 array.</returns>
         private unsafe NDArray uniqueValuesOnlyFloat(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
@@ -292,7 +291,6 @@ namespace NumSharp.Backends
             var keys = ExtractKeysOnly<float>(a, n);
             long firstNaN = PartitionNaN_FloatKeysOnly(keys, n);
             RadixSortValues(keys, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
-            WriteSortNaNs(keys, firstNaN, n);       // NumPy's in-place ar.sort() rewrites every NaN (see WriteSortNaNs)
             return EmitValuesOnlyFloat<float>(keys, n, firstNaN, equal_nan);
         }
 
@@ -541,45 +539,6 @@ namespace NumSharp.Backends
             throw new NotSupportedException($"IeeeNotEqual: {typeof(T)} is not a float or complex type.");
         }
 
-        /// <summary>The NaN NumPy's float64 sort writes: the positive quiet NaN <c>0x7FF8000000000000</c>.</summary>
-        private static readonly double NumPySortNaN64 = BitConverter.UInt64BitsToDouble(0x7FF8000000000000UL);
-
-        /// <summary>The NaN NumPy's float32 sort writes: the positive quiet NaN <c>0x7FC00000</c>.</summary>
-        private static readonly float NumPySortNaN32 = BitConverter.UInt32BitsToSingle(0x7FC00000U);
-
-        /// <summary>
-        ///     NumPy's in-place sort of a float64 array's NaNs: <c>_unique1d</c>'s values-only and counts-only routes run
-        ///     <c>ar.sort()</c> (neither an index nor an inverse is asked), and NumPy's default float sort (x86-simd-sort)
-        ///     rewrites every NaN of a line longer than one element — negative, signalling or payload-bearing — with the
-        ///     positive quiet NaN. So <c>np.unique([-nan, 1.0])</c> is <c>[1.0, nan]</c> with the bits
-        ///     <c>0x7FF8000000000000</c>, while a one-element <c>np.unique([-nan])</c> keeps <c>0xFFF8…</c> (a line of one
-        ///     element is not sorted). The index and inverse routes argsort and gather, so they keep every NaN's bits.
-        /// </summary>
-        /// <param name="keys">The partitioned keys; the NaN tail <c>[firstNaN, n)</c> is overwritten in place.</param>
-        /// <param name="firstNaN">The index where the NaN tail starts.</param>
-        /// <param name="n">The number of keys: one element keeps its NaN.</param>
-        /// <remarks><c>np.sort</c> writes the same NaN on its default kind (<c>AxisSort.SortLineF64</c>).</remarks>
-        private static void WriteSortNaNs(double[] keys, long firstNaN, long n)
-        {
-            if (n <= 1) return;
-            double nan = NumPySortNaN64;
-            for (long i = firstNaN; i < n; i++) keys[i] = nan;
-        }
-
-        /// <summary>
-        ///     <see cref="WriteSortNaNs(double[], long, long)"/> for float32: every NaN of a line longer than one element
-        ///     becomes <c>0x7FC00000</c>.
-        /// </summary>
-        /// <param name="keys">The partitioned keys; the NaN tail <c>[firstNaN, n)</c> is overwritten in place.</param>
-        /// <param name="firstNaN">The index where the NaN tail starts.</param>
-        /// <param name="n">The number of keys: one element keeps its NaN.</param>
-        private static void WriteSortNaNs(float[] keys, long firstNaN, long n)
-        {
-            if (n <= 1) return;
-            float nan = NumPySortNaN32;
-            for (long i = firstNaN; i < n; i++) keys[i] = nan;
-        }
-
         // ----- Helpers -----
 
         /// <summary>
@@ -664,10 +623,12 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     Moves every NaN of <paramref name="keys"/><c>[0..n)</c> to the tail by a two-pointer swap: the NaN step of
-        ///     the values-only and counts-only routes, which run NumPy's in-place sort and carry no permutation.
-        ///     Unstable: the values swapped forward lose their order, which the sort of the prefix restores, and the NaNs
-        ///     keep the partition's order, which on these routes only decides which NaN represents a collapsed run
-        ///     (float32 and float64 tails are then written as NumPy's sort NaN).
+        ///     the values-only and counts-only routes, which run NumPy's in-place sort and carry no permutation. It is
+        ///     x86-simd-sort's <c>move_nans_to_end_of_array</c> statement for statement (a NaN met at <c>i</c> swaps with the
+        ///     last unexamined slot, whose element is examined next), so the NaN tail is in the order NumPy 2.5's default
+        ///     sort leaves it, every NaN's bits kept — the order that decides which NaN represents a collapsed run and the
+        ///     order of the NaNs <c>equal_nan=False</c> keeps. The values swapped forward lose their order, which the sort of
+        ///     the prefix restores.
         /// </summary>
         /// <param name="keys">The keys, partitioned in place (each NaN keeps its bits).</param>
         /// <param name="n">The number of keys.</param>
@@ -785,8 +746,8 @@ namespace NumSharp.Backends
         ///     takes no argsort. Mirrors <see cref="EmitValuesOnlyFloat{T}"/> for the values AND
         ///     <see cref="EmitOutputs{T}"/>'s counts branch (run-length between mask=true positions), with NO perm (counts
         ///     are run-lengths of the sorted values). <paramref name="keys"/>[0..firstNaN) is radix-sorted ascending;
-        ///     [firstNaN..n) is the NaN run (NumPy's sort NaN for two or more elements,
-        ///     <see cref="WriteSortNaNs(double[], long, long)"/>).
+        ///     [firstNaN..n) is the NaN run in NumPy's sort order, each NaN with its bits
+        ///     (<see cref="PartitionNaN_DoubleKeysOnly"/>).
         /// </summary>
         /// <typeparam name="T">The key type (float or double).</typeparam>
         /// <param name="keys">The sorted non-NaN prefix followed by the NaN tail.</param>
@@ -1571,8 +1532,8 @@ namespace NumSharp.Backends
         ///     Long-indexed unique for NaN-capable types Single/Double/Half (not Complex), by the managed routes' split: a
         ///     call with an index or an inverse, and every float16 call, is NumPy's argsort and gather
         ///     (<see cref="uniqueFlatArgsortedLong{T}"/>); a float32 / float64 values-only or counts-only call is NumPy's
-        ///     in-place sort, here the NaNs partitioned to the tail, the non-NaN portion sorted with the default compare,
-        ///     the NaN tail's records put back in input order, and the tail written as NumPy's sort NaN.
+        ///     in-place sort, here the NaNs partitioned to the tail in the order NumPy's sort leaves them (the partition is
+        ///     x86-simd-sort's swap pass, every NaN's bits kept) and the non-NaN portion sorted with the default compare.
         /// </summary>
         /// <typeparam name="T">The operand's element type (Half, float or double).</typeparam>
         /// <param name="a">The operand (any layout; only read).</param>
@@ -1597,14 +1558,10 @@ namespace NumSharp.Backends
                 KeyPerm<T>* kp = block.Address;
                 PopulateKeyPerm(a, kp, n);
 
+                // NumPy's values-only and counts-only routes sort in place: the partition leaves the NaN tail in that
+                // sort's order (x86-simd-sort's swap pass), each NaN with its bits; the prefix is sorted by value.
                 long firstNaN = PartitionNaN_Long<T>(kp, n);
                 Utilities.LongIntroSort.Sort(kp, firstNaN);
-                StabilizeNaNTailLong<T>(kp, firstNaN, n);
-                // NumPy's values-only and counts-only routes sort in place, which rewrites every float32 / float64 NaN
-                // (WriteSortNaNs); the index and inverse routes argsort and keep the bits (they returned above, so the test
-                // always holds here).
-                if (!return_index && !return_inverse)
-                    WriteSortNaNsLong(kp, firstNaN, n);
 
                 return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan,
                                                 return_index, return_inverse, return_counts);
@@ -1615,31 +1572,6 @@ namespace NumSharp.Backends
                 // (parity QA-52), and the 0 -> 1 -> 0 reference transition of a bare block hands its buffer back to the pool.
                 block.TryAddRef();
                 block.Release();
-            }
-        }
-
-        /// <summary>
-        ///     <see cref="WriteSortNaNs(double[], long, long)"/> for the long-indexed records: a float32 or float64 NaN tail
-        ///     of a line longer than one element becomes NumPy's sort NaN; a float16 tail is left as it is (NumPy's float16
-        ///     sort keeps the bits).
-        /// </summary>
-        /// <typeparam name="T">The key type (Half, float or double); only float and double are rewritten.</typeparam>
-        /// <param name="kp">The records; the keys of the tail <c>[firstNaN, n)</c> are overwritten in place.</param>
-        /// <param name="firstNaN">The index where the NaN tail starts.</param>
-        /// <param name="n">The number of records: one record keeps its NaN.</param>
-        private static unsafe void WriteSortNaNsLong<T>(KeyPerm<T>* kp, long firstNaN, long n) where T : unmanaged, IComparable<T>
-        {
-            if (n <= 1) return;
-            // The typeof tests are JIT constants: one branch survives per instantiation.
-            if (typeof(T) == typeof(double))
-            {
-                double nan = NumPySortNaN64;
-                for (long i = firstNaN; i < n; i++) kp[i].Key = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref nan);
-            }
-            else if (typeof(T) == typeof(float))
-            {
-                float nan = NumPySortNaN32;
-                for (long i = firstNaN; i < n; i++) kp[i].Key = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref nan);
             }
         }
 
@@ -1980,23 +1912,6 @@ namespace NumSharp.Backends
                 else i++;
             }
             return hi;
-        }
-
-        /// <summary>
-        ///     Sort the NaN-tail's perm ascending (keys are all NaN, order irrelevant)
-        ///     to match NumPy's stable mergesort semantics. We sort the KeyPerm structs
-        ///     by Perm using LongIntroSort with a comparer.
-        /// </summary>
-        /// <typeparam name="T">The key type.</typeparam>
-        /// <param name="kp">The records; the tail from <paramref name="firstNaN"/> is sorted by position in place.</param>
-        /// <param name="firstNaN">The index where the NaN tail starts.</param>
-        /// <param name="n">The number of records; a tail of fewer than two records is left as it is.</param>
-        private static unsafe void StabilizeNaNTailLong<T>(KeyPerm<T>* kp, long firstNaN, long n)
-            where T : unmanaged, IComparable<T>
-        {
-            if (firstNaN >= n - 1) return;
-            Utilities.LongIntroSort.Sort(kp + firstNaN, n - firstNaN,
-                (x, y) => x.Perm.CompareTo(y.Perm));
         }
 
         /// <summary>

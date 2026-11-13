@@ -90,7 +90,7 @@ namespace NumSharp.Backends
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
         /// <exception cref="ValueError">A text that does not parse as the numeric dtype's number.</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer dtype's range.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer dtype's range.</exception>
         /// <exception cref="NotSupportedException">None without a dtype (NumPy's object array).</exception>
         internal static NDArray FromAnyScalar(object op, DType dtype)
             => Build(Array.Empty<long>(), new List<object>(1) { op }, dtype, 'C');

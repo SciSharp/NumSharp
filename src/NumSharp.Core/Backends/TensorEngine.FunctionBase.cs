@@ -75,10 +75,8 @@ namespace NumSharp
         ///     prologue); text data with an empty reduced axis.</exception>
         /// <exception cref="IndexOutOfRangeException">Numeric data whose reduced axes hold no element (NumPy's IndexError
         ///     texts).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0 (NumPy's ValueError
-        ///     <c>cannot reshape array of size 0 into shape (0,newaxis)</c>).</exception>
         /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
-        /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype.</exception>
+        /// <exception cref="OverflowError">An integer q array whose virtual indexes leave its dtype.</exception>
         /// <remarks>
         ///     NumPy writes quantile in Python; DefaultEngine's override runs its statements in NumPy's order (the complex
         ///     check, q's checks, the weighted branch, the text routes, then <c>_ureduce</c> and the numeric quantile).
@@ -187,7 +185,7 @@ namespace NumSharp
         ///     NumPy names the argument).</exception>
         /// <exception cref="ValueError">An axis that appears twice (<c>repeated axis in `axis` argument</c>); weights not of
         ///     the reduced axes' shape.</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero (<c>Weights sum to zero, can't be
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero (<c>Weights sum to zero, can't be
         ///     normalized</c>), or a mean without weights whose result is empty (<c>division by zero</c>).</exception>
         /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
         ///     and weights differ.</c>); the weight sum's refusal of a text result dtype; a text operand without weights (the
@@ -198,8 +196,8 @@ namespace NumSharp
         ///     that computed (a wiring error inside NumSharp).</exception>
         /// <remarks>
         ///     NumPy writes average in Python; DefaultEngine's override runs its statements in NumPy's order.
-        ///     <c>np.average</c> and <c>np.average_returned</c> call it after the numpy.matrix rule and the null check; an
-        ///     override replaces both for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE);
+        ///     <c>np.average</c> (both of its return shapes, <c>returned</c> or not) calls it after the numpy.matrix rule and
+        ///     the null check; an override replaces it for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE);
         ///     it was the internal class <c>AverageEngine</c>.
         /// </remarks>
         public abstract (NDArray avg, NDArray sumOfWeights) Average(NDArray a, int[] axis = null, NDArray weights = null,
@@ -232,9 +230,10 @@ namespace NumSharp
         ///     <c>StringDType</c> request with weights.</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> (the in-place centring's cast
         ///     refusal).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero.</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
-        ///     arithmetic out of range.</exception>
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowException">Decimal arithmetic out of range (.NET's own, decimal has no NumPy
+        ///     dtype).</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <remarks>
@@ -273,8 +272,9 @@ namespace NumSharp
         /// <exception cref="DTypePromotionError"><c>StringDType</c> variables without <paramref name="dtype"/>.</exception>
         /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> (cov's in-place centring refuses
         ///     the cast).</exception>
-        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
-        ///     arithmetic out of range.</exception>
+        /// <exception cref="OverflowError">An integer text outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowException">Decimal arithmetic out of range (.NET's own, decimal has no NumPy
+        ///     dtype).</exception>
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <remarks>
@@ -313,10 +313,12 @@ namespace NumSharp
         ///     <paramref name="f"/> with a scalar step or first-order edges (NumPy's boolean subtract); a text
         ///     <paramref name="f"/>; bool coordinates; a str or None step.</exception>
         /// <exception cref="IndexError">The coordinates of an empty axis.</exception>
-        /// <exception cref="DivideByZeroException">A zero step that is a Python number with second-order edges (CPython's
-        ///     ZeroDivisionError); a decimal input or step divided by zero.</exception>
-        /// <exception cref="OverflowException">A Python int step past the float range; a decimal result past decimal's
-        ///     range.</exception>
+        /// <exception cref="ZeroDivisionError">A zero step that is a Python number with second-order edges (CPython's
+        ///     ZeroDivisionError).</exception>
+        /// <exception cref="DivideByZeroException">A decimal input or step divided by zero (.NET's own: decimal has no
+        ///     inf).</exception>
+        /// <exception cref="OverflowError">A Python int step past the float range.</exception>
+        /// <exception cref="OverflowException">A decimal result past decimal's range.</exception>
         /// <remarks>
         ///     NumPy writes gradient in Python; DefaultEngine's override runs its statements, each in NumPy's dtype, so the
         ///     components are bit-identical to NumPy's. <c>np.gradient</c>'s overloads spread their spacings into one list
@@ -540,7 +542,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A 0-D <paramref name="p"/>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> out of range.</exception>
         /// <exception cref="TypeError">A complex <paramref name="p"/>.</exception>
-        /// <exception cref="OverflowException">On the integer path, a bound or the period that does not fit the input
+        /// <exception cref="OverflowError">On the integer path, a bound or the period that does not fit the input
         ///     dtype (NumPy's OverflowError).</exception>
         [AsArray]
         public abstract NDArray Unwrap(NDArray p, double? discont = null, int axis = -1, object period = null);
@@ -554,23 +556,30 @@ namespace NumSharp
         /// <param name="xp">The sample points, 1-D, increasing unless a period is given (not checked: NumPy's loop answers
         ///     other points deterministically).</param>
         /// <param name="fp">The sample values, 1-D, as many as xp.</param>
-        /// <param name="left">The value below <c>xp[0]</c>, NumPy's Python object: null (None, meaning <c>fp[0]</c>), a
-        ///     double (a float) or a Complex (a complex, which the real loop refuses).</param>
-        /// <param name="right">The value above <c>xp[-1]</c>, as <paramref name="left"/> (null means <c>fp[-1]</c>).</param>
+        /// <param name="left">The value below <c>xp[0]</c> as NumPy's Python object, or null (None, meaning
+        ///     <c>fp[0]</c>). A C# literal is a Python number / bool / str (a double or an int converts implicitly, a
+        ///     Complex is a Python complex), a 0-d array that is not an explicit array a NumPy scalar, anything else an
+        ///     ndarray; the loop converts it as NumPy's does (<c>PyFloat_AsDouble</c>, or for the complex loop
+        ///     <c>PyComplex_RealAsDouble</c> / <c>ImagAsDouble</c>) after the operand and length checks.</param>
+        /// <param name="right">The value above <c>xp[-1]</c>, as <paramref name="left"/> (null means <c>fp[-1]</c>),
+        ///     converted after it.</param>
         /// <param name="period">The period of the x-coordinates, or null; it must not be zero.</param>
         /// <returns>A new array of x's shape (0-d for a 0-d x): complex128 for a complex fp, float64 otherwise.</returns>
-        /// <exception cref="ArgumentException"><paramref name="left"/> or <paramref name="right"/> is neither null, a
-        ///     double nor a Complex.</exception>
         /// <exception cref="NullReferenceException">An operand is null.</exception>
         /// <exception cref="ValueError">fp or xp not 1-D (<c>object too deep for desired array</c> / <c>object of too
         ///     small depth for desired array</c>), empty sample points, lengths that differ, a zero period; with a period,
         ///     points that are not 1-D (<c>Data points must be 1-D sequences</c>) or text that does not parse as a
-        ///     float.</exception>
+        ///     float; a 0-d text array fill that spells no float (<c>could not convert string to float</c>).</exception>
         /// <exception cref="InvalidCastException">Without a period, an operand that does not cast 'safely' to the loop's
         ///     dtype (NumPy's TypeError text).</exception>
-        /// <exception cref="TypeError">A real fp, no period and a complex fill value (<c>must be real number, not
-        ///     complex</c>), raised after the operand and length checks.</exception>
-        public abstract NDArray Interp(NDArray x, NDArray xp, NDArray fp, object left = null, object right = null,
+        /// <exception cref="TypeError">Without a period, a fill value the loop's conversion refuses, raised after the
+        ///     operand and length checks: a Python complex in the real loop (<c>must be real number, not complex</c>), a
+        ///     Python str (<c>must be real number, not str</c>), an array of one or more dimensions (<c>only
+        ///     0-dimensional arrays can be converted to Python scalars</c>), a 0-d complex array (<c>float() argument must
+        ///     be a string or a real number, not 'complex'</c>).</exception>
+        /// <remarks>API-parity batch 12: the fill values were an <c>object</c> that took only a double or a Complex; they
+        ///     are now typed, and every Python object NumPy converts converts here too.</remarks>
+        public abstract NDArray Interp(NDArray x, NDArray xp, NDArray fp, NDArray left = null, NDArray right = null,
             double? period = null);
 
         /// <summary>

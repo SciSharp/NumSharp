@@ -60,7 +60,7 @@ Windows' `np.intc` / `np.uintc` (int32 is the C long there), Linux's `np.longlon
 there). Each is a LANE-SHARING `LegacyBuiltinDTypeMeta` (`DTypeRegistry.LongDouble` / `CLongDouble` / `CInt` / `CUInt` /
 `CLongLong` / `CULongLong`; `ownsLane: false`, so `OwnsTypeCode` / `OwnsScalarType` are false): it stores in the owner's
 lane and reports its own type number, character, scalar type and class (`np.dtype('g')` is `num 13, char 'g', name
-'float64', type longdouble, LongDoubleDType`). NumPy's semantics, probed on Windows and Linux NumPy 2.4.2:
+'float64', type longdouble, LongDoubleDType`). NumPy's semantics, probed on Windows and Linux NumPy 2.5.4:
 - `np.issubdtype(np.float64, np.longdouble)` is False; the MROs and `__subclasses__()` lists are NumPy's per model
   (`floating` lists `longdouble`, `complexfloating` `clongdouble`, Windows' `signedinteger` `intc` before `int32`).
 - Equality is `PyArray_EquivTypes`: same-kind same-size NumPy numerics are EQUAL and hash equally
@@ -212,8 +212,9 @@ public. They run once per call or per Python value; bulk moves keep their typed 
   Kernels (`Utilities/NDByteOrder.cs`): a contiguous run copied and swapped in ONE SIMD pass when source and destination
   do not overlap (`CopyReverseRun`; an overlapping source keeps NumPy's memmove, then the swap), a contiguous run in
   place with SIMD (`ReverseRun`), strided items one `BinaryPrimitives.ReverseEndianness` per unit (`ReverseStrided`).
-  `StringDType` refuses a source; in place its swap is the identity (a cell has no byte order; NumPy 2.4.2 crashes the
-  process in `ndarray.byteswap` of one).
+  `StringDType` has no copyswap (a cell has no byte order): `ndarray.byteswap()` of one raises NumPy 2.5's `TypeError:
+  dtype StringDType() does not implement copyswap` at any size, in place too, where a read-only array's in-place call
+  raises the writeability `ValueError` first (`DTypeMeta.HasCopyswapn`; NumPy 2.4.2 crashed the process there).
 - `fill(descr, buffer, length)` is `PyArray_Arange`'s fill, NumPy's `@NAME@_fill` operation for operation (C's promotion
   for the integers, `HALF_fill` in float32, complex numbers by parts, `BOOL_fill`'s TypeError); `HasFill` is NumPy's
   `funcs->fill != NULL` (false for `S`, `U` and `StringDType`).
@@ -285,7 +286,8 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
   Python's `str(KeyError)`), `metadata` and `np.dtype(dtype, align, copy, metadata)` (`copy` copies only a singleton;
   `metadata` always copies and merges without overwriting existing keys; equality, hash and printing ignore it).
 - `newbyteorder` is `PyArray_DescrNewByteorder` (a requested host order stays EXPLICIT: `np.dtype('>i4').newbyteorder()`
-  is `dtype('<i4')`; errors quote the whole string; `None` is TypeError); `isnative` is `PyArray_ISNBO`; `repr` takes the
+  is `dtype('<i4')`; errors quote the whole string; `None` is TypeError; NumPy's `new_order` is a str, so there is no
+  `char` overload: `newbyteorder(">")`); `isnative` is `PyArray_ISNBO`; `repr` takes the
   short form whenever the stored byte order is explicit; `ensure_canonical` returns a FRESH native copy, never the
   singleton (`np.result_type(np.dtype('>f8')).isbuiltin` is 0); `promote_types`' fast path is pointer identity.
 - Gate: `test/oracle/gen_dtype_oracle.py` → `test/NumSharp.Tests/DTypes/corpus/dtype_oracle.{llp64,lp64}.jsonl` (NumPy's
@@ -306,7 +308,7 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
 
 ## C enums, type characters, `np.find_common_type`
 
-- `NPY_TYPECHAR` (`Creation/np.dtype.cs`) is NumPy 2.4.2's `ndarraytypes.h` enum member for member: `NPY_VSTRINGLTR =
+- `NPY_TYPECHAR` (`Creation/np.dtype.cs`) is NumPy 2.5.4's `ndarraytypes.h` enum member for member: `NPY_VSTRINGLTR =
   'T'` (NEP 55), `NPY_DEPRECATED_STRINGLTR2 = 'a'`, and no `NPY_INTPLTR` / `NPY_UINTPLTR` (intp is `'n'`; `'p'` / `'P'` /
   `'n'` / `'N'` parse but have no member: cast the character, `(NPY_TYPECHAR)'n'`). The kind letters share values with
   type characters as in C (`'b'` is the bool kind and int8, `'c'` the complex kind and NumPy's `S1`): compare values, never
@@ -350,7 +352,7 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
   C# integer primitive a Python int, `float` and `double` Python floats, `Complex` a Python complex, `Half` / `char` /
   `decimal` NumPy scalars) and promotes them as NumPy's array coercion does: a Python int is discovered as int64, which
   widens a float16 to float64 in either order, so no ordering of these types changes the result; the element order still
-  decides among NumPy scalars. Gate: `Creation/corpus/asanyarray_mixed.numpy242.jsonl`
+  decides among NumPy scalars. Gate: `Creation/corpus/asanyarray_mixed.jsonl`
   (`test/oracle/gen_asanyarray_mixed_oracle.py`).
 
 ## `DType` is the one dtype spelling
@@ -391,8 +393,19 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
      first read (both orders, np first and registry first, are tested). The `static np()` tables are built as
      `Dictionary<(DType, DType), DType>` and the `Type`/`NPTypeCode`-keyed maps derived from them.
   3. `isdtype` has only the NumPy-exact `DType` overloads (NumPy rejects `issubdtype`'s vocabulary: `kind argument is a
-     string, but 'floating' is not a known kind name.`, ValueError); the `NDArray` convenience overloads route through
-     `arr.dtype`.
+     string, but 'floating' is not a known kind name.`, ValueError). An array is asked through `arr.dtype`: NumPy refuses
+     one (`dtype argument must be a NumPy dtype, but it is a <class 'numpy.ndarray'>.`, issubdtype's `Cannot construct a
+     dtype from an array`), and the NDArray convenience overloads went in API-parity batch 9, so it does not compile.
+  4. `np.can_cast` refuses a Python number with NumPy 2's NEP 50 TypeError (`can_cast() does not support Python ints,
+     floats, and complex because the result used to depend on the value.` + the NEP 50 line), as
+     `array_can_cast_safely` does: the eleven typed value overloads went (batch 9), so a bare C# number binds
+     `can_cast(NDArray, …)` through the implicit conversion, which refuses a `WasPythonLiteral` / `WasPythonBool` 0-d
+     array after the `to` / `casting` checks; the `object` form ports the whole `from_` dispatch (array, NumPy scalar —
+     a boxed `Half` / `char` —, Python number, dtype specifier, else `did not understand one of the types; 'None' not
+     accepted`). `np.array(1)`, `NDArray.Scalar(1)` and a `decimal` (no NumPy analog, unmarked) keep the dtype rule;
+     `np.can_cast(0, NPTypeCode.Byte)` is CS0121 (the literal 0 also converts to the enum). The generic
+     `finfo<T>()` / `iinfo<T>()` / `can_cast<TFrom, TTo>()` went too (OD7, batch 9): write `np.finfo(typeof(T))` or the
+     np dtype.
   4. Tests: `test/NumSharp.Tests/Utilities/DTypeAssertions.cs` adds `Should(this DType)` → `DTypeAssertions`
      (`Be(DType)` (a `Type`/`NPTypeCode`/string converts in), `Be<T>()`, `NotBe`, `BeOneOf`) in the `NumSharp.Tests`
      namespace, so enclosing-namespace lookup binds every `x.dtype.Should()` ahead of AwesomeAssertions'

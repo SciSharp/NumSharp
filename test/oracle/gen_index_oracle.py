@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-gen_index_oracle.py — emit a committed, behaviour-exact NumPy 2.4.2 indexing oracle.
+gen_index_oracle.py — emit a committed, behaviour-exact NumPy 2.5.4 (the pin) indexing oracle.
 
 This is the indexing sibling of gen_oracle.py. Where gen_oracle.py proves elementwise/
 reduction ops bit-identical to NumPy, this proves the GETTER and SETTER index surface
@@ -26,11 +26,14 @@ Base recipes (mirrored in C#): S,V0,V1,V6,A,AT,ARS,ACS,ANR,ANC,ASO,ABC,B,BT,E03,
 values compare exactly as int64; the dtype sweep re-encodes per dtype (complex -> re/im pairs,
 bool -> 0/1, half -> double).
 
-Regenerate (deterministic; needs numpy==2.4.2):
+Regenerate (deterministic; needs the numpy in numpy-version.txt):
   python test/oracle/gen_index_oracle.py
 then `dotnet build` (the csproj glob copies Fuzz/corpus/**/*.jsonl to test output).
 """
 import numpy as np, json, itertools, os, random
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
+
+numpy_pin.require(np, "gen_index_oracle.py")  # a module-level script: it writes its corpora when it runs
 
 RANDOM_SEED = 20240626   # pinned; surfaces in the random corpus filename for reproducibility
 

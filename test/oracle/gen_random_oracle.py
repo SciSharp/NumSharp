@@ -1,6 +1,6 @@
 """
 gen_random_oracle.py — the random-API oracle: every public member of NumSharp's random world, by exact C# overload,
-against NumPy 2.4.2.
+against NumPy 2.5.4 (the pin).
 
 Plan and state: docs/plans/random-oracle-coverage.md. Replayed by test/NumSharp.Tests.Oracle/Fuzz/FuzzCorpusTests.RandomApi.cs
 (harness in Fuzz/RandomApi/). No Python runs at test time: this script records NumPy's answers into the committed corpus.
@@ -49,6 +49,7 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")
 
 import numpy as np  # noqa: E402
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -1349,15 +1350,20 @@ def fam_randn_generic(out, m, seeds):
 @family("NumPyRandom", "random_sample", "random", "ranf", "sample")
 def fam_random_sample(out, surface, name, seeds):
     """random_sample and its aliases. `ranf`/`sample` are NumPy module functions over the singleton's random_sample;
-    the instance counterpart is random_sample itself. The params-array spelling passes the dimensions as ONE size
-    tuple (none = size=None); the Shape spelling is size itself (default = None, () = a 0-d array)."""
+    the instance counterpart is random_sample itself. Each has NumPy's one spelling, `(Shape? size = null)`: size is
+    itself (a null = None, () = a 0-d array), and the omitted argument — the C# default path, NumPy's size=None — is
+    swept too (the gate's G3 check needs every optional parameter omitted somewhere). A params-array spelling, should
+    one come back, passes the dimensions as ONE size tuple (none = size=None)."""
     np_name = "random" if name == "random" else "random_sample"
     for m in overloads(surface, "NumPyRandom", name):
         pn, ct = m["params"][0]["name"], m["params"][0]["type"]
 
         def np_fn(r, py, pn=pn, ct=ct):
+            # An omitted size is absent from `py`: py.get gives None, NumPy's default.
             return getattr(r, np_name)(size_kw(ct, py.get(pn)))
         vs = dims_variants(pn, ct)
+        if m["params"][0].get("optional", False):
+            vs = vs + [("omit", {pn: OMIT})]
         legacy_sweep(out, PORTABLE, f"RandomState.{name}", m, seeds, vs[0][1], vs[1:], np_fn)
 
 
@@ -3413,21 +3419,23 @@ def windows_to_wsl(path):
 
 
 def run_lp64(seeds):
-    """Runs this script under Linux NumPy (WSL, `~/np242/bin/python`, or the NUMSHARP_LP64_PYTHON command) in
-    --lp64-only mode and returns its rows. Raises SystemExit when no LP64 NumPy 2.4.2 is available: the committed corpus
+    """Runs this script under Linux NumPy (WSL, `numpy_pin.LINUX_PYTHON` = `~/np<pin>/bin/python`, or the
+    NUMSHARP_LP64_PYTHON command) in --lp64-only mode and returns its rows. Raises SystemExit when no LP64 NumPy at the
+    pinned release (numpy-version.txt) is available: the committed corpus
     needs the LP64 answers, so a generation without them must not silently drop the cases."""
     import shutil
     import tempfile
     tmp = tempfile.mkdtemp(prefix="random_api_lp64_")
     try:
         script = windows_to_wsl(os.path.abspath(__file__))
-        cmd_prefix = os.environ.get("NUMSHARP_LP64_PYTHON", "~/np242/bin/python")
+        cmd_prefix = os.environ.get("NUMSHARP_LP64_PYTHON", numpy_pin.LINUX_PYTHON)
         seeds_arg = ",".join(str(x) for x in seeds)
         cmd = ["wsl", "-e", "bash", "-lc",
                f"{cmd_prefix} '{script}' --lp64-only --seeds {seeds_arg} --out '{windows_to_wsl(tmp)}'"]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
-            raise SystemExit("the LP64 sub-run failed (needs WSL with Linux NumPy 2.4.2 at ~/np242/bin/python, or "
+            raise SystemExit(f"the LP64 sub-run failed (needs WSL with Linux NumPy {numpy_pin.NUMPY_VERSION} at "
+                             f"{numpy_pin.LINUX_PYTHON}, or "
                              f"NUMSHARP_LP64_PYTHON):\n{proc.stdout}\n{proc.stderr}")
         rows = []
         with open(os.path.join(tmp, "lp64_rows.jsonl"), encoding="utf-8") as fh:

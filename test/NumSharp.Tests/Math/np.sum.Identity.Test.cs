@@ -287,7 +287,7 @@ namespace NumSharp.Tests.Math
             var fails = new List<string>();
             const string z64x3 = "0000000000000000 0000000000000000 0000000000000000";
             Check(fails, "nansum f64 (3,1) axis1", () => np.nansum(F64(3).reshape(3, 1), 1), "float64 (3,) " + z64x3);
-            Check(fails, "nansum f64 (3,1) axis1 keepdims", () => np.nansum(F64(3).reshape(3, 1), 1, true), "float64 (3,1) " + z64x3);
+            Check(fails, "nansum f64 (3,1) axis1 keepdims", () => np.nansum(F64(3).reshape(3, 1), 1, keepdims: true), "float64 (3,1) " + z64x3);
             Check(fails, "nansum f64 (1,1) axis0", () => np.nansum(F64(1).reshape(1, 1), 0), "float64 (1,) 0000000000000000");
             Check(fails, "nansum f32 (3,1).T axis0", () => np.nansum(F32(3).reshape(3, 1).T, 0), "float32 (3,) 00000000 00000000 00000000");
             AssertNoMismatch(fails, "NumPy's nansum is np.sum after the NaN replacement, which starts from +0.0");
@@ -369,7 +369,7 @@ namespace NumSharp.Tests.Math
                   "complex128 () 3ff0000000000000 4000000000000000");
             Check(fails, "nansum c128 [1+2j,3+4j][::-1] axis0", () => np.nansum(pair["::-1"], 0),
                   "complex128 () 4010000000000000 4018000000000000");
-            Check(fails, "nansum c128 [-0-0j]*2 axis0 keepdims", () => np.nansum(C128(2), 0, true),
+            Check(fails, "nansum c128 [-0-0j]*2 axis0 keepdims", () => np.nansum(C128(2), 0, keepdims: true),
                   "complex128 (1,) 0000000000000000 0000000000000000");
             Check(fails, "nansum c128 1-D axis0", () => np.nansum(withNaN, axis: 0),
                   "complex128 () 4010000000000000 4018000000000000");

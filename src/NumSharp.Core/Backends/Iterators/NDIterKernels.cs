@@ -144,7 +144,7 @@ namespace NumSharp.Backends.Iteration
         {
             // Ensure buffers are allocated
             if (!NDIterBufferManager.AllocateBuffers(ref state, state.BufferSize))
-                throw new OutOfMemoryException("Failed to allocate iteration buffers");
+                throw new MemoryError("Failed to allocate iteration buffers");
 
             try
             {

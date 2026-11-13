@@ -31,7 +31,7 @@ has no operand to choose another) and keep the cephes `BesselI0` port behind kai
   too (`TensorEngine.I0`, `Backends/Default/Math/Default.I0.cs`, one cephes kernel per float width; facade
   `Math/np.i0.cs`). kaiser's member applies np.i0's float64 kernel delegate (`np._i0Double`) per element in its fused pass
   and takes `i0(beta)` from the engine's own `I0` (NumPy's statement `i0(float(beta))`).
-- Bit-identical to NumPy 2.4.2: the transform is one `np.evaluate` fused expression in NumPy's exact operation order (so
+- Bit-identical to NumPy 2.5.4: the transform is one `np.evaluate` fused expression in NumPy's exact operation order (so
   `(π·n)/(M-1)` rounds the same two steps), float64 add/sub/mul/div are IEEE-exact, and float64 `cos` is the `ucrtbase`
   `Math.Cos` NumPy also calls (`i0` rides `Math.Exp`/`Math.Sqrt`). Because those are host libm, the `windows` tier is
   host-pinned (`RunHostLibmCorpus`: strict on win-amd64, Inconclusive elsewhere); bartlett is pure arithmetic and
@@ -43,7 +43,7 @@ has no operand to choose another) and keep the cephes `BesselI0` port behind kai
 `fftfreq`, `rfftfreq`, `fftshift`, `ifftshift`, plus the complex accessors `conjugate`/`conj`, `real`, `imag`, `angle`
 (np.real / np.imag's statements are `NDArray.real_` / `imag_` in `Backends/NDArray.TypeCheck.cs`).
 - A pure-managed C# port of pocketfft, NumPy's own FFT engine (`src/NumSharp.Core/Fourier/`, no native dependency). The
-  double/complex128 path is bit-for-bit identical to NumPy 2.4.2: the port is a faithful scalar transcription, NumPy's
+  double/complex128 path is bit-for-bit identical to NumPy 2.5.4: the port is a faithful scalar transcription, NumPy's
   win-amd64 wheel is itself scalar (`POCKETFFT_NO_VECTORS` under MSVC), and the twiddles come from the same CRT
   (`Math.Cos`/`Sin` = MSVC `ucrtbase`). No explicit FMA is needed, which is why `fft.jsonl` is a portable tier.
 - arm64 NumPy differs, not NumSharp: NumPy's arm64 wheels compile pocketfft with the default FP contraction on an FMA
@@ -96,8 +96,13 @@ has no operand to choose another) and keep the cephes `BesselI0` port behind kai
   `Cannot cast ufunc 'fft' output from …` text); the N-D wrappers accept `out` for signature parity but
   do not thread it (NumPy passes `out=None`).
 - Helpers: `fftfreq`/`rfftfreq` are float64 generators with NumPy's check order (divide by zero first, then `device`,
-  then `fftfreq`'s negative length; a non-integer n → `ValueError("n should be an integer")`); `fftshift`/`ifftshift` are
-  dtype-preserving cyclic rolls by `±(dim//2)` (0-d → a no-op copy, `[Misaligned]`).
+  then `fftfreq`'s negative length) and ONE integer signature, `long n` (NumPy's runtime `ValueError("n should be an
+  integer")` for a float n is C#'s compile-time refusal: no overload takes one). `fftshift`/`ifftshift` take NumPy's
+  int-or-tuple `axes` (`NDAxis?`, with the kept `int` / `int[]` forwards) and run NumPy's statements: the shift read from
+  `x.shape[ax] // 2` per listed axis (`±`; Python's `IndexError "tuple index out of range"` for an axis past the rank,
+  before anything rolls), then ONE `np.roll(x, shift, axes)` (repeats accumulate; `()` is a copy; a 0-d input is roll's
+  `ValueError "not enough values to unpack (expected 2, got 0)"`, NumPy's own; a subclass operand gives a plain array:
+  NumPy's `asarray`).
 - `[Misaligned]` F1, dtype only: NumSharp has one complex type (complex128) and no complex64, so a float32/float16 input
   returns complex128/float64 where NumPy returns complex64/float32/float16. The VALUES are bit-identical, because
   NumSharp reproduces NumPy's per-loop precision: NumPy's fft ufuncs have a single (`Ff->F`/`ff->F`) and a double

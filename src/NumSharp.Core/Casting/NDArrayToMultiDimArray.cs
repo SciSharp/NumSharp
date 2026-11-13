@@ -290,7 +290,7 @@ namespace NumSharp
             // general frame's own "not a NumSharp dtype" refusal.)
             if (storage.TypeCode == NPTypeCode.String && InfoOf<T>.NPTypeCode != NPTypeCode.Empty)
             {
-                using var numbers = astype(DType.From(InfoOf<T>.NPTypeCode), true, 'C', "unsafe");
+                using var numbers = astype(DType.From(InfoOf<T>.NPTypeCode), 'C');
                 return numbers.ToArray<T>();
             }
             ref readonly Shape shape = ref storage.ShapeReference;
@@ -2433,7 +2433,7 @@ namespace NumSharp
             // then that array is read out.
             if (typecode == NPTypeCode.String)
             {
-                using var numbers = astype(DType.From(target), true, 'C', "unsafe");
+                using var numbers = astype(DType.From(target), 'C');
                 return numbers.ToMuliDimArray<T>();
             }
 

@@ -17,9 +17,9 @@ using System.Runtime.Intrinsics.X86;
 //   NumPy's own cost); these forms run without a branch on the data.
 //
 // WHAT THEY KEEP EXACTLY (the general bodies' rules, see NDVStringMethods.cs's header)
-//   * Lengths and positions in code points without the trailing NULs: the length is one past the last nonzero byte, the
-//     code points are its lead bytes (every byte that is not a continuation byte — T text is always well-formed UTF-8,
-//     so the k-th code point starts at the k-th lead byte, which BMI2's pdep finds).
+//   * Lengths and positions in code points of the whole text (NumPy 2.5.3: a T text's trailing NULs are characters): the
+//     length is the cell's size, the code points are its lead bytes (every byte that is not a continuation byte — T text
+//     is always well-formed UTF-8, so the k-th code point starts at the k-th lead byte, which BMI2's pdep finds).
 //   * The searches use the needle's FULL bytes, trailing NULs included, except find / rfind of a one-code-point ASCII
 //     needle (one byte) and count of a one-byte needle; a match must lie inside the code-point window [start, end).
 //   * tailmatch reads haystack bytes past the text as zero (the cell is masked to its size first; the bytes past a short
@@ -65,12 +65,13 @@ namespace NumSharp.Backends.Strings
         private static uint LowBits(int n) => n >= 32 ? uint.MaxValue : (1u << n) - 1;
 
         /// <summary>
-        ///     The text of a short cell masked to its size, its length (one past the last nonzero byte) and its lead bytes
-        ///     below that length — the three facts every short form starts from.
+        ///     The text of a short cell masked to its size, its length (the size: every byte, trailing NULs included) and its
+        ///     lead bytes below that length — the three facts every short form starts from.
         /// </summary>
         /// <param name="cell">A short cell.</param>
         /// <param name="size">Its text size.</param>
-        /// <param name="end">Receives one past the last nonzero byte (the text without its trailing NULs).</param>
+        /// <param name="end">Receives the text's byte length, <paramref name="size"/> (NumPy 2.5.3's length-explicit UTF-8;
+        ///     NumPy 2.4 stopped at the last nonzero byte).</param>
         /// <param name="leads">Receives the lead (non-continuation) bytes below <paramref name="end"/>: one bit per code
         ///     point.</param>
         /// <returns>The 16 bytes, zero from <paramref name="size"/> on.</returns>
@@ -78,8 +79,7 @@ namespace NumSharp.Backends.Strings
         private static Vector128<byte> ShortText(byte* cell, int size, out int end, out uint leads)
         {
             var v = Vector128.Load(cell) & ByteLanes(size);
-            uint nonzero = ~Vector128.Equals(v, Vector128<byte>.Zero).ExtractMostSignificantBits() & 0xFFFFu;
-            end = 32 - BitOperations.LeadingZeroCount(nonzero);
+            end = size;
             // A continuation byte is 0x80..0xBF: below -64 as a signed byte.
             uint cont = Vector128.LessThan(v.AsSByte(), Vector128.Create((sbyte)-64)).ExtractMostSignificantBits();
             leads = ~cont & LowBits(end);
@@ -87,8 +87,8 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's <c>num_codepoints</c> of a short cell: the lead bytes below one past the last nonzero byte, from one
-        ///     vector (<see cref="CodePoints"/> walks the bytes).
+        ///     NumPy's <c>num_codepoints</c> of a short cell: the lead bytes of its whole text (trailing NULs included, NumPy
+        ///     2.5.3), from one vector (<see cref="CodePoints"/> walks the bytes).
         /// </summary>
         /// <param name="cell">A short cell.</param>
         /// <param name="size">Its text size.</param>

@@ -146,7 +146,7 @@ namespace NumSharp.Interop.OnnxRuntime
 
                 // The same rule as the synchronous form, on the memory ORT will really read and write. It matters more
                 // here: the caller has its thread back while ORT still reads the inputs.
-                SeparateInputsFromOutputs(run.InNames, run.InHandles, run.OutNames, run.OutHandles, mode, nameof(RunIntoAsync));
+                SeparateInputsFromOutputs(run.InNames, run.InHandles, run.OutNames, run.OutHandles, mode, nameof(RunIntoAsync), transient: false);
                 return run.Start();
             }
             catch

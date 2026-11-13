@@ -10,14 +10,18 @@ using NumSharp.Backends.Unmanaged.Pooling;
 // VStringSort.cs — sort / argsort / partition / lexsort of NEP 55 StringDType text (T), along an axis
 // =============================================================================
 //
-// WHAT NUMPY DOES (2.4.2, numpy/_core/src/multiarray/stringdtype/dtype.c + npysort; probed)
-//   * StringDType registers its own sort and argsort ArrayMethods: the default kind runs the GENERIC introsort
-//     (npy_quicksort_impl / npy_aquicksort_impl: median of three, insertion sort below SMALL_QUICKSORT + 1 = 16 elements,
-//     the heapsort fallback once the depth budget 2 * msb(n) is spent), the stable kind the generic mergesort
-//     (npy_mergesort_impl / npy_amergesort_impl); the heapsort kind raises RuntimeError("unsupported sort kind").
+// WHAT NUMPY DOES (2.5.4, numpy/_core/src/multiarray/stringdtype/dtype.c + common/npy_sort.c + npysort; probed)
+//   * StringDType registers its own sort and argsort ArrayMethods, whose loops (npy_default_sort_loop /
+//     npy_default_argsort_loop) run the GENERIC introsort for the default kind (npy_quicksort_impl / npy_aquicksort_impl:
+//     median of three, insertion sort below SMALL_QUICKSORT + 1 = 16 elements, the heapsort fallback once the depth budget
+//     2 * msb(n) is spent) and the generic mergesort for the stable kind (npy_mergesort_impl / npy_amergesort_impl). The
+//     heapsort kind IS the default kind: PyArray_Sort / PyArray_ArgSort clear its bit before resolving the loop (NumPy
+//     2.4 refused it with RuntimeError("unsupported sort kind")). The descending flag (np.sort(..., descending=True),
+//     new in 2.5) has no StringDType loop: stringdtype_get_sort_loop raises RuntimeError("unsupported sort kind").
 //   * Every comparison is `_sort_compare(a, b) < 0`, which loads both cells (NpyString_load) and compares their UTF-8
-//     bytes (NpyString_cmp: strncmp of the common prefix, then the shorter first — a NUL both texts share ends the byte
-//     comparison, so 'a\0c' and 'a\0b' are EQUAL and keep their sort's tie order). A missing (NA) cell follows the
+//     bytes (NpyString_cmp: memcmp of the common prefix, then the shorter first — every byte counts, an embedded NUL
+//     included, so 'a\0b' < 'a\0c'; NumPy 2.4's strncmp stopped at a NUL both texts shared and tied them, NumPy 2.5.0
+//     gh-31673 made it memcmp). A missing (NA) cell follows the
 //     descriptor's rule: a NaN-like NA object makes `_compare` return 1 when the FIRST operand is NA (even against
 //     another NA) and -1 when only the second is — so under `< 0` tests every NA is "not less" than everything and
 //     every non-NA is less than an NA: the NAs behave as ONE greatest value; any other non-string NA object (None, a
@@ -31,25 +35,25 @@ using NumSharp.Backends.Unmanaged.Pooling;
 //     `cmp(b, a) < 0` (strictly descending), so two adjacent NaN-like NAs (cmp(NA, NA) = 1 both ways) open a descending
 //     run and are REVERSED: np.lexsort((np.array([nan, nan, 'a'], dtype=nan),)) is [2, 1, 0] where argsort(kind='stable')
 //     gives [2, 0, 1].
-//   * NumPy 2.4.2 bug: the StringDType sort and argsort loops hand npy_(a)quicksort_impl the METHOD CONTEXT as its array
-//     argument, and the heapsort fallback (npy_heapsort / npy_aheapsort) reads that pointer as a PyArrayObject: an input
-//     that exhausts the depth budget crashes the interpreter (0xC0000005, probed with McIlroy's adversary). The
-//     partition fallback passes the real array and does not crash.
+//   * NumPy bug (2.4.2, still in 2.5.4's npy_default_sort_loop): the StringDType sort and argsort loops hand
+//     npy_(a)quicksort_impl the METHOD CONTEXT as its array argument, and the heapsort fallback (npy_heapsort /
+//     npy_aheapsort) reads that pointer as a PyArrayObject: an input that exhausts the depth budget crashes the
+//     interpreter (0xC0000005, probed with McIlroy's adversary). The partition fallback passes the real array and does
+//     not crash.
 //
 // HOW THIS FILE GETS THE SAME ANSWERS
 //   1. LOAD. Each element of a line is loaded once (its text pointer and size, NDVStringCells.Load with the arena base read
 //      under the allocator lock); an NA cell follows the descriptor's rule: a NaN-like NA is set aside (in input order),
 //      a None-like NA in a line of two or more elements raises NumPy's ValueError (every one of NumPy's sorts compares
-//      every element of such a line), any other NA reads as the default string. Each text gets its comparison prefix
-//      (NDVStringCells.NulLength: its bytes up to and including the first NUL, the whole text without one — strncmp ignores
-//      what follows a shared NUL) and an order-preserving key: the prefix's first 8 bytes read big-endian, zero-padded.
+//      every element of such a line), any other NA reads as the default string. Each text gets an order-preserving key:
+//      its first 8 bytes read big-endian, zero-padded (memcmp order: every byte is a key byte, a NUL the smallest).
 //   2. STABLE ORDER. A stable radix sort of the keys (RadixSort, only the bytes in which the keys differ), then a stable
-//      TIE PASS over every run of equal keys: the elements whose PREFIX ends within the bytes the keys covered come first,
-//      by size (equal keys make a shorter prefix a prefix of a longer one, and NpyString_cmp puts it first; equal prefixes
-//      order by size); the others
-//      are keyed on their next 8 bytes and radix-sorted inside the run, recursively; runs of at most 16 elements are
-//      insertion-sorted by comparing their remaining bytes. The NaN-like NAs follow in input order. This is the order of
-//      NumPy's stable kind (its mergesort only tests `< 0`, so the NAs keep their order), and of every VALUE sort.
+//      TIE PASS over every run of equal keys: the elements whose TEXT ends within the bytes the keys covered come first,
+//      by size (equal keys make a shorter text a prefix of a longer one, and NpyString_cmp puts it first; equal sizes are
+//      equal texts); the others are keyed on their next 8 bytes and radix-sorted inside the run, recursively; runs of at
+//      most 16 elements are insertion-sorted by comparing their remaining bytes. The NaN-like NAs follow in input order.
+//      This is the order of NumPy's stable kind (its mergesort only tests `< 0`, so the NAs keep their order), and of
+//      every VALUE sort.
 //   3. NUMPY'S TIE ORDER for the default kind: a line of at most 16 elements is one insertion sort in NumPy (stable). A
 //      longer line whose elements all differ (one NA at most) has one sorted order. Otherwise each element gets its dense
 //      rank in the stable order (the NAs one rank above every text), and NumPy's introsort, ported statement for statement
@@ -70,7 +74,7 @@ using NumSharp.Backends.Unmanaged.Pooling;
 namespace NumSharp.Backends.Sorting
 {
     /// <summary>
-    ///     Sorting of NEP 55 <c>StringDType</c> text along an axis with NumPy 2.4.2's answers: the value sort, the stable and
+    ///     Sorting of NEP 55 <c>StringDType</c> text along an axis with NumPy 2.5.4's answers: the value sort, the stable and
     ///     the default argsort (NumPy's introsort permutation, ties included), and the <c>np.lexsort</c> pass of a text key
     ///     (NumPy's timsort with its asymmetric NA compare). See the file header for the algorithm.
     /// </summary>
@@ -290,7 +294,7 @@ namespace NumSharp.Backends.Sorting
 
         /// <summary>NumPy's <c>_compare</c> refusal of a corrupt cell (its <c>MemoryError</c>).</summary>
         /// <returns>The exception (not thrown).</returns>
-        internal static OutOfMemoryException CorruptCellError() => new OutOfMemoryException("Failed to load string in string comparison");
+        internal static MemoryError CorruptCellError() => new MemoryError("Failed to load string in string comparison");
 
         /// <summary>
         ///     The 8 bytes of a text from <paramref name="offset"/> on, read big-endian and zero-padded past the text's end:
@@ -337,26 +341,22 @@ namespace NumSharp.Backends.Sorting
         }
 
         /// <summary>
-        ///     NumPy's <c>NpyString_cmp</c> of two texts whose comparison prefixes (<see cref="NDVStringCells.NulLength"/>) are
-        ///     known equal before byte <paramref name="from"/> (as far as both reach): the prefixes' bytes from
-        ///     <paramref name="from"/> on in plain byte order, then the full sizes — the prefix order with the sizes breaking
-        ///     its ties IS <c>NpyString_cmp</c> (see <see cref="NDVStringCells.NulLength"/>).
+        ///     NumPy's <c>NpyString_cmp</c> of two texts known equal before byte <paramref name="from"/> (as far as both reach):
+        ///     their bytes from <paramref name="from"/> on in plain byte order (<c>memcmp</c>), then the sizes.
         /// </summary>
         /// <param name="a">The first text.</param>
-        /// <param name="la">Its comparison prefix length.</param>
         /// <param name="sa">Its size.</param>
         /// <param name="b">The second text.</param>
-        /// <param name="lb">Its comparison prefix length.</param>
         /// <param name="sb">Its size.</param>
         /// <param name="from">The first byte that may differ.</param>
         /// <returns>Negative, zero or positive.</returns>
-        /// <remarks>The sizes alone break the tie of a prefix byte-equal over the common length: equal prefixes are the case
-        ///     the sizes decide, and when one prefix is a proper prefix of the other it holds no NUL, so it is its whole text,
-        ///     the shorter one.</remarks>
+        /// <remarks>Texts byte-equal over the common length order by size: the shorter one is a proper prefix of the longer
+        ///     (NumPy 2.5's <c>memcmp</c> compares every byte, so no NUL ends the comparison early; NumPy 2.4's <c>strncmp</c>
+        ///     needed a comparison prefix cut at the first NUL here).</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
-        internal static int CompareFrom(byte* a, long la, long sa, byte* b, long lb, long sb, long from)
+        internal static int CompareFrom(byte* a, long sa, byte* b, long sb, long from)
         {
-            long common = Math.Min(la, lb) - from;
+            long common = Math.Min(sa, sb) - from;
             if (common > 0)
             {
                 int c = NDVStringCells.OrderBytes(a + from, common, b + from, common);
@@ -424,14 +424,6 @@ namespace NumSharp.Backends.Sorting
             /// <summary>Per element: the text's size, or -1 for a NaN-like NA.</summary>
             private long* _sizes;
 
-            /// <summary>
-            ///     Per element: the length of the text's comparison prefix under <c>NpyString_cmp</c>
-            ///     (<see cref="NDVStringCells.NulLength"/>: its bytes up to and including the first NUL, or its size). The keys
-            ///     and the tie pass read the prefix only — <c>strncmp</c> ignores the bytes after a NUL both texts share — and
-            ///     the sizes break the ties of equal prefixes.
-            /// </summary>
-            private long* _lens;
-
             /// <summary>Per element: the first-window key.</summary>
             private ulong* _key0;
 
@@ -477,14 +469,6 @@ namespace NumSharp.Backends.Sorting
             ///     rules): such a cell can equal a text cell in value while being a different cell.</summary>
             private bool _defaultReadNA;
 
-            /// <summary>
-            ///     Whether the current line holds a text with bytes after a NUL (its comparison prefix shorter than its size):
-            ///     two such texts can be EQUAL under <c>NpyString_cmp</c> while their bytes differ (<c>'a\0c'</c> and
-            ///     <c>'a\0b'</c>), so the default kind's tie order decides what a value sort writes, as for
-            ///     <see cref="_defaultReadNA"/>.
-            /// </summary>
-            private bool _nulTail;
-
             /// <summary>Byte sizes of the pooled buffers, kept for <see cref="Dispose"/>.</summary>
             private readonly long _ptrBytes, _wordBytes;
 
@@ -524,7 +508,6 @@ namespace NumSharp.Backends.Sorting
                     }
                     _bufs = (byte**)SizeBucketedBufferPool.Take(_ptrBytes);
                     _sizes = (long*)SizeBucketedBufferPool.Take(_wordBytes);
-                    _lens = (long*)SizeBucketedBufferPool.Take(_wordBytes);
                     _key0 = (ulong*)SizeBucketedBufferPool.Take(_wordBytes);
                     _order = (long*)SizeBucketedBufferPool.Take(_wordBytes);
                     _keys = (ulong*)SizeBucketedBufferPool.Take(_wordBytes);
@@ -548,7 +531,6 @@ namespace NumSharp.Backends.Sorting
                 if (_defaultText != null) { SizeBucketedBufferPool.Return((IntPtr)_defaultText, _defaultSize); _defaultText = null; }
                 if (_bufs != null) { SizeBucketedBufferPool.Return((IntPtr)_bufs, _ptrBytes); _bufs = null; }
                 if (_sizes != null) { SizeBucketedBufferPool.Return((IntPtr)_sizes, _wordBytes); _sizes = null; }
-                if (_lens != null) { SizeBucketedBufferPool.Return((IntPtr)_lens, _wordBytes); _lens = null; }
                 if (_key0 != null) { SizeBucketedBufferPool.Return((IntPtr)_key0, _wordBytes); _key0 = null; }
                 if (_order != null) { SizeBucketedBufferPool.Return((IntPtr)_order, _wordBytes); _order = null; }
                 if (_keys != null) { SizeBucketedBufferPool.Return((IntPtr)_keys, _wordBytes); _keys = null; }
@@ -649,9 +631,10 @@ namespace NumSharp.Backends.Sorting
                 if (_cellTmp == null)
                     _cellTmp = (byte*)SizeBucketedBufferPool.Take(2 * _wordBytes);
                 // The default kind's own permutation only where it can differ in what the cells hold (see the remarks of
-                // SortLinesInPlace): an NA cell read as a default string, or texts equal up to a shared NUL whose bytes
-                // differ after it, in a line with ties.
-                if (_mode == JobMode.ValueDefault && (_defaultReadNA || _nulTail) && NeedsIntrosort())
+                // SortLinesInPlace): an NA cell read as a default string, in a line with ties. Texts equal under NumPy
+                // 2.5's memcmp are byte-identical, so their tie order cannot show (NumPy 2.4's strncmp also tied texts
+                // whose bytes differed after a shared NUL).
+                if (_mode == JobMode.ValueDefault && _defaultReadNA && NeedsIntrosort())
                 {
                     long* rec = IntrosortPermutation();
                     for (long k = 0; k < n; k++)
@@ -720,11 +703,11 @@ namespace NumSharp.Backends.Sorting
             /// </summary>
             /// <param name="cells">The line's cell 0.</param>
             /// <exception cref="ValueError">A None-like NA (<see cref="NullCompareError"/>).</exception>
-            /// <exception cref="OutOfMemoryException">A corrupt cell (<see cref="CorruptCellError"/>).</exception>
+            /// <exception cref="MemoryError">A corrupt cell (<see cref="CorruptCellError"/>).</exception>
             private void Load(byte* cells)
             {
                 long n = _n, t = 0, na = 0;
-                bool defaultRead = false, nulTail = false;
+                bool defaultRead = false;
                 // The NaN-like NAs fill the order buffer from its end backwards (reversed afterwards into input order):
                 // the texts fill it from the front, so one buffer holds both without a second pass.
                 for (long i = 0; i < n; i++)
@@ -752,23 +735,15 @@ namespace NumSharp.Backends.Sorting
                                 defaultRead = true;
                                 _bufs[i] = buf;
                                 _sizes[i] = size;
-                                // The key covers the comparison prefix only (a default string may hold a NUL too).
-                                long dlen = NDVStringCells.NulLength(buf, size);
-                                nulTail |= dlen < size;
-                                _lens[i] = dlen;
-                                _key0[i] = KeyAt(buf, dlen, 0);
+                                _key0[i] = KeyAt(buf, size, 0);
                                 _order[t++] = i;
                                 continue;
                         }
                     }
                     _bufs[i] = buf;
                     _sizes[i] = size;
-                    // NpyString_cmp stops at a NUL both texts share: the keys and the tie pass read the text up to and
-                    // including its first NUL, the sizes breaking the ties of equal prefixes.
-                    long len = NDVStringCells.NulLengthInPlace(cell, buf, size);
-                    nulTail |= len < size;
-                    _lens[i] = len;
-                    _key0[i] = FirstKey(cell, buf, len);
+                    // NpyString_cmp is memcmp (NumPy 2.5): the key is the text's first 8 bytes, a NUL among them included.
+                    _key0[i] = FirstKey(cell, buf, size);
                     _order[t++] = i;
                 }
                 // The NAs were stored from the end backwards: reverse them into input order behind the texts.
@@ -777,7 +752,6 @@ namespace NumSharp.Backends.Sorting
                 _textCount = t;
                 _naCount = na;
                 _defaultReadNA = defaultRead;
-                _nulTail = nulTail;
             }
 
             // ---------------------------------------------------------------- stable order
@@ -852,7 +826,7 @@ namespace NumSharp.Backends.Sorting
                 }
                 long enders = 0;
                 for (long k = 0; k < len; k++)
-                    if (_lens[run[k]] <= covered)
+                    if (_sizes[run[k]] <= covered)
                         enders++;
                 if (enders == len)
                 {
@@ -867,7 +841,7 @@ namespace NumSharp.Backends.Sorting
                     for (long k = 0; k < len; k++)
                     {
                         long index = run[k];
-                        if (_lens[index] <= covered)
+                        if (_sizes[index] <= covered)
                             tmp[e++] = index;
                         else
                             tmp[c++] = index;
@@ -882,7 +856,7 @@ namespace NumSharp.Backends.Sorting
                 for (long k = 0; k < cl; k++)
                 {
                     long index = _order[cs + k];
-                    ulong key = KeyAt(_bufs[index], _lens[index], covered);
+                    ulong key = KeyAt(_bufs[index], _sizes[index], covered);
                     _keys[cs + k] = key;
                     varying |= key;
                     all &= key;
@@ -909,10 +883,10 @@ namespace NumSharp.Backends.Sorting
                 {
                     long v = run[i];
                     byte* vb = _bufs[v];
-                    long vl = _lens[v], vs = _sizes[v];
+                    long vs = _sizes[v];
                     long j = i - 1;
                     // Strict less: equal texts keep their order (stable).
-                    while (j >= 0 && CompareFrom(vb, vl, vs, _bufs[run[j]], _lens[run[j]], _sizes[run[j]], covered) < 0)
+                    while (j >= 0 && CompareFrom(vb, vs, _bufs[run[j]], _sizes[run[j]], covered) < 0)
                     {
                         run[j + 1] = run[j];
                         j--;
@@ -980,18 +954,17 @@ namespace NumSharp.Backends.Sorting
                 return distinct + (_naCount > 0 ? 1 : 0);
             }
 
-            /// <summary>Whether two text elements are equal under <c>NpyString_cmp</c> (equal sizes, prefix lengths, first keys and
-            ///     remaining prefix bytes) — byte-different texts equal up to a NUL they share are equal.</summary>
+            /// <summary>Whether two text elements are equal under <c>NpyString_cmp</c>: equal sizes, first keys and remaining
+            ///     bytes (<c>memcmp</c> since NumPy 2.5, so only byte-identical texts are equal).</summary>
             /// <param name="a">An element index.</param>
             /// <param name="b">Another element index.</param>
             /// <returns>True for equal texts.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private bool SameText(long a, long b)
             {
-                // NpyString_cmp equality: the same size and the same comparison prefix (the bytes after a shared NUL never
-                // count); the first-window keys already cover the prefix's first 8 bytes.
-                long len = _lens[a];
-                if (_sizes[a] != _sizes[b] || len != _lens[b] || _key0[a] != _key0[b])
+                // The first-window keys already cover the first 8 bytes; the rest compare as one span.
+                long len = _sizes[a];
+                if (len != _sizes[b] || _key0[a] != _key0[b])
                     return false;
                 return len <= 8 || NDVStringCells.OrderBytes(_bufs[a] + 8, len - 8, _bufs[b] + 8, len - 8) == 0;
             }

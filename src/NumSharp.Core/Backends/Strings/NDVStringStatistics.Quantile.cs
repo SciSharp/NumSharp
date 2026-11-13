@@ -460,10 +460,11 @@ namespace NumSharp.Backends.Strings
                     UnmanagedStorage.Copyto(full, na, NPY_CASTING.NPY_UNSAFE_CASTING);
                 // `[()]` of a 0-d array is its Python object (the NA); of an array it is a VIEW of the whole array (NumPy's
                 // result does not own its data). The caller's scope reclaims `full`; the view keeps its storage.
-                return qShape.Length == 0 ? full.MarkReductionScalar() : full.view();
+                return qShape.Length == 0 ? full.PyArray_Return() : full.view();
             }
             // NumPy's _remove_nan_1d order, not a mask selection: the partition that picks the element sorts what is left,
-            // and texts equal under NpyString_cmp (the same bytes up to a shared NUL) keep the order they arrive in.
+            // and texts equal under NpyString_cmp keep the order they arrive in (byte-identical texts since NumPy 2.5's
+            // memcmp, so the order no longer shows in a value; NumPy 2.4's strncmp tied texts that differed past a NUL).
             using var kept = nans == 0 ? null : RemoveNaN1D(line, nan, nans);
             return QuantileText.Compute(op, kept ?? line, q, qShape, qIsInteger, null, null, method, false, qType: qType);
         }
@@ -473,7 +474,9 @@ namespace NumSharp.Backends.Strings
         ///     first NaN slots are filled, in order, with the non-NaN elements of the last <c>nans</c> slots, cut to its first
         ///     <c>n - nans</c> elements — NOT the NaN-free elements in input order. The order matters wherever ties do: the
         ///     partition that picks a quantile's element sorts this array, and texts equal under <c>NpyString_cmp</c> keep the
-        ///     order they arrive in (probed: a <c>np.nanpercentile(..., method='nearest')</c> over tied texts picks by it).
+        ///     order they arrive in (probed against NumPy 2.4.2, where <c>strncmp</c> tied texts that differed past a shared
+        ///     NUL and <c>np.nanpercentile(..., method='nearest')</c> picked by that order; NumPy 2.5's <c>memcmp</c> ties only
+        ///     byte-identical texts).
         /// </summary>
         /// <param name="line">The 1-D line.</param>
         /// <param name="nan">Its NaN mask (<c>np.isnan(line)</c>).</param>
@@ -621,7 +624,7 @@ namespace NumSharp.Backends.Strings
             NPTypeCode realType = precision is NPTypeCode.Half or NPTypeCode.Single ? precision : NPTypeCode.Double;
             if (target is null)
             {
-                var r = (complex ? NDArray.Scalar(value) : RealScalar(real, realType)).MarkReductionScalar();
+                var r = (complex ? NDArray.Scalar(value) : RealScalar(real, realType)).PyArray_Return();
                 return keepdims ? KeepdimsResult(r, nd, reduced) : r;
             }
 
@@ -632,13 +635,11 @@ namespace NumSharp.Backends.Strings
                 // A text out: the add's output cast lets the value through (written as its str), and the subtract's dtype=
                 // names the out's class, for which no loop takes two Python numbers.
                 UnmanagedStorage.Copyto(target, lerp, NPY_CASTING.NPY_UNSAFE_CASTING);
-                string operand = PyClassOf(b).ToString();
-                throw NDStringUfuncs.VStringNoLoop("subtract", new[] { operand, DTypeRegistry.PyFloat.ToString() },
-                    target.dtype.Meta.ToString());
+                throw NDStringUfuncs.VStringNoLoop("subtract", new object[] { PyClassOf(b), DTypeRegistry.PyFloat },
+                    target.dtype.Meta);
             }
             if (!DTypeCasting.CanCastTypeTo(loop, target.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError($"Cannot cast ufunc 'add' output from {loop.ToString(true)} to {target.dtype.ToString(true)} " +
-                                    "with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError("add", 1, "same_kind", loop, target.dtype, 2);
             UnmanagedStorage.Copyto(target, lerp, NPY_CASTING.NPY_UNSAFE_CASTING);
             return @out;
         }
@@ -701,7 +702,7 @@ namespace NumSharp.Backends.Strings
         {
             if (op is "percentile" or "nanpercentile")
                 // `q = np.true_divide(q, 100)`.
-                return NDStringUfuncs.VStringNoLoop("divide", new[] { q.dtype.Meta.ToString(), DTypeRegistry.PyLong.ToString() });
+                return NDStringUfuncs.VStringNoLoop("divide", new object[] { q.dtype.Meta, DTypeRegistry.PyLong });
 
             if (q.ndim == 1 && q.size < 10)
             {
@@ -909,7 +910,7 @@ namespace NumSharp.Backends.Strings
         private static NDArray ScalarElement(NDArray line, long index)
         {
             using var view = line.GetData(new[] { index });
-            return view.copy().MarkReductionScalar();
+            return view.copy().PyArray_Return();
         }
 
         /// <summary>
@@ -941,19 +942,19 @@ namespace NumSharp.Backends.Strings
                     // An unsized U discovers its width from the text (np.asanyarray('') is <U1).
                     return Backends.UnmanagedStorage.FromAnyScalar(s, null).MarkExplicitZeroDimArray();
                 case double d:
-                    return NDArray.Scalar(PyFloatValue(d)).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(PyFloatValue(d)).MarkExplicitZeroDimArray();
                 case float f:
-                    return NDArray.Scalar(PyFloatValue(f)).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(PyFloatValue(f)).MarkExplicitZeroDimArray();
                 case bool b:
-                    return NDArray.Scalar(b).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(b).MarkExplicitZeroDimArray();
                 case long l:
-                    return NDArray.Scalar(l).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(l).MarkExplicitZeroDimArray();
                 case int i:
-                    return NDArray.Scalar((long)i).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar((long)i).MarkExplicitZeroDimArray();
                 case Complex c:
-                    return NDArray.Scalar(c).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar(c).MarkExplicitZeroDimArray();
                 case BigInteger big when big >= long.MinValue && big <= long.MaxValue:
-                    return NDArray.Scalar((long)big).MarkExplicitZeroDimArray();
+                    return NDArray.WritableScalar((long)big).MarkExplicitZeroDimArray();
             }
             throw new NotSupportedException(
                 $"np.apply_along_axis over a row whose result is {NDPyObject.Repr(element)} builds an object array in NumPy, a " +

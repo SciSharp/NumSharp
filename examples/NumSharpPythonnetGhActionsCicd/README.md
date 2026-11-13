@@ -17,7 +17,7 @@ the same code, with each comment of that example turned into an assertion.
 | Step | What it does | Why |
 |---|---|---|
 | `actions/setup-dotnet` | Installs the .NET 10 SDK. | The project targets `net10.0`. |
-| `actions/setup-python` | Installs Python 3.12 and restores the pip cache. | pythonnet 3.0.5 drives Python 3.7 to 3.13, and the pinned libraries need 3.11 or later. The key of the cache is the hash of `requirements.txt`. |
+| `actions/setup-python` | Installs Python 3.12 and restores the pip cache. | pythonnet 3.0.5 drives Python 3.7 to 3.13, and the pinned libraries need 3.12 or later. The key of the cache is the hash of `requirements.txt`. |
 | Install the Python libraries | `python -m pip install -r requirements.txt` | The libraries go into the interpreter of the job. Each one is pinned to an exact version, so a run is reproducible. |
 | Build | `dotnet build --configuration Release` | A compile error fails here, before Python starts. |
 | Test | `dotnet test`, with `NUMSHARP_PYTHONNET_PYTHON` set to the `python-path` output of `setup-python` | The tests embed exactly the interpreter that the job installed into. Nothing searches `PATH`. |

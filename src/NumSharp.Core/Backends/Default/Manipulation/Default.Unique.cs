@@ -232,7 +232,7 @@ namespace NumSharp.Backends
         /// <param name="x">The plain operand (only read).</param>
         /// <returns>The unique values, sorted (NumPy returns its hash set's order for integers, complex and text: the
         ///     documented divergence).</returns>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>Owns its scope (a public entry since the plan's phase PE): the hash / sort internals are reclaimed at
         ///     this method's return instead of the facade's, the values are yielded.</remarks>
         [NDScoped]
@@ -256,7 +256,7 @@ namespace NumSharp.Backends
         /// <param name="x">The plain operand (only read).</param>
         /// <returns>[values, counts].</returns>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>Owns its scope (a public entry since the plan's phase PE): the internals are reclaimed at this method's
         ///     return, both outputs are yielded.</remarks>
         [NDScoped]
@@ -278,7 +278,7 @@ namespace NumSharp.Backends
         /// <param name="x">The plain operand (only read).</param>
         /// <returns>[values, inverse_indices]; the inverse has <paramref name="x"/>'s shape.</returns>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>Owns its scope (a public entry since the plan's phase PE). The flat inverse that the reshape views is
         ///     not returned, so the scope disposes it at this method's return (np.unique_inverse's scope did, before);
         ///     the view holds its own reference and keeps the buffer alive.</remarks>
@@ -301,7 +301,7 @@ namespace NumSharp.Backends
         /// <param name="x">The plain operand (only read).</param>
         /// <returns>[values, indices, inverse_indices, counts]; the inverse has <paramref name="x"/>'s shape.</returns>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>Owns its scope (a public entry since the plan's phase PE). The flat inverse that the reshape views is
         ///     not returned, so the scope disposes it at this method's return (np.unique_all's scope did, before); the
         ///     view holds its own reference and keeps the buffer alive.</remarks>

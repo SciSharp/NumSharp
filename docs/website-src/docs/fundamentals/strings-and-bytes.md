@@ -46,7 +46,7 @@ Use `np.strings` for elementwise text operations and the usual `np.*` functions 
      Converting between text and numbers → Converting_NumbersToText, Converting_TextToNumbers, Converting_StoresAndUfuncs, Converting_CSharpStringIsText
      Printing → Printing_StrAndRepr
      Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_Sorting, Computing_Searching, Computing_CharModule, Computing_NumPyRefusals, Computing_StringDTypeAndEvaluate, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
-     Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_Computing, StringDType_Ordering, StringDType_TextFiles, StringDType_Refusals, StringDType_ByteswapIsACopy
+     Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_Computing, StringDType_Ordering, StringDType_TextFiles, StringDType_Refusals, StringDType_ByteswapRaises
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1, Npy_StringDTypeIsNumPysPickle
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
      Byte streams via np.frombuffer → Bytes_ViaFrombuffer -->
@@ -104,6 +104,16 @@ np.array(new object[] { Encoding.ASCII.GetBytes("ab"), Encoding.ASCII.GetBytes("
 
 > **Footgun:** `np.array(new[] { bytes1, bytes2 })` with a `byte[][]` is a jagged NUMERIC array in C#. It becomes a 2-D `uint8` array, not an `S` array.
 
+NumPy's character dtype `np.dtype("c")` is an `|S1` that keeps the type character `'c'`. Creating an array from values with it splits every text into one byte per character, so equal-length rows make a 2-D byte map:
+
+```csharp
+np.array(new[] { "SFFF", "FHFH" }, np.dtype("c"));   // [[b'S' b'F' b'F' b'F'] [b'F' b'H' b'F' b'H']], (2, 4) |S1
+np.array("abc", np.dtype("c"));                      // [b'a' b'b' b'c'], (3,)
+np.array(new[] { "ab", "abc" }, np.dtype("c"));      // ValueError: ... inhomogeneous shape after 1 dimensions ...
+```
+
+A cast never splits: `astype("c")` and `np.asarray(existingArray, "c")` keep each value's first byte, as `S1` does. Pass the C# `string[]` to `np.array`, not `np.asarray`, which converts it to a `<U` array before it reads the dtype.
+
 ---
 
 ## Reading and writing elements
@@ -112,7 +122,7 @@ np.array(new object[] { Encoding.ASCII.GetBytes("ab"), Encoding.ASCII.GetBytes("
 names.item(1);                     // "dog" - a C# string
 names.astype("S4").item(1);        // byte[] { 100, 111, 103 } - b'dog'
 NDArray.AsStringArray(names);      // { "cat", "dog", "bird" }
-names[1];                          // array('dog', dtype='<U4') - a 0-d view
+names[1];                          // array('dog', dtype='<U3') - NumPy's scalar np.str_('dog'), a copy as wide as its text
 names[1] = "zebras";               // the array is now ['cat', 'zebr', 'bird']: cut to 4 characters
 names[2] = null;                   // NumPy's None is stored as its str(): ['cat', 'zebr', 'None']
 ```
@@ -153,7 +163,7 @@ names.astype("U2");                        // ['ca', 'do', 'bi']
 np.array(new[] { "é" }).astype("S1");      // UnicodeEncodeError
 ```
 
-The last call raises `UnicodeEncodeError` with Python's message: `'ascii' codec can't encode character '\xe9' in position 0: ordinal not in range(128)`.
+The last call raises `UnicodeEncodeError` with Python's message: `'ascii' codec can't encode character '\xe9' in position 0: ordinal not in range(128)`. Its `encoding`, `@object`, `start`, `end` and `reason` are Python's: `ascii`, `é`, 0, 1, `ordinal not in range(128)`.
 
 ---
 
@@ -184,7 +194,7 @@ np.pad(np.array(new[] { "ab", "c" }), 1);     // ['0' 'ab' 'c' '0']
 
 ### Text to numbers
 
-A cast to a number parses each element. `int()` takes decimal digits with an optional sign, underscores between digits and surrounding whitespace. `float()` also takes `inf`, `nan` and exponents. `complex()` takes `1+2j` forms, with or without parentheses. An element that does not parse raises NumPy's `ValueError`, and an integer that does not fit raises NumPy's `OverflowError` (as `OverflowException`):
+A cast to a number parses each element. `int()` takes decimal digits with an optional sign, underscores between digits and surrounding whitespace. `float()` also takes `inf`, `nan` and exponents. `complex()` takes `1+2j` forms, with or without parentheses. An element that does not parse raises NumPy's `ValueError`, and an integer that does not fit raises NumPy's `OverflowError`:
 
 ```csharp
 np.array(new[] { "1", " 22 ", "-3", "1_000" }).astype(np.int64);    // [   1   22   -3 1000]
@@ -192,7 +202,7 @@ np.array(new[] { "1.5", "inf", "-nan", "1e3" }).astype(np.float64); // [   1.5  
 np.array(new[] { "1+2j", "3", "(4-5j)" }).astype(np.complex128);    // [1.+2.j 3.+0.j 4.-5.j]
 np.array(new[] { "1", "x" }).astype(np.int64);      // ValueError: invalid literal for int() with base 10: np.str_('x')
 np.array(new[] { "1", "a" }).astype(np.float64);    // ValueError: could not convert string to float: np.str_('a')
-np.array(new[] { "300" }).astype(np.int8);          // OverflowException: Python integer 300 out of bounds for int8
+np.array(new[] { "300" }).astype(np.int8);          // OverflowError: Python integer 300 out of bounds for int8
 ```
 
 A `bytes` (`S`) element parses the same way. The error names the first element that fails, in NumPy's order.
@@ -287,7 +297,7 @@ The `np.multiply` ufunc cannot size its result, so it needs `out=`. It writes ea
 np.multiply(names, 2, np.zeros(new Shape(3L), "U5"));   // ['catca' 'dogdo' 'birdb']
 ```
 
-Broadcasting, every memory layout, `out=` (a narrower or wider text array receives the result cut or padded) and `where=` work as for numbers. A `bytes` array with a `str` array has no loop: `np.add` raises NumPy's `TypeError`. A repetition longer than 2^63 - 1 characters raises NumPy's `OverflowError` (as `OverflowException`).
+Broadcasting, every memory layout, `out=` (a narrower or wider text array receives the result cut or padded) and `where=` work as for numbers. A `bytes` array with a `str` array has no loop: `np.add` raises NumPy's `UFuncBinaryResolutionError` (a `TypeError`). A repetition longer than 2^63 - 1 characters raises NumPy's `OverflowError`.
 
 ### Length and substring search
 
@@ -402,10 +412,18 @@ np.argsort(grades);                   // [ 1  3 16  5 13  8 18 10  0 17 15 12  9
 np.argsort(grades, kind: "stable");   // [ 1  3  5  8 10 13 16 18  0  2  6  9 12 15 17  4  7 11 14 19]
 ```
 
+`descending: true` sorts the largest text first (NumPy 2.5). The default kind runs NumPy's introsort in reverse, whose order of equal strings NumSharp reproduces too; the stable kind keeps equal strings in their input order:
+
+```csharp
+np.sort(words, descending: true);                     // ['pear' 'fig' 'fig' 'apple']
+np.argsort(grades, descending: true);                 // [19 14  4 11  7 17 15 12  0  6  2  9 18 10  5 13  3 16  1  8]
+np.argsort(grades, stable: true, descending: true);   // [ 4  7 11 14 19  0  2  6  9 12 15 17  1  3  5  8 10 13 16 18]
+```
+
 The keywords follow NumPy's rules:
 
-- `kind` is read by its first letter, in either case: `q`uicksort (the default), `h`eapsort (NumPy 2.4.2 gives the default's answer), `m`ergesort and `s`table. Any other value is NumPy's `ValueError`.
-- `kind` and `stable` cannot be given together, `false` included.
+- `kind` is read by its first letter, in either case: `q`uicksort (the default), `h`eapsort (the default kind: NumPy clears its bit before it looks the sort up), `m`ergesort and `s`table. Any other value is NumPy's `ValueError`.
+- `kind` cannot be given together with `stable` or `descending`, `false` included.
 - `order` is refused, because no NumSharp dtype has fields.
 - NumPy has no partition for text and sorts it instead, so `np.partition` returns the sorted text and `np.argpartition` the `argsort` indices.
 
@@ -637,12 +655,12 @@ The rules are Python's:
 ```csharp
 np.@char.join("-", "osd");                                    // 'o-s-d'
 np.@char.join(new[] { "-", "." }, new[] { "ghc", "osd" });    // ['g-h-c', 'o.s.d'], <U5
-np.@char.join("-", np.@char.split(words));                    // TypeError, as in NumPy 2.4.2 (see below)
+np.@char.join("-", np.@char.split(words));                    // TypeError, as in NumPy 2.5.4 (see below)
 ```
 
 The result has the class of `seq`: `U` or `S` as wide as the longest result, or `StringDType()`. An `S` sequence joins only when its strings are empty, because Python iterates `bytes` as numbers.
 
-NumPy 2.4.2 cannot join the lists that `split` returns: it joins every list and then raises `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` NumSharp raises the same error. Over an empty `NDListArray` NumPy returns an empty object array, which has no `NDArray` form: NumSharp raises `NotSupportedException`.
+NumPy 2.5.4 cannot join the lists that `split` returns: it joins every list and then raises `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` NumSharp raises the same error. Over an empty `NDListArray` NumPy returns an empty object array, which has no `NDArray` form: NumSharp raises `NotSupportedException`.
 
 The errors are NumPy's, in NumPy's order. The first element that fails stops the call:
 
@@ -805,7 +823,7 @@ strict[0] = 5;                     // ValueError: StringDType only allows string
 
 ### Moving and casting
 
-Views share the buffer and its arena. A copy, a gather (`np.take`, fancy indexing, a boolean mask) and a scatter duplicate every string into the destination's own buffer. The casts follow NumPy: text, bool and numbers cast to `StringDType`; `StringDType` casts to a sized `U` or `S` (the text is cut to the width) and to numbers (each text is parsed by Python's `int()`, `float()` or `complex()`; a missing element raises):
+Views share the buffer and its arena. A copy, a gather (`np.take`, fancy indexing, a boolean mask) and a scatter (`np.put`, `np.putmask`, `np.place`, `np.choose`) duplicate every string into the destination's own buffer. The casts follow NumPy: text, bool and numbers cast to `StringDType` (an `S` text only when its bytes are valid UTF-8, otherwise NumPy's `TypeError: Invalid UTF-8 bytes found, cannot convert to StringDType`); `StringDType` casts to a sized `U` or `S` (the text is cut to the width) and to numbers (each text is parsed by Python's `int()`, `float()` or `complex()`; a missing element raises):
 
 ```csharp
 var t = np.array(new[] { "12", "-3" }, np.dtypes.StringDType());
@@ -857,12 +875,12 @@ np.isnan(t);                    // [False False  True]
 np.maximum(t, "x");             // TypeError: ufunc 'maximum' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.StrDType'>) -> None
 ```
 
-Texts compare as NumPy's `NpyString_cmp` compares them: `strncmp` over the shorter length, then the sizes. `strncmp` stops at the first byte that differs or at a NUL both texts share, so two texts with the same bytes up to a shared NUL and the same size are EQUAL (`'a\0c' == 'a\0b'`), and a NUL is smaller than any byte it meets (`'a\0' < 'ab'`). Fixed-width `U` text compares every code point instead. `np.array_equal` and `np.array_equiv` are `(a1 == a2).all()` with these rules: a NaN-like NA is never equal unless `equal_nan: true` matches the NA positions (through `np.isnan`), and a pair that has no comparison loop (`S`, numbers) is NumPy's all-`False` array, so only an empty one is equal:
+Texts compare as NumPy's `NpyString_cmp` compares them: `memcmp` over the shorter length, then the sizes. The first byte that differs decides, a NUL included: two texts are equal only when their bytes are (`'a\0c' != 'a\0b'`, and `'a\0b' < 'a\0c'`), a NUL is smaller than any byte it meets (`'a\0' < 'ab'`), and a text orders before every longer text that starts with it. Fixed-width `U` text compares every code point too. `np.array_equal` and `np.array_equiv` are `(a1 == a2).all()` with these rules: a NaN-like NA is never equal unless `equal_nan: true` matches the NA positions (through `np.isnan`), and a pair that has no comparison loop (`S`, numbers) is NumPy's all-`False` array, so only an empty one is equal:
 
 ```csharp
 var t2 = np.dtypes.StringDType();
-np.array(new object[] { "a\0c" }, t2) == np.array(new object[] { "a\0b" }, t2);   // [ True]
-np.array_equal(np.array(new object[] { "a\0c", "x" }, t2), np.array(new object[] { "a\0b", "x" }, t2));   // True
+np.array(new object[] { "a\0c" }, t2) == np.array(new object[] { "a\0b" }, t2);   // [False]
+np.array_equal(np.array(new object[] { "a\0c", "x" }, t2), np.array(new object[] { "a\0b", "x" }, t2));   // False
 np.array_equal(t, t);                                           // False: the NA is not equal to itself
 np.array_equal(t, t, equal_nan: true);                          // True
 ```
@@ -888,11 +906,12 @@ Choose the sentinel for the operations you need, or replace missing values expli
 
 ### Ordering `StringDType` text
 
-`np.sort`, `np.argsort`, `ndarray.sort`, `np.partition`, `np.argpartition`, `np.lexsort`, `np.searchsorted`, `np.unique` and the Array-API unique family, `np.isin`, the set routines, `np.median`, `np.quantile`, `np.percentile`, their nan forms and numpy.ma's `sort` / `argsort` / `median` / `unique` order `StringDType` text with NumPy's results, for every memory layout and axis. Texts compare by their UTF-8 bytes up to a NUL both texts share, a text before every longer text that starts with it (NumPy's `NpyString_cmp`, see [Computing on `StringDType` text](#computing-on-stringdtype-text)). Two texts that differ only after a shared NUL are equal: a stable sort keeps them in their input order, `np.unique` with a `return_*` flag keeps the first of them, and the values-only `np.unique` (and the set routines built on it) keeps both, because NumPy hashes the full bytes — in its hash table's order, which NumSharp replaces with their input order. Missing data follows the NA object, as NumPy's sort compares it:
+`np.sort`, `np.argsort`, `ndarray.sort`, `np.partition`, `np.argpartition`, `np.lexsort`, `np.searchsorted`, `np.unique` and the Array-API unique family, `np.isin`, the set routines, `np.median`, `np.quantile`, `np.percentile`, their nan forms and numpy.ma's `sort` / `argsort` / `median` / `unique` order `StringDType` text with NumPy's results, for every memory layout and axis. Texts compare by their UTF-8 bytes, a text before every longer text that starts with it (NumPy's `NpyString_cmp`, see [Computing on `StringDType` text](#computing-on-stringdtype-text)), so equal texts are identical texts and every route of `np.unique` keeps one entry per text. Missing data follows the NA object, as NumPy's sort compares it:
 
 - A NaN-like NA sorts after every text. The **stable** kinds preserve the NAs' input order; the default introsort gives NumPy's algorithm-dependent permutation.
-- A string NA reads as its text (the descriptor's default string).
+- A string NA reads as its text (the descriptor's default string), and `np.unique` keeps it and that text as one entry.
 - A `None`-like NA raises NumPy's `ValueError` at the first comparison that meets it, so in any line of two or more elements. A line of one element compares nothing.
+- `np.unique` keeps one entry for all the NAs of a descriptor whose NA object is not NaN-like, whatever `equal_nan` says; NaN-like NAs are one entry under `equal_nan: true` (the default) and one each without it.
 
 ```csharp
 var nan = np.dtypes.StringDType(na_object: double.NaN);
@@ -904,10 +923,10 @@ np.searchsorted(np.sort(t), np.array(new object[] { "grape" }, nan));   // [3]
 np.isin(t, np.array(new object[] { "fig" }, nan));         // [False False  True False  True]
 var none = np.dtypes.StringDType(na_object: null);
 np.sort(np.array(new object[] { "b", null }, none));       // ValueError: Cannot compare null that is not a nan-like value
-np.sort(t, kind: "heapsort");                              // RuntimeError: unsupported sort kind
+np.sort(t, descending: true);                              // RuntimeError: unsupported sort kind
 ```
 
-NumPy's default kind is an introsort, and NumSharp reproduces its order of equal texts, as for `S` and `U`. `kind: "heapsort"` raises NumPy's `RuntimeError`, because `StringDType` registers no heapsort.
+NumPy's default kind is an introsort, and NumSharp reproduces its order of equal texts, as for `S` and `U`. `kind: "heapsort"` sorts as the default kind (NumPy clears the heapsort bit before it looks the sort up). `descending: true` raises NumPy's `RuntimeError`, because `StringDType` registers no descending sort; `S` and `U` text sorts descending.
 
 The order statistics compute what NumPy computes, and refuse where NumPy refuses:
 
@@ -966,28 +985,20 @@ Measured against NumPy 2.4.2 on the same machine (pinned to two cores, 1,000 to 
 | Call | NumSharp |
 |------|----------|
 | `view(another dtype)`, `memoryview` (`.data`), `np.frombuffer(..., "T")` | NumPy's errors: a cell is not raw text |
+| `view(dtype)` / `getfield(dtype)` with an equal but separate `StringDType()` instance | NumPy's `TypeError` (`Cannot change data-type for array of references.`, `Cannot get/set field of an object array`): the cells point into the array's own allocator, so only the array's own `dtype` object views them |
+| `ndarray.byteswap()`, in place or not | NumPy's `TypeError: dtype StringDType() does not implement copyswap`: a cell has no byte order (the descriptor's `byteorder` is `'|'`) |
 | `np.ndarray(shape, "T", buffer: ...)` over raw bytes or a non-`StringDType` array, another dtype over a `StringDType` array's cells, or an offset that splits a cell | `NotSupportedException`. NumPy reads the bytes as cells; a cell holds an arena offset or a heap pointer, so NumSharp refuses. Over another `StringDType` array the call is a view that shares its cells (offsets and strides in 16-byte cells), and without a buffer the array starts with empty strings |
 | `np.fromfile`, `np.fromstring` and `tofile`'s binary mode with `StringDType` | NumPy's errors (`Cannot read into object array`, `OSError` for the binary write) |
 | `np.unique(..., axis: k)` over two or more dimensions | NumPy's `TypeError`: its structured path cannot hold `StringDType` fields |
 | A `np.nanquantile` / `np.nanmedian` row whose result is a `None` NA | `NotSupportedException`. NumPy builds an `object` array, a dtype NumSharp does not have |
 
-NumPy 2.4.2 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp gives the correct answer:
+NumPy 2.5.4 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp gives the correct answer:
 
-- `np.place` over a `StringDType` array crashes the process (a segmentation fault).
-- `ndarray.byteswap()` over a `StringDType` array crashes the process (a segmentation fault). A cell has no byte order (the descriptor's `byteorder` is `'|'`), so NumSharp returns a copy, and with `inplace: true` the array itself.
-- `np.choose`, `np.put` and `np.putmask` copy the cells raw: an arena string gives garbage.
-- The `bytes` to `StringDType` cast does not validate UTF-8, so a later read of the element raises. NumSharp raises the `UnicodeDecodeError` at the cast.
-- The `StringDType` to `complex` cast writes the real part into the imaginary part too (so `np.sort_complex(['2', '1'])` is `[1+1j, 2+2j]`).
 - `np.lexsort` with a `StringDType` key that is not contiguous along the axis (a transposed 2-D key, a stepped or reversed view) crashes the process (an access violation).
 - `np.argsort(view, axis=None)` of a `StringDType` view that is not C-contiguous (broadcast, reversed, transposed, stepped) misorders texts that live in the arena (a 17-byte text lands before its 16-byte prefix). The same view copied, `np.sort`, an explicit axis, the partitions and `ndarray.sort` sort right.
-- An empty `StringDType` text times a negative count hangs: `multiply` converts the count to `size_t`, its overflow check multiplies it by the size 0, and the repeat loop runs 2^64 - 1 times. NumSharp returns the empty text.
-- `np.searchsorted` loads the haystack's cells with the keys' allocator, so a haystack text in its arena raises `MemoryError: Failed to load string in string comparison` or reads another array's arena.
-- The default-kind sort crashes the process when its introsort spends its depth budget: the heapsort fallback reads its method context as an array. NumSharp's heapsort answers, in the order `np.argpartition` gives.
+- The default-kind `np.sort` / `ndarray.sort` never returns when its introsort spends its depth budget: the heapsort fallback reads its method context as an array (NumPy 2.4.2 crashed the process there; `np.argsort` of the same input answers). NumSharp's heapsort answers, in the order `np.argpartition` gives.
 - A short string copied onto itself (`a[...] = a[:1]`) becomes `''`.
-- A buffered `np.nditer` with a `StringDType` input and an allocated `StringDType` output raises `MemoryError: Failed to load string in StringDType getitem` when the loop reads its own output, and `String deallocation failed in clear loop` when the iterator closes.
-- `np.loadtxt` keeps the `StringDType` instance it is given as its result's descriptor, so a second call with the same instance corrupts the first result (`MemoryError: Failed to load string in StringDType getitem` when it is read). NumSharp gives every result its own allocator.
-- `tofile`'s text mode writes each element through `PyUnicode_AsASCIIString` without checking the result, so a non-ASCII text crashes the process. NumSharp raises the `UnicodeEncodeError` that call reports.
-- `np.cumsum` of a 1-D array into a 0-d out crashes the process (an access violation; NumPy does this for numbers too). NumSharp reports NumPy's error for an out of the wrong size, `provided out is the wrong size for the accumulation.`, as an `IncorrectShapeException`.
+- `np.loadtxt` keeps the `StringDType` instance it is given as its result's descriptor, so a second call with the same instance returns an array NumPy cannot read (`MemoryError: Failed to load string in StringDType getitem`). NumSharp gives every result its own allocator.
 - `np.maximum` / `np.minimum` with a `None`-like NA into an `S` out whose texts are not all ASCII raise `SystemError: <class 'UnicodeEncodeError'> returned a result with an exception set`: the output cast runs after the loop has already failed. NumSharp raises the loop's `ValueError: Cannot compare null that is not a nan-like value`.
 
 ---
@@ -1158,7 +1169,7 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `np.@char.add` / `np.@char.multiply` | `np.add` / `np.strings.multiply`; a count that is not an integer is `ValueError("Can only multiply by integers")` |
 | `np.@char.chararray` / `np.@char.array` / `np.@char.asarray` | NumPy's `chararray` (`NDCharArray`): element access and iteration remove trailing whitespace, views and copies stay chararrays, text data only; the comparison operators strip (also with a plain array on the left), `+` and `*` return chararrays, and the `np.*` functions keep, wrap or drop the class as NumPy's do |
 | `np.@char.split` / `rsplit` / `splitlines` | Python's `str` / `bytes` methods per element; the result is an `NDListArray`, NumPy's object array of lists |
-| `np.@char.join` | The characters of each string joined by its separator; the result has the class of `seq`; over an `NDListArray`, NumPy 2.4.2's `TypeError` (over an empty one, `NotSupportedException`: NumPy's empty object array) |
+| `np.@char.join` | The characters of each string joined by its separator; the result has the class of `seq`; over an `NDListArray`, NumPy 2.5.4's `TypeError` (over an empty one, `NotSupportedException`: NumPy's empty object array) |
 | `np.argmax` / `np.argmin` / `np.searchsorted` / `np.digitize` | NumPy's results: the first extreme element, NumPy's exact search over unsorted haystacks |
 | `np.unique` / `np.unique_values` / `np.unique_counts` / `np.unique_inverse` / `np.unique_all` | NumPy's results for every flag and axis; `unique_values` (and `sorted: false`) sorted where NumPy keeps its hash order |
 | `np.isin` / `np.intersect1d` / `np.union1d` / `np.setdiff1d` / `np.setxor1d` / `np.lexsort` / `np.sort_complex` | NumPy's results: numbers beside text written as text, bytes decoded as ASCII where NumPy joins the operands |

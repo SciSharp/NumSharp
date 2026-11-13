@@ -32,14 +32,14 @@ namespace NumSharp
         ///     p. Byte-identical to <c>np.random.RandomState(seed).geometric</c>; int64 output (NumPy returns C <c>long</c>).
         ///     Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray geometric(double p, Shape size)
+        public NDArray geometric(double p, Shape? size)
         {
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_GT_0_1);
 
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyGeometricSetup(p);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -47,11 +47,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyGeometric(ref one, in setup));
+                        return NDArray.WritableScalar(LegacyGeometric(ref one, in setup));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Int64, size);
+            var ret = LegacyOutput(NPTypeCode.Int64, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (long*)ret.Address;

@@ -21,6 +21,47 @@ namespace NumSharp.Backends
         };
 
         /// <summary>
+        ///     Whether NumPy's loop for a unary ufunc reads another dtype than the input's, i.e. casts the input
+        ///     (<c>check_for_trivial_loop</c> then refuses the trivial loop for an input of two or more dimensions, and the
+        ///     fresh result takes NpyIter's layout, whose extent-1 axes may carry other strides). Probed 2.4.2 over every
+        ///     unary ufunc and dtype through the strides of an F-ordered (2, 1, 3) input's result.
+        /// </summary>
+        /// <param name="op">The op.</param>
+        /// <param name="inputType">The input's dtype.</param>
+        /// <param name="outputType">The resolved output dtype.</param>
+        /// <returns>True when the input is cast to the loop dtype.</returns>
+        /// <remarks>
+        ///     Most loops read their output dtype (<c>T->T</c>), so a different input dtype is a cast (np.sqrt of int32 runs
+        ///     the float64 loop). The exceptions keep a loop per input dtype with another output: the float classification
+        ///     predicates and np.logical_not (every numeric dtype -> bool), np.abs of complex128 (<c>D->d</c>),
+        ///     np.bitwise_count (every integer -> uint8; bool has no loop and is cast). np.signbit has float loops only, so
+        ///     an integer or bool input is cast although NumSharp computes it from the input dtype.
+        /// </remarks>
+        private static bool UnaryLoopCastsInput(UnaryOp op, NPTypeCode inputType, NPTypeCode outputType)
+        {
+            switch (op)
+            {
+                case UnaryOp.SignBit:
+                    return inputType != NPTypeCode.Half && inputType != NPTypeCode.Single
+                           && inputType != NPTypeCode.Double && inputType != NPTypeCode.Decimal;
+                case UnaryOp.IsFinite:
+                case UnaryOp.IsNan:
+                case UnaryOp.IsInf:
+                case UnaryOp.IsPosInf:
+                case UnaryOp.IsNegInf:
+                case UnaryOp.LogicalNot:
+                    return false;
+                case UnaryOp.BitwiseCount:
+                    return inputType == NPTypeCode.Boolean;
+                case UnaryOp.Abs:
+                    if (inputType == NPTypeCode.Complex)
+                        return false;
+                    break;
+            }
+            return inputType != outputType;
+        }
+
+        /// <summary>
         /// Execute a unary operation using IL-generated kernels.
         /// Handles type promotion, strided arrays, and kernel dispatch.
         /// </summary>
@@ -86,13 +127,18 @@ namespace NumSharp.Backends
             // Handle scalar case
             if (nd.Shape.IsScalar)
             {
-                return ExecuteScalarUnary(nd, op, outputType);
+                // NumPy's ufunc returns a 0-d result without out= as a SCALAR (PyArray_Return: np.sqrt(np.array(4.0)) is
+                // np.float64(2.0)).
+                return ExecuteScalarUnary(nd, op, outputType).PyArray_Return();
             }
 
-            // NumPy's ufunc output layout (parity QA-36): the result follows the operand's K order. A C or F-contiguous
-            // operand already gets it (the trivial bypass writes in the input's layout); any other layout NumPy keeps (a
-            // permuted view, a flipped F array) is computed over the operand transposed into that order and relabelled.
-            if (!kOrderResolved && !IsKOrderCVoter(nd.Shape) && !nd.Shape.IsFContiguous
+            // NumPy's ufunc output layout (parity QA-36): the result follows the operand's K order. A C-contiguous operand,
+            // and an F-contiguous one NumPy's trivial loop lays out (read in its own dtype, aligned), already get it (the
+            // trivial bypass writes in the input's layout); any other layout NumPy keeps (a permuted view, a flipped F
+            // array, an F array cast to the loop dtype, whose extent-1 strides come from NpyIter) is computed over the
+            // operand transposed into that order and relabelled.
+            if (!kOrderResolved && !IsKOrderCVoter(nd.Shape)
+                && !(nd.Shape.IsFContiguous && TrivialLoopLaysOut(nd, UnaryLoopCastsInput(op, inputType, outputType), out _))
                 && TryKOrderPlan(nd.Shape.dimensions, new[] { nd.Shape }, out var kLayout, out var kPerm))
             {
                 NDArray t = IntoKOrder(nd, nd.ndim, kPerm);

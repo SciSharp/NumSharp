@@ -24,8 +24,11 @@ namespace NumSharp.Backends
         /// <param name="out1">The mantissa output, or null (a TEXT output receives the mantissas as text).</param>
         /// <param name="out2">The exponent output, or null (a TEXT output receives the exponents as text).</param>
         /// <param name="where">The bool write mask, or null.</param>
+        /// <param name="dtype">NumPy's <c>dtype=</c>: null only. Any dtype would fix BOTH outputs, and every frexp loop
+        /// gives an int32 exponent, so NumPy raises "No loop matching the specified signature and casting was found for
+        /// ufunc frexp" (after the where= parse).</param>
         /// <exception cref="IncorrectTypeException"><paramref name="x"/> is complex — frexp has no complex loop
-        /// (NumPy raises the same "not supported for the input types" TypeError).</exception>
+        /// (NumPy raises the same "not supported for the input types" TypeError); or any <paramref name="dtype"/>.</exception>
         /// <exception cref="TypeError">An output its loop dtype cannot be cast to under same_kind (NumPy numbers the
         ///     outputs: "output 1" / "output 2").</exception>
         /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>.</exception>
@@ -37,12 +40,24 @@ namespace NumSharp.Backends
         ///     <c>npy_frexp</c> produces: <c>frexp(±inf)</c> and <c>frexp(NaN)</c> report exponent <c>-1</c>
         ///     (not 0), and a signalling NaN mantissa is quieted. See <see cref="DirectILKernelGenerator.FrexpHelper(double*,double*,int*,long)"/>.
         /// </remarks>
-        public override (NDArray Mantissa, NDArray Exponent) Frexp(NDArray x, NDArray out1 = null, NDArray out2 = null, NDArray where = null)
+        public override (NDArray Mantissa, NDArray Exponent) Frexp(NDArray x, NDArray out1 = null, NDArray out2 = null, NDArray where = null,
+            DType dtype = null)
+        {
+            if (dtype is not null)
+            {
+                // NumPy parses where= first, then resolves the loop: dtype= would make both outputs that dtype, and frexp's
+                // loops ('e->ei' ... 'd->di') all give an int32 exponent, so no dtype has a loop (probed 2.4.2).
+                ValidateWhereMask(where);
+                throw new IncorrectTypeException("No loop matching the specified signature and casting was found for ufunc frexp");
+            }
+
             // Fresh outputs take NumPy's K layout (the kernel writes C, so a non-C K order runs over the transposed input
             // and both results are relabelled); a caller's out keeps its own layout.
-            => out1 is null && out2 is null
-                ? KOrderUnaryPair(x, where, this, static (engine, a, w) => engine.FrexpCore(a, null, null, w))
+            // Without outputs both fresh results of a 0-d input are NumPy's scalars (the ufunc's PyArray_Return).
+            return out1 is null && out2 is null
+                ? ReturnPair(KOrderUnaryPair(x, where, this, static (engine, a, w) => engine.FrexpCore(a, null, null, w)))
                 : FrexpCore(x, out1, out2, where);
+        }
 
         /// <summary>
         ///     The body of <see cref="Frexp"/>: the decomposition into C-ordered fresh outputs (or into the given ones).

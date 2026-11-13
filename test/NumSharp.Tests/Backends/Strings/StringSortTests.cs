@@ -318,24 +318,28 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>StringDType</c>'s sort loop accepts the default and stable kinds only: the heapsort kind is NumPy's
-        ///     <c>RuntimeError</c> — after the axis (and writeability) checks for a sort, before the axis check for an argsort,
-        ///     and even for one element.
+        ///     <c>StringDType</c>'s sort loop accepts the default and stable kinds only, and NumPy 2.5's <c>PyArray_Sort</c> /
+        ///     <c>PyArray_ArgSort</c> clear the heapsort bit before they resolve it, so the heapsort kind sorts as the default
+        ///     kind (NumPy 2.4 raised). The descending flag is the loop's <c>RuntimeError</c> now — after the axis (and
+        ///     writeability) checks for a sort, before the axis check for an argsort, and even for one element.
         /// </summary>
         [TestMethod]
-        public void StringDType_RefusesTheHeapsortKind()
+        public void StringDType_HeapsortIsTheDefaultKind_DescendingIsRefused()
         {
             var t = np.array(new[] { "b", "a" }).astype(np.dtype("T"));
-            Action sort = () => np.sort(t, kind: "heapsort");
+            NDArray.AsStringArray(np.sort(t, kind: "heapsort")).Should().Equal("a", "b");
+            NDArray.AsStringArray(np.sort(t["0:1"], kind: "heapsort")).Should().Equal("b");
+            np.argsort(t, kind: "heapsort").ToArray<long>().Should().Equal(1L, 0L);
+            Action sort = () => np.sort(t, descending: true);
             sort.Should().Throw<RuntimeError>().WithMessage("unsupported sort kind");
-            Action one = () => np.sort(t["0:1"], kind: "heapsort");
+            Action one = () => np.sort(t["0:1"], descending: true);
             one.Should().Throw<RuntimeError>().WithMessage("unsupported sort kind");
-            Action sortAxis = () => np.sort(t, 5, kind: "heapsort");
+            Action sortAxis = () => np.sort(t, 5, descending: true);
             sortAxis.Should().Throw<AxisError>().WithMessage("axis 5 is out of bounds for array of dimension 1*");
-            Action argsortAxis = () => np.argsort(t, 5, kind: "heapsort");
+            Action argsortAxis = () => np.argsort(t, 5, descending: true);
             argsortAxis.Should().Throw<RuntimeError>().WithMessage("unsupported sort kind");
             var readOnly = np.broadcast_to(t, new Shape(2, 2));
-            Action ro = () => readOnly.sort(kind: "heapsort");
+            Action ro = () => readOnly.sort(descending: true);
             ro.Should().Throw<ValueError>().WithMessage("sort array is read-only");
         }
 

@@ -81,19 +81,19 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void ZeroStep_IsPythonsDivisionByZero()
         {
-            new Action(() => { NDArray _ = np.mgrid["0:3:0", "0:2"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { NDArray _ = np.mgrid["0:3:0", "0:2"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("division by zero");
-            new Action(() => { NDArray[] _ = np.ogrid["0:3:0", "0:2"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { NDArray[] _ = np.ogrid["0:3:0", "0:2"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("division by zero");
-            new Action(() => { NDArray _ = np.mgrid["0.0:3:0", "0:2"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { NDArray _ = np.mgrid["0.0:3:0", "0:2"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("float division by zero");
-            new Action(() => { NDArray _ = np.mgrid["0:3:0.0", "0:2"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { NDArray _ = np.mgrid["0:3:0.0", "0:2"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("float division by zero");
-            new Action(() => { NDArray[] _ = np.ogrid["0.0:3:0", "0:2"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { NDArray[] _ = np.ogrid["0.0:3:0", "0:2"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("float division by zero");
-            new Action(() => { NDArray _ = np.mgrid["3:3:0"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { NDArray _ = np.mgrid["3:3:0"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("division by zero");
-            new Action(() => { NDArray _ = np.mgrid["0:5:0.0"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { NDArray _ = np.mgrid["0:5:0.0"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("float division by zero");
         }
 
@@ -139,7 +139,7 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void SizeLoop_RaisesInKeyOrder()
         {
-            new Action(() => { NDArray _ = np.mgrid["0:3:0", "0:"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { NDArray _ = np.mgrid["0:3:0", "0:"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("division by zero");
             new Action(() => { NDArray _ = np.mgrid["0:", "0:3:0"]; }).Should().Throw<ValueError>()
                 .WithMessage("mgrid*requires an explicit stop for slice 0*");
@@ -158,11 +158,11 @@ namespace NumSharp.Tests.Creation
                 .WithMessage("cannot convert float NaN to integer");
             new Action(() => { NDArray[] _ = np.ogrid["0:nan", "0:2"]; }).Should().Throw<ValueError>()
                 .WithMessage("cannot convert float NaN to integer");
-            new Action(() => { NDArray _ = np.mgrid["0:Infinity", "0:2"]; }).Should().Throw<OverflowException>()
+            new Action(() => { NDArray _ = np.mgrid["0:Infinity", "0:2"]; }).Should().Throw<OverflowError>()
                 .WithMessage("cannot convert float infinity to integer");
             new Action(() => { NDArray _ = np.mgrid["0:1:nanj", "0:2"]; }).Should().Throw<ValueError>()
                 .WithMessage("cannot convert float NaN to integer");
-            new Action(() => { NDArray _ = np.mgrid["0:1:Infinityj"]; }).Should().Throw<OverflowException>()
+            new Action(() => { NDArray _ = np.mgrid["0:1:Infinityj"]; }).Should().Throw<OverflowError>()
                 .WithMessage("cannot convert float infinity to integer");
             new Action(() => { NDArray _ = np.mgrid["0:1e300", "0:2"]; }).Should().Throw<ValueError>()
                 .WithMessage("Maximum allowed dimension exceeded");
@@ -214,9 +214,9 @@ namespace NumSharp.Tests.Creation
                 long.MinValue, long.MinValue + 1, 0L, 0L);
 
             new Action(() => { NDArray _ = np.mgrid["9223372036854775808:9223372036854775810", "0:2"]; })
-                .Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+                .Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             new Action(() => { NDArray[] _ = np.ogrid["9223372036854775808:9223372036854775808", "0:2"]; })
-                .Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+                .Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
         }
 
         /// <summary>

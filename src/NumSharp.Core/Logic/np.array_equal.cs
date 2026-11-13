@@ -4,18 +4,19 @@ namespace NumSharp {
         /// <summary>
         ///     True if two arrays have the same shape and all elements are equal, False otherwise.
         /// </summary>
-        /// <param name="a">First input array.</param>
-        /// <param name="b">Second input array.</param>
+        /// <param name="a1">First input array (NumPy's keyword <c>a1</c>).</param>
+        /// <param name="a2">Second input array (NumPy's keyword <c>a2</c>).</param>
         /// <param name="equal_nan">
         ///     When <c>false</c> (the NumPy default) NaN never compares equal, so an array that holds a NaN
-        ///     is NOT equal even to itself — <c>np.array_equal(a, a)</c> is <c>false</c> whenever <paramref name="a"/>
+        ///     is NOT equal even to itself — <c>np.array_equal(a, a)</c> is <c>false</c> whenever the array
         ///     contains a NaN. When <c>true</c>, NaNs at matching positions are treated as equal; for a complex
         ///     dtype a value counts as NaN when EITHER its real or imaginary component is NaN.
         /// </param>
         /// <returns>True if the arrays have identical shape and every element is equal.</returns>
         /// <remarks>
         ///     The shapes must match EXACTLY — unlike <see cref="array_equiv(NDArray,NDArray)"/> this performs
-        ///     NO broadcasting. Mirrors <c>numpy.array_equal(a1, a2, equal_nan=False)</c> (NumPy 2.4.2).
+        ///     NO broadcasting. Mirrors <c>numpy.array_equal(a1, a2, equal_nan=False)</c> (NumPy 2.4.2), keyword for
+        ///     keyword (the operands were <c>a</c> / <c>b</c> until 2026-11-11, so a ported named call did not compile).
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html
         /// </remarks>
         /// <exception cref="TypeError">A fixed-width string operand with <paramref name="equal_nan"/> and two different arrays
@@ -24,14 +25,14 @@ namespace NumSharp {
         ///     empty arrays are True). A <c>StringDType</c> operand compares through its own <c>==</c> (NumPy's NA rules: two
         ///     different NA objects raise its TypeError) and, with <paramref name="equal_nan"/>, its <c>isnan</c> (a NaN-like
         ///     NA is a NaN).</exception>
-        public static bool array_equal(NDArray a, NDArray b, bool equal_nan = false)
+        public static bool array_equal(NDArray a1, NDArray a2, bool equal_nan = false)
         {
             // The body is NumPy's statements, TensorEngine.ArrayEqual (DefaultEngine's in
             // Backends/Default/Logic/Default.ArrayEqual.cs), on the engine of the first operand that is not null. Two nulls
             // are equal (NumSharp's null convention) and have no engine to ask; one null reaches the engine, whose statements
             // answer False.
-            var engine = (a ?? b)?.TensorEngine;
-            return engine is null || engine.ArrayEqual(a, b, equal_nan);
+            var engine = (a1 ?? a2)?.TensorEngine;
+            return engine is null || engine.ArrayEqual(a1, a2, equal_nan);
         }
     }
 }

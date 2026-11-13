@@ -267,7 +267,7 @@ namespace NumSharp.Tests.Polynomial
         {
             var poly = np.polynomial.polynomial;
             Action zero = () => poly.polydiv(new object[] { 1 }, new object[] { 0 });
-            zero.Should().Throw<DivideByZeroException>().Which.Message.Should().BeEmpty();
+            zero.Should().Throw<ZeroDivisionError>().Which.Message.Should().BeEmpty();
             var (q1, r1) = poly.polydiv(new object[] { 2 }, new object[] { 2 });
             q1.ToArray<double>().Should().Equal(1.0);
             r1.ToArray<double>().Should().Equal(0.0);
@@ -490,9 +490,10 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     The argument errors, NumPy's type and text verbatim: the empty ZeroDivisionError, pow's ValueError /
-        ///     OverflowError from <c>int(pow)</c> and its two range checks, fromroots' <c>len()</c> TypeErrors (a Python
-        ///     float, a 0-d array), and as_series' texts.
+        ///     The argument errors, NumPy's type and text verbatim: the empty ZeroDivisionError, pow's two range checks,
+        ///     fromroots' <c>len()</c> TypeErrors (a Python float, a 0-d array), and as_series' texts. NumPy's errors for a
+        ///     float power (<c>2.5</c>, <c>nan</c>, <c>inf</c>) have no C# call since API-parity batch 11: <c>{p}pow</c>
+        ///     takes an <see cref="int"/> power, so the compiler refuses a double one.
         /// </summary>
         [TestMethod]
         public void Errors_AreNumPys()
@@ -502,11 +503,8 @@ namespace NumSharp.Tests.Polynomial
             void Raises<TException>(Action call, string message, string because) where TException : Exception
                 => call.Should().Throw<TException>(because).Which.Message.Should().Be(message, because);
 
-            Raises<DivideByZeroException>(() => P.polynomial.polydiv(one, new object[] { 0.0 }), "", "polydiv by [0.]");
+            Raises<ZeroDivisionError>(() => P.polynomial.polydiv(one, new object[] { 0.0 }), "", "polydiv by [0.]");
             Raises<ValueError>(() => P.polynomial.polypow(one, -1), "Power must be a non-negative integer.", "polypow(c, -1)");
-            Raises<ValueError>(() => P.polynomial.polypow(one, 2.5), "Power must be a non-negative integer.", "polypow(c, 2.5)");
-            Raises<ValueError>(() => P.polynomial.polypow(one, double.NaN), "cannot convert float NaN to integer", "polypow(c, nan)");
-            Raises<OverflowException>(() => P.polynomial.polypow(one, double.PositiveInfinity), "cannot convert float infinity to integer", "polypow(c, inf)");
             Raises<ValueError>(() => P.chebyshev.chebpow(one, 17), "Power is too large", "chebpow(c, 17) at the default maxpower 16");
             Raises<ValueError>(() => P.chebyshev.chebpow(one, 3, maxpower: 2), "Power is too large", "chebpow(c, 3, maxpower=2)");
             Raises<TypeError>(() => P.polynomial.polyfromroots(2.5), "object of type 'float' has no len()", "polyfromroots(2.5)");
@@ -521,9 +519,9 @@ namespace NumSharp.Tests.Polynomial
         // =========================================================================================================
 
         /// <summary>
-        ///     The C# spellings of <c>{p}pow</c>: an <see cref="int"/> binds the int overload, a <see cref="double"/> the
-        ///     double overload (NumPy's float pow), and a <see cref="long"/> — which converts implicitly to double, never
-        ///     to int — the double overload too, with the same answer; <c>maxpower</c> is optional, named, and
+        ///     The C# spelling of <c>{p}pow</c>: one signature, <c>(c, int pow, int? maxpower)</c> (API-parity batch 11
+        ///     removed the double and object forms - a <see cref="double"/> or <see cref="long"/> power is a compile-time
+        ///     refusal now, as C# converts neither to int implicitly); <c>maxpower</c> is optional, named, and
         ///     <c>null</c> is NumPy's <c>None</c> (no limit) for every basis.
         /// </summary>
         [TestMethod]
@@ -533,8 +531,7 @@ namespace NumSharp.Tests.Polynomial
             var c = np.array(new[] { 1.0, 2.0 });
             var expected = new[] { 1.0, 4.0, 4.0 };
             P.polynomial.polypow(c, 2).ToArray<double>().Should().Equal(expected, "int");
-            P.polynomial.polypow(c, 2.0).ToArray<double>().Should().Equal(expected, "double");
-            P.polynomial.polypow(c, 2L).ToArray<double>().Should().Equal(expected, "long binds the double overload");
+            typeof(NumSharp.PowerSeriesModule).GetMethods().Where(m => m.Name == "polypow").Should().ContainSingle("one signature");
             P.chebyshev.chebpow(c, 17, maxpower: null).size.Should().Be(18, "maxpower=None lifts chebpow's default limit of 16");
             P.legendre.legpow(c, 3, maxpower: 3).size.Should().Be(4, "maxpower bounds the power inclusively");
             ((Action)(() => P.legendre.legpow(c, 17))).Should().Throw<ValueError>().WithMessage("Power is too large");
@@ -819,24 +816,25 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     A NaN root's SIGN follows NumPy's <c>roots.sort()</c> (the 2026-10-05 re-review): NumPy's float sort turns
-        ///     every NaN into the positive quiet NaN, <c>line(-r, 1)</c> negates it, and the products carry that negative
-        ///     NaN into every coefficient it reaches. NumSharp's sort wrote .NET's negative NaN, so the negation made them
-        ///     all positive. Inputs: a positive payload NaN (float64) and a negative payload NaN (float32, whose lines are
-        ///     float64 by array coercion) — the sort's canonical NaN, not the input's bits, decides the result.
+        ///     A NaN root's bits follow NumPy's <c>roots.sort()</c>: NumPy 2.5's float sort keeps every NaN's bits (its
+        ///     x86-simd-sort moves the NaNs to the end as they are; 2.4's turned each into the positive quiet NaN),
+        ///     <c>line(-r, 1)</c> negates it, and the products carry that NaN into every coefficient it reaches. Inputs: a
+        ///     positive payload NaN (float64), negated to <c>0xfff8000000000005</c>, and a negative payload NaN (float32,
+        ///     whose lines are float64 by array coercion), negated to the positive <c>0x7fc00005</c> and widened with its
+        ///     payload — the input's bits, not a canonical NaN, decide the result.
         /// </summary>
         [TestMethod]
-        public void FromRoots_NaNRoot_TakesTheSortsCanonicalNaN()
+        public void FromRoots_NaNRoot_KeepsTheSortedNaNsBits()
         {
             double nan5 = BitConverter.UInt64BitsToDouble(0x7ff8000000000005UL);
-            // P.polyfromroots(np.array([1.0, nan5, -2.0])) and C.chebfromroots(...) on NumPy 2.4.2:
+            // P.polyfromroots(np.array([1.0, nan5, -2.0])) and C.chebfromroots(...) on NumPy 2.5.4:
             AssertBytes(np.polynomial.polynomial.polyfromroots(np.array(new[] { 1.0, nan5, -2.0 })), "float64", new long[] { 4 },
-                        "000000000000f8ff000000000000f8ff000000000000f8ff000000000000f03f", "polyfromroots");
+                        "050000000000f8ff050000000000f8ff050000000000f8ff000000000000f03f", "polyfromroots");
             AssertBytes(np.polynomial.chebyshev.chebfromroots(np.array(new[] { 1.0, nan5, -2.0 })), "float64", new long[] { 4 },
-                        "000000000000f8ff000000000000f8ff000000000000f8ff000000000000d03f", "chebfromroots");
-            // P.polyfromroots(np.array([0.25, -nan(payload 5)], np.float32)) -> float64 [-nan, -nan, 1.0]
+                        "050000000000f8ff050000000000f8ff050000000000f8ff000000000000d03f", "chebfromroots");
+            // P.polyfromroots(np.array([0.25, -nan(payload 5)], np.float32)) -> float64 [nan(0x7ff80000a0000000) x2, 1.0]
             AssertBytes(np.polynomial.polynomial.polyfromroots(np.array(new[] { 0.25f, BitConverter.UInt32BitsToSingle(0xffc00005U) })),
-                        "float64", new long[] { 3 }, "000000000000f8ff000000000000f8ff000000000000f03f", "float32 roots");
+                        "float64", new long[] { 3 }, "000000a00000f87f000000a00000f87f000000000000f03f", "float32 roots");
         }
 
         /// <summary>

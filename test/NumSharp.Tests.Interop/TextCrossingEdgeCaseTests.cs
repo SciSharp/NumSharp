@@ -15,7 +15,7 @@ using Python.Runtime;
 namespace NumSharp.Tests.Interop
 {
     /// <summary>
-    ///     Edge cases of the text crossing (strings phase 1, P1.8) against live NumPy 2.4.2, beyond the per-layout matrices of
+    ///     Edge cases of the text crossing (strings phase 1, P1.8) against live NumPy 2.5.4, beyond the per-layout matrices of
     ///     <see cref="TextFixedWidthCrossingTests"/> and <see cref="TextStringDTypeCrossingTests"/>: cell histories (heap
     ///     rewrites, NA and <c>''</c> over arena strings, a short string over an arena cell), UTF-8 sizes at every cell and
     ///     prefix boundary, more missing-data objects, ranks up to 6 with composed views, empty and read-only sources, an
@@ -738,9 +738,9 @@ namespace NumSharp.Tests.Interop
         ///     decodes back with the NA intact; an object array of <c>str</c> decodes as <c>StringDType()</c>.
         /// </summary>
         /// <remarks>
-        ///     The <c>StringDType</c> half uses <c>add</c>, not <c>upper</c>: numpy 2.4.2's <c>np.strings.upper</c> calls
-        ///     <c>str.upper</c> on every element and raises on any NA that is not a <c>str</c> (probed), and its ufuncs raise
-        ///     on an NA that is neither NaN-like nor a <c>str</c> (<c>None</c>).
+        ///     The <c>StringDType</c> half uses <c>add</c>, not <c>upper</c>: numpy's <c>np.strings.upper</c> (2.4.2 and 2.5.4)
+        ///     calls <c>str.upper</c> on every element and raises on any NA that is not a <c>str</c> (probed), and its ufuncs
+        ///     raise on an NA that is neither NaN-like nor a <c>str</c> (<c>None</c>).
         /// </remarks>
         [TestMethod]
         public void Codec_EndToEnd_TextThroughThePythonnetPipeline()
@@ -896,11 +896,11 @@ namespace NumSharp.Tests.Interop
 
         /// <summary>
         ///     An object array of <c>str</c> SUBCLASS instances copies like any array of <c>str</c> (fixed with this test: it
-        ///     was refused with a false UTF-8 message, because numpy's <c>coerce=False</c> cast takes only an exact
-        ///     <c>str</c> and <c>np.str_</c>). The copy holds what numpy's coercing cast stores — <c>str(x)</c>, so a
-        ///     subclass that overrides <c>__str__</c> crosses as that text, as in <c>np.array(arr, dtype=StringDType())</c>.
-        ///     A non-<c>str</c> element after a subclass is still named; a subclass whose <c>__str__</c> raises is refused
-        ///     with Python's error.
+        ///     was refused with a false UTF-8 message, because numpy 2.4's <c>coerce=False</c> cast took only an exact
+        ///     <c>str</c> and <c>np.str_</c>). The copy holds what <c>np.array(arr, dtype=StringDType())</c> stores: since
+        ///     NumPy 2.5 a <c>str</c> subclass's OWN text, whatever its <c>__str__</c> override says, so a subclass whose
+        ///     <c>__str__</c> raises crosses too (NumPy 2.4 stored <c>str(x)</c>: the override's text, or its error). A
+        ///     non-<c>str</c> element after a subclass is still named.
         /// </summary>
         [TestMethod]
         public void ObjectArrays_OfStrSubclasses_CopyAsNumpysCoercingCast()
@@ -926,11 +926,16 @@ namespace NumSharp.Tests.Interop
             }
 
             using (NDArray copy = ImportOf("subs"))
-                copy.GetValue(1).Should().Be("LOUD:cd", "the __str__ override is what numpy's cast stores");
+                copy.GetValue(1).Should().Be("cd", "NumPy 2.5's cast stores the subclass's own text (2.4 stored 'LOUD:cd')");
             ((Action)(() => ImportOf("mixed").Dispose()))
                 .Should().Throw<NotSupportedException>().WithMessage("*NoneType at flat index 1 (None), which is not a str*");
-            ((Action)(() => ImportOf("broken").Dispose()))
-                .Should().Throw<NotSupportedException>().WithMessage("*only str elements, but numpy cannot store one of them as text*no text for you*");
+            // A subclass whose __str__ raises: NumPy 2.5's cast never calls __str__, so it crosses by its own text (NumPy 2.4
+            // raised the override's RuntimeError, which the bridge reported as "cannot store one of them as text").
+            using (NDArray copy = ImportOf("broken"))
+            {
+                Encode(copy).Should().Equal(PyStrings("_enc(broken.astype(StringDType()))"), "broken: numpy's coercing cast");
+                copy.GetValue(1).Should().Be("b", "NumPy 2.5's cast stores Broken('b')'s own text without calling __str__");
+            }
             PyExec("del Plain, Loud, Broken, subs, subs2d, mixed, broken");
         }
 

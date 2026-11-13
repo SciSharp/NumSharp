@@ -478,7 +478,7 @@ namespace NumSharp.Tests.Backends
                          ("count_nonzero_0x3", np.count_nonzero(np.zeros(new Shape(0L, 3L)), 0)),
                          ("sum_0x3", np.sum(np.zeros(new Shape(0L, 3L)), 0)),
                          ("sum_empty_keepdims", np.sum(empty, 0, keepdims: true)),
-                         ("nansum_keepdims", np.nansum(np.array(new[] { 1.0, double.NaN }), 0, true)),
+                         ("nansum_keepdims", np.nansum(np.array(new[] { 1.0, double.NaN }), 0, keepdims: true)),
                          ("nansum_2x3", np.nansum(np.ones(new Shape(2L, 3L)), 0)),
                      })
             {
@@ -515,7 +515,7 @@ namespace NumSharp.Tests.Backends
         public void ReductionScalars_OutParameter_StaysWriteableAndReceives()
         {
             var a = np.arange(12).astype(NPTypeCode.Int64).reshape(3, 4);
-            var o = NDArray.Scalar(0L);
+            var o = np.array(0L);                   // NumPy's out=np.array(0): a 0-d ARRAY (a NumPy scalar is no out=)
             var r = a.TensorEngine.ReduceAdd(a, null, false, null, o);
             ReferenceEquals(r, o).Should().BeTrue("out= returns the out instance");
             r.flags.writeable.Should().BeTrue("NumPy: out is returned writeable, not converted to a scalar");

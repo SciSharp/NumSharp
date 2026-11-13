@@ -154,11 +154,9 @@ namespace NumSharp.Tests.Backends.Strings
         /// <param name="kind">The predicate.</param>
         /// <returns>The predicate's value.</returns>
         private static bool Utf8Reference(byte* s, long size, int kind)
-        {
-            while (size > 0 && s[size - 1] == 0)
-                size--;
-            return size != 0 && NDTextElements.IsKindUtf8Scalar(s, size, kind);
-        }
+            // NumPy 2.5.3's length-explicit UTF-8: every byte is part of the text, a trailing NUL a code point like any other
+            // (NumPy 2.4 trimmed the trailing NULs first).
+            => size != 0 && NDTextElements.IsKindUtf8Scalar(s, size, kind);
 
         // =============================================================================================================
         // The Unicode tables
@@ -368,9 +366,6 @@ namespace NumSharp.Tests.Backends.Strings
                         if (bytes.Length > buffer.Length)
                             continue;
                         bytes.CopyTo(buffer, 0);
-                        long stripped = bytes.Length;
-                        while (stripped > 0 && s[stripped - 1] == 0)
-                            stripped--;
                         foreach (int kind in Kinds)
                         {
                             bool want = Utf8Reference(s, bytes.Length, kind);
@@ -380,7 +375,7 @@ namespace NumSharp.Tests.Backends.Strings
                             {
                                 for (int i = 0; i < 16; i++)
                                     window[i] = i < bytes.Length ? s[i] : (byte)0;
-                                if (NDTextElements.IsKindUtf8Window(Vector128.Load(window), (int)stripped, kind, flags) != want)
+                                if (NDTextElements.IsKindUtf8Window(Vector128.Load(window), bytes.Length, kind, flags) != want)
                                     Assert.Fail($"window {NDTextElements.PredicateName(kind)} of {Convert.ToHexString(bytes)}: NumPy {want}");
                             }
                         }
@@ -611,8 +606,9 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     The predicates over <c>StringDType</c> (probed: NumPy 2.4.2): short and long texts, a trailing NUL, a character
-        ///     past U+FFFF at the start of a title, a 41-byte text of 20 two-byte letters and an uppercase one.
+        ///     The predicates over <c>StringDType</c> (probed: NumPy 2.5.4): short and long texts, a trailing NUL (a character
+        ///     since NumPy 2.5.3, so <c>'abc\0'</c> is not alphabetic, though still lowercase), a character past U+FFFF at the
+        ///     start of a title, a 41-byte text of 20 two-byte letters and an uppercase one.
         /// </summary>
         [TestMethod]
         public void StringDType_MatchesNumPy()
@@ -621,7 +617,7 @@ namespace NumSharp.Tests.Backends.Strings
             {
                 "abc", "a1", "", "éß", "ABC", "Abc Def", "abc\0", "\U0001D400bc", new string('a', 40), new string('é', 20) + "X",
             }, np.dtypes.StringDType());
-            Bools(np.strings.isalpha(t)).Should().Equal(true, false, false, true, true, false, true, true, true, true);
+            Bools(np.strings.isalpha(t)).Should().Equal(true, false, false, true, true, false, false, true, true, true);
             Bools(np.strings.islower(t)).Should().Equal(true, true, false, true, false, false, true, false, true, false);
             Bools(np.strings.isupper(t)).Should().Equal(false, false, false, false, true, false, false, false, false, false);
             Bools(np.strings.istitle(t)).Should().Equal(false, false, false, false, false, true, false, true, false, false);

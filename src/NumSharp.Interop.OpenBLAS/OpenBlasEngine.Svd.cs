@@ -7,7 +7,7 @@ using NumSharp.Utilities;
 namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>
-    ///     <c>np.linalg.svd</c> / <c>np.linalg.svdvals</c> — a route-for-route port of NumPy 2.4.2's
+    ///     <c>np.linalg.svd</c> / <c>np.linalg.svdvals</c> — a route-for-route port of NumPy 2.5.4's
     ///     <c>svd_N</c> / <c>svd_S</c> / <c>svd_A</c> gufuncs (<c>umath_linalg.cpp</c>, <c>svd_wrapper</c>)
     ///     calling the SAME LAPACK <c>gesdd</c> the bundled scipy-openblas ships. Also the engine behind
     ///     <c>pinv</c>, <c>matrix_rank</c>, <c>cond</c> and the spectral/nuclear matrix norms, which are
@@ -37,6 +37,15 @@ namespace NumSharp.Interop.OpenBLAS
     ///     leaves U/VT uninitialised in LAPACK, so — matching NumPy's <c>identity_matrix</c> fallback —
     ///     an identity is written for each. Non-convergence raises
     ///     <see cref="LinAlgError"/>("SVD did not converge"), NumPy's exact message.
+    ///     </para>
+    ///     <para>
+    ///     The gufuncs' one 2.5 addition is not here: NumPy 2.5 checks each matrix for an inf or a NaN
+    ///     before <c>gesdd</c> (<c>all_finite</c>, gh-32591), because LAPACK's SVD drivers loop forever on
+    ///     some inputs holding inf and return garbage for the rest, and raises that same
+    ///     <see cref="LinAlgError"/>. Core's <c>SvdKernel</c> makes the check before it asks any backend
+    ///     (and <c>np.linalg.cond</c>'s NaN reading checks matrix by matrix), so the public API behaves
+    ///     the same with or without this package; a caller of <see cref="IBlasBackend.TrySvd"/> itself must
+    ///     keep non-finite input away.
     ///     </para>
     /// </remarks>
     public static unsafe partial class OpenBlasEngine

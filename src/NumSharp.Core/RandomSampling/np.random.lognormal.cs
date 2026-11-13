@@ -39,11 +39,11 @@ namespace NumSharp
         ///     (no intermediate array; the split lets the CPU overlap the <c>exp</c> calls). Holds the bit generator's lock for
         ///     the draws.
         /// </remarks>
-        public NDArray lognormal(double mean = 0.0, double sigma = 1.0, Shape size = default)
+        public NDArray lognormal(double mean = 0.0, double sigma = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(sigma, "sigma", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -51,11 +51,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyLognormal(ref one, mean, sigma));
+                        return NDArray.WritableScalar(LegacyLognormal(ref one, mean, sigma));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

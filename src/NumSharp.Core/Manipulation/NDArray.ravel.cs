@@ -5,26 +5,21 @@ namespace NumSharp
         /// <summary>
         ///     Return a contiguous flattened array. A 1-D array, containing the elements of the input, is returned
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
-        /// <remarks><br></br>If this array's <see cref="Shape"/> is a slice, the a copy will be made.</remarks>
-        [PlainReceiver]
-        public NDArray ravel()
-        {
-            return ravel(this, 'C');
-        }
-
-        /// <summary>
-        ///     Return a contiguous flattened array. A 1-D array, containing the elements of the input, is returned
-        /// </summary>
         /// <param name="order">
         ///     The order in which to read the elements.
         ///     'C' - row-major, 'F' - column-major,
         ///     'A' - 'F' if F-contiguous (and not C-contiguous) else 'C',
         ///     'K' - memory order.
         /// </param>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
+        /// <returns>The 1-D result: a view that shares this array's memory (and its writeability) when the reading order
+        ///     walks it front to back, otherwise a fresh copy (see <see cref="np.ravel(NDArray, char)"/>).</returns>
+        /// <exception cref="ArgumentException">An order code other than C, F, A or K.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.ravel.html
+        ///     <para>One signature, NumPy's <c>a.ravel(order='C')</c>: the no-argument overload went with API-parity batch 3
+        ///     (2026-11-11), so <c>a.ravel()</c> binds here with the default 'C'.</para>
+        /// </remarks>
         [PlainReceiver]
-        public NDArray ravel(char order)
+        public NDArray ravel(char order = 'C')
         {
             return ravel(this, order);
         }

@@ -21,7 +21,7 @@ namespace NumSharp.Backends
         ///     </para>
         ///     <para>
         ///     <b>The vector ends.</b> NumPy's <c>result[0, 0]</c> of the (1, 1) product is a scalar: here a fresh 0-d copy
-        ///     of that element, marked like NumPy's scalars (<see cref="NDArray.MarkReductionScalar"/>), never a view of the
+        ///     of that element, marked like NumPy's scalars (<see cref="NDArray.PyArray_Return"/>), never a view of the
         ///     product or of the out array. <c>result.ravel()</c> of the C-ordered (1, k) or (k, 1) product is a view of it.
         ///     </para>
         ///     <para>
@@ -66,7 +66,7 @@ namespace NumSharp.Backends
                 : Chain(work, Order(work), 0, n - 1, @out);
 
             if (ndimFirst == 1 && ndimLast == 1)
-                return result[0, 0].copy().MarkReductionScalar();   // NumPy's result[0, 0]: a scalar, not a view
+                return result[0, 0].copy().PyArray_Return();   // NumPy's result[0, 0]: a scalar, not a view
             if (ndimFirst == 1 || ndimLast == 1)
                 return NDArray.ravel(result, 'C');                   // result.ravel(): np.ravel's member, order 'C'
             return result;

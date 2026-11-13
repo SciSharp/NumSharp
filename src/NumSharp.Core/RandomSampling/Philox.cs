@@ -86,7 +86,7 @@ namespace NumSharp
         /// <summary>Constructs a Philox keyed from the given seed sequence (<c>generate_state(2, uint64)</c>), counter zero.</summary>
         /// <param name="seed">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/> works;
         ///     null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
-        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
         /// <remarks>
         ///     The overload a bare <c>null</c> literal binds (<c>new Philox(null)</c>, NumPy's <c>Philox(None)</c>): the
         ///     <c>int[]</c>/<c>long[]</c>/<c>uint[]</c> overloads are equally good targets for it under plain C# rules, so
@@ -116,7 +116,7 @@ namespace NumSharp
         /// <exception cref="ValueError">Both <paramref name="seed"/> and <paramref name="key"/> given (<c>seed and key cannot be both
         /// used</c>); a key/counter integer out of range (<c>key must be positive and less than 2**128.</c>); an array form of the
         /// wrong size (<c>counter must have 4 elements when using array form</c>); a NaN or unparsable string; an invalid seed.</exception>
-        /// <exception cref="OverflowException">An infinite float key/counter; an integer element too large for uint64.</exception>
+        /// <exception cref="OverflowError">An infinite float key/counter; an integer element too large for uint64.</exception>
         /// <exception cref="TypeError">An invalid seed type, or a complex/non-numeric key or counter.</exception>
         /// <remarks>
         ///     Validation follows NumPy's order — the seed/key conflict, then the seed (inside <see cref="SeedSequence"/>),
@@ -401,7 +401,7 @@ namespace NumSharp
         /// <param name="bits">128 for the key, 256 for the counter.</param>
         /// <returns>The words, lowest first.</returns>
         /// <exception cref="ValueError">Out of range, wrong element count, NaN, or an unparsable string.</exception>
-        /// <exception cref="OverflowException">An infinity, or an integer element beyond uint64.</exception>
+        /// <exception cref="OverflowError">An infinity, or an integer element beyond uint64.</exception>
         /// <exception cref="TypeError">A complex or non-numeric value.</exception>
         internal static ulong[] IntToArray(object value, string name, int bits)
         {
@@ -526,7 +526,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="big">The integers.</param>
         /// <returns>The uint64 words.</returns>
-        /// <exception cref="OverflowException">An element outside <c>[-2**63, 2**64)</c> forces an object array: the first
+        /// <exception cref="OverflowError">An element outside <c>[-2**63, 2**64)</c> forces an object array: the first
         /// element that cannot convert raises — <c>Python int too large to convert to C long</c> beyond the range (LP64
         /// NumPy's text, the model NumSharp's legacy integers follow; NumPy's Windows build words the same failure
         /// <c>int too big to convert</c>), <c>Python integer -1 out of bounds for uint64</c> for a negative.</exception>
@@ -548,9 +548,9 @@ namespace NumSharp
                 foreach (BigInteger b in big)
                 {
                     if (b < int64Min || b > uint64Max)
-                        throw new OverflowException("Python int too large to convert to C long");
+                        throw new OverflowError("Python int too large to convert to C long");
                     if (b.Sign < 0)
-                        throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Python integer {b} out of bounds for uint64"));
+                        throw new OverflowError(string.Create(CultureInfo.InvariantCulture, $"Python integer {b} out of bounds for uint64"));
                 }
                 throw new InvalidOperationException("unreachable: an object element always fails to convert");
             }
@@ -585,7 +585,16 @@ namespace NumSharp
         ///     'buffer': uint64[4], 'buffer_pos': int, 'has_uint32': int, 'uinteger': int}</c> with the nested
         ///     <c>'state'</c> dict flattened.
         /// </summary>
-        public sealed class State : BitGeneratorState
+        /// <remarks>
+        ///     Unsealed, so a subclass engine that adds state of its own derives its snapshot from this class. Its
+        ///     <see cref="Philox.GetStateCore"/> override returns the derived snapshot, which passes the typed
+        ///     <see cref="Philox.state"/> getter (a cast to <see cref="State"/>) and <see cref="Philox.SetStateCore"/> (an
+        ///     <c>is State</c> test); its <see cref="Philox.SetStateCore"/> override restores its own fields and calls the base for
+        ///     the engine's. Footgun: the <see cref="bit_generator"/> label stays <c>"Philox"</c> and the base
+        ///     <see cref="Philox.SetStateCore"/> takes any <see cref="State"/>, where NumPy labels a subclass's state with the
+        ///     subclass's class name and refuses another class's state.
+        /// </remarks>
+        public class State : BitGeneratorState
         {
             /// <summary>Creates an empty state (fill the members before assigning it).</summary>
             public State() { }

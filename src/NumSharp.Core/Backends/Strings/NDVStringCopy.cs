@@ -44,7 +44,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="IncorrectShapeException"><paramref name="src"/> does not broadcast to <paramref name="dst"/>
         ///     (<c>np.broadcast_to</c>'s error).</exception>
         /// <exception cref="InvalidOperationException">Either storage is not a <c>StringDType</c> storage (the caller's routing).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to allocate string in string to string cast</c>.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>Failed to allocate string in string to string cast</c>.</exception>
         internal static void Copy(UnmanagedStorage dst, UnmanagedStorage src)
         {
             if (dst is null) throw new ArgumentNullException(nameof(dst));
@@ -103,7 +103,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The destination storage.</param>
         /// <param name="src">The source storage.</param>
         /// <param name="bshape">The source's shape broadcast to <paramref name="dst"/>'s dimensions.</param>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         private static void CopyIterated(UnmanagedStorage dst, UnmanagedStorage src, Shape bshape)
         {
             var inAllocator = src.VStringSlice.Allocator;
@@ -150,7 +150,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The 1-D destination.</param>
         /// <param name="src">The source (same allocator).</param>
         /// <param name="bshape">The source's broadcast shape (1-D).</param>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         private static void CopyRaw1D(UnmanagedStorage dst, UnmanagedStorage src, Shape bshape)
         {
             long n = dst.Shape.dimensions[0];
@@ -199,7 +199,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="outAllocator">The destination's allocator (may be <paramref name="inAllocator"/>).</param>
         /// <param name="naName">The UTF-8 <c>str()</c> of the source's NA object when its NA cells must become text (a
         ///     descriptor with an NA object into one without), else null.</param>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         /// <remarks>
         ///     A cell copied onto itself is skipped (see the loop): the destination's free would otherwise empty the source of
         ///     a short string first. A short non-empty source into a destination that holds no arena or heap text is one
@@ -230,7 +230,7 @@ namespace NumSharp.Backends.Strings
                     // lossy but this is an unsafe cast so this is OK
                     fixed (byte* name = naName)
                         if (outAllocator.pack(d, name, naName.Length) < 0)
-                            throw new OutOfMemoryException("Failed to pack string in string to string cast.");
+                            throw new MemoryError("Failed to pack string in string to string cast.");
                 }
                 else
                 {

@@ -36,30 +36,37 @@ namespace NumSharp.Tests.View
             arr.Shape.IsFContiguous.Should().BeFalse();
         }
 
+        /// <summary>
+        ///     NumPy's <c>np.zeros(shape, order='F')</c>: an F-ordered <see cref="Shape"/> passes only its dimensions (as
+        ///     NumPy's shape tuple does), so the order letter decides the layout — C by default, F when asked. Before
+        ///     API-parity batch 8 np.zeros had no order parameter and kept the Shape's own F layout as a workaround.
+        /// </summary>
         [TestMethod]
         public void NpZeros_FShape_PreservesFContig()
         {
-            // Workaround: passing an F-contig Shape to np.zeros preserves the layout.
-            // (np.zeros has no order parameter; this documents the functional workaround.)
             var shape = new Shape(new long[] { 3, 4 }, 'F');
-            var arr = np.zeros(shape);
-            arr.Shape.IsFContiguous.Should().BeTrue();
+            np.zeros(shape).Shape.IsContiguous.Should().BeTrue("the dimensions alone are NumPy's shape");
+            np.zeros(shape, order: 'F').Shape.IsFContiguous.Should().BeTrue();
         }
 
+        /// <summary>NumPy's <c>np.ones(shape, order='F')</c>; an F-ordered Shape passes only its dimensions (see
+        ///     <see cref="NpZeros_FShape_PreservesFContig"/>).</summary>
         [TestMethod]
         public void NpOnes_FShape_PreservesFContig()
         {
             var shape = new Shape(new long[] { 3, 4 }, 'F');
-            var arr = np.ones(shape);
-            arr.Shape.IsFContiguous.Should().BeTrue();
+            np.ones(shape).Shape.IsContiguous.Should().BeTrue("the dimensions alone are NumPy's shape");
+            np.ones(shape, order: 'F').Shape.IsFContiguous.Should().BeTrue();
         }
 
+        /// <summary>NumPy's <c>np.full(shape, fill_value, order='F')</c>; an F-ordered Shape passes only its dimensions (see
+        ///     <see cref="NpZeros_FShape_PreservesFContig"/>).</summary>
         [TestMethod]
         public void NpFull_FShape_PreservesFContig()
         {
             var shape = new Shape(new long[] { 3, 4 }, 'F');
-            var arr = np.full(shape, 7);
-            arr.Shape.IsFContiguous.Should().BeTrue();
+            np.full(shape, 7).Shape.IsContiguous.Should().BeTrue("the dimensions alone are NumPy's shape");
+            np.full(shape, 7, order: 'F').Shape.IsFContiguous.Should().BeTrue();
         }
 
         [TestMethod]
@@ -1643,13 +1650,14 @@ namespace NumSharp.Tests.View
         // Section 39: argsort / unique / np.outer
         // ============================================================================
 
+        /// <summary>np.argsort of an F-contiguous input along axis 0 returns a C-contiguous result, as NumPy's.</summary>
         [TestMethod]
         public void ArgSort_FContig_ProducesCContig()
         {
             // NumPy: argsort of F-contig produces C-contig output.
-            // np.arange returns Int64, so argsort<long> matches the source dtype.
+            // np.arange returns Int64 (the source dtype np.argsort reads).
             var fArr = np.arange(12).reshape(3, 4).T;
-            var r = np.argsort<long>(fArr, axis: 0);
+            var r = np.argsort(fArr, axis: 0);
             r.Shape.IsContiguous.Should().BeTrue();
         }
 
@@ -2628,23 +2636,25 @@ namespace NumSharp.Tests.View
             ((double)r[1, 1]).Should().BeApproximately(4.57, 1e-9);
         }
 
+        /// <summary>np.round of an F-contiguous 2-D array gives NumPy's values (around and round are one computation).</summary>
         [TestMethod]
         public void Round_FContig2D_Values_MatchNumPy()
         {
-            // NumPy: round_ is alias for around — same values and layout.
+            // NumPy: round and around are one computation — same values and layout.
             var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
-            var r = np.round_(f, decimals: 1);
+            var r = np.round(f, decimals: 1);
             ((double)r[0, 0]).Should().BeApproximately(1.3, 1e-9);
             ((double)r[1, 1]).Should().BeApproximately(4.6, 1e-9);
         }
 
+        /// <summary>np.round of an F-contiguous 2-D array returns an F-contiguous result, as NumPy's.</summary>
         [TestMethod]
         public void Round_FContig2D_PreservesFContig()
         {
             var f = np.array(new double[,] { { 1.345, 2.678 }, { 3.123, 4.567 } }).copy('F');
-            var r = np.round_(f, decimals: 1);
+            var r = np.round(f, decimals: 1);
             r.Shape.IsFContiguous.Should().BeTrue(
-                "NumPy: round_ preserves F-contig layout (same as around)");
+                "NumPy: round preserves F-contig layout (same as around)");
         }
 
         [TestMethod]

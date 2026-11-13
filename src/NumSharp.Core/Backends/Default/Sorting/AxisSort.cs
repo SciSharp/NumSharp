@@ -22,7 +22,7 @@ namespace NumSharp.Backends.Sorting
     /// equal). Floats partition NaN to the end (NumPy sorts NaN last). Radix is stable, so argsort
     /// ties resolve in ascending index order (NumPy 'stable').
     /// </summary>
-    internal static unsafe class AxisSort
+    internal static unsafe partial class AxisSort
     {
         // ----- key adapters: monotonic unsigned transform so ascending key order == NumPy value order -----
         private interface IKey32<T> where T : unmanaged { uint To(T v); T From(uint k); int Bytes { get; } }
@@ -63,30 +63,44 @@ namespace NumSharp.Backends.Sorting
         /// </summary>
         /// <param name="a">The array.</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="kind">The kind. It changes the answer only where NumPy's does: the stable kind's float value sort keeps
-        ///     every NaN's bits (the default kind writes NumPy's canonical NaN), and <c>StringDType</c> refuses the heapsort
-        ///     kind.</param>
+        /// <param name="kind">The kind (NumPy 2.5's flags: the stable bit, the descending bit). It changes the answer only
+        ///     where NumPy's does: the heapsort bit is cleared (the default kind), the float value sorts keep every NaN's bits
+        ///     (the default kind in the order NumPy's x86-simd-sort moves them to the end, the stable kind in input order),
+        ///     the descending default kind places ties as NumPy's introsort does, and <c>StringDType</c> refuses the
+        ///     descending flag.</param>
         /// <returns>The sorted copy.</returns>
         /// <exception cref="AxisError">The axis is out of bounds (a 0-d input refuses every axis: NumPy's sort does not ravel
         ///     it first).</exception>
-        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>),
-        ///     after the axis check.</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array sorted descending (<c>unsupported sort kind</c>), after
+        ///     the axis check.</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements holding an NA whose NA object is
         ///     neither NaN-like nor a string (<c>Cannot compare null that is not a nan-like value</c>).</exception>
         [NDScoped]
         public static NDArray Sort(NDArray a, int? axis, NPY_SORTKIND kind)
         {
+            // PyArray_Sort clears the heapsort bit before anything reads the kind: the heapsort kind IS the default kind.
+            kind = SortKindArguments.ClearHeapsort(kind);
+            bool stable = SortKindArguments.IsStable(kind), descending = SortKindArguments.IsDescending(kind);
             if (Strings.NDStringUfuncs.IsVString(a))
             {
-                // StringDType: the sort loop's refusal of the heapsort kind follows the axis check (PyArray_Sort resolves
+                // StringDType: the sort loop's refusal of the descending flag follows the axis check (PyArray_Sort resolves
                 // the loop after check_and_adjust_axis); then the copy is sorted with NumPy's NA ordering (VStringSort).
                 Strings.NDStringUfuncs.ValidateReduceAxis("sort", a.ndim, axis);
-                if (kind == NPY_SORTKIND.NPY_HEAPSORT)
+                if (descending)
                     throw UnsupportedSortKind();
-                return SortVString(a, axis, kind == NPY_SORTKIND.NPY_STABLESORT);
+                return SortVString(a, axis, stable);
             }
             if (Strings.NDStringUfuncs.IsString(a))
-                return SortText(a, axis);
+            {
+                if (!descending)
+                    return SortText(a, axis);
+                // S / U descending: NumPy's axis check, then the copy fromnumeric.sort makes (the C-order flattening for a
+                // null axis), sorted in place.
+                Strings.NDStringUfuncs.ValidateReduceAxis("sort", a.ndim, axis);
+                var textCopy = axis == null ? a.flatten() : a.copy('K');
+                SortInPlaceDescending(textCopy, axis == null ? 0 : NormalizeAxis(axis.Value, a.ndim), stable);
+                return textCopy;
+            }
 
             if (axis == null)
             {
@@ -120,20 +134,23 @@ namespace NumSharp.Backends.Sorting
         ///     that is not a nan-like value</c>: the lines before it are sorted, that line is left as it was where NumPy
         ///     leaves it in the order its failing comparisons produced).</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
-        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>).</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array sorted descending (<c>unsupported sort kind</c>).</exception>
         [NDScoped]
         public static void SortInPlace(NDArray a, int? axis, NPY_SORTKIND kind)
         {
+            // PyArray_Sort clears the heapsort bit first: the heapsort kind IS the default kind.
+            kind = SortKindArguments.ClearHeapsort(kind);
+            bool stable = SortKindArguments.IsStable(kind), descending = SortKindArguments.IsDescending(kind);
             if (Strings.NDStringUfuncs.IsVString(a))
             {
-                // StringDType: NumPy's checks in PyArray_Sort's order (axis, writeability, the loop's kind), then every
-                // line's cells permuted in place (VStringSort; a line of at most one element is left as it is).
+                // StringDType: NumPy's checks in PyArray_Sort's order (axis, writeability, the loop's refusal of the
+                // descending flag), then every line's cells permuted in place (VStringSort; a line of at most one element
+                // is left as it is).
                 Strings.NDStringUfuncs.ValidateReduceAxis("sort", a.ndim, axis);
                 if (!a.Shape.IsWriteable)
                     throw new ValueError("sort array is read-only");
-                if (kind == NPY_SORTKIND.NPY_HEAPSORT)
+                if (descending)
                     throw UnsupportedSortKind();
-                bool stable = kind == NPY_SORTKIND.NPY_STABLESORT;
                 if (axis == null)
                 {
                     // NumSharp's flatten-in-place extension: one line over the whole (contiguous) buffer.
@@ -152,6 +169,16 @@ namespace NumSharp.Backends.Sorting
                     throw new ValueError("sort array is read-only");
                 if (Strings.NDStringUfuncs.ShapeDecides("sort", a, axis))
                     return;
+                if (descending)
+                {
+                    // NumPy 2.5's string_quicksort_ / string_timsort_ with reverse = true (the flatten-in-place extension
+                    // sorts the whole contiguous buffer as one line).
+                    if (axis == null)
+                        SortInPlaceDescending(a.reshape(a.size), 0, stable);
+                    else
+                        SortInPlaceDescending(a, NormalizeAxis(axis.Value, a.ndim), stable);
+                    return;
+                }
                 if (axis == null)
                 {
                     // NumSharp's flatten-in-place extension: one line over the whole (contiguous) buffer.
@@ -191,32 +218,38 @@ namespace NumSharp.Backends.Sorting
         ///     np.argsort with a resolved kind. Over <c>S</c> / <c>U</c> text the default and heapsort kinds give NumPy's
         ///     introsort permutation (ties in its order) and the stable kind the stable one (<see cref="TextSort.ArgSortLines"/>);
         ///     over <c>StringDType</c> text the default kind gives NumPy's introsort permutation and the stable kind the stable
-        ///     one, the NaN-like NAs last (<see cref="VStringSort.ArgSortLines"/>); NumSharp's numeric argsort is one stable
-        ///     order for every kind.
+        ///     one, the NaN-like NAs last (<see cref="VStringSort.ArgSortLines"/>); NumSharp's numeric ascending argsort is one
+        ///     stable order for every kind. A descending argsort (NumPy 2.5) is the stable descending order for the stable kind
+        ///     and NumPy's introsort permutation for the default kind, numeric and <c>S</c> / <c>U</c> alike
+        ///     (<see cref="ArgSortDescending"/>).
         /// </summary>
         /// <param name="a">The array.</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <param name="kind">The kind.</param>
         /// <returns>A fresh, C-contiguous int64 array of indices.</returns>
         /// <exception cref="AxisError">The axis is out of bounds (for a 0-d input, outside rank 1).</exception>
-        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>):
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array sorted descending (<c>unsupported sort kind</c>):
         ///     NumPy's argsort resolves its loop BEFORE it checks the axis.</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements holding an NA whose NA object is
         ///     neither NaN-like nor a string (<c>Cannot compare null that is not a nan-like value</c>).</exception>
         [NDScoped]
         public static NDArray ArgSort(NDArray a, int? axis, NPY_SORTKIND kind)
         {
-            // PyArray_ArgSort resolves the dtype's argsort loop (StringDType refuses the heapsort kind) before
-            // PyArray_CheckAxis.
-            if (kind == NPY_SORTKIND.NPY_HEAPSORT && Strings.NDStringUfuncs.IsVString(a))
+            // PyArray_ArgSort clears the heapsort bit, then resolves the dtype's argsort loop (StringDType refuses the
+            // descending flag) before PyArray_CheckAxis.
+            kind = SortKindArguments.ClearHeapsort(kind);
+            bool stable = SortKindArguments.IsStable(kind), descending = SortKindArguments.IsDescending(kind);
+            if (descending && Strings.NDStringUfuncs.IsVString(a))
                 throw UnsupportedSortKind();
             // PyArray_CheckAxis ravels a 0-d input before the axis is checked (the reshape is a view; the scope reclaims it).
             if (a.ndim == 0)
                 a = a.reshape(1);
             if (Strings.NDStringUfuncs.IsVString(a))
-                return ArgSortVString(a, axis, kind == NPY_SORTKIND.NPY_STABLESORT);
+                return ArgSortVString(a, axis, stable);
+            if (descending)
+                return ArgSortDescending(a, axis, stable);
             if (Strings.NDStringUfuncs.IsString(a))
-                return ArgSortText(a, axis, kind == NPY_SORTKIND.NPY_STABLESORT);
+                return ArgSortText(a, axis, stable);
             if (axis == null)
             {
                 var flat = a.Shape.IsContiguous ? a.reshape(a.size) : a.ravel().copy('C');
@@ -344,8 +377,9 @@ namespace NumSharp.Backends.Sorting
         }
 
         /// <summary>
-        ///     NumPy's refusal of the heapsort kind by a <c>StringDType</c> sort or argsort (<c>stringdtype_get_sort_loop</c>
-        ///     accepts only the default and the stable kinds).
+        ///     NumPy's refusal of the descending flag by a <c>StringDType</c> sort or argsort (<c>stringdtype_get_sort_loop</c>
+        ///     accepts only the default and the stable kinds; NumPy 2.4 refused the heapsort kind here, which NumPy 2.5's
+        ///     <c>PyArray_Sort</c> clears first).
         /// </summary>
         /// <returns>The exception (not thrown).</returns>
         private static RuntimeError UnsupportedSortKind() => new RuntimeError("unsupported sort kind");
@@ -399,13 +433,20 @@ namespace NumSharp.Backends.Sorting
         /// </summary>
         /// <param name="target">The array (writeable, already checked).</param>
         /// <param name="axis">The normalised axis.</param>
-        /// <param name="kind">The kind: only the stable kind changes the answer, keeping every float NaN's bits in the
-        ///     sorted line's NaN tail (NumPy's stable kinds do not canonicalize; its default kind does).</param>
+        /// <param name="kind">The kind (heapsort bit already cleared): the stable kind keeps the float NaN tail in input order,
+        ///     the default kind in the order NumPy's x86-simd-sort leaves it (every NaN's bits kept either way), and the
+        ///     descending flag takes <see cref="SortInPlaceDescending"/>.</param>
         /// <exception cref="NotSupportedException">A Half / Complex / Decimal line longer than <see cref="int.MaxValue"/>.</exception>
         private static void SortInPlace(NDArray target, int axis, NPY_SORTKIND kind)
         {
             long N = target.Shape.dimensions[axis];
             if (N <= 1 || target.size == 0) return;
+            if (SortKindArguments.IsDescending(kind))
+            {
+                // NumPy 2.5's reverse sorts: the scalar introsort (default kind) or timsort (stable kind), never SIMD.
+                SortInPlaceDescending(target, axis, SortKindArguments.IsStable(kind));
+                return;
+            }
 
             var tc = target.GetTypeCode;
             int elsize = tc.SizeOf();
@@ -416,7 +457,7 @@ namespace NumSharp.Backends.Sorting
             // is long* because one byte-bucket can hold up to N counts. The scalar BCL path
             // (Half/Complex/Decimal) sorts through managed Span/Array and so cannot exceed int range.
             int w = KeyWidth(tc);
-            var ctx = new LineCtx { n = N, inStride = axisStride, outStride = axisStride, keepNaNBits = kind == NPY_SORTKIND.NPY_STABLESORT };
+            var ctx = new LineCtx { n = N, inStride = axisStride, outStride = axisStride, keepNaNBits = SortKindArguments.IsStable(kind) };
 
             if (w == 0)
             {
@@ -617,8 +658,9 @@ namespace NumSharp.Backends.Sorting
             public long* idx; public long* it; public long* count;
             public long inStride; public long outStride; public long n;
 
-            /// <summary>The float value sorts' NaN tail: true keeps every NaN's bits in input order (NumPy's stable kinds),
-            ///     false writes NumPy's canonical quiet NaN (its default kind).</summary>
+            /// <summary>The float value sorts' NaN tail order: true keeps the NaNs in input order (NumPy's stable kinds),
+            ///     false in the order NumPy 2.5's x86-simd-sort moves them to the end (its default kind,
+            ///     <see cref="SimdNaNTail32"/>). Every NaN keeps its bits either way.</summary>
             public bool keepNaNBits;
         }
 
@@ -663,20 +705,67 @@ namespace NumSharp.Backends.Sorting
         // ----- float radix with NaN-last partition -----
 
         /// <summary>
-        ///     The NaN NumPy's float32 sort writes: the positive quiet NaN <c>0x7FC00000</c>. NumPy's default sort
-        ///     (x86-simd-sort for 'quicksort' / 'heapsort') replaces every NaN of a line longer than one element —
-        ///     negative, signalling or payload-bearing — with <c>std::numeric_limits&lt;float&gt;::quiet_NaN()</c> after
-        ///     sorting. .NET's <see cref="float.NaN"/> is the NEGATIVE <c>0xFFC00000</c>, so writing it gave every sorted
-        ///     NaN the opposite sign of NumPy's (np.sort, ndarray.sort, and everything that sorts first — polyfromroots'
-        ///     <c>roots.sort()</c> then carried the wrong sign through <c>-r</c> into every coefficient).
+        ///     The NaN tail NumPy's default float32 sort leaves (x86-simd-sort's <c>move_nans_to_end_of_array</c>, which
+        ///     NumPy 2.5.2+ vendors at <c>fa944ef</c>), each NaN's bits kept: <c>ii</c> scans up from the start, a NaN found
+        ///     there is swapped with position <c>jj</c> (which then counts down from the end) and the element that came from
+        ///     <c>jj</c> is examined next. The SIMD sort then orders only the elements before the tail, so the tail's order is
+        ///     this pass's. NumPy 2.4's x86-simd-sort rewrote every NaN as the positive quiet NaN instead.
         /// </summary>
-        private static readonly float NumPySortNaN32 = BitConverter.UInt32BitsToSingle(0x7FC00000U);
+        /// <param name="line">The line's first element (unmodified: the pass reads the original elements).</param>
+        /// <param name="s">The byte stride between elements.</param>
+        /// <param name="n">The line length (at least 2: NumPy sorts nothing shorter).</param>
+        /// <param name="q">The number of NaNs in the line.</param>
+        /// <param name="tail">Receives the q NaNs' bits in their final order (tail[0] lands first).</param>
+        /// <remarks>Run over original indices, without moving anything: the element at <c>jj</c> is still the original one
+        ///     when the swap reads it (positions between <c>ii</c> and <c>jj</c> are never written), so tracking the index at
+        ///     <c>ii</c> reproduces the pass. The k-th NaN swapped lands k slots from the end (tail slot <c>q - 1 - k</c>); a
+        ///     NaN left where the scans meet is the tail's first element.</remarks>
+        private static void SimdNaNTail32(byte* line, long s, long n, long q, uint* tail)
+        {
+            long ii = 0, jj = n - 1, cur = 0, swapped = 0;
+            while (ii < jj)
+            {
+                uint bits = *(uint*)(line + cur * s);
+                if (float.IsNaN(BitConverter.UInt32BitsToSingle(bits)))
+                {
+                    tail[q - 1 - swapped++] = bits;
+                    cur = jj--;
+                }
+                else
+                    cur = ++ii;
+            }
+            uint last = *(uint*)(line + cur * s);
+            if (float.IsNaN(BitConverter.UInt32BitsToSingle(last)))
+                tail[0] = last;
+        }
 
         /// <summary>
-        ///     The NaN NumPy's float64 sort writes: the positive quiet NaN <c>0x7FF8000000000000</c> (see
-        ///     <see cref="NumPySortNaN32"/>; .NET's <see cref="double.NaN"/> is the negative <c>0xFFF8…</c>).
+        ///     <see cref="SimdNaNTail32"/> for a float64 line: the NaN tail NumPy's default float64 sort leaves, in
+        ///     x86-simd-sort's <c>move_nans_to_end_of_array</c> order, each NaN's bits kept.
         /// </summary>
-        private static readonly double NumPySortNaN64 = BitConverter.UInt64BitsToDouble(0x7FF8000000000000UL);
+        /// <param name="line">The line's first element (unmodified).</param>
+        /// <param name="s">The byte stride between elements.</param>
+        /// <param name="n">The line length (at least 2).</param>
+        /// <param name="q">The number of NaNs in the line.</param>
+        /// <param name="tail">Receives the q NaNs' bits in their final order.</param>
+        private static void SimdNaNTail64(byte* line, long s, long n, long q, ulong* tail)
+        {
+            long ii = 0, jj = n - 1, cur = 0, swapped = 0;
+            while (ii < jj)
+            {
+                ulong bits = *(ulong*)(line + cur * s);
+                if (double.IsNaN(BitConverter.UInt64BitsToDouble(bits)))
+                {
+                    tail[q - 1 - swapped++] = bits;
+                    cur = jj--;
+                }
+                else
+                    cur = ++ii;
+            }
+            ulong last = *(ulong*)(line + cur * s);
+            if (double.IsNaN(BitConverter.UInt64BitsToDouble(last)))
+                tail[0] = last;
+        }
 
         /// <summary>
         ///     Sorts one float32 line in place: the non-NaN values by radix, then the NaN tail. A line holding a <c>-0.0</c>
@@ -686,12 +775,12 @@ namespace NumSharp.Backends.Sorting
         /// <param name="line">The line's first element (byte address).</param>
         /// <param name="c">The line context: length, stride and the radix scratch buffers.</param>
         /// <remarks>
-        ///     The default kind's tail is NumPy's canonical NaN (<see cref="NumPySortNaN32"/>), not the input NaNs: NumPy's
-        ///     default kind rewrites them all. The stable kind (<see cref="LineCtx.keepNaNBits"/>) keeps each NaN's bits
-        ///     in input order, as NumPy's stable sort (timsort with <c>npy::float_tag::less</c>, where two NaNs compare
-        ///     equal) does. The NaN bits wait in the key buffer's unused top slots while the radix sorts the bottom ones:
-        ///     the m keys fill slots [0, m) upward and the n - m NaNs fill [m, n) downward, so the two never meet. A
-        ///     one-element line never reaches here (the driver leaves it untouched, as NumPy does).
+        ///     The default kind's tail is the input NaNs in the order NumPy 2.5's x86-simd-sort leaves them
+        ///     (<see cref="SimdNaNTail32"/>); the stable kind (<see cref="LineCtx.keepNaNBits"/>) keeps them in input order,
+        ///     as NumPy's stable sort (timsort with <c>npy::float_tag::less</c>, where two NaNs compare equal) does. Every
+        ///     NaN keeps its bits. The NaN bits wait in the key buffer's unused top slots while the radix sorts the bottom
+        ///     ones: the m keys fill slots [0, m) and the n - m NaNs [m, n), so the two never meet. A one-element line never
+        ///     reaches here (the driver leaves it untouched, as NumPy does).
         /// </remarks>
         private static void SortLineF32(byte* line, LineCtx* c)
         {
@@ -716,6 +805,9 @@ namespace NumSharp.Backends.Sorting
                 SortLineF32SignedZeros(line, c);
                 return;
             }
+            // The default kind's NaN order, read from the untouched line before the write-back; slots [m, n) are free.
+            if (!keep && m < n)
+                SimdNaNTail32(line, s, n, n - m, c->k32 + m);
             // The radix reads and writes slots [0, m) of k32 and t32 only, so the NaN bits above stay put.
             uint* r = RadixSort.SortU32(c->k32, c->t32, m, 4, c->count);
             for (long i = 0; i < m; i++) *(float*)(line + i * s) = FVal32(r[i]);
@@ -724,8 +816,7 @@ namespace NumSharp.Backends.Sorting
                 for (long i = 0; i < n - m; i++) *(uint*)(line + (m + i) * s) = c->k32[n - 1 - i];
                 return;
             }
-            float nan = NumPySortNaN32;
-            for (long i = m; i < n; i++) *(float*)(line + i * s) = nan;
+            for (long i = m; i < n; i++) *(uint*)(line + i * s) = c->k32[i];
         }
 
         /// <summary>
@@ -734,8 +825,8 @@ namespace NumSharp.Backends.Sorting
         /// </summary>
         /// <param name="line">The line's first element (byte address).</param>
         /// <param name="c">The line context: length, stride and the radix scratch buffers.</param>
-        /// <remarks>The default kind's tail is NumPy's canonical NaN (<see cref="NumPySortNaN64"/>), the stable kind's the
-        ///     input NaNs in input order; see <see cref="SortLineF32"/>.</remarks>
+        /// <remarks>The default kind's tail is the input NaNs in x86-simd-sort's order (<see cref="SimdNaNTail64"/>), the
+        ///     stable kind's in input order; see <see cref="SortLineF32"/>.</remarks>
         private static void SortLineF64(byte* line, LineCtx* c)
         {
             long n = c->n; long s = c->inStride; long m = 0, q = 0;
@@ -759,6 +850,9 @@ namespace NumSharp.Backends.Sorting
                 SortLineF64SignedZeros(line, c);
                 return;
             }
+            // The default kind's NaN order, read from the untouched line before the write-back; slots [m, n) are free.
+            if (!keep && m < n)
+                SimdNaNTail64(line, s, n, n - m, c->k64 + m);
             ulong* r = RadixSort.SortU64(c->k64, c->t64, m, c->count);
             for (long i = 0; i < m; i++) *(double*)(line + i * s) = FVal64(r[i]);
             if (keep)
@@ -766,8 +860,7 @@ namespace NumSharp.Backends.Sorting
                 for (long i = 0; i < n - m; i++) *(ulong*)(line + (m + i) * s) = c->k64[n - 1 - i];
                 return;
             }
-            double nan = NumPySortNaN64;
-            for (long i = m; i < n; i++) *(double*)(line + i * s) = nan;
+            for (long i = m; i < n; i++) *(ulong*)(line + i * s) = c->k64[i];
         }
 
         /// <summary>
@@ -784,7 +877,8 @@ namespace NumSharp.Backends.Sorting
         ///     bits, so the zero run is the only place the order of equal values shows. The zeros therefore stay out of the
         ///     radix; their bits wait in the key buffer's top slots in input order, beside the NaN bits of the stable kind
         ///     (the m nonzero keys fill slots [0, m) upward, the zeros and kept NaNs fill [n - top, n) downward, and the
-        ///     radix touches only [0, m)). The write-back is the negatives, the zeros, the positives, then the NaN tail.
+        ///     radix touches only [0, m)). The default kind's NaNs go between them, in x86-simd-sort's order
+        ///     (<see cref="SimdNaNTail32"/>). The write-back is the negatives, the zeros, the positives, then the NaN tail.
         /// </remarks>
         private static void SortLineF32SignedZeros(byte* line, LineCtx* c)
         {
@@ -798,6 +892,10 @@ namespace NumSharp.Backends.Sorting
                 else if ((bits & 0x7FFFFFFFu) == 0) c->k32[n - 1 - top++] = bits;   // ±0, in input order
                 else c->k32[m++] = FKey32(v);
             }
+            // The default kind's NaNs: slots [m, n - top) are theirs, filled in x86-simd-sort's order from the untouched line.
+            long nans = n - m - top;
+            if (!keep && nans > 0)
+                SimdNaNTail32(line, s, n, nans, c->k32 + m);
             uint* r = RadixSort.SortU32(c->k32, c->t32, m, 4, c->count);
             // The nonzero keys of negative values are below +0.0's key 0x80000000 (zeros are absent), positives above it.
             long neg = 0;
@@ -820,8 +918,7 @@ namespace NumSharp.Backends.Sorting
                 }
                 return;
             }
-            float nan = NumPySortNaN32;
-            for (; o < n; o++) *(float*)(line + o * s) = nan;
+            for (long i = 0; i < nans; i++) *(uint*)(line + (o++) * s) = c->k32[m + i];
         }
 
         /// <summary>
@@ -831,7 +928,8 @@ namespace NumSharp.Backends.Sorting
         /// <param name="line">The line's first element (byte address); not yet written.</param>
         /// <param name="c">The line context: length, stride, the radix scratch and the NaN-tail rule.</param>
         /// <remarks>The zeros and the stable kind's NaN bits wait in the key buffer's top slots in input order while the
-        ///     radix sorts the nonzero keys in slots [0, m); see <see cref="SortLineF32SignedZeros"/>.</remarks>
+        ///     radix sorts the nonzero keys in slots [0, m), the default kind's NaNs between them in x86-simd-sort's order;
+        ///     see <see cref="SortLineF32SignedZeros"/>.</remarks>
         private static void SortLineF64SignedZeros(byte* line, LineCtx* c)
         {
             long n = c->n; long s = c->inStride; long m = 0, top = 0;
@@ -844,6 +942,10 @@ namespace NumSharp.Backends.Sorting
                 else if ((bits & 0x7FFFFFFFFFFFFFFFUL) == 0) c->k64[n - 1 - top++] = bits;   // ±0, in input order
                 else c->k64[m++] = FKey64(v);
             }
+            // The default kind's NaNs: slots [m, n - top) are theirs, filled in x86-simd-sort's order from the untouched line.
+            long nans = n - m - top;
+            if (!keep && nans > 0)
+                SimdNaNTail64(line, s, n, nans, c->k64 + m);
             ulong* r = RadixSort.SortU64(c->k64, c->t64, m, c->count);
             // The nonzero keys of negative values are below +0.0's key 0x8000000000000000 (zeros are absent).
             long neg = 0;
@@ -866,8 +968,7 @@ namespace NumSharp.Backends.Sorting
                 }
                 return;
             }
-            double nan = NumPySortNaN64;
-            for (; o < n; o++) *(double*)(line + o * s) = nan;
+            for (long i = 0; i < nans; i++) *(ulong*)(line + (o++) * s) = c->k64[m + i];
         }
 
         /// <summary>

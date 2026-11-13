@@ -7,7 +7,7 @@ oracle contract onto its API row. On 2026-10-08 it listed 40 headline APIs (and 
 NumSharp exposes but no contract proves: the np.linalg Array-API forms, the histogram family, array_equiv, the memory
 predicates, broadcast_shapes, apply_along_axis / apply_over_axes, bmat, the text formatters, the ndarray attributes and
 methods tolist / tofile / setfield / base / dtype / shape / device / to_device / data, the print and buffer options,
-frompyfunc, the cumulative_* aliases and numpy.shape, and the members of finfo, iinfo, dtype, ndarray.flags, poly1d,
+frompyfunc, numpy.cumulative_sum / cumulative_prod and numpy.shape, and the members of finfo, iinfo, dtype, ndarray.flags, poly1d,
 np.broadcast, flatiter and np.nditer. Most were classified "sibling-owned" because the operand corpus had no form for
 them (a tuple, a text, a shape list, a function argument, two views of one buffer, an object stepped k times); the
 harness has had tuple, text, scalar and dtype results for a while, and this generator supplies the rest through params:
@@ -30,7 +30,7 @@ Output (../NumSharp.Tests.Oracle/Fuzz/corpus/):
   gaps/surface_gaps.jsonl       the cases a carve rule (_gap_of) names: NumSharp is known to differ there; replayed by
                                 an [OpenBugs] test that names each gap
 
-Run (needs numpy==2.4.2; deterministic: a rerun is byte-identical):
+Run (needs the pinned NumPy (numpy-version.txt, 2.5.4); deterministic: a rerun is byte-identical):
     python test/oracle/gen_surface_oracle.py [--uncarved DIR]
 """
 import argparse
@@ -45,11 +45,12 @@ import tempfile
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_surface_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -1410,8 +1411,10 @@ def gen_objects():
 
 
 def gen_aliases():
-    """The rows the inventory credits through an alias or a property: numpy.cumulative_sum / cumulative_prod (aliased
-    to np.cumsum / np.cumprod) and numpy.shape (NDArray.shape) — the shared subset and the parameters the alias lacks."""
+    """numpy.cumulative_sum / cumulative_prod and numpy.shape (the family keeps its first name: the inventory once
+    credited them through np.cumsum / np.cumprod and NDArray.shape; NumSharp has the three functions since 2026-11-11):
+    every dtype and operand kind, the axis forms, include_initial on a 1-D input, dtype= and the refusals. The 2-D
+    include_initial rows are gen_cumulative_initial's (emitted last, so the earlier case ids keep their numbers)."""
     for op, fn in [("cumulative_sum", np.cumulative_sum), ("cumulative_prod", np.cumulative_prod)]:
         for dt in ALL13:
             x1 = values((5,), dt, 1, lo=-2, hi=3)
@@ -1440,6 +1443,31 @@ def gen_aliases():
                 ("zerod", operand(np.asarray(x.flat[1]), "c")[1])]:
             emit("aliases", "shape", f"{dt}:{kind}", [d], {}, "array",
                  lambda o: np.array(np.shape(o[0]), dtype=np.int64))
+
+
+def gen_cumulative_initial():
+    """numpy.cumulative_sum / cumulative_prod with include_initial along every axis of a 2-D operand, in every dtype and
+    2-D kind: the identity block NumPy concatenates in front (full_like + concat), the route gen_aliases' 1-D
+    include_initial row does not reach. Its own section, emitted after every other, so adding it renumbered no
+    existing case (API-parity batch 1, 2026-11-11)."""
+    for op, fn in [("cumulative_sum", np.cumulative_sum), ("cumulative_prod", np.cumulative_prod)]:
+        for dt in ALL13:
+            x2 = values((2, 3), dt, 2, lo=-2, hi=3)
+            for kind, d in kinds_of(x2, ["c", "f", "reversed", "strided", "bcast"]):
+                for axis in [0, 1, -1]:
+                    emit("aliases", op, f"{dt}:2d:{kind}:ax{axis}:initial", [d], {"axis": axis, "include_initial": True},
+                         "array", lambda o, fn=fn, axis=axis: fn(o[0], axis=axis, include_initial=True))
+
+
+def gen_ndim():
+    """numpy.ndim(a) over every dtype and the operand kinds of the shape rows (a 0-d operand included): the rank as an
+    int64 0-d result. Emitted after every other section, so adding it renumbered no existing case (API-parity batch 1,
+    2026-11-11, when NumSharp gained np.ndim)."""
+    for dt in ALL13:
+        x = values((2, 3), dt, 4)
+        for kind, d in kinds_of(x, ["c", "f", "strided", "bcast", "empty", "empty_view"]) + [
+                ("zerod", operand(np.asarray(x.flat[1]), "c")[1])]:
+            emit("aliases", "ndim", f"{dt}:{kind}", [d], {}, "array", lambda o: np.array(np.ndim(o[0]), dtype=np.int64))
 
 
 def _frompy(f, nin, nout, o):
@@ -1533,18 +1561,20 @@ def _with_bufsize(n, fn):
 # SU35 (the dtype name 'cdouble') matches NumPy since branch strings merged journey4 (f87de210, 2026-10-31): journey4's
 # np.dtype reads a name by the whole string, as NumPy's typeDict (0a96ddba), so 'cdouble' is complex128. Its rule is
 # dropped: the 'cdouble' cell of finfo.minexp falls to SU12 (complex128's minexp), the other twelve attributes are kept.
+# SU36 (include_initial) and SU37 (an N-D input without axis) match NumPy since NumSharp has np.cumulative_sum /
+# np.cumulative_prod themselves (API-parity batch 1, 2026-11-11: NumPy's _cumulative_func, no longer the np.cumsum /
+# np.cumprod alias). Their rules are dropped; the rows replay the real functions.
+# SU11 (finfo's refusal of a dtype that is not inexact), SU12 (minexp one too high), SU14 (float32 tiny /
+# smallest_normal not exactly 2**-126) and SU16 (iinfo's float text naming the dtype) match NumPy since API-parity
+# batch 7 (2026-11-12: finfo / iinfo raise NumPy's ValueError texts, minexp is NumPy's, float32's smallest normal is
+# exact) and the NumPy 2.5.4 bump (finfo's text is NumPy 2.5's "data type dtype('int32') not compatible with
+# finfo"). Their rules are dropped.
 GAPS = {
     "SU10": "ndarray.setfield with a Python int outside the field dtype's range wraps it (-1 into a uint8 field is "
             "255); NumPy raises OverflowError 'Python integer -1 out of bounds for uint8'",
-    "SU11": "np.finfo of a non-inexact dtype raises 'data type 'int32' not inexact'; NumPy's text names the scalar "
-            "class: \"data type <class 'numpy.int32'> not inexact\"",
-    "SU12": "np.finfo(float32 / float64 / complex128).minexp is one too high (-125 / -1021); NumPy's is -126 / -1022",
     "SU13": "np.finfo(float16 / float32).resolution is the decimal 10**-precision as a double; NumPy's is that value "
             "rounded to the dtype (np.float32(1e-06) == 9.99999997e-07)",
-    "SU14": "np.finfo(float32).tiny / smallest_normal is the double 1.17549435e-38, not exactly 2**-126",
     "SU15": "np.iinfo(bool) returns an iinfo; NumPy raises ValueError \"Invalid integer data type 'b'.\"",
-    "SU16": "np.iinfo of a float / complex dtype raises \"Invalid integer data type 'float64'\"; NumPy's text names the "
-            "kind character and ends with a period: \"Invalid integer data type 'f'.\"",
     "SU20": "np.broadcast(...).iters are independent iterators that start at element 0; NumPy's share the broadcast's "
             "cursor, so after k steps of the broadcast they yield the remaining size - k elements",
     "SU21": "np.get_printoptions() lacks NumPy's 'formatter' and 'override_repr' keys (both None by default): reading "
@@ -1555,11 +1585,6 @@ GAPS = {
             "NumPy's _leading_trailing(a, 0) takes a[-0:] (the whole array), so 1e-9 and 1e5 make it scientific",
     "SU24": "dtype.type of a datetime64 / timedelta64 descriptor is null (no CLR element type before Stage C); NumPy's "
             "is numpy.datetime64 / numpy.timedelta64",
-    "SU36":"numpy.cumulative_sum / cumulative_prod are aliased to np.cumsum / np.cumprod, which have no "
-            "include_initial (NumPy prepends the identity: cumulative_sum([1, 2], include_initial=True) is [0, 1, 3])",
-    "SU37": "np.cumsum / np.cumprod (the cumulative_* aliases) flatten an N-D input without axis; numpy.cumulative_sum / "
-            "cumulative_prod raise ValueError 'For arrays which have more than one dimension ``axis`` argument is "
-            "required.'",
 }
 
 def _edge0_model(a, opts):
@@ -1593,16 +1618,10 @@ def _gap_of(case):
     if op == "ndarray.setfield" and err and err["type"] == "OverflowError":
         return "SU10"
     if op.startswith("finfo."):
-        if err:
-            return "SU11"
-        if op == "finfo.minexp" and dt in ("float32", "float64", "complex128"):
-            return "SU12"
         if op == "finfo.resolution" and dt in ("float16", "float32"):
             return "SU13"
-        if op in ("finfo.tiny", "finfo.smallest_normal") and dt == "float32":
-            return "SU14"
-    if op.startswith("iinfo.") and err:
-        return "SU15" if dt == "bool" else "SU16"
+    if op.startswith("iinfo.") and err and dt == "bool":
+        return "SU15"
     if op == "broadcast.iters" and p.get("steps", 0) > 0:
         return "SU20"
     if op == "get_printoptions" and p["key"] in (None, "formatter", "override_repr"):
@@ -1617,11 +1636,6 @@ def _gap_of(case):
                 return "SU23"
     if op == "dtype.type" and p["dtype"][0] in "Mm":
         return "SU24"
-    if op in ("cumulative_sum", "cumulative_prod"):
-        if p.get("include_initial"):
-            return "SU36"
-        if err and err["text"].startswith("For arrays which have more than one dimension"):
-            return "SU37"
     return None
 
 
@@ -2236,8 +2250,148 @@ def _gen_dragon4_powers_of_two(fns):
                     emit_power(width, mbits, fe, op, fn, min_digits, "sample")
 
 
+# =============================================================================================================
+# API-parity batch 7: np.fromiter, np.fromfunction, np.lib.stride_tricks.sliding_window_view
+# =============================================================================================================
+
+# fromiter's item menu: each entry is a JSON list the C# side decodes with the same rules (OpRegistry.Surface.FromIterItem):
+# an integral number is a Python int (C# long), any other number a float (double), a string a str, null None, a bool a
+# bool, a list a Python list (C# object[]), and the objects {"tuple": [...]} (a 2-tuple), {"float": "nan" / "inf" /
+# "-inf"}, {"complex": [re, im]} and {"array": value, "dtype": name} (an ndarray item, 0-d for a scalar value).
+FROMITER_ITEMS = {
+    "ints5": [0, 1, 2, 3, 4],
+    "floats": [1.7, -2.7, 2.2],
+    "strs_num": ["1.5", "2"],
+    "strs_text": ["ab", "cdef"],
+    "none": [None],
+    "big": [300],
+    "bools": [True, False],
+    "complex": [{"complex": [1, 2]}],
+    "nan": [{"float": "nan"}],
+    "list_item": [[1, 2]],
+    "empty_list_item": [[]],
+    "tuple_item": [{"tuple": [1, 2]}],
+    "arr0d": [{"array": 5, "dtype": "int64"}],
+    "arr1": [{"array": [5], "dtype": "int64"}],
+    "arr2": [{"array": [5, 6], "dtype": "int64"}],
+    "bad_then_seq": [300, [2]],
+    "seq_then_bad": [1, [2], 300],
+    "empty": [],
+}
+FROMITER_DTYPES = ["float64", "float32", "float16", "int8", "uint8", "int64", "uint64", "bool", "complex128", "U3", "S2"]
+
+
+def _fromiter_item(spec):
+    """The Python value a fromiter item spec names (the twin of the C# decoder)."""
+    if isinstance(spec, list):
+        return [_fromiter_item(x) for x in spec]
+    if isinstance(spec, dict):
+        if "tuple" in spec:
+            return tuple(_fromiter_item(x) for x in spec["tuple"])
+        if "float" in spec:
+            return float(spec["float"])
+        if "complex" in spec:
+            return complex(spec["complex"][0], spec["complex"][1])
+        if "array" in spec:
+            return np.array(spec["array"], dtype=spec["dtype"])
+        raise ValueError(spec)
+    return spec
+
+
+def _fromiter_kind(dt):
+    """The expected kind of a fromiter case: "text" for a U / S dtype (the result's repr, values and dtype in one string:
+    the array record and its comparer read numeric dtypes only), "array" otherwise (None is float64)."""
+    return "text" if dt is not None and np.dtype(dt).kind in "SU" else "array"
+
+
+def _fromiter_result(r, kind):
+    """NumPy's fromiter result as its case records it: the repr for the text kind, the array itself otherwise."""
+    return repr(r) if kind == "text" else r
+
+
+# fromfunction's menu: name -> (the rank it takes, None for any; NumPy's callable). The names and computations of
+# gen_ma_surface_oracle.FROMFUNCTION_FUNCS, so both replays share one C# twin (OpRegistry.MaSurface's FromFunctionFunc,
+# ix[0] + ix[1] for lambda i, j: i + j). No int literals: a C# literal and a Python literal promote differently against
+# a narrow grid, which would gate the operators, not fromfunction.
+FROMFUNCTION_FUNCS = {
+    "first": (None, lambda i, *rest: i),
+    "add2": (2, lambda i, j: i + j),
+    "mul2": (2, lambda i, j: i * j),
+    "sub2": (2, lambda i, j: i - j),
+    "gt2": (2, lambda i, j: i > j),
+    "sq2": (2, lambda i, j: i * i + j),
+    "add3": (3, lambda i, j, k: i + j + k),
+}
+FROMFUNCTION_SHAPES = [[2, 3], [3], [0, 3], [2, 2, 2], [1, 1], [3, 1]]
+FROMFUNCTION_DTYPES = [None, "int64", "int32", "float32", "bool", "uint8", "float16", "complex128"]
+
+
+def gen_batch7():
+    """np.fromiter over the item menu x dtypes (each item converted by NumPy's setitem, every sequence item answered by
+    its dtype), its counts and refusals; np.fromfunction over its function menu x shapes x dtypes; and
+    np.lib.stride_tricks.sliding_window_view over every operand kind, its axes and its refusals."""
+    from numpy.lib.stride_tricks import sliding_window_view
+
+    # ---- np.fromiter --------------------------------------------------------------------------------------------
+    # A text dtype's result is recorded as its repr (_fromiter_kind); every other result as an array.
+    for name, spec in FROMITER_ITEMS.items():
+        for dt in FROMITER_DTYPES:
+            kind = _fromiter_kind(dt)
+            emit("batch7", "fromiter", f"{dt}:{name}", [], {"items": spec, "dtype": dt, "count": -1}, kind,
+                 lambda o, spec=spec, dt=dt, kind=kind: _fromiter_result(np.fromiter(_fromiter_item(spec), dt), kind))
+    for count in [3, 5, 7, 0, -2]:
+        for dt in ["float64", "int32"]:
+            emit("batch7", "fromiter", f"{dt}:count{count}", [], {"items": FROMITER_ITEMS["ints5"], "dtype": dt,
+                                                                   "count": count}, "array",
+                 lambda o, dt=dt, count=count: np.fromiter(_fromiter_item(FROMITER_ITEMS["ints5"]), dt, count=count))
+    # dtype=None is float64 (never inferred); an unsized text dtype refuses; a Python str iterates its characters.
+    emit("batch7", "fromiter", "none_dtype", [], {"items": [1, 2], "dtype": None, "count": -1}, "array",
+         lambda o: np.fromiter([1, 2], None))
+    emit("batch7", "fromiter", "unsized_U", [], {"items": ["ab"], "dtype": "U", "count": -1}, "text",
+         lambda o: repr(np.fromiter(["ab"], "U")))
+    for dt in ["int32", "float64", "U1"]:
+        for text in ["12", "ab"]:
+            kind = _fromiter_kind(dt)
+            emit("batch7", "fromiter", f"{dt}:str_{text}", [], {"text": text, "dtype": dt, "count": -1}, kind,
+                 lambda o, dt=dt, text=text, kind=kind: _fromiter_result(np.fromiter(text, dt), kind))
+
+    # ---- np.fromfunction ----------------------------------------------------------------------------------------
+    for fname, (rank, f) in FROMFUNCTION_FUNCS.items():
+        for shape in FROMFUNCTION_SHAPES:
+            if rank is not None and len(shape) != rank:
+                continue
+            for dt in FROMFUNCTION_DTYPES:
+                # bool - bool is the subtract ufunc's own TypeError (a gate of the operator, not of fromfunction).
+                if fname == "sub2" and dt == "bool":
+                    continue
+                label = "x".join(map(str, shape))
+                p = {"func": fname, "shape": shape, "dtype": dt}
+                emit("batch7", "fromfunction", f"{dt}:{fname}:{label}", [], p, "array",
+                     lambda o, f=f, shape=shape, dt=dt: np.fromfunction(f, tuple(shape),
+                                                                        dtype=float if dt is None else dt))
+    emit("batch7", "fromfunction", "negative", [], {"func": "first", "shape": [-1], "dtype": None}, "array",
+         lambda o: np.fromfunction(lambda *ix: ix[0], (-1,)))
+
+    # ---- np.lib.stride_tricks.sliding_window_view ---------------------------------------------------------------
+    for dt in ["int64", "float64", "float32", "bool", "uint8", "complex128", "float16"]:
+        x1 = values((6,), dt, 1)
+        x2 = values((3, 4), dt, 2)
+        for kind, d in kinds_of(x1, ["c", "c_offset", "reversed", "strided", "strided_neg", "readonly",
+                                     "scalar_bcast", "empty"]):
+            for w in [3, 1, 6, 0, 7]:
+                emit("batch7", "sliding_window_view", f"{dt}:1d:{kind}:w{w}", [d], {"window": [w], "axis": None},
+                     "array", lambda o, w=w: sliding_window_view(o[0], w))
+        for kind, d in kinds_of(x2, ["c", "f", "reversed", "strided", "bcast", "permuted"]):
+            for window, axis in [([2, 2], None), ([2], 0), ([2], -1), ([2, 3], [0, 1]), ([2, 2], [1, 1]),
+                                 ([2], None), ([2, 2], 0), ([2], 2), ([-1, 2], None)]:
+                emit("batch7", "sliding_window_view", f"{dt}:2d:{kind}:{window}@{axis}", [d],
+                     {"window": window, "axis": axis}, "array",
+                     lambda o, window=window, axis=axis: sliding_window_view(o[0], tuple(window), axis=axis))
+
+
 SECTIONS = [gen_linalg, gen_histogram, gen_equiv_memory_shapes, gen_apply_bmat, gen_text, gen_ndarray,
-            gen_attributes, gen_objects, gen_aliases, gen_scalar_types, gen_dragon4]
+            gen_attributes, gen_objects, gen_aliases, gen_scalar_types, gen_dragon4, gen_cumulative_initial, gen_ndim,
+            gen_batch7]
 
 
 def write_jsonl(path, cases):

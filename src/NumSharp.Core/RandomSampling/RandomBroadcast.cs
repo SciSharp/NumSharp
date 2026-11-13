@@ -146,7 +146,7 @@ namespace NumSharp
         ///     maximum possible size.</c>) — scanned left to right like NumPy's, so <c>(2^62, -1)</c> reports the size — or,
         ///     after a successful allocation, the shape errors of <see cref="OutputDims"/> (the parameters do not broadcast, or
         ///     the size is not their broadcast shape).</exception>
-        /// <exception cref="OutOfMemoryException">A valid size that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
+        /// <exception cref="MemoryError">A valid size that cannot be allocated (NumPy's <c>MemoryError</c>).</exception>
         /// <remarks>
         ///     <para>
         ///     NumPy's <c>cont_broadcast_N</c> / <c>discrete_broadcast_*</c> (and the Generator's hand-written binomial) run
@@ -771,7 +771,7 @@ namespace NumSharp
             // double.NaN is the negative one, and a NaN parameter's bits propagate into the draws (gamma(NaN) -> NaN
             // carries them), so the constant matters.
             if (x is null)
-                return new RandomParam(NDArray.Scalar(Distributions.NPY_NAN), owned: true, isNone: true, complexScalar: false);
+                return new RandomParam(NDArray.WritableScalar(Distributions.NPY_NAN), owned: true, isNone: true, complexScalar: false);
             RandomConstraints.CheckSafeCast(x, NPTypeCode.Double);
             return Convert(x, NPTypeCode.Double);
         }
@@ -787,7 +787,7 @@ namespace NumSharp
         internal static RandomParam Float64(NDArray x, double defaultValue)
         {
             if (x is null)
-                return new RandomParam(NDArray.Scalar(defaultValue), owned: true, isNone: false, complexScalar: false);
+                return new RandomParam(NDArray.WritableScalar(defaultValue), owned: true, isNone: false, complexScalar: false);
             RandomConstraints.CheckSafeCast(x, NPTypeCode.Double);
             return Convert(x, NPTypeCode.Double);
         }
@@ -825,7 +825,7 @@ namespace NumSharp
         {
             if (x is null)
                 // np.asarray(None, np.float32): the positive quiet NaN 0x7fc00000 (.NET's float.NaN is 0xffc00000).
-                return new RandomParam(NDArray.Scalar(BitConverter.Int32BitsToSingle(0x7FC00000)), owned: true, isNone: true, complexScalar: false);
+                return new RandomParam(NDArray.WritableScalar(BitConverter.Int32BitsToSingle(0x7FC00000)), owned: true, isNone: true, complexScalar: false);
             bool complexScalar = x.ndim == 0 && x.typecode == NPTypeCode.Complex;
             var converted = Convert(x, NPTypeCode.Single);
             return new RandomParam(converted.Array, converted._owned, isNone: false, complexScalar);

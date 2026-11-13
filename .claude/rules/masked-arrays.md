@@ -44,6 +44,93 @@ the text classes included. The masked reductions' statistics (`ma.mean` / `ma.va
   floats `astype(object)` makes of them (`1.732421875`, not `1.732`).
 - The indexer parses a lone slice string once for the data and the mask (`GetView` rewrites its slice ARRAY, so the mask
   indexes a copy of it).
+- NumPy's keywords: `zeros` / `ones` / `empty(shape, dtype, order, device, fill_value, hardmask)` and `identity(n, dtype,
+  fill_value, hardmask)` are `_convert2ma` (the ndarray function, then `result.fill_value = ...` through the converting
+  setter — numpy.ma's TypeErrors — and `_hardmask`; the order check precedes the device check); `zeros_like` /
+  `ones_like` / `empty_like(a, dtype, order, shape, device)` follow `__array_finalize__` for a masked prototype: the mask
+  is copied in the RESULT's layout (C / F / K), reshaped (C order) for a same-size `shape` and dropped for another size,
+  with the fill and hardness carried; `copy(a, order)` and `MaskedArray.copy(order)` copy data and mask in that order.
+  `apply_over_axes(func, a, NDAxis axes)` (+ the kept int / int[] forms, all named `axes`), `angle(a, deg)`, and
+  `argmax` / `argmin(a, axis, fill_value, out, keepdims)` (the methods too: `filled(fill).argmax(axis, out=, keepdims=)`;
+  the common call keeps its 0-d route) are NumPy's signatures.
+- More of NumPy's signatures: `ma.array(data, dtype, copy, order, mask, fill_value, keep_mask, hard_mask, shrink, ndmin)`
+  (the dtype SECOND, the mask fifth; `ndmin must be <= ndmax (64)`) and `masked_array(data, mask, dtype, copy, ndmin,
+  fill_value, keep_mask, hard_mask, shrink, order)` (NumPy's MaskedArray order without subok; the data stays required),
+  and `np.ma.MaskedArray(...)` is the same call under the class's name (NumPy's `ma.MaskedArray is ma.masked_array`);
+  `asarray(a, dtype, order)` is `order or 'C'`; `stack(arrays, axis, dtype, casting)` / `vstack` / `hstack(tup, dtype,
+  casting)` join the masks with the same keywords, then read them back as bool; `reshape(a, Shape new_shape, order)` and
+  `MaskedArray.reshape(shape, order, copy)`; `squeeze(a, NDAxis axis, fill_value, hardmask)` and `expand_dims(a, NDAxis)`;
+  `indices(dimensions, dtype, fill_value, hardmask)`; `make_mask(m, copy, shrink, dtype)` / `mask_or(m1, m2, copy,
+  shrink)` / `make_mask_none(newshape, dtype)` (`copy=False` hands a boolean operand back ITSELF, an unmasked masked
+  array's data as a view; every field-less dtype gives bool; callers that store the result as a mask of their own pass
+  `copy: true`, as NumPy's `_comparison` does); `where(condition)` alone is `nonzero(condition)`;
+  `atleast_1d` / `2d` / `3d(params object[] arys)` return one masked array per operand (a lone `object[]` is the operand
+  list, `[Misaligned]`); `MaskedArray.item(params long[] args)` is `ndarray.item` over the data — a masked element's
+  STORED value; `mask_rows` / `mask_cols(a, int? axis = null)` take NumPy's deprecated axis and ignore it, as NumPy
+  does (without its DeprecationWarning); `average(a, axis, weights, returned, keepdims)` returns
+  `MaskedArrayModule.AverageResult` (the masked average typed `NDMaskedArray`, the sum of weights with `returned`).
+- The reductions `sum` / `prod` / `product` / `mean(a, axis, dtype, out, keepdims)`, `var` / `std(a, axis, dtype, out,
+  ddof, keepdims, mean)`, `min` / `max` / `ptp(a, axis, out, fill_value, keepdims)`, `all` / `any(a, axis, out,
+  keepdims)` and `count(a, axis, keepdims)` take `NDAxis` (a tuple of axes; ufunc's `duplicate value in 'axis'`) beside the
+  kept int / int[] forms. Their `out=` is NumPy's per function: sum / prod write `outmask.flat = newmask` (a mask created if
+  missing); min / max likewise, and a PLAIN out refuses an integer or bool dtype with `MaskError` after the data was
+  written (else NaN at the masked cells); all / any `out.__setmask__(mask)` when out has dimensions or the mask is set;
+  mean `out.flat = result`; var / std the nomask `_var` route with the divide domain (std through `np.power(out, 0.5)`).
+  A plain `NDArray` converts to the out through the implicit operator, which marks it `IsPlainArrayWrapper`: NumPy's
+  `isinstance(out, MaskedArray)` is false for it, so it receives the data only.
+- `out=` of the rest (`cumsum` / `cumprod(a, axis, dtype, out)`, `take(a, indices, axis, out, mode)`, `choose(indices,
+  choices, out, mode)`, `compress(condition, a, axis, out)`, `round(a, decimals, out)`, `around(a, decimals, out)`,
+  `dot(a, b, strict, out)`, `trace(a, offset, axis1, axis2, dtype, NDArray out)`; the methods alike, `dot(b, out,
+  strict)` in NumPy's method order): the scans and take / choose end with `out.__setmask__(...)` (`SetMaskLikeNumPy`: a
+  hard mask only ORs, nomask leaves a mask-less out alone); `take` returns `out[()]` (`masked` / a scalar for 0-d);
+  `compress` writes out's DATA and returns a new masked array over it; `ma.round` stores `out._mask = getmask(a)` (the
+  operand's mask object); `ma.dot` needs a MASKED out (`'numpy.ndarray' object has no attribute '_data'`) and writes the
+  no-valid-pair mask into it in place; `trace` returns out for a masked operand and `out.astype(dtype)` for an unmasked
+  one. A masked out of the round family goes through NumPy's in-place multiply / rint / divide and their
+  `__array_wrap__` (`RoundInto`): an infinite result is written as 1.0 (`10**-decimals` for negative decimals) and masked
+  by the divide domain, decimals 0 leaves an all-False mask array, integer data with decimals >= 0 runs no ufunc, and
+  complex data raises `property 'real' of 'MaskedArray' object has no setter`.
+- `ma.around` is `_MaskedUnaryOperation(np.around)`: the masked slots keep the operand's ORIGINAL data (`ma.round`
+  rounds them). `ma.choose` reads each choice FILLED with its own fill value (visible through a plain out);
+  `MaskedArray.choose` is `ndarray.choose`: the stored index values over the raw choices, a copy of the index's mask.
+- The 48 ufunc wrappers (`add` … `true_divide`; not `angle` / `around`) take np.add's C# keywords `(…, out, where,
+  dtype)`: they reach the ufunc, then the wrapper's own statements run over what it returned — with an out, the out's
+  DATA. The call returns a NEW masked array over that data (`result.view(...)`; the out itself only for a 0-d result),
+  with the wrapper's mask and the operand's fill / hardness. A MASKED out first goes through the ufunc's
+  `__array_wrap__` (`WrapIntoMaskedOut`): its mask is REPLACED (hard or not) — nomask for a binary ufunc, an all-False
+  ARRAY for a unary one (reduce over one input never shrinks) — and a ufunc numpy.ma registered with a domain writes its
+  `ufunc_fills` value where the domain fails (sqrt / tan / arcsin / arccos / arctanh 0.0, the logs / arccosh 1.0, the
+  division family 1) and masks those slots. The division family's add-back is then `MaskedArray.__iadd__` on the out,
+  which adds nothing where its wrap mask is set (a plain out gets the dividend back). NumPy's returned mask of a domained
+  call with a masked out is itself a masked array (`tolist()` shows None); NumSharp returns the plain values
+  (`[Misaligned]`). `where` without an out leaves the unselected slots unspecified, as NumPy (test with an out).
+- `sort(a, axis, kind, order, endwith, fill_value, stable)` / `argsort(a, axis, kind, order, endwith, fill_value,
+  stable)` and the methods are NumPy's order; the no-axis argsort (`axis=<no value>`) keeps `endwith` / `fill_value`
+  first so a positional null still binds the axis form. ma.sort and both methods refuse `stable=True` (`` `stable`
+  parameter is not supported for masked arrays. ``); the MODULE ma.argsort drops it (NumPy passes `stable=None`).
+- `clip(a, a_min, a_max, out, min, max, fill_value, bool? hardmask, dtype)` is `_convert2ma`: np.clip over the masked
+  operand viewed as masked, so the result ORs EVERY operand's mask (a masked bound masks; one input — no bounds, or
+  both dropped by `_clip`'s Python-int rule — keeps `getmaskarray(a)` unshrunk), takes the first masked input's fill /
+  hardness, and a masked out has its mask replaced (a view of it is returned). `hardmask` is `bool?` so an explicit
+  false softens. `MaskedArray.clip(min, max, out, dtype)` is ndarray.clip: it returns the out itself.
+- `median(a, NDAxis axis, out, overwrite_input, keepdims)` (+ int / int[]): `_ureduce` merges several axes into one
+  (`repeated axis`), `overwrite_input` sorts a masked operand IN PLACE (fill inf; a non-contiguous flattened operand
+  sorts a copy), and the out follows `_median`'s writes: an array mask (`outmask.flat`), nomask after an even-count 1-D
+  median (the halving ufunc's wrap), untouched through keepdims' view of a mask-less out; a PLAIN out for an inexact
+  operand on the axis path is NumPy's `return arrays must be of ArrayType` TypeError (`.data` is a memoryview).
+  `amax` / `amin(a, NDAxis axis, out, keepdims, initial, where)` are np.amax / np.amin: a masked operand runs `max` /
+  `min` and refuses initial / where (`MaskedArray.max() got an unexpected keyword argument 'initial'`); `fill_value` is
+  gone. Also NumPy's: `row_stack(object[] tup, dtype, casting)` (= vstack), `ndenumerate(a, compressed)` (`masked` at
+  the masked slots when false), `arange(…, dtype, device, fill_value, hardmask)`, `left_shift` / `right_shift(a, n)`.
+- ndarray's members a masked array inherits in NumPy: `@base` is the stored data object (`ma.array(d).@base` IS `d`
+  without a copy; never null; disposing it releases the masked array's data), `device` is `"cpu"`, `to_device(device,
+  stream)` runs ndarray's checks on the data and returns `this`. `getfield(dtype, offset)` is a masked VIEW of the data's
+  field carrying the same mask memory (a masked write through either reaches the other), the hard-mask flag and a
+  converted COPY of the stored fill (`__array_finalize__`); `setfield(val, dtype, offset)` is ndarray's, on the data
+  alone (masked slots and a hard mask included, the mask unchanged). Not offered: `flags` / `setflags` (the stored data
+  is the caller's object, so a flag would reach the caller's array), `sharedmask` (sharing is not tracked), and NumPy's
+  `get_fill_value` / `set_fill_value` / `get_real` / `get_imag` (C# reserves those names for the property accessors:
+  CS0571).
 - Open: a 0-d result NumPy returns as a plain scalar stays a 0-d masked array. `NDArray.view()` of a DISPOSED array
   returns a live view over the freed buffer (`InitializeArc` ignores `TryAddRef`'s failure).
 - Gate: `Ma/NDMaskedArrayInheritanceTests.cs` (probed member by member against NumPy).
@@ -82,11 +169,13 @@ Stored as NumPy stores it, for every dtype (`Ma/NDMaskedArray.cs`; `_fill_value`
 
 ## The set routines
 
-numpy.ma's arraysetops are NumPy's statements (`Ma/NDMaskedArray.SetOps.cs`): `unique` (with NumPy's `return_index` /
-`return_inverse`, a `MaskedArrayModule.UniqueResult` tuple), `in1d`, `isin`, `intersect1d`, `setxor1d`, `union1d`,
+numpy.ma's arraysetops are NumPy's statements (`Ma/NDMaskedArray.SetOps.cs`): `unique` (one signature with NumPy's
+`return_index` / `return_inverse`, always a `MaskedArrayModule.UniqueResult`: `values` typed `NDMaskedArray`, the masked
+array's members forwarded to it, an implicit conversion to `NDMaskedArray`; an object-typed np.ma function receives the
+struct boxed, so pass `values` or an `NDMaskedArray` variable), `in1d`, `isin`, `intersect1d`, `setxor1d`, `union1d`,
 `setdiff1d` replay `numpy/ma/extras.py` over `_unique1d`, `ma.concatenate` (with `axis=None`), the masked sort / argsort
-(masked slots keyed by NaN for a floating dtype, the dtype maximum otherwise) and the masked `==` / `!=` (two masked slots
-equal, a masked slot unequal to every value, every comparison that reads a masked slot masked).
+(masked slots keyed by NaN for a floating dtype, the dtype maximum otherwise) and the masked `==` / `!=` (two masked
+slots equal, a masked slot unequal to every value, every comparison that reads a masked slot masked).
 - So a flag whose sorted neighbour is masked is masked (`ma.in1d([3, 5], ma.array([3, 9], mask=[0, 1]))` is
   `[True, --]`), NaNs collapse only behind an UNMASKED last NaN, a masked bool slot sorts among the unmasked Trues, a hard
   mask ORs into `ma.unique`'s in-place sort, and setxor1d compares FILLED values (999999 equals a masked int slot).

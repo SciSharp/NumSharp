@@ -3,39 +3,32 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        /// Returns the indices that would sort an array.
-        ///
-        /// Perform an indirect sort along the given axis using the algorithm specified by the kind keyword.It returns an array of indices of the same shape as a that index data along the given axis in sorted order.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="nd"></param>
-        /// <param name="axis"></param>
-        /// <returns></returns>
-        public static NDArray argsort<T>(NDArray nd, int axis = -1) where T : unmanaged
-            => nd.argsort<T>(axis);
-
-        /// <summary>
         ///     Returns the indices that would sort <paramref name="a"/> along <paramref name="axis"/> (default last;
         ///     <c>null</c> flattens). Returns int64 indices. NumPy's
-        ///     <c>np.argsort(a, axis=-1, kind=None, order=None, *, stable=None)</c>.
+        ///     <c>np.argsort(a, axis=-1, kind=None, order=None, *, stable=None, descending=False)</c>.
         /// </summary>
         /// <param name="a">Array to sort.</param>
         /// <param name="axis">Axis to sort along; null sorts the flattened array.</param>
-        /// <param name="kind">The sort algorithm (see <see cref="NDArray.argsort(int?, string, object, bool?)"/>): over text
-        ///     the default and heapsort kinds give NumPy's introsort tie order, the stable kinds the stable one.</param>
+        /// <param name="kind">The sort algorithm (see <see cref="NDArray.argsort(int?, string, object, bool?, bool?)"/>): over
+        ///     text the default and heapsort kinds give NumPy's introsort tie order, the stable kinds the stable one.</param>
         /// <param name="order">Field names; any value is refused (no NumSharp dtype has fields).</param>
         /// <param name="stable">True asks for the stable kind; cannot be combined with <paramref name="kind"/>.</param>
+        /// <param name="descending">NumPy 2.5's <c>descending</c>: true orders the largest value first, NaN still last, ties
+        ///     in input order for the stable kind and in NumPy's introsort order for the default kind; cannot be combined with
+        ///     <paramref name="kind"/>.</param>
         /// <returns>A fresh, C-contiguous int64 array of indices.</returns>
         /// <exception cref="ValueError">An unknown <paramref name="kind"/>, <paramref name="kind"/> given with
-        ///     <paramref name="stable"/>, or an <paramref name="order"/>; or a <c>numpy.matrix</c> operand whose result
-        ///     cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        ///     <paramref name="stable"/> or <paramref name="descending"/>, or an <paramref name="order"/>; or a
+        ///     <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too
+        ///     large to be a matrix.</c>).</exception>
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
-        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>).</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array sorted descending (<c>unsupported sort kind</c>).</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
         ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
         ///     value</c>, raised after the lines before it were sorted).</exception>
-        /// <exception cref="System.OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
-        public static NDArray argsort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
-            => a.argsort(axis, kind, order, stable);
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        public static NDArray argsort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null,
+            bool? descending = null)
+            => a.argsort(axis, kind, order, stable, descending);
     }
 }

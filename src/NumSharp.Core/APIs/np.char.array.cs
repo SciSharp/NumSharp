@@ -58,7 +58,7 @@ namespace NumSharp
         ///     <c>null</c> for new memory. A C# <see cref="string"/> is NumPy's str FILLER: every element is set to it
         ///     (truncated to the width; an <c>S</c> chararray encodes it ASCII), and <paramref name="offset"/> /
         ///     <paramref name="strides"/> are ignored. Any other buffer is viewed without copying, exactly as
-        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/> views it: a <c>byte[]</c> / <c>Memory&lt;byte&gt;</c>
+        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/> views it: a <c>byte[]</c> / <c>Memory&lt;byte&gt;</c>
         ///     writable (NumPy's <c>bytearray</c>), a <c>ReadOnlyMemory&lt;byte&gt;</c> read-only (NumPy's <c>bytes</c>), an
         ///     <see cref="NDArray"/> through its bytes.
         /// </param>
@@ -79,6 +79,33 @@ namespace NumSharp
         public NDCharArray chararray(Shape shape, long itemsize = 1, bool unicode = false, object buffer = null, long offset = 0,
                                      long[] strides = null, char order = 'C')
         {
+            var created = ChararrayData(shape, itemsize, unicode, buffer, offset, strides, order);
+
+            // The new array is the chararray (NumPy allocates it as the subclass): the chararray takes over its storage, so
+            // OWNDATA is the ndarray's (true without a buffer, false over one). The plain wrapper is reclaimed by the scope.
+            return new NDCharArray(created.Storage);
+        }
+
+        /// <summary>
+        ///     The statements of <c>chararray.__new__</c> up to the subclass: the plain array of the chararray's data, which
+        ///     <see cref="chararray"/> and the <see cref="NDCharArray"/> constructor of the same parameters wrap.
+        /// </summary>
+        /// <param name="shape">The dimensions.</param>
+        /// <param name="itemsize">The element width in characters.</param>
+        /// <param name="unicode"><c>true</c> for <c>U</c>, <c>false</c> for <c>S</c>.</param>
+        /// <param name="buffer">null, a str filler, or a buffer to view (see <see cref="chararray"/>).</param>
+        /// <param name="offset">The byte offset into <paramref name="buffer"/>.</param>
+        /// <param name="strides">The byte strides over <paramref name="buffer"/>, or null.</param>
+        /// <param name="order">The memory order.</param>
+        /// <returns>A new plain array of the chararray's descriptor, owned by the caller (wrap its storage, then release
+        ///     it).</returns>
+        /// <exception cref="ValueError">An invalid itemsize, a negative dimension, an unknown order.</exception>
+        /// <exception cref="NotSupportedException">A zero itemsize (NumSharp holds no zero-width strings).</exception>
+        /// <exception cref="UnicodeEncodeError">A non-ASCII str filler into an <c>S</c> chararray.</exception>
+        /// <exception cref="TypeError">A buffer too small or not bytes-like.</exception>
+        internal static NDArray ChararrayData(Shape shape, long itemsize, bool unicode, object buffer, long offset,
+                                              long[] strides, char order)
+        {
             // ndarray.__new__ converts the (dtype, itemsize) tuple before it reads the buffer or the order.
             var descr = TextDescr(unicode, itemsize);
 
@@ -86,9 +113,18 @@ namespace NumSharp
             if (buffer is string filler)
             {
                 // "unicode objects do not have the buffer interface": a str buffer is dropped, the array allocated as for no
-                // buffer (offset and strides unused), and the str stored into every element.
+                // buffer (offset and strides unused), and the str stored into every element. The filler's store runs after
+                // the allocation, so a refused filler (non-ASCII into S) releases the array it was written into.
                 created = np.ndarray(shape, descr, order: order);
-                created[Slice.Ellipsis] = filler;
+                try
+                {
+                    created[Slice.Ellipsis] = filler;
+                }
+                catch
+                {
+                    created.Dispose();
+                    throw;
+                }
             }
             else if (buffer is null)
             {
@@ -98,10 +134,7 @@ namespace NumSharp
             {
                 created = np.ndarray(shape, descr, buffer, offset, strides, order);
             }
-
-            // The new array is the chararray (NumPy allocates it as the subclass): the chararray takes over its storage, so
-            // OWNDATA is the ndarray's (true without a buffer, false over one). The plain wrapper is reclaimed by the scope.
-            return new NDCharArray(created.Storage);
+            return created;
         }
 
         /// <summary>
@@ -130,7 +163,7 @@ namespace NumSharp
         /// <returns>The chararray. NumPy 2.4.2 returns a PLAIN ndarray when <paramref name="order"/> is given for a string
         ///     array (its <c>np.asarray</c> step drops the subclass); the C# result is a chararray with NumPy's data, layout and
         ///     flags.</returns>
-        /// <exception cref="DivideByZeroException">A string or bytes <paramref name="obj"/> with an itemsize of 0 (its own
+        /// <exception cref="ZeroDivisionError">A string or bytes <paramref name="obj"/> with an itemsize of 0 (its own
         ///     length 0 included): NumPy's <c>len(obj) // itemsize</c> raises <c>ZeroDivisionError</c>
         ///     (<c>integer division or modulo by zero</c>).</exception>
         /// <exception cref="ValueError">A negative or too large <paramref name="itemsize"/> (<c>invalid itemsize in generic
@@ -183,7 +216,7 @@ namespace NumSharp
         /// <param name="unicode"><c>true</c> for <c>U</c>, <c>false</c> for <c>S</c>, <c>null</c> to follow the input.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>, or <c>null</c>.</param>
         /// <returns>The chararray (see <see cref="array"/> for the order quirk).</returns>
-        /// <exception cref="DivideByZeroException">A string or bytes <paramref name="obj"/> with an itemsize of 0.</exception>
+        /// <exception cref="ZeroDivisionError">A string or bytes <paramref name="obj"/> with an itemsize of 0.</exception>
         /// <exception cref="ValueError">A negative or too large <paramref name="itemsize"/>, an unknown order, or a ragged
         ///     list.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
@@ -207,7 +240,7 @@ namespace NumSharp
         /// <param name="unicode">The class, or <c>null</c> for <c>U</c>.</param>
         /// <param name="order">The order, or <c>null</c> (C).</param>
         /// <returns>The filled chararray.</returns>
-        /// <exception cref="DivideByZeroException">The itemsize is 0.</exception>
+        /// <exception cref="ZeroDivisionError">The itemsize is 0.</exception>
         /// <exception cref="ValueError">A negative or too large itemsize, or an unknown order.</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII str into <c>S</c>.</exception>
         private NDCharArray FromStr(string text, long? itemsize, bool? unicode, char? order)
@@ -226,7 +259,7 @@ namespace NumSharp
         /// <param name="unicode">The class, or <c>null</c> for <c>S</c>.</param>
         /// <param name="order">The order, or <c>null</c> (C).</param>
         /// <returns>The chararray view.</returns>
-        /// <exception cref="DivideByZeroException">The itemsize is 0.</exception>
+        /// <exception cref="ZeroDivisionError">The itemsize is 0.</exception>
         /// <exception cref="ValueError">A negative or too large itemsize, or an unknown order.</exception>
         /// <exception cref="TypeError">A <c>U</c> request the bytes are too short for.</exception>
         private NDCharArray FromBytes(byte[] bytes, long? itemsize, bool? unicode, char? order)
@@ -464,12 +497,12 @@ namespace NumSharp
         /// <param name="a">The dividend.</param>
         /// <param name="b">The divisor.</param>
         /// <returns>The floor quotient.</returns>
-        /// <exception cref="DivideByZeroException"><paramref name="b"/> is 0 (Python's <c>integer division or modulo by
+        /// <exception cref="ZeroDivisionError"><paramref name="b"/> is 0 (Python's <c>integer division or modulo by
         ///     zero</c>).</exception>
         private static long PythonFloorDivide(long a, long b)
         {
             if (b == 0)
-                throw new DivideByZeroException("integer division or modulo by zero");
+                throw new ZeroDivisionError("integer division or modulo by zero");
             long q = a / b;
             // C# truncates toward zero; Python floors: step down when the signs differ and the division is inexact.
             if ((a % b != 0) && ((a < 0) ^ (b < 0)))

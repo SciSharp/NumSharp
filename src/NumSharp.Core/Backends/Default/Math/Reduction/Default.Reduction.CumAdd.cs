@@ -31,14 +31,13 @@ namespace NumSharp.Backends
         ///     loop dtype with the text cast around it.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only (<c>output array is read-only</c>, checked
         ///     first), or text that a numeric loop must parse does not parse.</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape and NumPy's
-        ///     accumulate refuses it: the text of the statement that refuses (parity QA-31, <see cref="StoreIntoMisfitOut"/>):
-        ///     NpyIter's <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]:
-        ///     (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> (or its <c>op_axes</c> / non-broadcastable-output siblings) on NumPy's
-        ///     iterator path, an input of more than one dimension among its triggers; <c>provided out is the wrong size for
-        ///     the accumulation.</c> on the direct 1-D path. The outs NumPy accepts are written where its iterator writes
-        ///     (more trailing out axes at index 0, an extent-1 input broadcast, the accumulated axis cut to the input's
-        ///     extent), and an empty input or out comes back untouched (parity QA-54).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape: the text of the
+        ///     statement that refuses it (parity QA-31, <see cref="MisfitOutError"/>): NpyIter's <c>operands could not be
+        ///     broadcast together with remapped shapes [original-&gt;remapped]: (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> (or its
+        ///     <c>op_axes</c> / non-broadcastable-output siblings) on NumPy's iterator path, an input of more than one
+        ///     dimension among its triggers; otherwise — an out the iterator accepts, the direct 1-D path, an empty input or
+        ///     out included — <c>provided out is the wrong size for the accumulation.</c> (NumPy 2.5 compares the dimensions on
+        ///     every path before the empty exits; 2.4 wrote into a longer or broadcast out, parity QA-54).</exception>
         /// <remarks>
         ///     <para>The statements are np.cumsum's, in its order (moved from <c>APIs/np.cumsum.cs</c> by the np-layer dtype
         ///     plan's P0 pilot): the StringDType route, then add.accumulate's loop resolution on (out, arr) for text (an
@@ -155,8 +154,9 @@ namespace NumSharp.Backends
 
             if (shape[axis] == 1)
                 // axis of length 1: values unchanged, but promoted to the accumulator dtype + copied
-                // (NumPy: cumsum([[5]], axis=0) -> int64). Was an un-promoted view-copy (NEP50 skip).
-                return Cast(arr, retTypeCode, copy: true);
+                // (NumPy: cumsum([[5]], axis=0) -> int64). Was an un-promoted view-copy (NEP50 skip). Laid out as the
+                // accumulate's iterator allocates it (LengthOneAxisScan), not as astype's K copy.
+                return LengthOneAxisScan(arr, retTypeCode);
 
             // NumPy-aligned accumulate: np.cumsum IS np.add.accumulate. NumPy allocates the
             // output through the iterator with KEEPORDER, so its memory layout follows the
@@ -174,7 +174,7 @@ namespace NumSharp.Backends
             // buffered cast of the input to the loop dtype is done up front, in the input's own memory order. The
             // result's layout still follows the original operand: `order` was resolved from its shape above.
             NDArray complexInput = retTypeCode == NPTypeCode.Complex && arr.GetTypeCode != NPTypeCode.Complex
-                ? arr.astype(NPTypeCode.Complex, true, 'K')
+                ? arr.astype(NPTypeCode.Complex)
                 : null;
             if (complexInput is not null)
                 arr = complexInput;
@@ -230,6 +230,34 @@ namespace NumSharp.Backends
             => TryKOrderPlan(input.dimensions, new[] { input }, out var layout, out _)
                 ? layout
                 : new Shape(input.dimensions, copy: false);
+
+        /// <summary>
+        ///     A scan along an axis of length 1: the values unchanged in the accumulator dtype, in a fresh array laid out as
+        ///     NumPy's accumulate allocates its output (<see cref="AccumulateOutputLayout"/>: the iterator's K order of the
+        ///     operand, where an extent-1 axis abstains and lands outermost), not as astype's K copy, which keeps a plain
+        ///     F array's strides.
+        /// </summary>
+        /// <param name="arr">The operand (any layout, at least one element).</param>
+        /// <param name="accumulator">The scan's accumulator dtype (NEP 50: narrow signed integers int64, unsigned uint64,
+        ///     floats kept; or <c>dtype=</c>'s).</param>
+        /// <returns>A fresh array the caller owns.</returns>
+        /// <remarks>The cast is unsafe, as astype's: every accumulator is reachable from the input by NumPy's own scan
+        ///     loop, which validated it before this shortcut.</remarks>
+        private NDArray LengthOneAxisScan(NDArray arr, NPTypeCode accumulator)
+        {
+            var result = NewArray(accumulator, AccumulateOutputLayout(arr.Shape), false);
+            try
+            {
+                UnmanagedStorage.Copyto(result, arr, NPY_CASTING.NPY_UNSAFE_CASTING);
+            }
+            catch
+            {
+                // The copy failed: the fresh array must not outlive the call.
+                result.Dispose();
+                throw;
+            }
+            return result;
+        }
 
         /// <summary>
         ///     Moves a C-ordered scan result into <paramref name="layout"/> when that is not C: the defensive fallbacks of
@@ -350,10 +378,18 @@ namespace NumSharp.Backends
             }
         }
 
+        /// <summary>
+        ///     The flat cumulative sum of <paramref name="arr"/> (<see cref="cumsum_elementwise"/>), cast to
+        ///     <paramref name="typeCode"/> when the accumulation came back in another dtype.
+        /// </summary>
+        /// <typeparam name="T">The element type the caller dispatched on (kept for the call sites' generic form).</typeparam>
+        /// <param name="arr">The array.</param>
+        /// <param name="typeCode">The requested result dtype, or null for the accumulation's.</param>
+        /// <returns>The 1-D running sums.</returns>
         public NDArray CumSumElementwise<T>(NDArray arr, NPTypeCode? typeCode) where T : unmanaged
         {
             var ret = cumsum_elementwise(arr, typeCode);
-            return typeCode.HasValue && typeCode.Value != ret.typecode ? ret.astype(typeCode.Value, true) : ret;
+            return typeCode.HasValue && typeCode.Value != ret.typecode ? ret.astype(typeCode.Value) : ret;
         }
 
         protected unsafe NDArray cumsum_elementwise(NDArray arr, NPTypeCode? typeCode)

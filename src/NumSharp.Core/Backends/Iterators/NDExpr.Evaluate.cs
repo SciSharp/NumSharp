@@ -59,7 +59,7 @@ namespace NumSharp.Backends.Iteration
         /// (integer/unsigned overflow WRAPS exactly as NumPy's, since it is a plain subtract of two
         /// same-dtype reductions), a NaN in the child propagates to the result, and there is NO empty
         /// identity (a zero-size input raises, like <see cref="Max"/>/<see cref="Min"/>). Unlike the
-        /// fold-driven kinds above it is host-delegated: <see cref="np.ptp(NDArray,int?,NDArray,bool)"/>
+        /// fold-driven kinds above it is host-delegated: <see cref="np.ptp(NDArray,NDAxis?,NDArray,bool)"/>
         /// runs over the materialized child — see the host divert in <c>DefaultEngine.EvaluateReduce</c>.
         /// </summary>
         Ptp,
@@ -594,7 +594,7 @@ namespace NumSharp.Backends.Iteration
         /// weights)</c>) — so an integer average is always at least float64, and the product/sums run at
         /// that dtype (no integer wrap). A NaN in either tree PROPAGATES to NaN. Weights that sum to zero
         /// (an empty input included) raise <see cref="DivideByZeroException"/> "Weights sum to zero, can't
-        /// be normalized", exactly as <see cref="np.average(NDArray, int?, NDArray, bool)"/> does. A
+        /// be normalized", exactly as <see cref="np.average(NDArray, NDAxis?, NDArray, bool, bool)"/> does. A
         /// float16 or decimal result dtype is rejected with a directed <see cref="NotSupportedException"/>
         /// (a bit-exact reduction there needs a pairwise sum kernel that dtype lacks).
         /// </summary>

@@ -61,7 +61,7 @@ namespace NumSharp.Backends.Sorting
         /// <exception cref="ValueError">A sorter index outside the haystack that the search reaches (<c>Sorter index out of
         ///     range.</c>), else a comparison that touched a None-like NA (<c>Cannot compare null that is not a nan-like
         ///     value</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+        /// <exception cref="MemoryError">A corrupt cell.</exception>
         internal static NDArray SearchSorted(NDArray haystack, NDArray keys, bool left, NDArray sorter, DType common)
         {
             var result = new NDArray(NPTypeCode.Int64,
@@ -212,7 +212,7 @@ namespace NumSharp.Backends.Sorting
         /// <param name="b">The second cell.</param>
         /// <param name="arenaB">Its arena base.</param>
         /// <returns>Negative, zero or positive.</returns>
-        /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+        /// <exception cref="MemoryError">A corrupt cell.</exception>
         private static int Compare(ref Ctx ctx, byte* a, byte* arenaA, byte* b, byte* arenaB)
         {
             int ra = NDVStringCells.Load(a, arenaA, out byte* ba, out long sa);

@@ -186,15 +186,16 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>"Value conversion on assignment": a weak C# int out of int8's range raises NumPy's OverflowError text,
-        /// while a 0-d int32 array casts (300 wraps to 44), as NumPy's <c>a.fill(np.array(300, np.int32))</c> does.</summary>
+        /// while a 0-d int32 array (<c>np.array(300)</c>, a C# <see cref="int"/>) casts (300 wraps to 44), as NumPy's
+        /// <c>a.fill(np.array(300, np.int32))</c> does.</summary>
         /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from the page.</exception>
         [TestMethod]
         public void Fill_WeakAndStrongScalars()
         {
             var a = np.zeros(3, dtype: np.int8);
             Action weak = () => a.fill(300);
-            weak.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
-            a.fill(NDArray.Scalar<int>(300));
+            weak.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
+            a.fill(np.array(300));
             a.ToArray<sbyte>().Should().Equal((sbyte)44, (sbyte)44, (sbyte)44);
         }
 

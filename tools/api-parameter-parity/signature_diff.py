@@ -1,4 +1,4 @@
-"""Compare every function NumSharp exposes under np.* with NumPy 2.4.2's signature, and write the differences.
+"""Compare every function NumSharp exposes under np.* with the imported NumPy's signature, and write the differences.
 
 Usage (from this directory; the committed outputs are docs/plans/numpy-signature-diff.md / .csv and
 docs/plans/numpy-signature-marks.md):
@@ -24,8 +24,10 @@ The module dump comes from ``dump_modules.cs`` (same directory): every ``[Module
 ndarray, np.linalg, np.fft, np.random, np.ma, np.emath, np.char, np.strings, np.dtypes, np.typing, np.polynomial and its
 bases) plus the object API np.random.Generator; its type dump (second output) every exported type, from which the
 second pass takes NumPy's other classes (OBJECT_GROUPS), constructors, extension methods and the typed NDArray<T>.
-NumPy 2.4.2 must be importable; its ``.pyi`` stubs and numpydoc sections fill in the parameters a runtime signature
-hides behind ``(*args, **kwargs)`` (``--no-stubs`` turns that off).
+The NumPy to compare with must be importable: the repository's pin (``numpy-version.txt``), as the committed reports
+were generated with the pin of their day, and every report names the release it ran under (``np.__version__``). Its
+``.pyi`` stubs and numpydoc sections fill in the parameters a runtime signature hides behind ``(*args, **kwargs)``
+(``--no-stubs`` turns that off).
 
 Why one signature per name: the owner's rule of 2026-10-17 is "one whole api per function as numpy provides, remove
 others". NumPy has ONE signature per function, so a name with several public C# overloads differs from NumPy by that
@@ -1190,7 +1192,7 @@ def resolve_module(key):
         The module or class.
 
     Raises:
-        AttributeError: NumPy has no such attribute (the dump names a module NumPy 2.4.2 lacks).
+        AttributeError: NumPy has no such attribute (the dump names a module the imported NumPy lacks).
     """
     if key == "ndarray":
         return np.ndarray
@@ -1304,8 +1306,8 @@ NUMPY_PUBLIC_MODULES = (
     ("polynomial.legendre", "np.polynomial.legendre"), ("polynomial.hermite", "np.polynomial.hermite"),
     ("polynomial.hermite_e", "np.polynomial.hermite_e"), ("polynomial.laguerre", "np.polynomial.laguerre"),
     ("ma", "np.ma"), ("char", "np.char"), ("strings", "np.strings"), ("dtypes", "np.dtypes"), ("typing", "np.typing"),
-    ("lib.stride_tricks", None), ("lib.array_utils", None), ("rec", None), ("lib.recfunctions", None),
-    ("exceptions", None), ("ma.mrecords", None), ("ctypeslib", None), ("lib.format", None), ("lib.introspect", None),
+    ("lib.stride_tricks", "np.lib.stride_tricks"), ("lib.array_utils", "np.lib.array_utils"), ("rec", None), ("lib.recfunctions", None),
+    ("exceptions", None), ("ma.mrecords", None), ("ctypeslib", None), ("lib.format", "np.lib.format"), ("lib.introspect", None),
     ("lib", None), ("lib.mixins", None), ("version", None), ("f2py", None), ("testing", None),
     ("testing.overrides", None),
 )
@@ -1351,6 +1353,68 @@ def extension_overloads(types, clr):
     return found
 
 
+#: The parameter names that carry NumPy's axis argument (the kept-forward rule below matches them by name).
+AXIS_PARAMETER_NAMES = frozenset({"axis", "axes", "source", "destination"})
+#: The kept integer spellings of an axis parameter (the dump's short type names).
+KEPT_INTEGER_AXIS_TYPES = frozenset({"int", "int?", "int[]"})
+#: NumPy's axis type in the dump.
+NDAXIS_TYPES = frozenset({"NDAxis", "NDAxis?"})
+
+
+def is_kept_axis_forward(overload, siblings):
+    """Whether ``overload`` is one of the owner's kept integer axis forwards (API-parity batch 6, "keep the int and int[]
+    overloads ... for allllll overloads"): beside every member that takes NumPy's axis as NDAxis / NDAxis?, an ``int``
+    and an ``int[]`` overload (``int?`` for a one-integer axis) forward to it. NumPy's ONE signature is the NDAxis member;
+    the forwards are the C# spellings of the same signature, so they must not count as overloads (no O mark).
+
+    The rule is structural, never a list: the overload's axis-like parameters are ``int`` / ``int?`` / ``int[]``, and a
+    sibling of the same name and receiver has the same parameter names and types except NDAxis / NDAxis? in those
+    slots (defaults may differ: a kept forward has none on its axis and on the parameters before it). An integer
+    overload WITHOUT such a sibling still counts.
+
+    Args:
+        overload: One overload dictionary of the dump.
+        siblings: Every overload of the same name (``overload`` included).
+
+    Returns:
+        True for a kept forward.
+    """
+    params = overload["params"]
+    if not any(p["name"] in AXIS_PARAMETER_NAMES and p["type"] in KEPT_INTEGER_AXIS_TYPES for p in params):
+        return False
+    for sibling in siblings:
+        if sibling is overload or sibling.get("static") != overload.get("static"):
+            continue
+        others = sibling["params"]
+        if len(others) != len(params):
+            continue
+        same = True
+        for p, q in zip(params, others):
+            if p["name"] != q["name"]:
+                same = False
+            elif p["name"] in AXIS_PARAMETER_NAMES and p["type"] in KEPT_INTEGER_AXIS_TYPES:
+                same = q["type"] in NDAXIS_TYPES
+            else:
+                same = p["type"] == q["type"]
+            if not same:
+                break
+        if same:
+            return True
+    return False
+
+
+def drop_kept_axis_forwards(overloads):
+    """The overloads without the owner's kept integer axis forwards (see ``is_kept_axis_forward``).
+
+    Args:
+        overloads: Every overload dictionary of one name.
+
+    Returns:
+        A new list: the NumPy-signature overloads and every other overload, the kept forwards left out.
+    """
+    return [o for o in overloads if not is_kept_axis_forward(o, overloads)]
+
+
 def build_groups(dump, types):
     """Every group the comparison covers: each module facade, then (with the type dump) each object API.
 
@@ -1366,14 +1430,15 @@ def build_groups(dump, types):
     groups = []
     for key in sorted(dump, key=lambda k: (k != "np", k != "ndarray", k)):
         info = dump[key]
-        methods = {n: list(v) for n, v in info["methods"].items()}
+        # The owner's kept integer axis forwards are the NDAxis member's C# spellings, not overloads (batch 6).
+        methods = {n: drop_kept_axis_forwards(list(v)) for n, v in info["methods"].items()}
         members = set(methods) | set(info["properties"]) | set(info["fields"]) | set(info.get("types", []))
         clr = MODULE_TYPES.get(key)
         if types is not None and clr in types:
             if types[clr]["ctors"]:
                 methods[CONSTRUCTOR] = list(types[clr]["ctors"])
             for name, extra in extension_overloads(types, clr).items():
-                methods.setdefault(name, []).extend(extra)
+                methods[name] = drop_kept_axis_forwards(methods.get(name, []) + list(extra))
                 members.add(name)
         groups.append({"key": key, "target": resolve_module(key), "methods": methods, "members": members,
                        "own_only": False, "clr": clr or info["type"]})
@@ -1384,13 +1449,13 @@ def build_groups(dump, types):
         target = resolve_numpy_path(path)
         if info is None or target is None:
             continue
-        methods = {n: list(v) for n, v in info["methods"].items()}
+        methods = {n: drop_kept_axis_forwards(list(v)) for n, v in info["methods"].items()}
         if info["ctors"]:
             # A generic class's constructors take the class's type argument as their dtype (`new NDArray<double>(shape)`),
             # so they carry its generic parameters, which typecode_params reads as a dtype selector.
             methods[CONSTRUCTOR] = [dict(c, generic=list(info["genericParams"])) for c in info["ctors"]]
         for name, extra in extension_overloads(types, clr).items():
-            methods.setdefault(name, []).extend(extra)
+            methods[name] = drop_kept_axis_forwards(methods.get(name, []) + list(extra))
         members = set(methods) | set(info["properties"]) | set(info["fields"]) | set(info["types"])
         # Members a C# subclass inherits from a NumSharp base are there for the caller too (NDMatrix.reshape is
         # NDArray.reshape), so they count as present when NumPy's names are checked.
@@ -1880,7 +1945,7 @@ def main():
     Raises:
         SystemExit: Wrong command-line arguments (argparse).
     """
-    parser = argparse.ArgumentParser(description="Diff NumSharp's np.* signatures against NumPy 2.4.2.")
+    parser = argparse.ArgumentParser(description=f"Diff NumSharp's np.* signatures against NumPy {np.__version__}.")
     parser.add_argument("dump", help="dump_modules.cs' first output (the module facades)")
     parser.add_argument("md", help="the diff report to write")
     parser.add_argument("csv", nargs="?", help="the CSV to write")
@@ -1968,7 +2033,8 @@ def write_markdown(path, summary, rows, surface):
     """
     lines = []
     w = lines.append
-    w("# NumSharp `np.*` signatures against NumPy 2.4.2")
+    # The release the comparison ran under, never a literal: a literal kept naming 2.4.2 after the pin moved on.
+    w(f"# NumSharp `np.*` signatures against NumPy {np.__version__}")
     w("")
     w("Generated by `tools/api-parameter-parity/signature_diff.py` from `dump_modules.cs`: every `[ModuleName]` module")
     w("of NumSharp.Core and the object API `np.random.Generator`, and (with `--types`, the second pass) NumPy's other")
@@ -2189,7 +2255,7 @@ def write_marks_markdown(path, marked, modules, surface, modules_missing=()):
     probed = any("probes" in r for r in marked)
     lines = []
     w = lines.append
-    w("# NumSharp `np.*` names marked against NumPy 2.4.2")
+    w(f"# NumSharp `np.*` names marked against NumPy {np.__version__}")
     w("")
     w("Generated by `tools/api-parameter-parity/signature_diff.py` (4th argument) from the same comparison as")
     w("[`numpy-signature-diff.md`](numpy-signature-diff.md). Do not edit it by hand. Every C# name of every")
@@ -2342,7 +2408,7 @@ def write_marks_markdown(path, marked, modules, surface, modules_missing=()):
             w(f"### `np.{module_path}` ({len(names)} names)")
             w("")
             w(", ".join(f"`{n}`" + (f" (in {', '.join(f'`{x}`' for x in where[n])})" if n in where else "")
-                        for n in names) if names else "(not importable in NumPy 2.4.2)")
+                        for n in names) if names else f"(not importable in NumPy {np.__version__})")
             w("")
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write("\n".join(lines) + "\n")

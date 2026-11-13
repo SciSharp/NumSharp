@@ -15,7 +15,7 @@ This page is self-contained. You do not need the rest of the interop documentati
 [Lifetime](#lifetime-who-frees-what) · [The GIL](#the-gil) · [Seven libraries](#seven-libraries-verbatim) ·
 [Troubleshooting](#troubleshooting) · [Claims](#claims-ledger)
 
-> Verified on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 · net8.0/net10.0.
+> Verified on CPython 3.12.12 · numpy 2.5.4 · pythonnet 3.0.5 · net8.0/net10.0.
 > Every claim below is reproduced by a test in `NumSharp.Tests.Interop`.
 
 ---
@@ -222,7 +222,7 @@ still refuses big-endian - a native-endian shared view is impossible - with the 
 
 ```text
 NotSupportedException: big-endian buffer format '>l' cannot be mapped onto a native-endian
-NumSharp buffer. Byte-swap first: arr.astype(arr.dtype.newbyteorder('<')).
+NumSharp buffer. Byte-swap first: arr.astype(arr.dtype.newbyteorder("<")).
 ```
 
 <sub>See here [`Import_ViewsEveryExporterVariety`][gate], [`Import_WidensComplex64OnCopy_TextViewsAsItsOwnDtype`][gate], [`Import_ViewRefusesBigEndian_CopyByteSwaps`][gate]</sub>

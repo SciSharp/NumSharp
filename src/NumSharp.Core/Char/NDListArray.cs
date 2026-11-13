@@ -262,7 +262,9 @@ namespace NumSharp
         {
             ThrowIfDisposed();
             slices ??= Array.Empty<Slice>();
-            var view = Over(Ids[slices]);
+            // The id slots' storage-level VIEW, not the indexer: an element index names one slot, which the indexer reads
+            // as an item (NumPy's scalar copy of the id) - the stand-in must keep pointing at the array's own slot.
+            var view = Over(Ids.BasicIndexView(slices));
             if (IsElementIndex(slices))
                 view.MarkStandIn();
             return view;
@@ -556,9 +558,10 @@ namespace NumSharp
             Heap.Dispose();
         }
 
-        /// <summary>Throws when the array was disposed.</summary>
+        /// <summary>Throws when the array was disposed: the guard every member runs first, and the one np.broadcast's list
+        ///     form runs on each operand before it borrows the ids (internal for that reason).</summary>
         /// <exception cref="ObjectDisposedException">Always, once <see cref="Dispose"/> ran.</exception>
-        private void ThrowIfDisposed()
+        internal void ThrowIfDisposed()
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(NDListArray));

@@ -65,7 +65,7 @@ namespace NumSharp.Backends
         ///     routed ufunc).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's 'safe' cast
         ///     text).</exception>
-        /// <exception cref="OverflowException">A kept Python-int bound does not fit an integer loop dtype
+        /// <exception cref="OverflowError">A kept Python-int bound does not fit an integer loop dtype
         /// ("Python integer 1000 out of bounds for int8"), raised before any element is read, so also for an
         /// empty <paramref name="lhs"/>. See <see cref="NDExprTypeRules.CheckPyIntPacksIntoLoop"/>.</exception>
         /// <exception cref="TypeError">No bound is left and the loop would be bool: NumPy's <c>positive</c> has no bool loop.</exception>
@@ -113,7 +113,7 @@ namespace NumSharp.Backends
                 if (max is null)
                     throw Strings.NDStringUfuncs.BinaryError("maximum", lhs, min, @out, typeCode);
                 throw Strings.NDStringUfuncs.VStringNoLoop("clip",
-                    new[] { ClipOperandClass(lhs), ClipOperandClass(min), ClipOperandClass(max) });
+                    new[] { ClipOperandMeta(lhs), ClipOperandMeta(min), ClipOperandMeta(max) });
             }
 
             // ---- Text: the routed ufunc has no string loop. The drop rule above only touches integer arrays with
@@ -171,7 +171,7 @@ namespace NumSharp.Backends
             //      come in NumPy's order; then the clip runs without out= and is cast into it under the mask.
             if (@out is not null && @out.typecode == NPTypeCode.String)
             {
-                ThrowIfTextOutCastFails(ufunc, "output", outType, @out);
+                ThrowIfTextOutCastFails(ufunc, 1, ClipNin(ufunc), outType, @out);
                 ClipIterationDims(lhs, min, max, @out, where);
                 ReadMaskedTextOut(@out, outType, where);
                 var (lo, hi) = (min, max);
@@ -182,7 +182,7 @@ namespace NumSharp.Backends
             //      A same_kind-reachable out of another dtype is legal: the loop runs at outType and the
             //      result is cast into out (np.clip(uint8, 5, 100, out=int8) is NumPy-legal).
             if (@out is not null)
-                ValidateOutCast(outType, @out.GetTypeCode, ufunc);
+                ValidateOutCast(outType, @out.GetTypeCode, ufunc, nin: ClipNin(ufunc));
 
             // ---- The iterator's joint broadcast of every operand: the bounds may be larger than lhs, and out
             //      may be larger than all inputs (they broadcast up into it), but out itself never stretches.
@@ -196,7 +196,7 @@ namespace NumSharp.Backends
             // ---- Empty iteration — nothing to compute. Every check above still ran, as in NumPy, where
             //      clip(empty int8, 1000, 2000) raises the OverflowError.
             if (DimsSize(dims) == 0)
-                return @out ?? NewArray(outType, ClipResultLayout(dims, lhs, min, max, where), false);
+                return @out ?? NewArray(outType, ClipResultLayout(dims, lhs, min, max, where, outType), false);
 
             if (where is null && TryClipFlat(lhs, min, max, @out, outType, mode, dims, out NDArray flat))
                 return flat;
@@ -223,24 +223,24 @@ namespace NumSharp.Backends
             // A text out= (the input is not text): positive's typed copy formatted into it, NumPy's order of checks.
             if (@out is not null && @out.typecode == NPTypeCode.String)
             {
-                ThrowIfTextOutCastFails("positive", "output", copyType, @out);
+                ThrowIfTextOutCastFails("positive", 1, 1, copyType, @out);
                 ClipIterationDims(lhs, null, null, @out, where);
                 ReadMaskedTextOut(@out, copyType, where);
                 return Strings.NDStringArithmetic.CastInto(@out, where, () => ClipPositive(lhs, typeCode, null, where));
             }
             if (@out is not null)
-                ValidateOutCast(copyType, @out.GetTypeCode, "positive");
+                ValidateOutCast(copyType, @out.GetTypeCode, "positive", nin: 1);
 
             long[] dims = ClipIterationDims(lhs, null, null, @out, where);
 
-            // A plain copy of a non-broadcast input: Cast keeps the input's memory order (K), which is the layout
-            // positive's iterator allocates for a single non-broadcast operand. A broadcast input is NOT handled here:
-            // K order sorts its stride-0 axis innermost, where the ufunc's layout vote ignores it (C order).
+            // A plain copy of a non-broadcast input: positive's own fresh result (IdentityLoopResult: the trivial loop's C or
+            // F, NpyIter's order for a permuted or cast operand). A broadcast input is NOT handled here: it takes the
+            // iterator route below, whose layout vote ignores a stride-0 axis (C order).
             if (where is null && @out is null && !lhs.Shape.IsBroadcasted && SameLongs(lhs.Shape.dimensions, dims))
-                return Cast(lhs, copyType, copy: true);
+                return IdentityLoopResult(lhs, copyType, inputCast: copyType != lhs.GetTypeCode);
 
             if (DimsSize(dims) == 0)
-                return @out ?? NewArray(copyType, ClipResultLayout(dims, lhs, null, null, where), false);
+                return @out ?? NewArray(copyType, ClipResultLayout(dims, lhs, null, null, where, copyType), false);
 
             return ClipViaIterator(lhs, null, null, @out, where, copyType, mode: null, dims);
         }
@@ -345,17 +345,24 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// The layout NumPy's ufunc allocates the result in (<see cref="Shape.NpyIterOutputShape"/>): its iterator sorts
-        /// the axes by the INPUT operands' strides (the mask votes too; 0-d operands and broadcast axes abstain), so an
-        /// F-ordered or permuted array keeps its memory order and C order wins any disagreement.
+        /// The layout NumPy's ufunc allocates the result in (<see cref="Shape.UfuncOutputShape"/>): clip is a ufunc, so
+        /// <c>try_trivial_single_output_loop</c> allocates plain C or F when the call qualifies (no mask, no input of two
+        /// or more dimensions cast to the loop or unaligned, every such input contiguous with one flag pair), and the
+        /// iterator otherwise sorts the axes by the INPUT operands' strides (the mask votes too; 0-d operands and
+        /// broadcast axes abstain), so an F-ordered or permuted array keeps its memory order and C order wins any
+        /// disagreement. The two allocators differ only in extent-1 strides: <c>np.clip</c> of an F (2, 1, 3) float64
+        /// array with scalar bounds has NumPy's byte strides (8, 16, 16), the iterator's would be (8, 48, 16).
         /// </summary>
         /// <param name="dims">The broadcast result dimensions.</param>
         /// <param name="lhs">The array being clipped.</param>
         /// <param name="min">The kept lower bound, or null.</param>
         /// <param name="max">The kept upper bound, or null.</param>
         /// <param name="where">The where= mask, or null.</param>
+        /// <param name="loop">The loop dtype: an input of two or more dimensions of another dtype is cast, which refuses
+        ///     the trivial loop.</param>
         /// <returns>A fresh dense shape of <paramref name="dims"/>.</returns>
-        private static Shape ClipResultLayout(long[] dims, NDArray lhs, NDArray min, NDArray max, NDArray where)
+        private static Shape ClipResultLayout(long[] dims, NDArray lhs, NDArray min, NDArray max, NDArray where,
+                                              NPTypeCode loop)
         {
             int n = 1 + (min is null ? 0 : 1) + (max is null ? 0 : 1) + (where is null ? 0 : 1);
             var votes = new Shape[n];
@@ -364,8 +371,21 @@ namespace NumSharp.Backends
             if (min is not null) votes[k++] = min.Shape;
             if (max is not null) votes[k++] = max.Shape;
             if (where is not null) votes[k] = where.Shape;
-            return Shape.NpyIterOutputShape((long[])dims.Clone(), votes);
+            bool trivialLoopEligible = where is null && TrivialLoopOperand(lhs, loop)
+                                       && (min is null || TrivialLoopOperand(min, loop))
+                                       && (max is null || TrivialLoopOperand(max, loop));
+            return Shape.UfuncOutputShape((long[])dims.Clone(), votes, trivialLoopEligible);
         }
+
+        /// <summary>
+        /// NumPy's <c>check_for_trivial_loop</c> per input: a 0-d or 1-D input is copied when it needs a cast (it never
+        /// refuses the loop), one of two or more dimensions must already be the loop dtype and aligned.
+        /// </summary>
+        /// <param name="x">The input.</param>
+        /// <param name="loop">The loop dtype.</param>
+        /// <returns>False when this input keeps the call off the trivial loop.</returns>
+        private static bool TrivialLoopOperand(NDArray x, NPTypeCode loop)
+            => x.ndim < 2 || (x.GetTypeCode == loop && UfuncLoopOperand.IsAligned(x));
 
         // =============================================================================
         // The flat route
@@ -423,7 +443,7 @@ namespace NumSharp.Backends
                 return false;
 
             // The result's memory order: NumPy's allocation layout, or out's own.
-            Shape layout = @out is not null ? @out.Shape : ClipResultLayout(dims, lhs, min, max, null);
+            Shape layout = @out is not null ? @out.Shape : ClipResultLayout(dims, lhs, min, max, null, outType);
             bool identity = layout.IsContiguous;
             int[] perm = identity ? null : layout.DenseAxisOrder();
 
@@ -807,20 +827,20 @@ namespace NumSharp.Backends
         /// <c>StrDType</c>, a bool as <c>BoolDType</c>).
         /// </summary>
         /// <param name="operand">The array being clipped or a kept bound.</param>
-        /// <returns>NumPy's repr of the class.</returns>
-        private static string ClipOperandClass(NDArray operand)
+        /// <returns>The class itself (a <see cref="UFuncNoLoopError.dtypes"/> entry, printed as NumPy prints it).</returns>
+        private static DTypeMeta ClipOperandMeta(NDArray operand)
         {
             if (operand.WasPythonLiteral)
             {
                 var tc = operand.GetTypeCode;
                 if (NDExprTypeRules.IsIntegerKind(tc))
-                    return DTypeRegistry.PyLong.ToString();
+                    return DTypeRegistry.PyLong;
                 if (tc == NPTypeCode.Single || tc == NPTypeCode.Double)
-                    return DTypeRegistry.PyFloat.ToString();
+                    return DTypeRegistry.PyFloat;
                 if (tc == NPTypeCode.Complex)
-                    return DTypeRegistry.PyComplex.ToString();
+                    return DTypeRegistry.PyComplex;
             }
-            return operand.dtype.Meta.ToString();
+            return operand.dtype.Meta;
         }
 
         /// <summary>
@@ -830,7 +850,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="bound">A bound that survived <see cref="DropUnclippingPyIntBounds"/>, or null.</param>
         /// <param name="loop">The resolved loop dtype (<c>dtype=</c> or the promoted dtype).</param>
-        /// <exception cref="OverflowException">The Python int does not fit an integer <paramref name="loop"/> — see
+        /// <exception cref="OverflowError">The Python int does not fit an integer <paramref name="loop"/> — see
         /// <see cref="NDExprTypeRules.CheckPyIntPacksIntoLoop"/> for the texts.</exception>
         private static void CheckPyIntBoundPacks(NDArray bound, NPTypeCode loop)
         {
@@ -905,11 +925,16 @@ namespace NumSharp.Backends
                 fromName = from.AsNumpyDtypeName();
             }
 
+            // The routed ufunc has two or three inputs, so NumPy names the index; fromName is a NumPy dtype name.
             if (!ok)
-                throw new TypeError(
-                    string.Create(CultureInfo.InvariantCulture, $"Cannot cast ufunc '{ufunc}' input {index} from dtype('{fromName}') to " +
-                    $"dtype('{loop.AsNumpyDtypeName()}') with casting rule 'same_kind'"));
+                throw new UFuncInputCastingError(ufunc, ClipNin(ufunc), "same_kind", (DType)fromName, loop.AsNumpyDescr(), index);
         }
+
+        /// <summary>The input count of the ufunc <c>np.clip</c> routes to: <c>clip</c> 3, <c>minimum</c> /
+        ///     <c>maximum</c> 2, <c>positive</c> 1.</summary>
+        /// <param name="ufunc">The routed ufunc's name.</param>
+        /// <returns>Its input count, which places its output's operand index (NumPy's <c>out_i</c>).</returns>
+        private static int ClipNin(string ufunc) => ufunc switch { "clip" => 3, "positive" => 1, _ => 2 };
 
         private static bool IsSameKind(NPTypeCode a, NPTypeCode b)
         {

@@ -50,7 +50,7 @@ namespace NumSharp
         ///     when the kind is known: they are typed and need no cast.
         ///     <para>An <see cref="NpzFile"/> owns a file handle and must be disposed.</para>
         /// </returns>
-        /// <exception cref="EndOfStreamException">The file is empty.</exception>
+        /// <exception cref="EOFError">The file is empty.</exception>
         /// <exception cref="FormatException">The content is not a .npy or .npz file, or is malformed; or it is a pickle and
         ///     <paramref name="allow_pickle"/> is false (NumPy's texts).</exception>
         /// <exception cref="NotSupportedException">A pickle that is not NumPy's pickle of a <c>StringDType</c> array.</exception>
@@ -170,7 +170,7 @@ namespace NumSharp
         /// <param name="file">An open, readable stream.</param>
         /// <param name="allow_pickle">Whether the file is trusted.</param>
         /// <param name="max_header_size">Reject headers larger than this.</param>
-        /// <exception cref="EndOfStreamException">The stream is already at its end.</exception>
+        /// <exception cref="EOFError">The stream is already at its end.</exception>
         public static NDArray load_npy(Stream file, bool allow_pickle = false, long max_header_size = NpyFormat.MaxHeaderSize)
         {
             if (file == null) throw new ArgumentNullException(nameof(file));
@@ -195,7 +195,7 @@ namespace NumSharp
             if (stream.CanSeek)
             {
                 if (stream.Position >= stream.Length)
-                    throw new EndOfStreamException("No data left in file");
+                    throw new EOFError("No data left in file");
                 if (NpyFormat.IsNpzFile(stream))
                     throw new FormatException($"'{what}' is a .npz archive, not a .npy file. Use np.load_npz to open it.");
             }
@@ -227,7 +227,7 @@ namespace NumSharp
             try
             {
                 CheckIsNpz(stream, file);
-                return new NpzFile(stream, ownStream: true, allow_pickle, max_header_size);
+                return new NpzFile(stream, own_fid: true, allow_pickle, max_header_size);
             }
             catch
             {
@@ -262,7 +262,7 @@ namespace NumSharp
             try
             {
                 CheckIsNpz(stream, "bytes");
-                return new NpzFile(stream, ownStream: true, allow_pickle, max_header_size);
+                return new NpzFile(stream, own_fid: true, allow_pickle, max_header_size);
             }
             catch
             {
@@ -274,7 +274,7 @@ namespace NumSharp
         private static void CheckIsNpz(Stream stream, string what)
         {
             if (stream.CanSeek && stream.Position >= stream.Length)
-                throw new EndOfStreamException("No data left in file");
+                throw new EOFError("No data left in file");
             if (!NpyFormat.IsNpzFile(stream))
                 throw new FormatException(
                     NpyFormat.IsNpyFile(stream)
@@ -297,7 +297,7 @@ namespace NumSharp
                     "Stream must be seekable so the file type can be detected from its magic bytes.", nameof(stream));
 
             if (stream.Position >= stream.Length)
-                throw new EndOfStreamException("No data left in file");
+                throw new EOFError("No data left in file");
 
             if (NpyFormat.IsNpzFile(stream))
                 return new NpzFile(stream, ownStream, allowPickle, maxHeaderSize); // mmap_mode ignored (NumPy parity)

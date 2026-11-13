@@ -136,9 +136,9 @@ namespace NumSharp.Tests.IO
         public void Fmt_CharAndBool_MatchNumpyRaises()
         {
             // %c on an integer out of [0, 0x10FFFF] raises OverflowError (NumPy lets it propagate uncaught).
-            var neg = Assert.ThrowsException<OverflowException>(() => Cap(np.array(new int[] { -1 }), "%c"));
+            var neg = Assert.ThrowsException<OverflowError>(() => Cap(np.array(new int[] { -1 }), "%c"));
             Assert.AreEqual("%c arg not in range(0x110000)", neg.Message);
-            var over = Assert.ThrowsException<OverflowException>(() => Cap(np.array(new int[] { 0x110000 }), "%c"));
+            var over = Assert.ThrowsException<OverflowError>(() => Cap(np.array(new int[] { 0x110000 }), "%c"));
             Assert.AreEqual("%c arg not in range(0x110000)", over.Message);
             Assert.AreEqual("A\n", Cap(np.array(new int[] { 65 }), "%c"));                   // in-range -> the code point
             // bool is NOT an int for %c/%x/%X/%o — a TypeError reported as the dtype/format mismatch.
@@ -243,7 +243,7 @@ namespace NumSharp.Tests.IO
             Assert.AreEqual("3\n-3\n", Cap(np.array(new double[] { 3.9, -3.9 }), "%d"));
             var nan = Assert.ThrowsException<ValueError>(() => Cap(np.array(new double[] { 1.5, double.NaN }), "%d"));
             Assert.AreEqual("cannot convert float NaN to integer", nan.Message);
-            var inf = Assert.ThrowsException<OverflowException>(() => Cap(np.array(new double[] { double.PositiveInfinity }), "%d"));
+            var inf = Assert.ThrowsException<OverflowError>(() => Cap(np.array(new double[] { double.PositiveInfinity }), "%d"));
             Assert.AreEqual("cannot convert float infinity to integer", inf.Message);
             // integral dtypes still take %x/%o.
             Assert.AreEqual("ff\n8\n", Cap(np.array(new int[] { 255, 8 }), "%x"));

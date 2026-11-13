@@ -75,11 +75,20 @@ NumPy's scalar-type hierarchy over NumSharp's descriptors (the descriptors thems
 - `finfo.ToString()` / `iinfo.ToString()` are NumPy's reprs byte for byte under every culture (parity QA-41): finfo's
   resolution is the dtype's own scalar through `ArrayFormatter.ScalarStr`, min / max the dtype's `_MACHAR_PARAMS` printf
   format through `PrintfFormatter` (`%24.16e` / `%15.7e` / `%12.5e`, stripped; the long double and decimal print `str()`);
-  iinfo prints an unsigned type's `maxUnsigned` (uint64 `18446744073709551615`, where the `max` property is clamped). Open
-  (`OpenBugs.Surface.cs`): `minexp` is C's convention for float32 / float64 (-125 / -1021 where NumPy says -126 / -1022,
-  SU12), the float16 / float32 `resolution` property is the double 0.001 / 1e-06 where NumPy's is the dtype's own scalar
-  (SU13), float32's `tiny` is the literal `1.175494351e-38`, not 2^-126 (SU14); `machep` / `negep` / `nexp` / `nmant` /
-  `iexp` are missing.
+  iinfo prints an unsigned type's `maxUnsigned` (uint64 `18446744073709551615`, where the `max` property is clamped).
+- `np.iinfo(int_type)` / `np.finfo(dtype)` take NumPy's keyword names and read a STRING as NumPy does:
+  `numeric.dtype(s)`, and on its TypeError the dtype of the value's type, `str` — so `iinfo("foo")` / `iinfo("")` are
+  `Invalid integer data type 'U'.` and `finfo("foo")` is `data type <class 'numpy.str_'> not inexact`; a null string is
+  None (`iinfo`: float64's `'f'`; `finfo`: float64's limits, NumPy's deprecated None). The refusals are NumPy's
+  ValueErrors: iinfo names the KIND character (`'f'` for every float, decimal included, `'c'` complex), finfo the
+  scalar class (`NDScalarType.Of(meta)`: `<class 'numpy.int32'>`). An ARRAY is not accepted (NumPy refuses one: `'O'` /
+  `object_`); pass `arr.dtype`. bool and char stay accepted by iinfo (NumSharp extensions; NumPy refuses bool, SU15).
+- finfo reports NumPy's binary layout per format (a complex dtype: its real part's): `nmant` 10 / 23 / 52, `iexp` =
+  `nexp` 5 / 8 / 11, `machep` / `negep` -10 / -11, -23 / -24, -52 / -53, `minexp` -14 / -126 / -1022 (`2**minexp ==
+  smallest_normal`, NumPy's convention, not C's `FLT_MIN_EXP`), and float32's `tiny` / `smallest_normal` is exactly
+  2^-126. decimal (NumSharp-only) follows its base-10 layout: `nmant` 96, `iexp` = `nexp` 8, `machep` = `negep` -28.
+  Open (`OpenBugs.Surface.cs`): the float16 / float32 `resolution` property is the double 0.001 / 1e-06 where NumPy's is
+  the dtype's own scalar (SU13).
 - Relatives: `np.typecodes` (NumPy's strings in NumPy's order, read-only); `np.sctypeDict` (NumPy's names → NumSharp's
   descriptors, `np.sctypeDict["float64"]` IS `np.float64`, in NumPy's key order for the host's C long model; the string
   names `bytes_`/`bytes`/`a` and `str_`/`str`/`unicode` map to the unsized `dtype('S')` / `dtype('<U')`; the dtype-less

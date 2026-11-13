@@ -349,13 +349,13 @@ public class np_histogram_Tests
             return np.array(v);
         }
 
-        ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 33), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 33), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 64.0 GiB for an array with shape (8589934593,) and data type float64");
-        ((Action)(() => np.histogram(Int64Span((1L << 34) + 12345), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram(Int64Span((1L << 34) + 12345), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 128. GiB for an array with shape (17179881530,) and data type float64");
-        ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 40), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 40), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 8.00 TiB for an array with shape (1099511627777,) and data type float64");
-        ((Action)(() => np.histogram_bin_edges(Int64Span((1L << 52) + 7), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(Int64Span((1L << 52) + 7), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 32.0 PiB for an array with shape (4503599627370504,) and data type float64");
         ((Action)(() => np.histogram_bin_edges(Int64Span(1L << 61), "fd"))).Should().Throw<ValueError>()
             .WithMessage("array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.");
@@ -368,7 +368,7 @@ public class np_histogram_Tests
         ((Action)(() => np.histogram_bin_edges(UInt64Span(ulong.MaxValue), "fd"))).Should().Throw<ValueError>()
             .WithMessage("Maximum allowed size exceeded");
         ((Action)(() => np.histogram_bin_edges(UInt64Span(1UL << 40), "fd", range: (0.0, 1099511627776.0))))
-            .Should().Throw<OutOfMemoryException>()
+            .Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 8.00 TiB for an array with shape (1099511627777,) and data type float64");
 
         static NDArray TinyIqr(double spread)
@@ -378,9 +378,9 @@ public class np_histogram_Tests
             v[100] = 1e3;
             return np.array(v);
         }
-        ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-9), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-9), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 16.9 TiB for an array with shape (2326176056681,) and data type float64");
-        ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-12), "fd"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-12), "fd"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 16.5 PiB for an array with shape (2325969469107706,) and data type float64");
         ((Action)(() => np.histogram_bin_edges(TinyIqr(1e-15), "fd"))).Should().Throw<ValueError>()
             .WithMessage("array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.");
@@ -460,7 +460,7 @@ public class np_histogram_Tests
 
         ((Action)(() => np.histogram(np.full(Shape.Vector(6), (Half)0.7), "scott")))
             .Should().Throw<ValueError>().WithMessage("Too many bins for data range. Cannot create 1066 finite-sized bins.");
-        ((Action)(() => np.histogram(np.full(Shape.Vector(3), 0.1), "scott"))).Should().Throw<OutOfMemoryException>()
+        ((Action)(() => np.histogram(np.full(Shape.Vector(3), 0.1), "scott"))).Should().Throw<ArrayMemoryError>()
             .WithMessage("Unable to allocate 212. PiB for an array with shape (29770864728363688,) and data type float64");
     }
 
@@ -770,7 +770,11 @@ public class np_histogram_Tests
     /// <summary>
     ///     Edges holding a NaN pass the monotonic check but are not sorted for NumPy's binary search (NaN sorts last), so
     ///     NumPy's searchsorted itself decides each point's bin; counting the edges at or below a point gives other bins
-    ///     (NumPy 2.4.2's answers for an inner, a last and a first NaN edge, an int32 column, and a 2-D sample).
+    ///     (NumPy 2.5.4's answers for an inner, a last and a first NaN edge, an int32 column, and a 2-D sample). NumPy 2.5's
+    ///     batched bisection (gh-30517) walks an unsorted haystack differently from 2.4's per-key search: behind the inner
+    ///     NaN edge, the last edge's own value 2.0 now searches to index 1 (2.4.2: 3), which the on-edge correction moves
+    ///     below the first bin, and the int32 column's 3 lands in the first bin (2.4.2 counted <c>[5, 1]</c>,
+    ///     <c>[2, 1]</c> and <c>[2, 2, 0, 1]</c>).
     /// </summary>
     [TestMethod]
     public void DD_NaNEdges_AreNumPysSearch()
@@ -779,15 +783,15 @@ public class np_histogram_Tests
         double nan = double.NaN;
         foreach (var (edges, expected) in new (double[], double[])[]
                  {
-                     (new[] { 0.0, nan, 2.0 }, new[] { 5.0, 1.0 }),
+                     (new[] { 0.0, nan, 2.0 }, new[] { 5.0, 0.0 }),
                      (new[] { 0.0, 2.0, nan }, new[] { 4.0, 2.0 }),
                      (new[] { nan, 1.0, 2.0 }, new[] { 0.0, 3.0 }),
                  })
             Eq(np.histogramdd(col, new[] { np.array(edges) }).H, expected);
-        Eq(np.histogramdd(np.array(new[] { 0, 1, 2, 3, -1 }), new[] { np.array(new[] { 0.0, nan, 2.0 }) }).H, new[] { 2.0, 1.0 });
+        Eq(np.histogramdd(np.array(new[] { 0, 1, 2, 3, -1 }), new[] { np.array(new[] { 0.0, nan, 2.0 }) }).H, new[] { 3.0, 0.0 });
         var two = np.stack(new[] { col, col }, axis: 1);
         Eq(np.histogramdd(two, new[] { np.array(new[] { 0.0, nan, 2.0 }), np.array(new[] { 0.0, 1.0, 2.0 }) }).H,
-            new[] { 2.0, 2.0, 0.0, 1.0 });
+            new[] { 2.0, 2.0, 0.0, 0.0 });
     }
 
     /// <summary>

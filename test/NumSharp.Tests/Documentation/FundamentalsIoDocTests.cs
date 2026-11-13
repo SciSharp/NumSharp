@@ -54,7 +54,7 @@ namespace NumSharp.Tests.Documentation
             npz["weights"].ToArray<long>().Should().Equal(0L, 1, 2);      // by key
             NDArray b = npz.f.bias;                                       // BagObj dot access
             b.size.Should().Be(2);
-            npz.Files.Should().BeEquivalentTo(new[] { "weights", "bias" });
+            npz.files.Should().BeEquivalentTo(new[] { "weights", "bias" });
         }
 
         [TestMethod]

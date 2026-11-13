@@ -19,26 +19,51 @@ namespace NumSharp.Backends
         /// <param name="x2">Integer exponents (bool, int8/16/32/64, uint8/16/32, or char). An exponent outside
         /// the C-int range is clamped, so a huge magnitude overflows to ±inf / underflows to ±0 exactly as
         /// NumPy's int64 loop does. uint64, float and complex exponents are rejected.</param>
+        /// <param name="dtype">NumPy's <c>dtype=</c>: the loop's float dtype (float16 / float32 / float64), or null for
+        /// <paramref name="x1"/>'s float tier. The operands must reach that float x int loop under 'safe' casting
+        /// (x1 to the dtype, x2 to int64); anything else is NumPy's "No loop matching the specified signature and
+        /// casting was found" TypeError.</param>
+        /// <param name="out">The output (same_kind cast from the loop dtype, its own layout kept), or null.</param>
+        /// <param name="where">The bool write mask for <paramref name="out"/>, or null.</param>
         /// <returns><c>x1 * 2^x2</c> broadcast to the common shape, in <paramref name="x1"/>'s float tier: a fresh
         /// result in NumPy's ufunc output layout (the operands' K order: F inputs give F, a permuted input keeps its
         /// memory order; parity QA-36), or <paramref name="out"/> written.</returns>
         /// <exception cref="IncorrectTypeException"><paramref name="x1"/> is complex, or <paramref name="x2"/> is
         /// not a supported integer exponent (uint64/float/complex) — NumPy raises the same "not supported for
-        /// the input types" TypeError.</exception>
+        /// the input types" TypeError; with <paramref name="dtype"/>, any operand that does not reach the loop (NumPy's
+        /// "No loop matching ..." text instead).</exception>
         /// <remarks>Bit-identical to win-amd64 NumPy 2.4.2 (<see cref="Math.ScaleB(double,int)"/> IS <c>ldexp</c>).</remarks>
-        public override NDArray Ldexp(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null)
+        public override NDArray Ldexp(NDArray x1, NDArray x2, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             // ldexp has float x int loops only; text in either operand is refused with the legacy resolver's text, after
             // NumPy's out= / where= parse (a read-only out, then a non-bool mask), which the guard reports first.
             Strings.NDStringUfuncs.ThrowIfBinary("ldexp", x1, x2, @out, null, where);
             // NumPy validation order: where parse -> input coercion / loop resolution -> out cast -> shape.
             ValidateWhereMask(where);
-            // ldexp has float×int loops only; a complex mantissa or a non-integer exponent coerces to no loop.
-            if (x1.GetTypeCode == NPTypeCode.Complex)
-                throw LdexpNoLoop();
-            ValidateLdexpExponent(x2);
 
-            var floatType = ResolveUnaryFloatReturnType(x1, null, "ldexp"); // x2 has no say in the result dtype
+            NPTypeCode floatType;
+            if (dtype is not null)
+            {
+                // dtype= fixes the loop's output: NumPy's type-tuple resolver then looks for a loop with that output whose
+                // inputs the operands reach under 'safe' casting - 'ei->e' ... 'dl->d', a float mantissa and an int32 /
+                // int64 exponent (probed over 288 x1 / x2 / dtype triples, 2.4.2). Its text is the signature one, raised
+                // before (and instead of) the default resolver's "not supported for the input types". The casts are
+                // DTypeCasting's own (what np.can_cast answers with): an engine file does not call up into np.*.
+                var loop = dtype.typecode;
+                if (loop != NPTypeCode.Half && loop != NPTypeCode.Single && loop != NPTypeCode.Double
+                    || !DTypeCasting.CanCastTypeTo(x1.dtype, dtype, NPY_CASTING.NPY_SAFE_CASTING)
+                    || !DTypeCasting.CanCastTypeTo(x2.dtype, DType.Int64, NPY_CASTING.NPY_SAFE_CASTING))
+                    throw new IncorrectTypeException("No loop matching the specified signature and casting was found for ufunc ldexp");
+                floatType = loop;
+            }
+            else
+            {
+                // ldexp has float×int loops only; a complex mantissa or a non-integer exponent coerces to no loop.
+                if (x1.GetTypeCode == NPTypeCode.Complex)
+                    throw LdexpNoLoop();
+                ValidateLdexpExponent(x2);
+                floatType = ResolveUnaryFloatReturnType(x1, null, "ldexp"); // x2 has no say in the result dtype
+            }
             // out= must accept a same_kind cast from the loop dtype (a float32 result up-casts into a float64 out).
             if (@out is not null)
                 ValidateOutCast(floatType, @out.typecode, "ldexp");
@@ -46,9 +71,14 @@ namespace NumSharp.Backends
             // A fresh result takes NumPy's ufunc output layout (parity QA-36): the kernels write C, so a non-C K order of
             // the operands is computed over the operands transposed into it and relabelled. After every check above, so
             // NumPy's error order holds; a caller's out keeps its own layout.
+            // A fresh 0-d result is NumPy's scalar (the ufunc's PyArray_Return, a no-op for an array with dimensions).
             if (@out is null)
                 return KOrderBinary(x1, x2, (engine: this, floatType, where),
-                    static (s, a, b) => s.engine.LdexpCompute(a, b, s.floatType, null, s.where));
+                    static (s, a, b) => s.engine.LdexpCompute(a, b, s.floatType, null, s.where),
+                    // NumPy's ldexp loops read the float dtype and an int32 / int64 exponent ('fi->f', 'fl->f', ...): any
+                    // other operand dtype is cast, which keeps an N-D operand off the trivial loop.
+                    x1.GetTypeCode != floatType,
+                    x2.GetTypeCode != NPTypeCode.Int32 && x2.GetTypeCode != NPTypeCode.Int64).PyArray_Return();
             return LdexpCompute(x1, x2, floatType, @out, where);
         }
 

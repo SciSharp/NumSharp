@@ -209,14 +209,14 @@ namespace NumSharp.Tests.IO
 
         /// <summary>
         ///     Guards NumPy's text for a missing file name (<c>DataSource.open</c>'s <c>&lt;path&gt; not found.</c>, a
-        ///     <see cref="FileNotFoundException"/>), reported before an unknown encoding is looked up.
+        ///     <see cref="FileNotFoundError"/>), reported before an unknown encoding is looked up.
         /// </summary>
         [TestMethod]
         public void LoadTxt_MissingFile_IsNumPysNotFound()
         {
             var path = TempFile();
-            Throws<FileNotFoundException>(() => np.loadtxt(path, TD), $"{path} not found.");
-            Throws<FileNotFoundException>(() => np.loadtxt(path, TD, encoding: "nosuchcodec"), $"{path} not found.");
+            Throws<FileNotFoundError>(() => np.loadtxt(path, TD), $"{path} not found.");
+            Throws<FileNotFoundError>(() => np.loadtxt(path, TD, encoding: "nosuchcodec"), $"{path} not found.");
         }
 
         /// <summary>Guards a <c>.gz</c> file name: decompressed transparently, then decoded with the given encoding.</summary>

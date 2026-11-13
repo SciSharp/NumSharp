@@ -195,7 +195,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> array given a value that is not text; a str
         ///     that is not a number of a numeric dtype's kind (Python's <c>int()</c> / <c>float()</c> / <c>complex()</c>
         ///     text, quoting the str); a NaN into an integer array.</exception>
-        /// <exception cref="OverflowException">A Python int, alone or in a list, out of the dtype's range (the LP64
+        /// <exception cref="OverflowError">A Python int, alone or in a list, out of the dtype's range (the LP64
         ///     texts).</exception>
         /// <exception cref="NotSupportedException">A value of no NumPy type.</exception>
         /// <remarks>Scoped: the packed value, its broadcast and the tiled values are temporaries of this call.</remarks>
@@ -335,7 +335,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A str that is not a number of the dtype's kind, quoted as the str (<c>invalid literal
         ///     for int() with base 10: 'x'</c>, <c>could not convert string to float: 'x'</c>), a NaN into an integer array,
         ///     a ragged list, or an array whose cast refuses its elements.</exception>
-        /// <exception cref="OverflowException">A Python int, alone or in a list, outside an integer dtype ("Python integer
+        /// <exception cref="OverflowError">A Python int, alone or in a list, outside an integer dtype ("Python integer
         ///     1000 out of bounds for int8"; the LP64 "Python int too large to convert to C long" past the C long), or past
         ///     the double range into a float dtype.</exception>
         /// <exception cref="NotSupportedException">A value of no NumPy type.</exception>
@@ -352,7 +352,7 @@ namespace NumSharp
         ///     </para>
         ///     <para>
         ///     Anything else: an <see cref="NDArray"/> is raveled and CAST (FORCECAST: unsafe); a C# array (an ndarray in the
-        ///     boundary map), a list, a tuple or a collection goes through <see cref="np.asanyarray(in object, DType, string)"/>
+        ///     boundary map), a list, a tuple or a collection goes through <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>
         ///     with the dtype requested, whose coercion of a Python list stores every item by the setitem (<c>[1000]</c> into
         ///     int8 raises, as NumPy's <c>PyArray_AssignFromCache</c> does) and whose typed C# arrays are cast.
         ///     </para>
@@ -491,7 +491,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The errors of <see cref="AxisConcatenate"/>; a matrix result with more than two axes
         ///     longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="ArgumentNullException">A null entry.</exception>
-        /// <exception cref="OverflowException">A C# integer literal outside the adopted integer dtype.</exception>
+        /// <exception cref="OverflowError">A C# integer literal outside the adopted integer dtype.</exception>
         /// <exception cref="DTypePromotionError">A C# number beside text.</exception>
         /// <exception cref="ArgumentException">A malformed slice string, or np.concatenate's refusals.</exception>
         /// <remarks>The scope reclaims the entries' plain views and the hidden plain result, which the matrix view keeps alive
@@ -530,7 +530,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="key"/> or one of its entries is null.</exception>
         /// <exception cref="ValueError">A directive after the first entry ("special directives must be the first
         ///     entry."), or an unknown one ("unknown special directive").</exception>
-        /// <exception cref="OverflowException">A C# integer literal outside the adopted integer dtype, in NumPy's setitem
+        /// <exception cref="OverflowError">A C# integer literal outside the adopted integer dtype, in NumPy's setitem
         ///     texts with the LP64 C <c>long</c> ("Python integer 1000 out of bounds for int8"; "Python int too large to
         ///     convert to C long" past the long range, and past 2**64 - 1 for uint32 / uint64).</exception>
         /// <exception cref="DTypePromotionError">A C# number beside text (no common DType).</exception>
@@ -1019,8 +1019,8 @@ namespace NumSharp
         /// <exception cref="ValueError">A missing stop (<see cref="GridAxisSize"/>, <see cref="GridFillLine"/>); a NaN
         ///     size; a size past int64 (<c>Maximum allowed dimension exceeded</c>); a negative one (np.indices'
         ///     <c>negative dimensions are not allowed</c>); the allocation guard's.</exception>
-        /// <exception cref="DivideByZeroException">A zero real step.</exception>
-        /// <exception cref="OverflowException">An infinite size; a Python int NumPy cannot convert (see
+        /// <exception cref="ZeroDivisionError">A zero real step.</exception>
+        /// <exception cref="OverflowError">An infinite size; a Python int NumPy cannot convert (see
         ///     <see cref="GridFillLine"/>).</exception>
         [NDScoped] // reclaims each rescale pass's line/reshape/broadcast temps and the grid[k] layer views
         internal static NDArray mgrid(object[] key)
@@ -1159,9 +1159,9 @@ namespace NumSharp
         ///     <c>unsupported operand type(s) for -: 'NoneType' and 'int'</c>, or <c>'float'</c> for a float start).</exception>
         /// <exception cref="ValueError">A NaN imaginary step (<c>cannot convert float NaN to integer</c>); a length past
         ///     npy_intp (<c>Maximum allowed size exceeded</c>); arange's own errors; the allocation guard's.</exception>
-        /// <exception cref="OverflowException">An infinite imaginary step (<c>cannot convert float infinity to
+        /// <exception cref="OverflowError">An infinite imaginary step (<c>cannot convert float infinity to
         ///     integer</c>); a Python int past the float range (<c>int too large to convert to float</c>).</exception>
-        /// <exception cref="DivideByZeroException">A zero real step (arange's Python division).</exception>
+        /// <exception cref="ZeroDivisionError">A zero real step (arange's Python division).</exception>
         private static NDArray GridSingleSlice(in np.AxisConcatenator.SliceSpec spec)
         {
             if (!spec.ImaginaryStep)
@@ -1210,9 +1210,9 @@ namespace NumSharp
         /// <exception cref="ValueError">A real step without a stop (NumSharp's text; NumPy's <c>None - start</c> TypeError
         ///     sends it to the except branch, whose <c>key.step</c> raises <c>AttributeError: 'tuple' object has no
         ///     attribute 'step'</c>); a NaN quotient or imaginary step (<c>cannot convert float NaN to integer</c>).</exception>
-        /// <exception cref="DivideByZeroException">A zero step: <c>division by zero</c> over Python ints, <c>float division
+        /// <exception cref="ZeroDivisionError">A zero step: <c>division by zero</c> over Python ints, <c>float division
         ///     by zero</c> once a float is involved.</exception>
-        /// <exception cref="OverflowException">An infinite quotient or imaginary step (<c>cannot convert float infinity to
+        /// <exception cref="OverflowError">An infinite quotient or imaginary step (<c>cannot convert float infinity to
         ///     integer</c>); a Python int past the float range met by float arithmetic (<c>int too large to convert to
         ///     float</c>) or an int quotient past it (<c>integer division result too large for a float</c>).</exception>
         private static double GridAxisSize(in np.AxisConcatenator.SliceSpec spec, int k, string caller)
@@ -1232,7 +1232,7 @@ namespace NumSharp
                 // long_true_divide is one IEEE division of the two (PyScalar.IntTrueDivide's own fast path), without the
                 // BigInteger round trip; a zero step is still int division's text.
                 if (spec.Step == 0d)
-                    throw new DivideByZeroException("division by zero");
+                    throw new ZeroDivisionError("division by zero");
                 quotient = (spec.Stop - spec.Start) / spec.Step;
             }
             else
@@ -1241,7 +1241,7 @@ namespace NumSharp
             if (double.IsNaN(quotient))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(quotient))
-                throw new OverflowException("cannot convert float infinity to integer");
+                throw new OverflowError("cannot convert float infinity to integer");
             return Math.Ceiling(quotient);
         }
 
@@ -1252,13 +1252,13 @@ namespace NumSharp
         /// <param name="value">The float.</param>
         /// <returns>The integer, as an integer-valued double.</returns>
         /// <exception cref="ValueError">A NaN (<c>cannot convert float NaN to integer</c>).</exception>
-        /// <exception cref="OverflowException">An infinity (<c>cannot convert float infinity to integer</c>).</exception>
+        /// <exception cref="OverflowError">An infinity (<c>cannot convert float infinity to integer</c>).</exception>
         private static double GridIntOfFloat(double value)
         {
             if (double.IsNaN(value))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(value))
-                throw new OverflowException("cannot convert float infinity to integer");
+                throw new OverflowError("cannot convert float infinity to integer");
             return Math.Truncate(value);
         }
 
@@ -1331,7 +1331,7 @@ namespace NumSharp
         /// <param name="caller">The public entry's name, for the missing-stop error.</param>
         /// <exception cref="ValueError">An imaginary step of other than one point without a stop (NumSharp's text; NumPy's
         ///     <c>kk.stop - start</c> TypeError ends in its except branch's AttributeError).</exception>
-        /// <exception cref="OverflowException">A Python int step or start past int64 in an int64 mesh (NumPy's
+        /// <exception cref="OverflowError">A Python int step or start past int64 in an int64 mesh (NumPy's
         ///     <c>Python int too large to convert to C long</c>, the LP64 text), or past the float range in a float64 mesh
         ///     (<c>int too large to convert to float</c>) — raised before any element, even of an empty axis.</exception>
         private static void GridFillLine(NDArray line, in np.AxisConcatenator.SliceSpec spec, int k, DType typ,
@@ -1374,12 +1374,12 @@ namespace NumSharp
         /// <summary>A Python int as the int64 NumPy's NEP 50 conversion gives it in an int64 operation.</summary>
         /// <param name="value">The int.</param>
         /// <returns>The value.</returns>
-        /// <exception cref="OverflowException">The int does not fit int64 (NumPy's <c>Python int too large to convert to C
+        /// <exception cref="OverflowError">The int does not fit int64 (NumPy's <c>Python int too large to convert to C
         ///     long</c> on LP64 platforms; Windows NumPy says <c>int too big to convert</c> — NumSharp pins the LP64 text).</exception>
         private static long GridToInt64(BigInteger value)
         {
             if (!np.AxisConcatenator.SliceSpec.FitsInt64(value))
-                throw new OverflowException("Python int too large to convert to C long");
+                throw new OverflowError("Python int too large to convert to C long");
             return (long)value;
         }
 
@@ -1485,18 +1485,18 @@ namespace NumSharp
             /// </summary>
             /// <param name="value">The int.</param>
             /// <returns>The double.</returns>
-            /// <exception cref="OverflowException">Past the double range (<c>int too large to convert to float</c>).</exception>
+            /// <exception cref="OverflowError">Past the double range (<c>int too large to convert to float</c>).</exception>
             public static double IntToFloat(BigInteger value)
             {
                 double d = PythonInt.ToDouble(value);
                 if (double.IsInfinity(d))
-                    throw new OverflowException("int too large to convert to float");
+                    throw new OverflowError("int too large to convert to float");
                 return d;
             }
 
             /// <summary>The number as a float: an int converted as CPython's float arithmetic converts it.</summary>
             /// <returns>The double.</returns>
-            /// <exception cref="OverflowException">An int past the double range.</exception>
+            /// <exception cref="OverflowError">An int past the double range.</exception>
             public double AsFloat() => _isInt ? IntToFloat(_int) : _float;
 
             /// <summary>
@@ -1506,7 +1506,7 @@ namespace NumSharp
             /// <param name="a">The minuend.</param>
             /// <param name="b">The subtrahend.</param>
             /// <returns>The difference.</returns>
-            /// <exception cref="OverflowException">An int operand past the double range beside a float.</exception>
+            /// <exception cref="OverflowError">An int operand past the double range beside a float.</exception>
             public static GridPyNumber Subtract(GridPyNumber a, GridPyNumber b)
             {
                 if (a._isInt && b._isInt)
@@ -1523,9 +1523,9 @@ namespace NumSharp
             /// <param name="a">The dividend.</param>
             /// <param name="b">The divisor.</param>
             /// <returns>The quotient, a Python float.</returns>
-            /// <exception cref="DivideByZeroException">A zero divisor: <c>division by zero</c> for two ints, <c>float
+            /// <exception cref="ZeroDivisionError">A zero divisor: <c>division by zero</c> for two ints, <c>float
             ///     division by zero</c> otherwise.</exception>
-            /// <exception cref="OverflowException">An int quotient past the double range (<c>integer division result too
+            /// <exception cref="OverflowError">An int quotient past the double range (<c>integer division result too
             ///     large for a float</c>), or an int operand past it beside a float.</exception>
             public static double TrueDivide(GridPyNumber a, GridPyNumber b)
             {
@@ -1552,8 +1552,8 @@ namespace NumSharp
         /// <exception cref="TypeError">See <see cref="GridSingleSlice"/>.</exception>
         /// <exception cref="ValueError">A missing stop (<see cref="GridAxisSize"/>, <see cref="GridFillLine"/>); a NaN size;
         ///     a size past npy_intp (<c>Maximum allowed size exceeded</c>); the allocation guard's.</exception>
-        /// <exception cref="DivideByZeroException">A zero real step.</exception>
-        /// <exception cref="OverflowException">An infinite size; a Python int NumPy cannot convert (see
+        /// <exception cref="ZeroDivisionError">A zero real step.</exception>
+        /// <exception cref="OverflowError">An infinite size; a Python int NumPy cannot convert (see
         ///     <see cref="GridFillLine"/>).</exception>
         // NDScoped: each line is a temp — only its open-mesh RESHAPE VIEW is returned, and the view holds its own
         // reference on the line's buffer. Without the scope every line's wrapper stranded one pooled buffer per slice

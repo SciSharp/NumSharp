@@ -61,8 +61,8 @@ namespace NumSharp.Backends
                 // uint16 -> char is the identity on the 16 bits (both are 2-byte unsigned lanes), so the cast copy moves the
                 // loop's results unchanged in whatever layout the uint16 route gave them.
                 NDIter.Copy(result, reduced);
-                // The uint16 route's full reduction is NumPy's scalar, read-only (MarkReductionScalar); so is its char twin.
-                return reduced.Shape.IsWriteable ? result : result.MarkReductionScalar();
+                // The uint16 route's full reduction is NumPy's scalar, read-only (PyArray_Return); so is its char twin.
+                return reduced.Shape.IsWriteable ? result : result.PyArray_Return();
             }
             finally
             {

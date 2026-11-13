@@ -159,7 +159,7 @@ namespace NumSharp
         ///     convolve/correlate mode</c> when its first letter names a mode, else <c>mode must be one of 'valid', 'same', or
         ///     'full' (got 'x')</c> with the argument in Python's <c>repr</c>), <c>object too deep for desired array</c> for
         ///     an operand of two or more dimensions (a <c>numpy.matrix</c> operand included, as in NumPy), or — for a
-        ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c>.</exception>
+        ///     fixed-width string operand, after every check above — <c>function not available for this data type</c>.</exception>
         /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate (CPython's UTF-8 encoding
         ///     error, raised before the mode is read).</exception>
         /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
@@ -178,7 +178,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data (any numeric dtype; text has no multiply loop and is refused).</param>
         /// <param name="axis">The axis to multiply over (negative counts from the end); <c>null</c> multiplies every element.
-        ///     A 0-d array accepts 0 and -1 as every axis (ufunc.reduce's rule).</param>
+        ///     A 0-d array accepts 0 and -1 as every axis (ufunc.reduce's rule). A tuple (<c>(0, 2)</c>) reduces every
+        ///     axis it names together, in one pass (NumPy's tuple axis; the empty tuple reduces none, and a tuple item
+        ///     gets no 0-d allowance).</param>
         /// <param name="dtype">The accumulator and result dtype: every element is cast to it before it is multiplied.
         ///     <c>null</c> is NumPy's default: int64 for bool and the signed integers narrower than 64 bits, uint64 for the
         ///     unsigned ones, the input's own dtype otherwise — or, with <paramref name="out"/>, <c>promote_types(out, a)</c>
@@ -201,19 +203,21 @@ namespace NumSharp
         ///     <paramref name="initial"/> or <paramref name="where"/> (<c>matrix.prod() got an unexpected keyword argument
         ///     'keepdims'</c>).</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>; a mask with more axes than
-        ///     <paramref name="a"/>; an unconvertible <paramref name="initial"/>.</exception>
+        ///     <paramref name="a"/>; an unconvertible <paramref name="initial"/>. Also a tuple that names an axis twice
+        ///     (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast.</exception>
-        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>.</exception>
         /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.prod.html. With <paramref name="initial"/> or
-        ///     <paramref name="where"/> the product is NumPy's sequential multiply loop through its reduction iterator (a
-        ///     NaN keeps the payload of the first NaN met); without them a flat float product multiplies in SIMD lane order,
-        ///     which can differ from NumPy's in the last bit (the open NL3).
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.prod.html. A float product is NumPy's sequential
+        ///     multiply loop on every route (a NaN keeps the payload of the first NaN met in a reduce run), bit for bit:
+        ///     a contiguous product at NumPy's own speed (a dependent multiply per element), an axis product of a C-ordered
+        ///     array eight rows at a time or row by row with vectors; <paramref name="initial"/> or
+        ///     <paramref name="where"/> run NumPy's reduction iterator.
         /// </remarks>
-        public static NDArray prod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+        public static NDArray prod(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             object initial = null, NDArray @where = null)
         {
             if (a is null)
@@ -222,6 +226,27 @@ namespace NumSharp
             // The whole call is the engine's: TensorEngine.ReduceProduct of a's engine takes every keyword.
             return a.TensorEngine.ReduceProduct(a, axis, keepdims, dtype, @out, initial, @where);
         }
+
+        /// <summary>
+        ///     <see cref="prod(NDArray, NDAxis?, DType, NDArray, bool, object, NDArray)"/> with the axis as one
+        ///     <c>int</c>: the overload a C# integer binds (its identity conversion beats NDAxis' implicit one),
+        ///     forwarding to the NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="prod(NDArray, NDAxis?, DType, NDArray, bool, object, NDArray)"/>
+        public static NDArray prod(NDArray a, int axis, DType dtype = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => prod(a, (NDAxis?)axis, dtype, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="prod(NDArray, NDAxis?, DType, NDArray, bool, object, NDArray)"/> with the axes as an
+        ///     <c>int[]</c>: the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to
+        ///     <c>int[]</c> better than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any
+        ///     other array NumPy's tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="prod(NDArray, NDAxis?, DType, NDArray, bool, object, NDArray)"/>
+        public static NDArray prod(NDArray a, int[] axis, DType dtype = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => prod(a, (NDAxis?)axis, dtype, @out, keepdims, initial, @where);
 
         /// <summary>
         ///     Numerical positive, element-wise (identity: returns +x, a copy).

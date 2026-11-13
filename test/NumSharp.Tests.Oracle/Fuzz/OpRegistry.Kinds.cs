@@ -192,6 +192,11 @@ namespace NumSharp.Tests.Fuzz
         ///     Ops returning N arrays. The corpus records every slot, so ARITY is asserted too —
         ///     which the older which/piece params (one slot per case) structurally cannot do.
         /// </summary>
+        /// <param name="op">The corpus op key of a tuple-valued call (<c>divmod</c>, <c>frexp</c>, <c>nonzero</c>, ...).</param>
+        /// <param name="p">The case's params.</param>
+        /// <param name="ops">The case's operands.</param>
+        /// <returns>Every result slot, in NumPy's tuple order.</returns>
+        /// <exception cref="NotSupportedException">The op key is not wired here.</exception>
         public static NDArray[] ApplyTuple(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
             // ndarray.* tuple keys — a.nonzero() plus the IN-PLACE mutators whose two slots are
@@ -409,8 +414,10 @@ namespace NumSharp.Tests.Fuzz
                         ? (int?)null
                         : p["axis"].GetInt32();
                     NDArray weights = p["weighted"].GetBoolean() ? ops[1] : null;
-                    var (average, sumOfWeights) = np.average_returned(ops[0], axis, weights,
-                        p["keepdims"].GetBoolean());
+                    // NumPy's np.average(..., returned=True); the op keeps the corpus name of the NumSharp-only
+                    // average_returned it replayed before API-parity batch 11 folded it into np.average's result struct.
+                    var (average, sumOfWeights) = np.average(ops[0], axis, weights, returned: true,
+                        keepdims: p["keepdims"].GetBoolean());
                     return new[] { average, sumOfWeights };
                 }
                 case "unique_counts":
@@ -469,7 +476,7 @@ namespace NumSharp.Tests.Fuzz
                 case "out_round":
                 {
                     var target = ops[1];
-                    var returned = np.round_(ops[0], p["decimals"].GetInt32(), target);
+                    var returned = np.round(ops[0], p["decimals"].GetInt32(), target);
                     return new[] { returned, BaseBuffer(target) };
                 }
                 case "out_clip":
@@ -496,9 +503,19 @@ namespace NumSharp.Tests.Fuzz
 
                 case "broadcast_arrays":
                     return np.broadcast_arrays(ops);
+                // NumPy's np.indices(..., sparse=True) (the corpus keeps the name of the NumSharp-only indices_sparse it
+                // replayed before API-parity batch 11).
                 case "indices_sparse":
-                    return np.indices_sparse(ParseIntArray(p["dimensions"]),
-                        FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                    return np.indices(ParseIntArray(p["dimensions"]),
+                        FuzzCorpus.DtypeToTC(p["dtype"].GetString()), sparse: true).ToArray();
+                // np.linspace(..., retstep=True): NumPy's (samples, step); naming retstep binds the whole-signature
+                // overload over object ends, which returns np.LinspaceResult.
+                case "linspace_retstep":
+                {
+                    var result = np.linspace(ops[0], ops[1], p["num"].GetInt64(), p["endpoint"].GetBoolean(), retstep: true,
+                        dtype: LinspaceDtype(p), axis: p["axis"].GetInt32());
+                    return new[] { result.samples, result.step };
+                }
 
                 // ---- LAPACK factorisation family (linalg_parity tier; TUPLE results) ----
                 // svd/eig/eigh/qr return multiple arrays; lstsq returns four. Computable ONLY

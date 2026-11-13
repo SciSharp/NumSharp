@@ -216,7 +216,7 @@ namespace NumSharp.Backends.Printing
         ///     or more dimensions (<c>only 0-dimensional arrays can be converted to Python scalars</c>); a 0-d array whose
         ///     element <c>float()</c> refuses (<c>float() argument must be a string or a real number, not
         ///     'complex'</c>).</exception>
-        /// <exception cref="OverflowException">A Python int beyond the float range (<c>int too large to convert to
+        /// <exception cref="OverflowError">A Python int beyond the float range (<c>int too large to convert to
         ///     float</c>).</exception>
         /// <exception cref="ValueError">A 0-d text array that spells no float (<c>could not convert string to float:
         ///     'x'</c>).</exception>
@@ -252,7 +252,7 @@ namespace NumSharp.Backends.Printing
         /// <param name="x">The argument.</param>
         /// <returns>The value.</returns>
         /// <exception cref="TypeError"><c>must be real number, not {type}</c>.</exception>
-        /// <exception cref="OverflowException">A Python int beyond the float range.</exception>
+        /// <exception cref="OverflowError">A Python int beyond the float range.</exception>
         private static double PyFloatAsDouble(object x)
         {
             switch (x)
@@ -268,7 +268,7 @@ namespace NumSharp.Backends.Printing
             {
                 double d = PythonInt.ToDouble(big);
                 if (double.IsInfinity(d))
-                    throw new OverflowException("int too large to convert to float");
+                    throw new OverflowError("int too large to convert to float");
                 return d;
             }
             throw new TypeError($"must be real number, not {NDPyObject.TypeName(x)}");
@@ -282,7 +282,7 @@ namespace NumSharp.Backends.Printing
         /// <returns>The value.</returns>
         /// <exception cref="TypeError">An array of one or more dimensions; an element <c>float()</c> refuses.</exception>
         /// <exception cref="ValueError">Text that is no float literal.</exception>
-        /// <exception cref="OverflowException">A Python int element beyond the float range.</exception>
+        /// <exception cref="OverflowError">A Python int element beyond the float range.</exception>
         private static unsafe double ArrayFloat(NDArray array)
         {
             if (array.ndim != 0)

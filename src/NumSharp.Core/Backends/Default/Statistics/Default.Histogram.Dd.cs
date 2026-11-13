@@ -294,7 +294,7 @@ namespace NumSharp.Backends
             // np.ravel_multi_index(Ncount, nbin)'s statement: the first coordinate array's engine (the default one without
             // dimensions), mode 'raise', C order.
             TensorEngine indexEngine = D > 0 ? Ncount[0].TensorEngine : TensorEngine.Default;
-            NDArray xy = indexEngine.RavelMultiIndex(Ncount, nbin, "raise", 'C');
+            NDArray xy = indexEngine.RavelMultiIndex(Ncount, ToLongShape(nbin), "raise", 'C');
 
             long minlen = 1;
             foreach (int nb in nbin) minlen *= nb;
@@ -629,8 +629,7 @@ namespace NumSharp.Backends
                     };
                 case NDArray nd:
                     if (Backends.Strings.NDStringUfuncs.IsText(nd))
-                        throw new TypeError(
-                            $"ufunc 'less' did not contain a loop with signature matching types ({nd.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
+                        throw new UFuncNoLoopError("less", 2, nd.dtype.Meta, DTypeRegistry.PyLong, null);
                     return NumericBelowOne(nd.GetAtIndex(0));
                 case null:
                     throw new TypeError("'<' not supported between instances of 'NoneType' and 'int'");

@@ -138,7 +138,7 @@ namespace NumSharp.Tests.Interop
 
         /// <summary>
         ///     "The same references feed NumSharp's resize guard … `cannot resize an array that
-        ///     references or is referenced by another array in this way`" — the page's verbatim
+        ///     references or is referenced by another object in this way`" — the page's verbatim
         ///     NumPy-worded refusal, and that lifting the reference lifts the guard.
         /// </summary>
         [TestMethod]
@@ -152,7 +152,7 @@ namespace NumSharp.Tests.Interop
             ((Action)(() => nd.resize(new Shape(16))))
                 .Should().Throw<IncorrectShapeException>()
                 .WithMessage("*cannot resize an array that references or is referenced*")
-                .WithMessage("*by another array in this way*");
+                .WithMessage("*by another object in this way*");
 
             secondReference.Dispose();
             nd.resize(new Shape(16));   // ...and lifting the reference lifts the guard

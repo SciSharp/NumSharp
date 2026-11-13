@@ -10,7 +10,7 @@ paths:
 
 # `numpy.char` and `chararray`
 
-The module, the class and the object path, byte-identical to NumPy 2.4.2 (the string classes and the computing rule:
+The module, the class and the object path, byte-identical to NumPy 2.5.4 (the string classes and the computing rule:
 `strings.md`; the functions numpy.char re-exports: `strings-methods.md`).
 
 ## The module
@@ -41,9 +41,12 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
 
 `Char/NDCharArray{,.Strip,.Indexing,.Methods}.cs`, `APIs/np.char.array.cs`.
 - `np.@char.chararray(shape, itemsize, unicode, buffer, offset, strides, order)`: a `string` buffer FILLS,
-  `ReadOnlyMemory<byte>` is Python's read-only `bytes`, `byte[]` a writable `bytearray`, an `NDArray` is borrowed.
+  `ReadOnlyMemory<byte>` is Python's read-only `bytes`, `byte[]` a writable `bytearray`, an `NDArray` is borrowed. NumPy's
+  class constructor `new NDCharArray(shape, itemsize = 1, unicode = false, buffer = null, offset = 0, strides = null,
+  order = 'C')` runs the same statements (`CharModule.ChararrayData`) and takes over the plain array's storage; the
+  `UnmanagedStorage` constructor stays NumSharp's plumbing.
   `np.@char.array` / `asarray` follow NumPy's branches (str / bytes: `itemsize = len`, shape `len // itemsize`, Python's
-  ZeroDivisionError as `DivideByZeroException`; an S / U array: a view, `itemsize // 4` for U, so U is always cast;
+  Python's `ZeroDivisionError`; an S / U array: a view, `itemsize // 4` for U, so U is always cast;
   numbers, bools, None and StringDType through NumPy's `tolist()` route, value-based widths; floats cast once, then
   narrowed).
 - The finalize rule (`dtype.char in 'VSUbc'`, else `ValueError: Can only create a chararray from string data.`) runs
@@ -142,7 +145,11 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   its exact units, a per-piece `np.str_` flag: unicodeobject.c returns the element's own `np.str_` when the separator is
   longer or of a wider kind; the repr prints `np.str_('ab')`). Every structural member is the same NDArray operation on
   `Ids` (a view shares the ids, a copy copies them, the lists stay shared), so strides, flags, base and errors are NumPy's
-  for the object array.
+  for the object array. `np.vstack(NDListArray[])` / `np.row_stack(NDListArray[])` (`NDListArray.VStack`) stack the ids of
+  every part mapped into the FIRST part's heap (its own lists keep their identity; another family's are appended there
+  once) with `np.vstack` of the ids, so NumPy's shape rule and texts hold and the result shares the heap.
+  `np.broadcast(NDListArray[])` broadcasts the ids the same way and steps through tuples of the lists (a new
+  `List<object>` of the pieces each, NumPy's Python list); its `iters` are refused (they would read ids as numbers).
 - The members that read and write the lists' VALUES (`Char/NDListArray.{Engine,Compare,Sort,Reduce,Arithmetic,Assign,TextOperands}.cs`)
   are NumPy's object loops over CPython's list semantics: `list_richcompare` (ordering a str item against a bytes item is
   CPython's TypeError), the truth members over non-emptiness, `astype` (object converts only under `'unsafe'`), the sorts
@@ -156,8 +163,8 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   array (NumPy: the list itself, which `item()` gives; `[Misaligned]`).
 - Every member is ONE NumPy signature with all its parameters: `dtype=` of `sum` / `prod` / `cumsum` / `cumprod` / `trace`
   / `mean` / `var` / `std` / `clip` (NumPy's ufunc dtype checks, then the object loop's conversion error per class),
-  `out=` of `cumsum` / `cumprod` (both `PyUFunc_Accumulate` routes' texts; NumPy 2.4.2 segfaults on a 0-d out, NumSharp
-  raises the wrong-size text, `[Misaligned]`), `trace`, `conj`, `mean` / `var` / `std` (ndarray outs, `_mean` / `_var`'s
+  `out=` of `cumsum` / `cumprod` (both `PyUFunc_Accumulate` routes' texts, a 0-d out included: NumPy 2.5's wrong-size
+  text, where NumPy 2.4.2 segfaulted), `trace`, `conj`, `mean` / `var` / `std` (ndarray outs, `_mean` / `_var`'s
   statements), `where=` of `clip` and of `mean` in a `dtype=` loop, `mean=` of `var` / `std`, `view(dtype, type)`
   (`[Optional]` parameters, so an omitted argument and an explicit null are told apart), `reshape(shape, order, copy)`,
   `tofile(fid, sep, format)`. A NumPy result holding a non-list object (an int identity, `imag`'s zeros) is
@@ -168,7 +175,7 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   append); the builders create their heap once at the counted size (`NDListHeap.Reserved`, whose appends THROW past the
   reservation: the pool's size-bucket slack would hide an under-sized heap completely); a member that selects lists
   (`max` / `min` / `clip`) shares the array's heap.
-- `join` takes `seq`'s class, as wide as the longest result; over an `NDListArray` it raises NumPy 2.4.2's own
+- `join` takes `seq`'s class, as wide as the longest result; over an `NDListArray` it raises NumPy 2.5.4's own
   `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` (NumPy cannot finish
   `np.char.join(' ', np.char.split(a))`); over an EMPTY one NumPy returns an empty object array, which the one
   `join(object sep, object seq)` (an `NDArray` result) cannot hold: `NotSupportedException`.

@@ -181,7 +181,7 @@ namespace NumSharp.Backends
         /// <param name="indices">Normalised (non-negative, in-range) leading coordinates.</param>
         /// <exception cref="ValueError">A sequence into one element, a value that does not broadcast to the target, or a text
         ///     that does not parse into a numeric storage.</exception>
-        /// <exception cref="OverflowException">An integer text outside a numeric storage's dtype.</exception>
+        /// <exception cref="OverflowError">An integer text outside a numeric storage's dtype.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
         internal void SetDataString(NDArray value, int[] indices)
@@ -226,7 +226,7 @@ namespace NumSharp.Backends
                 // SetData's pack before it got here, and a 0-d text ARRAY converts nothing; formatting a number as text
                 // cannot fail, so a numeric value leaves nothing to report.
                 if (valueShape.IsScalar && value.Storage.IsString && IsString && value.dtype.Meta != Descr.Meta)
-                    value.astype(Descr, true, 'K', "unsafe").Dispose();
+                    value.astype(Descr).Dispose();
                 return;
             }
             Iteration.NDIter.Copy(target, source);
@@ -244,7 +244,7 @@ namespace NumSharp.Backends
         /// <param name="indices">Normalised (non-negative, in-range) leading coordinates.</param>
         /// <exception cref="ValueError">A value that does not broadcast to the target, a non-text literal (or array element
         ///     text) into a <c>coerce=False</c> descriptor, a text that does not parse when the value is cast.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts: setitem's (<c>Failed to pack string during
+        /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts: setitem's (<c>Failed to pack string during
         ///     StringDType setitem</c>) when one element takes a Python object, the copy loop's otherwise.</exception>
         /// <exception cref="Exception">The cast's own errors (see <see cref="Strings.NDVStringCasting.Copy"/>).</exception>
         /// <remarks>
@@ -299,7 +299,7 @@ namespace NumSharp.Backends
         /// <param name="offset">The element's index in this storage's slice.</param>
         /// <exception cref="ValueError">A non-text value under <c>coerce=False</c>.</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        /// <exception cref="OutOfMemoryException">Setitem's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">Setitem's <c>MemoryError</c> texts.</exception>
         internal void SetVStringItem(NDArray value, long offset)
         {
             // A str literal stores its ORIGINAL C# text (its 0-d U array drops trailing NULs on read; setitem keeps them).

@@ -55,7 +55,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an out or mask that does not
         ///     broadcast, or an out that would be stretched.</exception>
         /// <exception cref="IncorrectShapeException">The inputs do not broadcast together.</exception>
-        /// <exception cref="OverflowException">A C# integer literal operand (NumPy's Python int) outside the integer loop's
+        /// <exception cref="OverflowError">A C# integer literal operand (NumPy's Python int) outside the integer loop's
         /// range (<c>Python integer 1000 out of bounds for int8</c>).</exception>
         public override (NDArray Quotient, NDArray Remainder) DivMod(
             NDArray lhs, NDArray rhs, DType dtype = null,
@@ -213,7 +213,7 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">A complex operand with no <paramref name="dtype"/>: divmod has no complex loop
         ///     (NumPy's <c>ufunc 'divmod' not supported for the input types, ...</c>, parity QA-27), raised after the
         ///     outs and the mask are checked.</exception>
-        /// <exception cref="OverflowException">A weak C# integer literal outside the integer loop's range.</exception>
+        /// <exception cref="OverflowError">A weak C# integer literal outside the integer loop's range.</exception>
         /// <exception cref="IncorrectShapeException">The inputs do not broadcast together (every operand listed).</exception>
         /// <remarks>
         /// <para><b>Order of the checks</b> (NumPy's <c>ufunc_generic_fastcall</c>): both outputs' writeability (argument
@@ -701,15 +701,41 @@ namespace NumSharp.Backends
         /// <paramref name="rt"/>. A no-op passthrough (no copy) when <paramref name="x"/> already IS a
         /// C-contiguous, offset-0, non-broadcast array of <paramref name="rt"/> with that shape.
         /// </summary>
+        /// <param name="x">The operand (any layout; 0-d or lower-rank operands broadcast).</param>
+        /// <param name="shape">The iteration shape (at least one dimension).</param>
+        /// <param name="rt">The loop dtype.</param>
+        /// <returns><paramref name="x"/> itself, or a fresh C-contiguous copy the caller disposes. Either way the result's
+        ///     first element is at its storage's base (offset 0), which the kernels read through <c>.Address</c>.</returns>
+        /// <remarks>
+        ///     The divmod, frexp and ldexp kernels address their operands from the storage's BASE, so a C-contiguous view at
+        ///     a non-zero offset (an np.split child, a row of a matrix) must not reach them as it is:
+        ///     <see cref="NDArray.ascontiguousarray(NDArray, DType)"/> returns such a view unchanged (it already is
+        ///     contiguous), and the kernels then read the owner's first elements - silently wrong values (the relayout tier's
+        ///     RL03 and the array-object tier's VA05: <c>np.ldexp</c> of an np.split child). Its elements are copied instead.
+        /// </remarks>
         private NDArray MaterializeContiguous(NDArray x, Shape shape, NPTypeCode rt)
         {
             var v = x.Shape.Equals(shape) && !x.Shape.IsBroadcasted ? x : NDArray.broadcast_to(x, shape);
-            if (v.GetTypeCode == rt && v.Shape.IsContiguous && v.Shape.offset == 0 && !v.Shape.IsBroadcasted)
-                return v;
+            if (v.GetTypeCode == rt && v.Shape.IsContiguous && !v.Shape.IsBroadcasted)
+            {
+                if (v.Shape.offset == 0)
+                    return v;
+                // A C-contiguous view at a non-zero offset: the kernels read from .Address, the storage's base, so its
+                // elements are copied to a fresh buffer (see the remarks).
+                var fresh = v.copy('C');
+                // A broadcast view made here only fed the copy: back to the owner's count rather than the finalizer.
+                if (!ReferenceEquals(v, x))
+                    v.Dispose();
+                return fresh;
+            }
             // asarray(order='C') materializes a C-contiguous resultType copy through any layout,
             // preserving the (ndim>=1) shape — unlike ascontiguousarray it does not reshape 0-d,
             // but this path only runs for ndim>=1 (0-d routes to the compose fallback above).
-            return NDArray.ascontiguousarray(v, rt);
+            var copy = NDArray.ascontiguousarray(v, rt);
+            // A broadcast view made here is dead once copied: back to the owner's count rather than the finalizer.
+            if (!ReferenceEquals(v, x) && !ReferenceEquals(v, copy))
+                v.Dispose();
+            return copy;
         }
     }
 }

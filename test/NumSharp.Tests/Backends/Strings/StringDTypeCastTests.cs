@@ -99,13 +99,13 @@ namespace NumSharp.Tests.Backends.Strings
             try
             {
                 Action toU = () => a.astype(np.dtype("U4"));
-                toU.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string in in string to unicode cast");
+                toU.Should().Throw<MemoryError>().WithMessage("Failed to load string in in string to unicode cast");
                 Action toS = () => a.astype(np.dtype("S4"));
-                toS.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string in in string to bytes cast");
+                toS.Should().Throw<MemoryError>().WithMessage("Failed to load string in in string to bytes cast");
                 Action toBool = () => a.astype(np.dtype("?"));
-                toBool.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string in string to bool cast");
+                toBool.Should().Throw<MemoryError>().WithMessage("Failed to load string in string to bool cast");
                 Action toInt = () => a.astype(np.dtype("i8"));
-                toInt.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string for conversion to a non-nullable type");
+                toInt.Should().Throw<MemoryError>().WithMessage("Failed to load string for conversion to a non-nullable type");
             }
             finally
             {
@@ -133,10 +133,10 @@ namespace NumSharp.Tests.Backends.Strings
                     try
                     {
                         Action whole = () => a.astype(np.dtype("?"));
-                        whole.Should().Throw<OutOfMemoryException>().WithMessage(Message, $"n={n}, corrupt cell {k}");
+                        whole.Should().Throw<MemoryError>().WithMessage(Message, $"n={n}, corrupt cell {k}");
                         using var strided = a[$"{k % 2}::2"];
                         Action stepped = () => strided.astype(np.dtype("?"));
-                        stepped.Should().Throw<OutOfMemoryException>().WithMessage(Message, $"n={n}, corrupt cell {k}, step 2");
+                        stepped.Should().Throw<MemoryError>().WithMessage(Message, $"n={n}, corrupt cell {k}, step 2");
                     }
                     finally
                     {
@@ -182,7 +182,7 @@ namespace NumSharp.Tests.Backends.Strings
             {
                 Action parse = () => a.astype(np.dtype("i8"));
                 parse.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: 'é'");
-                Action sameKind = () => a.astype(np.dtype("i8"), true, 'K', "same_kind");
+                Action sameKind = () => a.astype(np.dtype("i8"), 'K', "same_kind");
                 sameKind.Should().Throw<Exception>().WithMessage("Cannot cast array data from StringDType() to dtype('int64') according to the rule 'same_kind'");
             }
             using (var f8 = np.array(new[] { double.NaN, 1.5 }))
@@ -197,7 +197,7 @@ namespace NumSharp.Tests.Backends.Strings
             using (var big = np.array(new[] { "2147483648" }, T))
             {
                 Action overflow = () => big.astype(np.dtype("i4"));
-                overflow.Should().Throw<OverflowException>().WithMessage("Integer 2147483648 is out of bounds for int",
+                overflow.Should().Throw<OverflowError>().WithMessage("Integer 2147483648 is out of bounds for int",
                     "NumSharp pins the LP64 C type name of int32 (Windows NumPy says 'long')");
             }
         }
@@ -216,51 +216,49 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy 2.4.2's <c>bytes → StringDType</c> cast copies the bytes WITHOUT validating UTF-8 (casts.cpp
-        ///     <c>bytes_to_string</c>), so invalid UTF-8 is stored and every later read raises; NumSharp raises the same
-        ///     UnicodeDecodeError at the cast, so no StringDType array ever holds invalid text.
+        ///     NumPy 2.5's <c>bytes → StringDType</c> cast validates each element as UTF-8 in the cast (casts.cpp
+        ///     <c>bytes_to_string</c>'s <c>utf8_buffer_size</c>, gh-32296) and refuses invalid text with a TypeError, so no
+        ///     StringDType array ever holds it. NumPy 2.4 copied the bytes unchecked and raised on every later read, where
+        ///     NumSharp raised CPython's UnicodeDecodeError at the cast.
         /// </summary>
         [TestMethod]
-        public void NumPyBug_SToT_InvalidUtf8_RaisesAtTheCast()
+        public void SToT_InvalidUtf8_RaisesNumPysTypeErrorAtTheCast()
         {
             // A byte[][] without a dtype is a nested list of ints (a uint8 matrix); under an S dtype each byte[] is a bytes object.
             using var s = np.array(new[] { new byte[] { (byte)'d' }, new byte[] { 0xFF } }, np.dtype("S1"));
             Action cast = () => s.astype(T);
-            cast.Should().Throw<UnicodeDecodeError>().WithMessage("'utf-8' codec can't decode byte 0xff in position 0: invalid start byte");
+            cast.Should().Throw<TypeError>().Which.Message.Should().Be("Invalid UTF-8 bytes found, cannot convert to StringDType");
             using var ok = np.array(new[] { new byte[] { 0xC3, 0xA9 }, new byte[] { 0xE2, 0x82, 0xAC } }, np.dtype("S3"));
             using var r = ok.astype(T);
             V(r).Should().Equal(new object[] { "é", "€" });
         }
 
         /// <summary>
-        ///     <c>bytes → StringDType</c> validates four-byte UTF-8 sequences with CPython's ranges: a bad second, third or
-        ///     fourth byte, a value past U+10FFFF, and a sequence cut by the end of the element; a valid one is one astral code
-        ///     point.
+        ///     <c>bytes → StringDType</c> validates four-byte UTF-8 sequences as strict UTF-8: a bad second, third or fourth
+        ///     byte, a value past U+10FFFF, a sequence cut by the end of the element, a bad byte after a valid character, a
+        ///     surrogate and an overlong form are all NumPy 2.5's one TypeError (no position: NumPy 2.4 named CPython's range
+        ///     on read); a valid sequence is one astral code point, and a NUL inside the text is kept.
         /// </summary>
         [TestMethod]
-        public void SToT_FourByteSequences_HaveCPythonsRanges()
+        public void SToT_FourByteSequences_AreStrictUtf8()
         {
-            const string Codec = "'utf-8' codec can't decode ";
-            var errors = new (byte[] Bytes, string Text)[]
+            var errors = new[]
             {
-                (new byte[] { 0xF0, 0x90, 0x28, 0xBC }, "bytes in position 0-1: invalid continuation byte"),
-                (new byte[] { 0xF0, 0x90, 0x8C, 0x28 }, "bytes in position 0-2: invalid continuation byte"),
-                (new byte[] { 0xF0, 0x28, 0x8C, 0xBC }, "byte 0xf0 in position 0: invalid continuation byte"),
-                (new byte[] { 0xF4, 0x90, 0x80, 0x80 }, "byte 0xf4 in position 0: invalid continuation byte"),
-                (new byte[] { 0xF0, 0x9F, 0x98 }, "bytes in position 0-2: unexpected end of data"),
-                (new byte[] { 0xF0, 0x9F }, "bytes in position 0-1: unexpected end of data"),
-                // A cut sequence that an early byte already proves invalid is a continuation error (CPython's texts).
-                (new byte[] { 0xF0, 0x28 }, "byte 0xf0 in position 0: invalid continuation byte"),
-                (new byte[] { 0xF0, 0x90, 0x28 }, "bytes in position 0-1: invalid continuation byte"),
-                // The diagnosis walks past a valid four-byte character to the first bad byte.
-                (new byte[] { 0xF0, 0x9F, 0x98, 0x80, 0xFF }, "byte 0xff in position 4: invalid start byte"),
+                new byte[] { 0xF0, 0x90, 0x28, 0xBC }, new byte[] { 0xF0, 0x90, 0x8C, 0x28 }, new byte[] { 0xF0, 0x28, 0x8C, 0xBC },
+                new byte[] { 0xF4, 0x90, 0x80, 0x80 }, new byte[] { 0xF0, 0x9F, 0x98 }, new byte[] { 0xF0, 0x9F },
+                new byte[] { 0xF0, 0x28 }, new byte[] { 0xF0, 0x90, 0x28 }, new byte[] { 0xF0, 0x9F, 0x98, 0x80, 0xFF },
+                new byte[] { 0xED, 0xA0, 0x80 }, new byte[] { 0xC0, 0x80 },
             };
-            foreach (var (bytes, text) in errors)
+            foreach (var bytes in errors)
             {
                 using var s = np.array(new[] { bytes }, np.dtype("S5"));
                 Action cast = () => s.astype(T);
-                cast.Should().Throw<UnicodeDecodeError>(BitConverter.ToString(bytes)).WithMessage(Codec + text);
+                cast.Should().Throw<TypeError>(BitConverter.ToString(bytes)).Which.Message
+                    .Should().Be("Invalid UTF-8 bytes found, cannot convert to StringDType", BitConverter.ToString(bytes));
             }
+            using var inner = np.array(new[] { new byte[] { (byte)'a', 0, (byte)'b' } }, np.dtype("S5"));
+            using var innerT = inner.astype(T);
+            innerT.GetValue(0).Should().Be("a\0b");
             using var valid = np.array(new[] { new byte[] { 0xF0, 0x9F, 0x98, 0x80 } }, np.dtype("S4"));
             using var r = valid.astype(T);
             r.GetValue(0).Should().Be("\U0001F600");

@@ -18,6 +18,7 @@ The essential types for working with NumSharp.
 | @NumSharp.np | Static API class (like `import numpy as np` in Python) |
 | @NumSharp.Shape | Array dimensions and strides |
 | @NumSharp.Slice | Slice specification for array indexing |
+| @NumSharp.NDAxis | NumPy's `axis` argument: one axis or a tuple (`1`, `(0, 2)`, `new[] { 0, 2 }`; `null` is None) |
 | @NumSharp.Generic.NDArray`1 | Generic typed wrapper for unmanaged CLR element types; use `NDArray` for text |
 | @NumSharp.DType | Full dtype descriptor, including text width or StringDType parameters |
 | @NumSharp.NDCharArray | NumPy's fixed-width `chararray`, with stripping element access and comparisons |
@@ -49,9 +50,9 @@ Functions for creating new arrays.
 |----------|-------------|
 | `np.array(data)` | Create array from existing data |
 | `np.zeros(shape)` | Array filled with zeros |
-| `np.zeros_like(a)` | Array of zeros with same shape as `a` |
+| `np.zeros_like(a, dtype, order, shape)` | Array of zeros with same shape as `a` (or `shape:`) |
 | `np.ones(shape)` | Array filled with ones |
-| `np.ones_like(a)` | Array of ones with same shape as `a` |
+| `np.ones_like(a, dtype, order, shape)` | Array of ones with same shape as `a` (or `shape:`) |
 | `np.empty(shape)` | Uninitialized array |
 | `np.full(shape, value)` | Array filled with a constant value |
 | `np.eye(N)` | Identity matrix |
@@ -72,8 +73,8 @@ Functions for combining multiple arrays.
 |----------|-------------|
 | `np.concatenate(arrays, axis)` | Join arrays along an existing axis |
 | `np.stack(arrays, axis)` | Join arrays along a new axis |
-| `np.vstack(arrays)` | Stack arrays vertically (row-wise) |
-| `np.hstack(arrays)` | Stack arrays horizontally (column-wise) |
+| `np.vstack(arrays)` | Stack arrays vertically (row-wise); `np.vstack(new[] { a, b }, dtype:, casting:)` |
+| `np.hstack(arrays)` | Stack arrays horizontally (column-wise); `np.hstack(new[] { a, b }, dtype:, casting:)` |
 | `np.dstack(arrays)` | Stack arrays depth-wise (along 3rd axis) |
 
 ---

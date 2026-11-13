@@ -280,10 +280,10 @@ namespace NumSharp.Tests.Interop
                     using (PyObject _ = Python.np.with("np.savez(p, weights=w, biases=b)", ("p", p), ("w", w), ("b", b))) { }
 
                     using NpzFile npz = np.load_npz(path);
-                    npz.Count.Should().Be(2);
+                    npz.files.Count.Should().Be(2);
                     npz.ContainsKey("weights").Should().BeTrue();
                     npz.ContainsKey("missing").Should().BeFalse();
-                    ((IEnumerable<string>)npz.Files).Should().Contain(new[] { "weights", "biases" });
+                    ((IEnumerable<string>)npz.files).Should().Contain(new[] { "weights", "biases" });
 
                     NDArray dotAccess = npz.f.weights;   // NumPy's BagObj dot access
                     ByteContract.AssertSameBytes(dotAccess, w, "npz.f.weights (dot access) reads numpy's member byte-exact");

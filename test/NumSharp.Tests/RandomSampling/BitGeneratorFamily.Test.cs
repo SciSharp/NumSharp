@@ -149,7 +149,13 @@ namespace NumSharp.Tests.RandomSampling
             // n_children_spawned is NumPy's uint32_t: the parameter IS a uint, so the out-of-range values NumPy rejects at
             // assignment (-1, 2**32) do not compile, and the whole uint32 range is accepted.
             new SeedSequence(1, null, 4, uint.MaxValue).n_children_spawned.Should().Be(uint.MaxValue);
-            Throws<OverflowException>(() => new SeedSequence(1).spawn(-1), "can't convert negative value to uint32_t");
+            // NumPy 2.5 checks a negative child count first (2.4 raised the uint32 OverflowError after an empty loop), and the
+            // refused call leaves the count untouched.
+            var counted = new SeedSequence(1);
+            Throws<ValueError>(() => counted.spawn(-1), "n_children must be non-negative");
+            counted.n_children_spawned.Should().Be(0u);
+            Throws<ValueError>(() => new SeedlessSeedSequence().spawn(-1), "n_children must be non-negative");
+            new SeedlessSeedSequence().spawn(0).Should().BeEmpty();
         }
 
         /// <summary>
@@ -162,7 +168,7 @@ namespace NumSharp.Tests.RandomSampling
         {
             var s = new SeedSequence(1, null, 4, uint.MaxValue);
             // LP64 NumPy's uint32_t conversion text (the Windows build says "Python int too large to convert to C unsigned long").
-            Throws<OverflowException>(() => s.spawn(2), "value too large to convert to uint32_t");
+            Throws<OverflowError>(() => s.spawn(2), "value too large to convert to uint32_t");
             s.n_children_spawned.Should().Be(uint.MaxValue);
         }
 
@@ -220,19 +226,20 @@ namespace NumSharp.Tests.RandomSampling
         }
 
         /// <summary>
-        ///     NumPy's <c>_coerce_to_uint32_array</c> corners: nested sequences flatten, string elements parse (hex after
-        ///     <c>0x</c>, decimal after a leading digit), a 2-D int array flattens in C order, a uint32 array element passes through, empties are
-        ///     empty, bools count as ints, and a C# list stands for a Python list.
+        ///     NumPy's <c>_coerce_to_uint32_array</c> corners: string elements parse (hex after <c>0x</c>, decimal after a
+        ///     leading digit), empties are empty, bools count as ints, and a C# list stands for a Python list. NumPy 2.5
+        ///     refuses NESTED sequences — an inner list, an array element, the rows of a 2-D int array — with <c>SeedSequence
+        ///     does not accept nested sequences.</c> (NumPy 2.4 flattened them).
         /// </summary>
         [TestMethod]
         public void SeedSequence_EntropyCoercion_Corners()
         {
-            var one23 = new[] { 3822189696UL, 3026158655UL };
-            W(new SeedSequence((object)new object[] { new[] { 1, 2 }, new[] { 3 } }).generate_state(2)).Should().Equal(one23);
-            W(new SeedSequence((object)new object[] { np.array(new uint[] { 1, 2 }), 3 }).generate_state(2)).Should().Equal(one23);
+            const string nested = "SeedSequence does not accept nested sequences.";
+            Throws<TypeError>(() => new SeedSequence((object)new object[] { new[] { 1, 2 }, new[] { 3 } }), nested);
+            Throws<TypeError>(() => new SeedSequence((object)new object[] { np.array(new uint[] { 1, 2 }), 3 }), nested);
             W(new SeedSequence((object)new object[] { "0x10", "5" }).generate_state(2)).Should().Equal(242428781UL, 3874957636UL);
             var one234 = new[] { 4251844491UL, 3567780332UL };
-            W(new SeedSequence((object)np.array(new long[,] { { 1, 2 }, { 3, 4 } })).generate_state(2)).Should().Equal(one234);
+            Throws<TypeError>(() => new SeedSequence((object)np.array(new long[,] { { 1, 2 }, { 3, 4 } })), nested);
             W(new SeedSequence(new[] { 1, 2, 3, 4 }).generate_state(2)).Should().Equal(one234);
             var empty = new[] { 2968811710UL, 3677149159UL };
             W(new SeedSequence(new int[0]).generate_state(2)).Should().Equal(empty);
@@ -280,11 +287,11 @@ namespace NumSharp.Tests.RandomSampling
         public void SeedlessSeedSequence_MatchesNumPy()
         {
             var s = new SeedlessSeedSequence();
-            Throws<NotImplementedException>(() => s.generate_state(2), "seedless SeedSequences cannot generate state");
+            Throws<NotImplementedError>(() => s.generate_state(2), "seedless SeedSequences cannot generate state");
             var kids = s.spawn(3);
             kids.Length.Should().Be(3);
             kids.All(k => ReferenceEquals(k, s)).Should().BeTrue();
-            Throws<NotImplementedException>(() => new PCG64(s), "seedless SeedSequences cannot generate state");
+            Throws<NotImplementedError>(() => new PCG64(s), "seedless SeedSequences cannot generate state");
         }
 
         // =====================================================================================
@@ -327,7 +334,10 @@ namespace NumSharp.Tests.RandomSampling
             Throws<TypeError>(() => new Generator(new Philox(key: 5)).spawn(1), "The underlying SeedSequence does not implement spawning.");
         }
 
-        /// <summary><c>Generator.spawn</c> wraps the spawned bit generators; negative counts are NumPy's OverflowError.</summary>
+        /// <summary>
+        ///     <c>Generator.spawn</c> wraps the spawned bit generators; a negative count is NumPy 2.5's ValueError, which
+        ///     <c>BitGenerator.spawn</c> raises before it asks whether its seed sequence can spawn at all.
+        /// </summary>
         [TestMethod]
         public void Generator_Spawn_MatchesNumPy()
         {
@@ -335,7 +345,11 @@ namespace NumSharp.Tests.RandomSampling
             kids.Length.Should().Be(2);
             kids[0].bit_generator.Should().BeOfType<PCG64>();
             D(kids[1].random(new Shape(3))).Should().Equal(0.4674907799518424, 0.04644889644868733, 0.5955100095961371);
-            Throws<OverflowException>(() => np.random.default_rng(1).spawn(-1), "can't convert negative value to uint32_t");
+            Throws<ValueError>(() => np.random.default_rng(1).spawn(-1), "n_children must be non-negative");
+            Throws<ValueError>(() => np.random.default_rng(1).bit_generator.spawn(-2), "n_children must be non-negative");
+            var legacy = new MT19937(1);
+            legacy._legacy_seeding(1);
+            Throws<ValueError>(() => legacy.spawn(-1), "n_children must be non-negative");
         }
 
         // =====================================================================================
@@ -532,10 +546,10 @@ namespace NumSharp.Tests.RandomSampling
             new Philox(key: new object[] { p63 + 1, p63 + 3 }).state.key.Should().Equal(9223372036854775809UL, 9223372036854775811UL);
             new Philox(key: new object[] { -5, p63 + 1025 }).state.key.Should().Equal(18446744073709551611UL, 9223372036854777856UL);
             // LP64 NumPy's text (probed on Linux 2.4.2; the Windows build says "int too big to convert").
-            Throws<OverflowException>(() => new Philox(key: new object[] { p64, 1 }), "Python int too large to convert to C long");
-            Throws<OverflowException>(() => new Philox(key: new object[] { p64, -1 }), "Python int too large to convert to C long");
-            Throws<OverflowException>(() => new Philox(key: new object[] { -1, p64 }), "Python integer -1 out of bounds for uint64");
-            Throws<OverflowException>(() => new Philox(key: new object[] { -p63 - 1, 5 }), "Python int too large to convert to C long");
+            Throws<OverflowError>(() => new Philox(key: new object[] { p64, 1 }), "Python int too large to convert to C long");
+            Throws<OverflowError>(() => new Philox(key: new object[] { p64, -1 }), "Python int too large to convert to C long");
+            Throws<OverflowError>(() => new Philox(key: new object[] { -1, p64 }), "Python integer -1 out of bounds for uint64");
+            Throws<OverflowError>(() => new Philox(key: new object[] { -p63 - 1, 5 }), "Python int too large to convert to C long");
         }
 
         /// <summary>Philox's constructor errors, in NumPy's order (seed/key conflict, seed, key, counter).</summary>
@@ -555,7 +569,7 @@ namespace NumSharp.Tests.RandomSampling
             Throws<ValueError>(() => new Philox(key: new long[,] { { 1, 2 } }), "key must have 2 elements when using array form");
             Throws<ValueError>(() => new Philox(key: new object[] { new[] { 1 }, new[] { 2 } }), "key must have 2 elements when using array form");
             Throws<ValueError>(() => new Philox(key: double.NaN), "cannot convert float NaN to integer");
-            Throws<OverflowException>(() => new Philox(key: double.PositiveInfinity), "cannot convert float infinity to integer");
+            Throws<OverflowError>(() => new Philox(key: double.PositiveInfinity), "cannot convert float infinity to integer");
             Throws<TypeError>(() => new Philox(key: NDArray.Scalar(new Complex(1, 2))), "int() argument must be a string, a bytes-like object or a real number, not 'complex'");
             Throws<ValueError>(() => new Philox(key: "abc"), "invalid literal for int() with base 10: 'abc'");
             Throws<ValueError>(() => new Philox(key: "1__0"), "invalid literal for int() with base 10: '1__0'");
@@ -934,7 +948,7 @@ namespace NumSharp.Tests.RandomSampling
             D(rs.rand(5)).Should().Equal(0.3745401188473625, 0.9507143064099162, 0.7319939418114051, 0.5986584841970366, 0.15601864044243652);
             var single = np.random.RandomState(42);
             var bulk = np.random.RandomState(42);
-            double[] b = D(bulk.rand(new Shape(700)));
+            double[] b = D(bulk.rand(700));
             var s = new double[700];
             for (int k = 0; k < 700; k++) s[k] = Convert.ToDouble(single.rand().GetAtIndex(0));
             b.Should().Equal(s);

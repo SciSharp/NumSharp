@@ -71,7 +71,7 @@ Console.WriteLine("--- serialization (weights .npz + architecture JSON) ---");
     // Keys are positional and namespaced by bucket — a real NumPy archive.
     using (var npz = np.load_npz(ckpt))
     {
-        var files = npz.Files.ToArray();
+        var files = npz.files.ToArray();
         Check("key layer0/param/w", files.Contains("layer0/param/w"), string.Join(",", files));
         Check("key layer1/param/b", files.Contains("layer1/param/b"), string.Join(",", files));
         Check("key layer0/state/running_mean", files.Contains("layer0/state/running_mean"), string.Join(",", files));

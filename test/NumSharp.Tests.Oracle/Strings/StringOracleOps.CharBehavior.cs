@@ -245,7 +245,7 @@ namespace NumSharp.Tests.Strings
                     if (!hasAxis && !hasOut && !hasKeep)
                         r = max ? c.argmax() : c.argmin();
                     else if (hasAxis && axis is not null && !hasOut)
-                        r = max ? c.argmax(I(axis), keepdims) : c.argmin(I(axis), keepdims);
+                        r = max ? c.argmax(I(axis), keepdims: keepdims) : c.argmin(I(axis), keepdims: keepdims);
                     else
                         r = max ? c.argmax(Axis(axis), (NDArray)@out, keepdims) : c.argmin(Axis(axis), (NDArray)@out, keepdims);
                     break;
@@ -361,7 +361,7 @@ namespace NumSharp.Tests.Strings
                 "compress" => np.compress(Nd(a[0]), (NDArray)a[1], hasAxis ? Axis(axis) : null),
                 "extract" => np.extract((NDArray)a[0], (NDArray)a[1]),
                 "trim_zeros" => np.trim_zeros(x),
-                "insert" => np.insert(x, I(a[1]), a[2]),
+                "insert" => np.insert(x, I(a[1]), OptNd(a[2])),
                 "delete" => np.delete(x, I(a[1])),
                 "split" => Items(np.split(x, I(a[1]))),
                 "array_split" => Items(np.array_split(x, I(a[1]))),
@@ -401,7 +401,7 @@ namespace NumSharp.Tests.Strings
                 "broadcast_to" => np.broadcast_to(x, new Shape(Longs(a[1]))),
                 "count_nonzero" => np.count_nonzero(x),
                 "union1d" => np.union1d((NDArray)a[0], (NDArray)a[1]),
-                "intersect1d" => np.intersect1d((NDArray)a[0], (NDArray)a[1]),
+                "intersect1d" => (NDArray)np.intersect1d((NDArray)a[0], (NDArray)a[1]),
                 "setxor1d" => np.setxor1d((NDArray)a[0], (NDArray)a[1]),
                 "isin" => np.isin((NDArray)a[0], (NDArray)a[1]),
                 "setdiff1d" => np.setdiff1d((NDArray)a[0], (NDArray)a[1], kw("assume_unique", out bool hasAu) is bool au && hasAu && au),

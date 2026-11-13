@@ -132,7 +132,8 @@ namespace NumSharp.Tests.NumPyPortedTests
         [TestMethod]
         public void Clip_Float32_PreservesDtype()
         {
-            var arr = np.arange(10f);  // float32 from float overload
+            // A C# float is a Python float (np.arange(10f) is NumPy's float64): the float32 operand takes the dtype.
+            var arr = np.arange(10, dtype: np.float32);
             var result = np.clip(arr, 2f, 7f);
             Assert.AreEqual(np.float32, result.dtype);
         }

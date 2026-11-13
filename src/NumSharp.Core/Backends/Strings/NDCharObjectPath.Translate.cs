@@ -505,12 +505,12 @@ namespace NumSharp.Backends.Strings
             if (w.NAText is not null && w.NAText.AsSpan().SequenceEqual(w.Utf8.AsSpan(0, n)))
             {
                 if (w.OutputAllocator.pack_null(cell) < 0)
-                    throw new OutOfMemoryException("Failed to pack string in translate");
+                    throw new MemoryError("Failed to pack string in translate");
                 return;
             }
             fixed (byte* u = w.Utf8)
                 if (w.OutputAllocator.pack(cell, u, n) < 0)
-                    throw new OutOfMemoryException("Failed to pack string in translate");
+                    throw new MemoryError("Failed to pack string in translate");
         }
 
         /// <summary>

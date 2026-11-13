@@ -10,7 +10,7 @@ paths:
 
 # The quantile family
 
-`np.quantile` / `np.percentile` / `np.median` and their nan forms run NumPy 2.4.2's statements: `_ureduce`
+`np.quantile` / `np.percentile` / `np.median` and their nan forms run NumPy 2.5.4's statements: `_ureduce`
 (`Backends/Default/Statistics/Default.Quantile.UReduce.cs`), `_quantile` and its helpers
 (`Default.Quantile{,.Functions,.Median}.cs`), byte for byte for every dtype; text data: `strings-compute.md`.
 
@@ -60,6 +60,14 @@ one builder per precision (`DirectILKernelGenerator.QuantilePlan`, cached per dt
 - All-NaN data answers `np.full(q.shape, nan)` in the data's dtype, and an all-NaN FIRST slice makes the result the data's
   dtype. `np.nanquantile` takes the element for an integer `q` and reads an array `q` as a strong float64 weight. Empty data
   raises NumPy's IndexError (`index -1 ...`; `index 0 ...` for integer data).
+- Result layout: np.median along ONE axis is `np.mean(part[indexer], axis=axis)` of `part = partition(a, kth, axis)`,
+  whose copy is `order='K'`, so its result is the mean's allocation in that copy's axis order (`MedianMeanLayout`:
+  `Shape.ReductionOutputShape` over `Shape.NewLikeLayout(a, 'K')`): an F input's median is F, a transposed input's keeps
+  its memory order, a broadcast input's follows its K copy (`np.median(np.broadcast_to(row, (2, 3, 4)), axis=1)` is
+  F-contiguous). np.nanmedian's numpy.ma route keeps its C result (the array-object oracle's VF08). keepdims, for every
+  form, is `_ureduce`'s `r[(Ellipsis,) + index_r]` with `np.newaxis` at each reduced axis (`ApplyKeepdims`): a VIEW of
+  the result, stride 0 on the new axes, OWNDATA false (`np.median(F (2,3,4), axis=1, keepdims=True)` has strides
+  (8, 0, 16); `axis=None` gives (0, 0, 0)).
 - The nan forms along an axis return `np.apply_along_axis`'s object: a view of its C buffer with `q`'s axes moved first
   (F-ordered, OWNDATA false). An all-NaN slice is Python's `np.nan` (`0x7FF8...`), a plain form's NaN slice copies the
   data's own NaN. The nan forms' q-axis order over merged axes follows NumPy, which moves q's axes from the UNnormalized
@@ -73,10 +81,10 @@ one builder per precision (`DirectILKernelGenerator.QuantilePlan`, cached per dt
 ## `weights=`
 
 `NDArray weights = null` on all of `np.quantile` / `np.percentile` / `np.nanquantile` / `np.nanpercentile` runs NumPy
-2.4.2's weighted branch (`inverted_cdf` only) for every dtype, text included (`Statistics/QuantileWeighted.cs`):
+2.5.4's weighted branch (`inverted_cdf` only) for every dtype, text included (`Statistics/QuantileWeighted.cs`):
 - NumPy's check order and texts (the method, the axis with argname `axis`, `_weights_are_valid`, `np.any(weights < 0)`),
   `_ureduce` merging data AND weights, argsort + gathers + `cumsum / last` + the -1 rule + searchsorted-left, NaN slices,
-  the nan forms' `_nanquantile_1d` per position (NumPy 2.4.2's own IndexError for reduced-shape weights over a kept axis
+  the nan forms' `_nanquantile_1d` per position (NumPy 2.5.4's own IndexError for reduced-shape weights over a kept axis
   longer than 1, reproduced).
 - Routes: one line never gathers the whole sorted data (the last element and the picks go through the argsort) and, for
   a float64 search, divides only the cumulative sums its bisection probes (`SearchLazily`; float16 / float32 `q` cast the
@@ -91,19 +99,37 @@ one builder per precision (`DirectILKernelGenerator.QuantilePlan`, cached per dt
 
 ## The partition
 
-`Utilities/QuickSelect.cs`, shared with np.partition / np.argpartition / np.median, takes NumPy's `introselect_` shortcuts:
-dumb_select for `kth - low < 3`, and the float32 / float64 maximum pass for `kth == n - 1` (`npy_half` is a `uint16_t`,
-so float16 takes the quickselect, as in NumPy). Both are vector passes that keep NumPy's choice among ties (the first
-minimum, the last maximum: the zero sign and the argpartition index). A window of up to 16 elements is insertion-sorted
-before them, and the kernel's int entry sorts a line of up to 16 whole. float16 compares through `HalfOrderKey` (the
-magnitude, negated for a negative value: IEEE `<` without branches, checked over all 63,490 non-NaN halves). The nan path
-plans each NaN-free length once per call (`planLength` / `planCount`, locals of the emitted kernel). TRAP: on .NET 9+
-`Vector.Min` / `Vector.Max` of floats is the IEEE 754-2019 minimum, a compare-and-blend sequence (chained through one
-accumulator it read 100,000 doubles in ~110 µs; `Vector.MinNative` with four accumulators takes ~20 µs).
+Several kth (every quantile / median call over float data) run NumPy's `introselect_` statement for statement:
+`Utilities/QuickSelect.Introselect.cs` (QB43), shared with np.partition / np.argpartition. It has the 50-deep pivot stack,
+dumb_select for `kth - low < 3` and the inexact last-maximum pass for `kth == n - 1` (float32 / float64 / complex128;
+`npy_half` is a `uint16_t`, so float16 takes the quickselect), then median-of-3, or median-of-medians-5 once
+`2 * msb(n)` rounds are spent. The Hoare scan narrows with `low = ll`, and a two-element finish closes the loop. There is
+no insertion sort and no heap sort. Long windows run the block partition, whose stops and pairing are Hoare's, and
+Hoare's own loop finishes the crossing. The two linear passes search with vectors over NaN-free lines (the first minimum,
+the last maximum). float16 compares through `HalfOrderKey` (the magnitude, negated for a negative value: IEEE `<` without
+branches, checked over all 63,490 non-NaN halves).
+- The partition list is NumPy's own for float data (`QuantileIndexes.FloatPartitionKth`): `[0, -1] + previous + next`
+  for an interpolation, the take indexes `+ [-1]`, the median's `[n//2 - 1, n//2]` / `[(n-1)//2]` `+ [-1]`. The nan forms
+  remove NaNs in `_remove_nan_1d`'s order: the head's NaNs take the tail's values, which is not a stable compaction.
+- Which rows need it: a row's result bits can show the arrangement only through equal values with different bits.
+  Those are `+0.0` / `-0.0`, and NaNs of different sign or payload (NumPy answers a NaN slice with `arr[-1]` after its
+  partition). The kernel's NaN prescan also notes "any zero", and a second scan reads the zero signs of a row that has
+  one. A row with both zero signs (outside np.median, whose mean from `+0.0` erases the sign) or with NaNs of different
+  bits takes the exact select at NumPy's list (`kExact`). Every other row takes `QuickSelect.PartitionAtManyTieBlind` at
+  the needed neighbours alone: a line of up to 16 elements is insertion-sorted whole, a longer one runs the select it
+  always ran. The bits are the same, at the speed the family had before. Integer data never needs the exact route.
+- np.median / np.nanmedian's middle starts from `+0.0` (np.mean's add.reduce identity): a zero median is `+0.0`. The
+  complex median is np.mean's statements (`ComplexMedianMean`: the `0+0j` identity, Smith's division by `n+0j`).
+- The nan path plans each NaN-free length once per call (`planLength` / `planCount`, locals of the emitted kernel).
+- TRAP: on .NET 9+ `Vector.Min` / `Vector.Max` of floats is the IEEE 754-2019 minimum, a compare-and-blend sequence
+  (chained through one accumulator it read 100,000 doubles in ~110 µs; `Vector.MinNative` with four accumulators takes
+  ~20 µs).
+- Open: a NaN-only slice of np.nanmedian answers `+nan` where NumPy's flat form returns the slice's own last NaN
+  (`_nanmedian1d`'s `arr1d[-1]`), and float16's median rounds the pair's sum to float16 first (QB16's open half).
 
 ## Gates
 
 The oracle sections `qfamily` (the weighted branch included) and `qprec` (the arithmetic in `q`'s dtype), zero excuses;
 the soak's `quant` family with weights; unit `Statistics/np.quantile_family.{Weights,Precision,Prologue,QKinds}.Tests.cs`,
-`np.nanquantile_family.BattleTests.cs`, `np.percentile.BattleTests.cs`, `np.median.BattleTests.cs`, and two partition tie
-tests.
+`np.nanquantile_family.BattleTests.cs`, `np.percentile.BattleTests.cs`, `np.median.BattleTests.cs`, and the QB43 tie gate
+`Sorting/np.partition.IntroselectTies.Test.cs` (NumPy's bits for every method over signed zeros, plus the partitions).

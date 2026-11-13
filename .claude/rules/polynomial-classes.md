@@ -39,7 +39,7 @@ paths:
   `NDLegendre`, `NDLaguerre`, `NDHermite`, `NDHermiteE`), each with its class object (`NDPolyClass`). Every member calls
   the package's module functions; nothing has a loop of its own. `np.polynomial.Chebyshev(...)` and
   `np.polynomial.chebyshev.Chebyshev(...)` are `new NDChebyshev(...)`.
-- NumPy's names, case included (gate `PolynomialClassTests.MemberNames_AreNumPys_CaseIncluded`, against NumPy 2.4.2's
+- NumPy's names, case included (gate `PolynomialClassTests.MemberNames_AreNumPys_CaseIncluded`, against NumPy 2.5.4's
   `dir(p)`): `p(x)` is `p.__call__(x)` (an array result) or `p.__call__(q)` (composition, a series); `//`, `divmod`, `**`
   are `__floordiv__` / `__rfloordiv__`, `__divmod__` / `__rdivmod__` (a `(quo, rem)` tuple), `__pow__`; `len(p)` /
   `iter(p)` are `__len__()` and `foreach` over the coefficients; `str` / `format` / `repr` are `__str__()` = `ToString()`,

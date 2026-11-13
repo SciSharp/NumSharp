@@ -31,7 +31,7 @@ namespace NumSharp
         ///     destination is read-only", checked first — or the value does not fit the selection.</exception>
         /// <exception cref="IndexError">The index does not fit this array (NumPy's <c>prepare_index</c> and MapIter texts,
         ///     <see cref="GetIndices"/>).</exception>
-        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype.</exception>
+        /// <exception cref="OverflowError">A C# integer outside this array's integer dtype.</exception>
         public void SetIndices(NDArray values, NDArray[] indices)
         {
             NumSharpException.ThrowIfNotWriteable(Shape);

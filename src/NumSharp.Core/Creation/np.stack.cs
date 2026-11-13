@@ -27,14 +27,25 @@ namespace NumSharp
         /// (running them through <c>atleast_1d</c> first, as this method once did, gave <c>(n, 1)</c>). The caller's array
         /// of operands is not modified.</para></remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray stack(NDArray[] arrays, int axis = 0)
+        /// <param name="out">NumPy's <c>out=</c>: the destination of the stacked result (it must have the result's shape;
+        ///     the values are cast into it under <paramref name="casting"/>), returned itself; <c>null</c> allocates.</param>
+        /// <param name="dtype">NumPy's <c>dtype=</c>: the result's dtype (the inputs are cast to it under
+        ///     <paramref name="casting"/>); <c>null</c> promotes the inputs. Cannot be combined with
+        ///     <paramref name="out"/>.</param>
+        /// <param name="casting">NumPy's <c>casting=</c> rule for those casts (<c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>,
+        ///     <c>"same_kind"</c> - the default - or <c>"unsafe"</c>).</param>
+        /// <exception cref="TypeError">An input that <paramref name="dtype"/> / <paramref name="out"/> does not reach under
+        ///     <paramref name="casting"/> (NumPy's <c>Cannot cast array data from ... according to the rule ...</c>), or
+        ///     both <paramref name="out"/> and <paramref name="dtype"/>.</exception>
+        public static NDArray stack(NDArray[] arrays, int axis = 0, NDArray @out = null, DType dtype = null,
+            string casting = "same_kind")
         {
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
 
             // NumPy's statements (the empty and shape checks, the axis against the result's rank, the expanded arrays
-            // concatenated) are the array object's.
-            return NDArray.stack(arrays, axis);
+            // concatenated with out / dtype / casting) are the array object's.
+            return NDArray.stack(arrays, axis, @out, dtype, casting);
         }
     }
 }

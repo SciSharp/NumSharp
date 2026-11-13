@@ -58,8 +58,10 @@ namespace NumSharp.Backends
     ///     </list>
     ///     </para>
     ///     <para>
-    ///     Exception types follow the house map: NumPy's <c>OverflowError</c> is <see cref="OverflowException"/>, its
-    ///     <c>ValueError</c> is <see cref="ValueError"/>, its <c>TypeError</c> is <see cref="TypeError"/>.
+    ///     Exception types are NumPy's Python classes: its <c>OverflowError</c> is <see cref="OverflowError"/> (a sibling
+    ///     of .NET's <see cref="OverflowException"/> under <see cref="ArithmeticException"/>, so a <c>catch
+    ///     (OverflowException)</c> does not see it), its <c>ValueError</c> is <see cref="ValueError"/>, its <c>TypeError</c>
+    ///     is <see cref="TypeError"/>.
     ///     </para>
     /// </remarks>
     internal static class ReductionInitial
@@ -77,7 +79,7 @@ namespace NumSharp.Backends
         /// <param name="slot">Receives the packed element; at least <see cref="SlotBytes"/> bytes.</param>
         /// <returns><c>false</c> when <paramref name="initial"/> is <c>null</c> (nothing packed), else <c>true</c>.</returns>
         /// <exception cref="ArgumentException"><paramref name="slot"/> is shorter than <see cref="SlotBytes"/>.</exception>
-        /// <exception cref="OverflowException">An integer that does not fit an integer <paramref name="loop"/>, a float
+        /// <exception cref="OverflowError">An integer that does not fit an integer <paramref name="loop"/>, a float
         ///     infinity into an integer loop, or a Python int past the double range into a float loop (NumPy's
         ///     <c>OverflowError</c> texts).</exception>
         /// <exception cref="ValueError">A float NaN into an integer loop, an unparsable string, an ndarray with
@@ -276,7 +278,7 @@ namespace NumSharp.Backends
         /// <param name="slot">Receives the element; at least <see cref="SlotBytes"/> bytes.</param>
         /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> destination, or
         ///     <see cref="TryPack"/>'s TypeErrors.</exception>
-        /// <exception cref="OverflowException">See <see cref="TryPack"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="TryPack"/>.</exception>
         /// <exception cref="ValueError">See <see cref="TryPack"/>.</exception>
         /// <remarks>Use this, never <see cref="TryPack"/> directly, on a store path: <see cref="TryPack"/> returns
         ///     <c>false</c> for <c>null</c> and leaves the slot untouched, the reduction's <c>initial=None</c>.</remarks>
@@ -359,7 +361,7 @@ namespace NumSharp.Backends
         ///     goes through <see cref="TryPack"/>.</param>
         /// <param name="loop">The destination dtype.</param>
         /// <param name="slot">Receives the element; at least <see cref="SlotBytes"/> bytes.</param>
-        /// <exception cref="OverflowException">A signed integer loop and a value whose int() does not fit it, or an
+        /// <exception cref="OverflowError">A signed integer loop and a value whose int() does not fit it, or an
         ///     infinity ("cannot convert float infinity to integer").</exception>
         /// <exception cref="ValueError">A signed integer loop and a NaN ("cannot convert float NaN to integer").</exception>
         /// <exception cref="ArgumentException"><paramref name="slot"/> is shorter than <see cref="SlotBytes"/>.</exception>
@@ -530,7 +532,7 @@ namespace NumSharp.Backends
         ///     that does not parse as the loop dtype (the text cast's own texts, e.g. "could not convert string to float:
         ///     'x'" for a <c>StringDType</c> element).</exception>
         /// <exception cref="TypeError"><paramref name="nd"/> has dimensions and the loop is complex.</exception>
-        /// <exception cref="OverflowException">A text element parses to an integer the integer loop cannot hold (the text
+        /// <exception cref="OverflowError">A text element parses to an integer the integer loop cannot hold (the text
         ///     cast's range check).</exception>
         private static unsafe void PackArray(NDArray nd, NPTypeCode loop, Span<byte> slot)
         {
@@ -551,7 +553,7 @@ namespace NumSharp.Backends
             // copied into the slot. The temporary is disposed here: it never escapes the pack.
             if (Strings.NDStringUfuncs.IsText(nd))
             {
-                using var parsed = nd.astype(DType.From(loop), true, 'K', "unsafe");
+                using var parsed = nd.astype(DType.From(loop));
                 byte* q = (byte*)parsed.Address + parsed.Shape.offset * parsed.dtypesize;
                 fixed (byte* d = slot)
                     Buffer.MemoryCopy(q, d, slot.Length, parsed.dtypesize);
@@ -573,7 +575,7 @@ namespace NumSharp.Backends
         /// <param name="v">The integer.</param>
         /// <param name="loop">The loop dtype (not bool — the caller handles truthiness).</param>
         /// <param name="slot">Receives the element.</param>
-        /// <exception cref="OverflowException">The value does not fit an integer loop, or exceeds the double range for a
+        /// <exception cref="OverflowError">The value does not fit an integer loop, or exceeds the double range for a
         ///     float or complex loop, or the decimal range.</exception>
         private static void PackPyInt(BigInteger v, NPTypeCode loop, Span<byte> slot)
         {
@@ -588,7 +590,7 @@ namespace NumSharp.Backends
             {
                 // NumSharp-only: an exact decimal, or .NET's overflow past ±7.9e28.
                 if (v > (BigInteger)decimal.MaxValue || v < (BigInteger)decimal.MinValue)
-                    throw new OverflowException("Python int too large to convert to decimal");
+                    throw new OverflowError("Python int too large to convert to decimal");
                 Unsafe.WriteUnaligned(ref slot[0], (decimal)v);
                 return;
             }
@@ -596,7 +598,7 @@ namespace NumSharp.Backends
             // PyLong_AsDouble: correctly rounded, OverflowError past the double range (Python raises; .NET would give inf).
             double d = PythonInt.ToDouble(v);
             if (double.IsInfinity(d))
-                throw new OverflowException("int too large to convert to float");
+                throw new OverflowError("int too large to convert to float");
             WriteFloat(d, loop, slot);
         }
 
@@ -606,7 +608,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="v">The integer.</param>
         /// <param name="loop">An integer loop dtype.</param>
-        /// <exception cref="OverflowException">"Python int too large to convert to C long" when the value cannot even be
+        /// <exception cref="OverflowError">"Python int too large to convert to C long" when the value cannot even be
         ///     read as the C long the loop converts through (below int64, or above int64 for every loop but uint32 / uint64,
         ///     whose C unsigned long reaches 2**64 - 1); else "Python integer {v} out of bounds for {dtype}".</exception>
         private static void CheckPyIntFits(BigInteger v, NPTypeCode loop)
@@ -617,8 +619,8 @@ namespace NumSharp.Backends
 
             bool unsignedLong = loop is NPTypeCode.UInt32 or NPTypeCode.UInt64;
             if (v < long.MinValue || (unsignedLong ? v > ulong.MaxValue : v > long.MaxValue))
-                throw new OverflowException("Python int too large to convert to C long");
-            throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Python integer {v} out of bounds for {loop.AsNumpyDtypeName()}"));
+                throw new OverflowError("Python int too large to convert to C long");
+            throw new OverflowError(string.Create(CultureInfo.InvariantCulture, $"Python integer {v} out of bounds for {loop.AsNumpyDtypeName()}"));
         }
 
         /// <summary>
@@ -629,8 +631,10 @@ namespace NumSharp.Backends
         /// <param name="loop">The loop dtype (not bool).</param>
         /// <param name="slot">Receives the element.</param>
         /// <exception cref="ValueError"><paramref name="d"/> is NaN and the loop is an integer.</exception>
-        /// <exception cref="OverflowException"><paramref name="d"/> is infinite and the loop is an integer, or the
-        ///     truncated value does not fit it, or (decimal) out of range.</exception>
+        /// <exception cref="OverflowError"><paramref name="d"/> is infinite and the loop is an integer, or the
+        ///     truncated value does not fit it.</exception>
+        /// <exception cref="OverflowException">A decimal loop and a value out of decimal's range (.NET's own
+        ///     conversion).</exception>
         private static void PackPyFloat(double d, NPTypeCode loop, Span<byte> slot)
         {
             if (IsIntegerLoop(loop))
@@ -656,7 +660,7 @@ namespace NumSharp.Backends
         /// <param name="m">The value.</param>
         /// <param name="loop">The loop dtype (not bool).</param>
         /// <param name="slot">Receives the element.</param>
-        /// <exception cref="OverflowException">The truncated value does not fit an integer loop.</exception>
+        /// <exception cref="OverflowError">The truncated value does not fit an integer loop.</exception>
         private static void PackDecimal(decimal m, NPTypeCode loop, Span<byte> slot)
         {
             if (loop == NPTypeCode.Decimal)
@@ -708,7 +712,7 @@ namespace NumSharp.Backends
         /// <param name="slot">Receives the element.</param>
         /// <exception cref="ValueError">The text is not a valid literal (Python's texts), or an integer literal has more
         ///     than 4300 digits.</exception>
-        /// <exception cref="OverflowException">The parsed integer does not fit an integer loop (NumPy's LP64 texts).</exception>
+        /// <exception cref="OverflowError">The parsed integer does not fit an integer loop (NumPy's LP64 texts).</exception>
         /// <exception cref="UnicodeDecodeError">Bytes into a complex loop that are not UTF-8.</exception>
         private static unsafe void PackText(string text, byte[] bytes, NPTypeCode loop, Span<byte> slot)
         {

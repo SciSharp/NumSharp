@@ -99,12 +99,13 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Power Operations
 
+    /// <summary>A boxed exponent (a ValueType variable) goes through np.asanyarray into np.power's one signature: [4, 9, 16].</summary>
     [TestMethod]
     public void Power_ArrayAndValueTypeScalar_Compiles()
     {
         var a = np.array(new double[] { 2, 3, 4 });
         ValueType exp = 2.0;
-        var result = np.power(a, exp);
+        var result = np.power(a, np.asanyarray(exp));
         result.Should().NotBeNull();
         result.GetDouble(0).Should().Be(4.0);
         result.GetDouble(1).Should().Be(9.0);

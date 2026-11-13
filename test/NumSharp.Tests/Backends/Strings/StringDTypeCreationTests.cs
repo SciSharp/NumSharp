@@ -216,9 +216,9 @@ namespace NumSharp.Tests.Backends.Strings
                 V(r).Should().Equal(new object[] { "a", "x", "b" });
             using (var r = np.insert(t, 1, 5))
                 V(r).Should().Equal(new object[] { "a", "5", "b" });
-            using (var r = np.insert(t, 1, (object)"x"))
+            using (var r = np.insert(t, 1, "x"))
                 V(r).Should().Equal(new object[] { "a", "x", "b" });
-            using (var r = np.insert(t, 1L, (object)5))
+            using (var r = np.insert(t, 1L, 5))
                 V(r).Should().Equal(new object[] { "a", "5", "b" });
         }
 
@@ -229,7 +229,7 @@ namespace NumSharp.Tests.Backends.Strings
         [TestMethod]
         public void Ones_WithOrder()
         {
-            using var f = np.ones(new Shape(2, 2), 'F', T);
+            using var f = np.ones(new Shape(2, 2), T, 'F');
             f.Shape.IsFContiguous.Should().BeTrue();
             V(f).Should().Equal(new object[] { "1", "1", "1", "1" });
         }

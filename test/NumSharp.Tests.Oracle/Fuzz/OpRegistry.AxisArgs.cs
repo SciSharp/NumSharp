@@ -44,6 +44,9 @@ namespace NumSharp.Tests.Fuzz
             bool tuple = AxisArgIsTuple(p, "axis");
             int ax = !tuple && p.ContainsKey("axis") ? p["axis"].GetInt32() : 0;
             int[] axt = tuple ? ParseIntArray(p["axis"]) : null;
+            // NumPy's axis argument for the functions that take its axis type (API-parity batches 4 to 6): the tuple, or
+            // the integer.
+            NDAxis axis = tuple ? new NDAxis(axt) : ax;
             NDArray a = ops.Length > 0 ? ops[0] : null;
 
             // The stacking family's empty operand list: NumPy's "need at least one array to …" ValueError.
@@ -61,40 +64,40 @@ namespace NumSharp.Tests.Fuzz
             switch (fn)
             {
                 // ---- the reductions (NumPy's ufunc reduce or its Python wrappers) ----
-                case "sum": return np.sum(a, ax);
-                case "prod": return np.prod(a, ax);
-                case "mean": return np.mean(a, ax);
-                case "std": return np.std(a, ax);
-                case "var": return np.var(a, ax);
-                case "max": return np.max(a, ax);
-                case "min": return np.min(a, ax);
-                case "amax": return np.amax(a, ax);
-                case "amin": return np.amin(a, ax);
+                case "sum": return np.sum(a, axis);
+                case "prod": return np.prod(a, axis);
+                case "mean": return np.mean(a, axis);
+                case "std": return np.std(a, axis);
+                case "var": return np.var(a, axis);
+                case "max": return np.max(a, axis);
+                case "min": return np.min(a, axis);
+                case "amax": return np.amax(a, axis);
+                case "amin": return np.amin(a, axis);
                 case "ptp": return tuple ? np.ptp(a, axt) : np.ptp(a, ax);
                 case "all": return tuple ? np.all(a, axt) : np.all(a, ax);
                 case "any": return tuple ? np.any(a, axt) : np.any(a, ax);
-                case "argmax": return np.argmax(a, ax);
-                case "argmin": return np.argmin(a, ax);
-                case "nanargmax": return np.nanargmax(a, ax);
-                case "nanargmin": return np.nanargmin(a, ax);
+                case "argmax": return np.argmax(a, axis);
+                case "argmin": return np.argmin(a, axis);
+                case "nanargmax": return np.nanargmax(a, axis);
+                case "nanargmin": return np.nanargmin(a, axis);
                 case "cumsum": return np.cumsum(a, ax);
                 case "cumprod": return np.cumprod(a, ax);
                 case "nancumsum": return np.nancumsum(a, ax);
                 case "nancumprod": return np.nancumprod(a, ax);
-                case "nansum": return np.nansum(a, ax);
-                case "nanprod": return np.nanprod(a, ax);
-                case "nanmean": return np.nanmean(a, ax);
-                case "nanstd": return np.nanstd(a, ax);
-                case "nanvar": return np.nanvar(a, ax);
-                case "nanmax": return np.nanmax(a, ax);
-                case "nanmin": return np.nanmin(a, ax);
+                case "nansum": return np.nansum(a, axis);
+                case "nanprod": return np.nanprod(a, axis);
+                case "nanmean": return np.nanmean(a, axis);
+                case "nanstd": return np.nanstd(a, axis);
+                case "nanvar": return np.nanvar(a, axis);
+                case "nanmax": return np.nanmax(a, axis);
+                case "nanmin": return np.nanmin(a, axis);
                 case "median": return tuple ? np.median(a, axt) : np.median(a, ax);
                 case "nanmedian": return tuple ? np.nanmedian(a, axt) : np.nanmedian(a, ax);
                 case "percentile": return tuple ? np.percentile(a, 50, axt) : np.percentile(a, 50, ax);
                 case "nanpercentile": return tuple ? np.nanpercentile(a, 50, axt) : np.nanpercentile(a, 50, ax);
                 case "quantile": return tuple ? np.quantile(a, 0.5, axt) : np.quantile(a, 0.5, ax);
                 case "nanquantile": return tuple ? np.nanquantile(a, 0.5, axt) : np.nanquantile(a, 0.5, ax);
-                case "average": return tuple ? np.average(a, axt) : np.average(a, ax);
+                case "average": return (NDArray)(tuple ? np.average(a, axt) : np.average(a, ax));
                 case "count_nonzero": return np.count_nonzero(a, ax);
 
                 // ---- sorting, selection, the per-axis manipulation functions ----
@@ -119,7 +122,7 @@ namespace NumSharp.Tests.Fuzz
                 case "append": return np.append(a, a, ax);
                 case "unique": return np.unique(a, axis: ax);
                 case "flip": return tuple ? np.flip(a, axt) : np.flip(a, ax);
-                case "roll": return np.roll(a, 1, ax);
+                case "roll": return np.roll(a, 1, axis);
                 case "rollaxis":
                     return np.rollaxis(a, ax, p.TryGetValue("start", out var st) ? st.GetInt32() : 0);
                 case "concatenate": return np.concatenate(new[] { a, a }, ax);
@@ -164,9 +167,8 @@ namespace NumSharp.Tests.Fuzz
                         p.TryGetValue("axis", out var xx) ? xx.GetInt32() : (int?)null);
 
                 // ---- np.linalg / the gufunc vecdot ----
-                case "linalg.norm": return tuple ? np.linalg.norm(a, null, axt) : np.linalg.norm(a, null, ax);
-                case "linalg.vector_norm":
-                    return tuple ? np.linalg.vector_norm(a, axis: axt) : np.linalg.vector_norm(a, axis: ax);
+                case "linalg.norm": return np.linalg.norm(a, null, axis);
+                case "linalg.vector_norm": return np.linalg.vector_norm(a, axis: axis);
                 case "linalg.vecdot": return np.linalg.vecdot(ops[0], ops[1], ax);
                 case "linalg.cross": return np.linalg.cross(ops[0], ops[1], ax);
                 case "vecdot": return np.vecdot(ops[0], ops[1], axis: ax);
@@ -178,8 +180,8 @@ namespace NumSharp.Tests.Fuzz
                 case "fft.irfft": return np.fft.irfft(a, axis: ax);
                 case "fft.hfft": return np.fft.hfft(a, axis: ax);
                 case "fft.ihfft": return np.fft.ihfft(a, axis: ax);
-                case "fft.fftshift": return tuple ? np.fft.fftshift(a, axes: axt) : np.fft.fftshift(a, axes: ax);
-                case "fft.ifftshift": return tuple ? np.fft.ifftshift(a, axes: axt) : np.fft.ifftshift(a, axes: ax);
+                case "fft.fftshift": return np.fft.fftshift(a, axes: axis);
+                case "fft.ifftshift": return np.fft.ifftshift(a, axes: axis);
                 case "linalg.tensorsolve": return np.linalg.tensorsolve(a, ops[1], axt);
                 case "fft.fftn": return np.fft.fftn(a, axes: axt);
                 case "fft.ifftn": return np.fft.ifftn(a, axes: axt);
@@ -319,7 +321,7 @@ namespace NumSharp.Tests.Fuzz
             using var positions = flat.reshape(a.Shape.dimensions);
             using var rem = positions % 3;
             using var mask = rem == 0;
-            var m = np.ma.array(a, mask);
+            var m = np.ma.array(a, mask: mask);
             try
             {
                 return AxisArgMaskedCall(fn, m, ax, a);

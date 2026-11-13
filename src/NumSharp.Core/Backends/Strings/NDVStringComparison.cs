@@ -68,7 +68,7 @@ namespace NumSharp.Backends.Strings
         ///     <c>StringDType</c> text (a routing bug).</exception>
         /// <exception cref="ValueError">An ordering meets an NA of a <c>None</c>-like descriptor (NumPy's
         ///     <c>'less' not supported for null values that are not nan-like or strings.</c>).</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt cell (NumPy's <c>Failed to load string in …</c>).</exception>
+        /// <exception cref="MemoryError">A corrupt cell (NumPy's <c>Failed to load string in …</c>).</exception>
         internal static unsafe NDArray Execute(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where)
         {
             if (!NDStringUfuncs.IsVString(x1) && !NDStringUfuncs.IsVString(x2))
@@ -174,8 +174,9 @@ namespace NumSharp.Backends.Strings
         {
             var a1 = t1.Storage.VStringSlice.Allocator;
             var a2 = t2.Storage.VStringSlice.Allocator;
-            // The NA rule and the default string are the FIRST descriptor's (NumPy's descr1), whatever the swap.
-            var descr1 = t1.dtype;
+            // The NA rule and the default string are the effective NA descriptor's (NumPy 2.5.2: the first operand with an
+            // NA object; NumPy 2.4 read descr1), whatever the swap.
+            var descr1 = NDVStringCells.EffectiveNADescr(t1.dtype, t2.dtype);
             byte[] defaultText = NDUtf8.Encode(descr1.VString.default_string);
             VStringAllocator.acquire_allocators(a1, a2);
             try

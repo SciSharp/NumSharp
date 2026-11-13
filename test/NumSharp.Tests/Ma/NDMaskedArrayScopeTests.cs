@@ -84,7 +84,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void Put_HardMask_KeepsTheLiveMaskObject()
         {
-            var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), np.array(new[] { false, true, false, false }), hard_mask: true);
+            var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), mask: np.array(new[] { false, true, false, false }), hard_mask: true);
             var before = x._mask;
 
             np.ma.put(x, np.array(new long[] { 0, 1 }), np.array(new double[] { 9, 9 }));
@@ -104,9 +104,9 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void PutMask_HardMask_OrsTheValueMaskInPlace()
         {
-            var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), np.array(new[] { false, true, false, false }), hard_mask: true);
+            var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), mask: np.array(new[] { false, true, false, false }), hard_mask: true);
             var before = x._mask;
-            var v = np.ma.array(np.array(new double[] { 7, 7, 7, 7 }), np.array(new[] { false, false, true, false }));
+            var v = np.ma.array(np.array(new double[] { 7, 7, 7, 7 }), mask: np.array(new[] { false, false, true, false }));
 
             np.ma.putmask(x, np.array(new[] { true, true, true, false }), v);
 
@@ -125,7 +125,7 @@ namespace NumSharp.Tests.Ma
         public void PutMask_NomaskTarget_CreatedMaskOutlivesTheCallersScope()
         {
             var x = np.ma.array(np.array(new double[] { 1, 2, 3 }));
-            var v = np.ma.array(np.array(new double[] { 5, 6, 7 }), np.array(new[] { false, true, false }));
+            var v = np.ma.array(np.array(new double[] { 5, 6, 7 }), mask: np.array(new[] { false, true, false }));
 
             using (NDScope.Open())
             {
@@ -148,10 +148,10 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void SetItem_HardMask_MaskedValue_KeepsDataUnderEveryMaskedSlot()
         {
-            var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), np.array(new[] { false, true, false, false }), hard_mask: true);
+            var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), mask: np.array(new[] { false, true, false, false }), hard_mask: true);
             var before = x._mask;
 
-            x["0:3"] = np.ma.array(np.array(new double[] { 7, 7, 7 }), np.array(new[] { false, false, true }));
+            x["0:3"] = np.ma.array(np.array(new double[] { 7, 7, 7 }), mask: np.array(new[] { false, false, true }));
 
             Assert.IsTrue(ReferenceEquals(before, x._mask));
             Assert.IsTrue(D(x).SequenceEqual(new double[] { 7, 2, 3, 4 }));
@@ -170,7 +170,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void HardSlice_WritesInsideACallersScope_ParentSurvives_SliceReclaimedWithTheScope()
         {
-            var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), np.array(new[] { false, true, false, false }), hard_mask: true);
+            var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }), mask: np.array(new[] { false, true, false, false }), hard_mask: true);
             var data0 = x._data;
             var mask0 = x._mask;
 
@@ -207,7 +207,7 @@ namespace NumSharp.Tests.Ma
         public void HardSlice_SetItem_ReleasesItsSnapshots_WithNoEnclosingScope()
         {
             const int n = 4096; // large enough that both snapshots come from the bucketed pool
-            var x = np.ma.array(np.arange(n).astype(np.float64), np.equal(np.mod(np.arange(n), 7), 1), hard_mask: true);
+            var x = np.ma.array(np.arange(n).astype(np.float64), mask: np.equal(np.mod(np.arange(n), 7), 1), hard_mask: true);
             var v = (NDMaskedArray)x["0:4000"];
             v[1] = 99.0; // warm-up: kernels and the pool bucket exist before the window
 
@@ -284,7 +284,7 @@ namespace NumSharp.Tests.Ma
             NDMaskedArray s;
             using (NDScope.Open())
             {
-                var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }).reshape(2, 2), np.array(new[] { false, true, false, false }).reshape(2, 2));
+                var x = np.ma.array(np.array(new double[] { 1, 2, 3, 4 }).reshape(2, 2), mask: np.array(new[] { false, true, false, false }).reshape(2, 2));
                 s = np.ma.sum(x, 0);
                 // Column 0: 1 + 3 = 4; column 1: only the 4 is unmasked.
                 Assert.IsFalse(s._data.IsDisposed);

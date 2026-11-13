@@ -27,7 +27,7 @@ namespace NumSharp
     {
         /// <summary>
         ///     NumPy's <c>np.full</c> (<c>numeric.py</c>: <c>a = empty(shape, dtype, order); multiarray.copyto(a, fill_value,
-        ///     casting='unsafe')</c>), the body of <see cref="np.full(Shape, object, DType, string)"/> once the device was
+        ///     casting='unsafe')</c>), the body of <see cref="np.full(Shape, object, DType, char, string)"/> once the device was
         ///     checked: a fill value with dimensions broadcasts into the result (<see cref="FullFromArrayFill"/>), a text
         ///     dtype (or, without one, a <c>str</c> / <c>bytes</c> fill value) takes its class's fill route, <c>None</c>
         ///     without a dtype is refused, and any other value is stored into every element of the dtype's storage lane
@@ -53,7 +53,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>None</c> into a <c>StringDType(coerce=False)</c>; an array fill value that does not
         ///     broadcast into the result or whose text does not parse into a numeric dtype; a negative dimension or a byte
         ///     count past the limit (<see cref="AllocationGuard"/>).</exception>
-        /// <exception cref="OverflowException">A Python int outside an integer dtype's range (the copy is unsafe, but the
+        /// <exception cref="OverflowError">A Python int outside an integer dtype's range (the copy is unsafe, but the
         ///     Python scalar is packed first).</exception>
         /// <remarks>Without a dtype, a scalar's C# type picks the storage lane (a C# <c>int</c> fills an int32 array), not
         ///     NumPy's discovery of the Python scalar it stands for.</remarks>
@@ -121,7 +121,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The fill value does not broadcast into the result (NumPy's copyto text, <c>could not
         ///     broadcast input array from shape (2,) into shape (3,)</c>), or a text element does not parse into a numeric
         ///     result (the cast's text).</exception>
-        /// <exception cref="OverflowException">A text element parses to an integer outside an integer result.</exception>
+        /// <exception cref="OverflowError">A text element parses to an integer outside an integer result.</exception>
         /// <remarks>
         ///     The fill value used to fall to the house scalar conversion, which refused or misread every array of rank
         ///     ≥ 1 (<c>np.full_like(f3, [1, 2, 3])</c> is <c>[1., 2., 3.]</c> in NumPy). Text results keep their own fill
@@ -177,7 +177,9 @@ namespace NumSharp
         /// <param name="dtype">The result's dtype, or null for <paramref name="a"/>'s. The fill value's own type never
         ///     selects it.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>: the result's memory layout.</param>
-        /// <returns>A new array with <paramref name="a"/>'s dimensions and <paramref name="fill_value"/> cast into every
+        /// <param name="shapeOverride">NumPy's <c>shape=</c> override, or an empty (default) <see cref="Shape"/> for
+        ///     <paramref name="a"/>'s dimensions; <c>'K'</c> lays a shape of another rank out in C order.</param>
+        /// <returns>A new array with <paramref name="a"/>'s dimensions (or the override's) and <paramref name="fill_value"/> cast into every
         ///     element, labelled with a lane-sharing C-type class when that is the dtype (as NumPy's <c>empty_like</c> keeps
         ///     the descriptor).</returns>
         /// <exception cref="ArgumentException">An order other than C, F, A or K.</exception>
@@ -185,19 +187,21 @@ namespace NumSharp
         /// <exception cref="ValueError">An array fill value that does not broadcast into the result, or whose text does not
         ///     parse into a numeric result; <c>None</c> into a <c>StringDType(coerce=False)</c>; a byte count past the
         ///     limit.</exception>
-        /// <exception cref="OverflowException">A Python int outside the result's integer range
+        /// <exception cref="OverflowError">A Python int outside the result's integer range
         ///     (<c>np.full_like(int8_array, 1000)</c>).</exception>
         /// <remarks>NumPy's <c>subok=True</c>: <c>[NewSubtype("a")]</c> creates the result as the operand's class (a matrix
         ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where
         ///     <c>empty_like</c> allocates - after the order check, before the fill.</remarks>
         [NewSubtype("a")]
-        internal static NDArray full_like(NDArray a, object fill_value, DType dtype, char order)
+        internal static NDArray full_like(NDArray a, object fill_value, DType dtype, char order, Shape shapeOverride = default)
         {
             // NumPy's *_like contract preserves a.dtype unless dtype= is explicitly supplied.
             // fill_value is CAST into that dtype; its CLR type never selects the result dtype.
             var typeCode = dtype != null ? dtype.GetTypeCode() : a.typecode;
-            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
-            var shape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // PyArray_NewLikeArrayWithShape's layout: order='K' keeps a's axis permutation (C when shape= changes the rank),
+            // not merely C-or-F; an empty (default) override is "no shape=".
+            var dims = shapeOverride.IsEmpty ? (long[])a.Shape.dimensions.Clone() : (long[])shapeOverride;
+            var shape = Shape.NewLikeLayout(a.Shape, order, dims);
             // empty_like allocates the result as a chararray operand's class (subok=True) at this point: its finalize rule
             // refuses a dtype that is not string data BEFORE the fill could raise its own error.
             if (NDSubclass.StandsForCharArray(a))
@@ -232,7 +236,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.ones</c> (<c>numeric.py</c>: <c>a = empty(shape, dtype, order); multiarray.copyto(a, 1,
-        ///     casting='unsafe')</c>), the body of <see cref="np.ones(Shape, DType, string)"/> once the device was checked: a
+        ///     casting='unsafe')</c>), the body of <see cref="np.ones(Shape, DType, char, string)"/> once the device was checked: a
         ///     text dtype gets the text <c>'1'</c> in every element (<see cref="OnesOfText"/>), any other dtype the Python int
         ///     1 as its class's <c>setitem</c> converts it, written into every element (<see cref="UnmanagedStorage.OnesCore"/>).
         /// </summary>
@@ -251,28 +255,6 @@ namespace NumSharp
             if (dtype is not null && (dtype.Meta.HasReferences || Backends.Strings.NDStringStorage.IsString(dtype)))
                 return OnesOfText(shape, dtype);
             return WithLaneSharingDescr(UnmanagedStorage.OnesCore(shape, dtype ?? DType.Double), dtype);
-        }
-
-        /// <summary>
-        ///     NumPy's <c>np.ones</c> with an <c>order</c>, the body of <see cref="np.ones(Shape, char, DType)"/>: the order
-        ///     resolved (<c>'A'</c> and <c>'K'</c> mean C without a source), the dimensions laid out in it, then the fill of
-        ///     <see cref="ones(Shape, DType)"/>.
-        /// </summary>
-        /// <param name="shape">The dimensions (only they are read: the layout comes from <paramref name="order"/>).</param>
-        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
-        /// <param name="dtype">The dtype, or null for float64.</param>
-        /// <returns>A fresh array of ones in the requested layout (the fill is order-independent, so only the flags
-        ///     differ).</returns>
-        /// <exception cref="ValueError">An order other than C, F, A or K; a negative dimension, or a byte count past the
-        ///     limit.</exception>
-        internal static NDArray ones(Shape shape, char order, DType dtype)
-        {
-            char physical = OrderResolver.Resolve(order);
-            var orderedShape = new Shape(shape.dimensions, physical, copy: false);
-            // The text routes as in Ones(Shape, DType): text has no lane fill.
-            if (dtype is not null && (dtype.Meta.HasReferences || Backends.Strings.NDStringStorage.IsString(dtype)))
-                return OnesOfText(orderedShape, dtype);
-            return WithLaneSharingDescr(UnmanagedStorage.OnesCore(orderedShape, dtype ?? DType.Double), dtype);
         }
 
         /// <summary>
@@ -352,6 +334,8 @@ namespace NumSharp
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> in either case (<c>'K'</c> keeps
         ///     <paramref name="a"/>'s axis order: a transposed operand gives a transposed result, a broadcast one an F
         ///     result).</param>
+        /// <param name="shape">NumPy's <c>shape=</c> override, or an empty (default) <see cref="Shape"/> for
+        ///     <paramref name="a"/>'s dimensions; <c>'K'</c> lays a shape of another rank out in C order.</param>
         /// <param name="device">Null or <c>"cpu"</c>.</param>
         /// <returns>A new, owned, writeable array of zeros (a text dtype's empty strings).</returns>
         /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K (<c>order must be one of 'C', 'F',
@@ -361,16 +345,17 @@ namespace NumSharp
         ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where
         ///     <c>empty_like</c> allocates - after the order and device checks, before the fill.</remarks>
         [NewSubtype("a")]
-        internal static NDArray zeros_like(NDArray a, DType dtype, char order, string device)
+        internal static NDArray zeros_like(NDArray a, DType dtype, char order, Shape shape, string device)
         {
             // NumPy's empty_like converts its arguments in order (npy_parse_arguments): the order's letter before the device,
             // so an unknown order is reported first (np.zeros_like(a, order='Z', device='cuda') raises the order's ValueError,
             // probed 2.4.2). The layout itself is resolved after the device, as before.
             OrderResolver.Convert(order);
             DeviceArguments.ValidateDevice(device);
-            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation (a transposed a gives a transposed
-            // result, a broadcast one an F result), not merely C-or-F.
-            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // PyArray_NewLikeArrayWithShape's layout: order='K' keeps a's axis permutation (a transposed a gives a
+            // transposed result, a broadcast one an F result; C when shape= changes the rank), not merely C-or-F.
+            var dims = shape.IsEmpty ? (long[])a.Shape.dimensions.Clone() : (long[])shape;
+            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, dims);
             // empty_like allocates the result as a chararray operand's class (subok=True) at this point: its finalize rule
             // refuses a dtype that is not string data before the fill.
             if (NDSubclass.StandsForCharArray(a))
@@ -390,6 +375,8 @@ namespace NumSharp
         ///     for <c>'K'</c>, its axis permutation.</param>
         /// <param name="dtype">The result dtype, or null for <paramref name="a"/>'s.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> in either case.</param>
+        /// <param name="shape">NumPy's <c>shape=</c> override, or an empty (default) <see cref="Shape"/> for
+        ///     <paramref name="a"/>'s dimensions; <c>'K'</c> lays a shape of another rank out in C order.</param>
         /// <param name="device">Null or <c>"cpu"</c>.</param>
         /// <returns>A new, owned, writeable array of ones, labelled with a requested lane-sharing C-type class.</returns>
         /// <exception cref="ValueError"><paramref name="order"/> is not one of C, F, A, K, checked before the device;
@@ -398,7 +385,7 @@ namespace NumSharp
         ///     view; a chararray), and a chararray operand's finalize rule runs on the result dtype here, where
         ///     <c>empty_like</c> allocates - after the order and device checks, before the fill.</remarks>
         [NewSubtype("a")]
-        internal static NDArray ones_like(NDArray a, DType dtype, char order, string device)
+        internal static NDArray ones_like(NDArray a, DType dtype, char order, Shape shape, string device)
         {
             // A string array (or dtype) is NumPy's empty_like + copyto(res, 1, casting='unsafe'): the text '1' in every
             // element, through ones' string route.
@@ -407,8 +394,10 @@ namespace NumSharp
             // probed 2.4.2). The layout itself is resolved after the device, as before.
             OrderResolver.Convert(order);
             DeviceArguments.ValidateDevice(device);
-            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
-            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
+            // PyArray_NewLikeArrayWithShape's layout: order='K' keeps a's axis permutation (C when shape= changes the
+            // rank), not merely C-or-F.
+            var dims = shape.IsEmpty ? (long[])a.Shape.dimensions.Clone() : (long[])shape;
+            var resolvedShape = Shape.NewLikeLayout(a.Shape, order, dims);
             // empty_like allocates the result as a chararray operand's class (subok=True) at this point: its finalize rule
             // refuses a dtype that is not string data before the fill.
             if (NDSubclass.StandsForCharArray(a))
@@ -431,82 +420,154 @@ namespace NumSharp
         // ---------------------------- np.roll ----------------------------
 
         /// <summary>
-        ///     NumPy's <c>np.roll</c> (<c>numeric.py</c>) after the facade's class rules: with no axis the raveled array is
-        ///     rolled and reshaped back; along an axis, NumPy's <c>empty_like</c> plus the two slice copies (the body shifted
-        ///     forward, the tail wrapped to the front).
+        ///     NumPy's <c>np.roll</c> (<c>numeric.py</c>) after the facade's class rules, statement for statement: with no axis
+        ///     the raveled array is rolled along axis 0 and reshaped back; otherwise
+        ///     <code>
+        ///     axis = normalize_axis_tuple(axis, a.ndim, allow_duplicate=True)
+        ///     broadcasted = broadcast(shift, axis)              # ndim > 1: ValueError
+        ///     shifts = {ax: 0 for ax in range(a.ndim)}
+        ///     for sh, ax in broadcasted: shifts[ax] += int(sh)
+        ///     rolls[ax] = ((:-offset, offset:), (-offset:, :offset)) for each offset = shifts[ax] % (a.shape[ax] or 1) != 0
+        ///     result = empty_like(a); for indices in product(*rolls): result[res_index] = a[arr_index]
+        ///     </code>
         /// </summary>
         /// <param name="a">The array (not null).</param>
-        /// <param name="shift">The places to shift; any value, reduced Python-style modulo the axis length (a negative shift
-        ///     rolls backwards; the type's extremes do not overflow).</param>
-        /// <param name="axis">The axis, or null to roll the flattened array.</param>
+        /// <param name="shift">The places to shift: a scalar (0-d) or a 1-D array, broadcast against the axes; every element is
+        ///     read as Python's <c>int()</c> reads NumPy's scalar of it (an integer exactly, a float truncated toward zero, a
+        ///     bool as 0 / 1, a complex by its real part, text parsed as a Python int literal), and the shifts of one axis are
+        ///     SUMMED in arbitrary precision before Python's modulo by the axis length, so no value overflows.</param>
+        /// <param name="axis">The axis or the axes (repeats allowed: their shifts add up), or null to roll the flattened
+        ///     array.</param>
         /// <returns>A new array of <paramref name="a"/>'s shape and dtype: <paramref name="a"/>'s memory order (empty_like's
-        ///     <c>'K'</c>) along an axis, also for a zero shift (a <c>copy('K')</c>); C order with no axis (the reshape of the
-        ///     raveled roll).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank (the axis as
-        ///     given).</exception>
-        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel, the inner roll, and the slice views of the two copies are released;
-        ///     the result is yielded. It sees plain arrays only: the woven public function hands it the plain view of a
-        ///     subclass operand and answers for the class itself (NDSubclass).</remarks>
-        [NDScoped /* the ravel and the inner roll of the flat case, and the four slice views of the copies, are released; the result is yielded */]
+        ///     <c>'K'</c>) along axes, also when every offset is 0 (a <c>copy('K')</c>); C order with no axis (the reshape of
+        ///     the raveled roll).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="shift"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>'s rank (the axis as given).</exception>
+        /// <exception cref="IncorrectShapeException">The shift does not broadcast against the axes (np.broadcast's <c>shape
+        ///     mismatch: objects cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1
+        ///     with shape (2,).</c>).</exception>
+        /// <exception cref="ValueError">The broadcast has two dimensions or more (<c>'shift' and 'axis' should be scalars or
+        ///     1D sequences</c>); a NaN shift (<c>cannot convert float NaN to integer</c>); a text shift that is no int
+        ///     literal; a 0-d <paramref name="a"/> with the empty tuple (Python's <c>not enough values to unpack (expected 2,
+        ///     got 0)</c>: <c>zip(*())</c> of the one empty product).</exception>
+        /// <exception cref="OverflowError">An infinite shift (<c>cannot convert float infinity to integer</c>).</exception>
+        /// <exception cref="TypeError">A shift element <c>int()</c> refuses (a StringDType NA None).</exception>
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel and the inner roll of the flat case, and every slice view of the
+        ///     copies, are released; the result is yielded. It sees plain arrays only: the woven public function hands it the
+        ///     plain view of a subclass operand and answers for the class itself (NDSubclass). NumPy's ComplexWarning for a
+        ///     complex shift is not raised (NumSharp has no warnings).</remarks>
+        [NDScoped /* the ravel and the inner roll of the flat case, and the slice views of the copies, are released; the result is yielded */]
         [NewSubtype("a")]
-        internal static NDArray roll(NDArray a, long shift, int? axis)
+        internal static NDArray roll(NDArray a, NDArray shift, NDAxis? axis)
         {
-            if (axis == null)
+            if (shift is null)
+                throw new ArgumentNullException(nameof(shift));
+            // `if axis is None: return roll(a.ravel(), shift, 0).reshape(a.shape)`.
+            if (axis is null)
                 return roll(a.ravel(), shift, 0).reshape(new Shape(a.Shape.dimensions, copy: false));
 
-            // normalize_axis_tuple(axis, a.ndim, allow_duplicate=True): NumPy's AxisError, the axis as given.
-            int ax = Shape.check_and_adjust_axis(a.ndim, axis.Value);
+            // `axis = normalize_axis_tuple(axis, a.ndim, allow_duplicate=True)`: NumPy's AxisError, the axis as given; an
+            // integer is a tuple of one.
+            int nd = a.ndim;
+            int[] axes = axis.Value.Normalize(nd, allowDuplicate: true);
 
-            long n = a.Shape.dimensions[ax];
+            // `broadcasted = broadcast(shift, axis)`: the shift's shape against the axes' (k,), np.broadcast's mismatch text;
+            // then the dimension check.
+            Shape spread = Shape.MultiIterShape(new[] { shift.Shape, new Shape(new long[] { axes.Length }, copy: false) });
+            if (spread.NDim > 1)
+                throw new ValueError("'shift' and 'axis' should be scalars or 1D sequences");
 
-            // Python-style modulo: always non-negative when n > 0.
-            // If n == 0 (empty axis), offset stays 0 — nothing to roll.
-            long offset = n == 0 ? 0 : ((shift % n) + n) % n;
-
-            // NumPy still runs empty_like + the slice copies for a zero shift, so the result keeps a's memory order
-            // (order='K': a transposed / broadcast input stays transposed / F), which copy('K') reproduces.
-            if (offset == 0)
-                return a.copy('K');
-
-            // np.empty_like(a)'s statements: an uninitialised array of a's dtype in a's K layout (every element is written
-            // by the two copies below).
-            var result = new NDArray(a.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
-
-            // Build Slice arrays for each dimension.
-            // For the rolled axis we split into body + tail:
-            //   result[..., offset:, ...] = a[..., :-offset, ...]   (body shifts)
-            //   result[..., :offset, ...] = a[..., -offset:, ...]   (tail wraps)
-            // All other axes use Slice.All (":").
-
-            var srcBody = new Slice[a.ndim];
-            var dstBody = new Slice[a.ndim];
-            var srcTail = new Slice[a.ndim];
-            var dstTail = new Slice[a.ndim];
-
-            for (int i = 0; i < a.ndim; i++)
+            // `for sh, ax in broadcasted: shifts[ax] += int(sh)` - in C order over the 1-D broadcast; a shift of one element
+            // (0-d, or length 1) repeats, an axis tuple of one names the same axis every time. The sums are Python ints.
+            var sums = new BigInteger[nd];
+            long count = spread.size;
+            bool shiftRepeats = shift.size == 1;
+            bool unicode = shift.typecode == NPTypeCode.String && !shift.Storage.IsVString && shift.dtype.kind == 'U';
+            for (long i = 0; i < count; i++)
             {
-                if (i == ax)
-                {
-                    srcBody[i] = new Slice(null, -offset);   // :-offset
-                    dstBody[i] = new Slice(offset, null);    // offset:
-                    srcTail[i] = new Slice(-offset, null);   // -offset:
-                    dstTail[i] = new Slice(null, offset);    // :offset
-                }
-                else
-                {
-                    srcBody[i] = dstBody[i] = srcTail[i] = dstTail[i] = Slice.All;
-                }
+                int ax = axes.Length == 1 ? axes[0] : axes[i];
+                sums[ax] += PythonIntOfShift(shift.GetAtIndex(shiftRepeats ? 0 : i), unicode);
             }
 
-            result[dstBody] = a[srcBody];
-            result[dstTail] = a[srcTail];
+            // Python's `offset %= a.shape[ax] or 1`: never negative, and 0 for an empty axis ("nothing matters").
+            var offsets = new long[nd];
+            bool any = false;
+            for (int d = 0; d < nd; d++)
+            {
+                long n = a.Shape.dimensions[d] == 0 ? 1 : a.Shape.dimensions[d];
+                BigInteger r = BigInteger.Remainder(sums[d], n);
+                offsets[d] = (long)(r.Sign < 0 ? r + n : r);
+                any |= offsets[d] != 0;
+            }
+
+            // `zip(*indices)` of the ONE empty product a 0-d input gives: Python cannot unpack it into two names.
+            if (nd == 0)
+                throw new ValueError("not enough values to unpack (expected 2, got 0)");
+
+            // NumPy still runs empty_like + the slice copies when every offset is 0, so the result keeps a's memory order
+            // (order='K': a transposed / broadcast input stays transposed / F), which copy('K') reproduces.
+            if (!any)
+                return a.copy('K');
+
+            // np.empty_like(a)'s statements: an uninitialised array of a's dtype in a's K layout (every element is written by
+            // the copies below: the 2^m slice pairs of the m rolled axes cover the result exactly once).
+            var result = new NDArray(a.dtype, Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone()), false);
+
+            // `for indices in itertools.product(*rolls)`: an odometer over the rolled axes, each either its body
+            // (result[offset:] = a[:-offset]) or its tail (result[:offset] = a[-offset:]); an axis without an offset is ':'
+            // on both sides. The product's order (the first axis slowest) is NumPy's.
+            var rolled = new int[nd];
+            int m = 0;
+            for (int d = 0; d < nd; d++)
+                if (offsets[d] != 0)
+                    rolled[m++] = d;
+            var src = new Slice[nd];
+            var dst = new Slice[nd];
+            for (long pick = 0; pick < 1L << m; pick++)
+            {
+                for (int d = 0; d < nd; d++)
+                    src[d] = dst[d] = Slice.All;
+                for (int j = 0; j < m; j++)
+                {
+                    int d = rolled[j];
+                    long offset = offsets[d];
+                    bool tail = ((pick >> (m - 1 - j)) & 1) != 0;
+                    src[d] = tail ? new Slice(-offset, null) : new Slice(null, -offset);
+                    dst[d] = tail ? new Slice(null, offset) : new Slice(offset, null);
+                }
+                result[dst] = a[src];
+            }
 
             return result;
         }
 
         /// <summary>
+        ///     Python's <c>int(sh)</c> of one element of the broadcast shift, as <c>np.broadcast</c>'s iteration hands it to
+        ///     np.roll: NumPy's scalar of the element (an <c>np.str_</c> for a <c>U</c> array, a Python str for StringDType).
+        /// </summary>
+        /// <param name="element">The element, boxed by <see cref="NDArray.GetAtIndex(long)"/>.</param>
+        /// <param name="unicode">The shift is a <c>U</c> array: an invalid literal is quoted as <c>np.str_('…')</c>.</param>
+        /// <returns>The integer.</returns>
+        /// <exception cref="ValueError">A NaN, or text that is no int literal.</exception>
+        /// <exception cref="OverflowError">An infinity.</exception>
+        /// <exception cref="TypeError">A value <c>int()</c> refuses (None).</exception>
+        private static BigInteger PythonIntOfShift(object element, bool unicode)
+        {
+            switch (element)
+            {
+                case Complex c:
+                    // NumPy's complex scalar __int__: a ComplexWarning, then int() of the real part.
+                    return PythonInt.From(c.Real);
+                case string s when unicode:
+                    return PythonInt.Parse(s, 10, numpyStr: true);
+                default:
+                    return PythonInt.From(element);
+            }
+        }
+
+        /// <summary>
         ///     NumPy's <c>np.indices</c> (<c>numeric.py</c>) with <c>sparse=False</c>, the body of
-        ///     <see cref="np.indices(long[], DType)"/> once the dimensions were checked for null: a single dense array of
+        ///     <see cref="np.indices(Shape, DType, bool)"/> once the dimensions were read: a single dense array of
         ///     shape <c>(len(dimensions), *dimensions)</c> whose d-th sub-array holds each position's d-th coordinate.
         /// </summary>
         /// <param name="dimensions">The grid's sizes. An empty array gives NumPy's <c>(0,)</c> result. Never mutated.</param>
@@ -578,7 +639,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.indices</c> (<c>numeric.py</c>) with <c>sparse=True</c>, the body of
-        ///     <see cref="np.indices_sparse(long[], DType)"/> once the dimensions were checked for null: one array per
+        ///     <see cref="np.indices(Shape, DType, bool)"/> (<c>sparse: true</c>) once the dimensions were checked for null: one array per
         ///     dimension, of shape <c>(1, …, 1, dimensions[d], 1, …, 1)</c>, that broadcasts against the others.
         /// </summary>
         /// <param name="dimensions">The grid's sizes. An empty array gives an empty tuple. Never mutated.</param>
@@ -658,20 +719,28 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.isscalar</c> (<c>numeric.py</c>: <c>isinstance(element, generic) or type(element) in ScalarType
-        ///     or isinstance(element, numbers.Number)</c>) over C# values: a 0-d one-element NDArray (NumSharp's stand-in for
-        ///     a NumPy scalar), a <see cref="System.Numerics.Complex"/>, a string, a bool, a primitive, a decimal, and the C#
-        ///     spellings of the other NumPy and Python scalars — a <see cref="Half"/> (<c>np.float16</c>), a
-        ///     <see cref="BigInteger"/> (a Python int of any size), a <see cref="Char8"/> (<c>np.bytes_</c> / <c>bytes</c> of
-        ///     length 1) and a <see cref="DateTime64"/> (<c>np.datetime64</c>).
+        ///     or isinstance(element, numbers.Number)</c>) over C# values: a NumPy scalar (a 0-d NDArray that
+        ///     <see cref="NDArray.IsNumPyScalar"/> calls one), a <see cref="System.Numerics.Complex"/>, a string, a bool, a
+        ///     primitive, a decimal, and the C# spellings of the other NumPy and Python scalars — a <see cref="Half"/>
+        ///     (<c>np.float16</c>), a <see cref="BigInteger"/> (a Python int of any size), a <see cref="Char8"/>
+        ///     (<c>np.bytes_</c> / <c>bytes</c> of length 1) and a <see cref="DateTime64"/> (<c>np.datetime64</c>).
         /// </summary>
         /// <param name="obj">Any object, null included.</param>
-        /// <returns>True for the scalars above; false for null, any other NDArray, a C# array, a <see cref="Type"/> and any
-        ///     other object.</returns>
+        /// <returns>True for the scalars above; false for null, an explicit 0-d array (<c>np.array(5)</c>,
+        ///     <c>np.asarray(5)</c>), any NDArray with dimensions, a C# array, a <see cref="Type"/> and any other
+        ///     object.</returns>
         /// <remarks>
+        ///     <para>
         ///     A <see cref="Type"/> is a class object, never a scalar: <c>isscalar(typeof(int))</c> is False, as NumPy's
         ///     <c>isscalar(int)</c> and <c>isscalar(np.float64)</c> are (a class is neither a <c>generic</c> nor a
-        ///     <c>numbers.Number</c>). A 0-d NDArray answers True where NumPy's 0-d array does not: NumSharp has no scalar
-        ///     objects, so a 0-d array is what a NumPy scalar becomes.
+        ///     <c>numbers.Number</c>).
+        ///     </para>
+        ///     <para>
+        ///     NumSharp's NumPy scalar is a 0-d array, so the answer for an NDArray is <see cref="NDArray.IsNumPyScalar"/>:
+        ///     <c>np.isscalar(a.sum())</c> and <c>np.isscalar(NDArray.Scalar(1.5))</c> are True and
+        ///     <c>np.isscalar(np.array(5))</c> is False, as in NumPy. The accepted difference: a 0-d array built another way
+        ///     (<c>np.zeros(())</c>, <c>x.reshape(())</c>) answers True, where NumPy's ndarray answers False.
+        ///     </para>
         /// </remarks>
         internal static bool isscalar(object obj)
         {
@@ -690,8 +759,10 @@ namespace NumSharp
             if (type == typeof(string) || type == typeof(Complex) || type == typeof(decimal) || type == typeof(Half)
                 || type == typeof(BigInteger) || type == typeof(Char8) || type == typeof(DateTime64))
                 return true;
+            // A 0-d NDArray is NumPy's scalar unless np.array(x) / np.asarray(x) built it as an explicit 0-d ARRAY, which
+            // NumPy's isinstance(element, generic) rejects (np.isscalar(np.array(5)) is False). IsNumPyScalar is that rule.
             if (obj is NDArray nd)
-                return nd.ndim == 0 && nd.size == 1;
+                return nd.IsNumPyScalar;
 
             // Everything else: a C# array (a Python list), any other object, and a Type - a class object, which NumPy's
             // isscalar(int) answers False for. A Type used to be read as the type it names, so typeof(int) answered True

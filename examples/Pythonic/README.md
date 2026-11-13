@@ -55,7 +55,7 @@ Pillow, OpenCV and TensorFlow, are in [section 13 of the specification](PYTHONIC
 
 ## Run it
 
-You need the .NET 10 SDK and a 64-bit Python 3.11, 3.12 or 3.13. From this folder:
+You need the .NET 10 SDK and a 64-bit Python 3.12 or 3.13. From this folder:
 
 ```bash
 # Windows

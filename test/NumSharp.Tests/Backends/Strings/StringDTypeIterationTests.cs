@@ -355,12 +355,12 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     A T input with an allocated T output, buffered: NumPy 2.4.2 raises <c>MemoryError: Failed to load string in
+        ///     A T input with an allocated T output, buffered: the values the loop wrote, as NumPy 2.5.4 returns them (its
+        ///     2.5.3 iterator / StringDType fixes, gh-32304). NumPy 2.4 raised <c>MemoryError: Failed to load string in
         ///     StringDType getitem</c> reading its own output buffer (and <c>String deallocation failed in clear loop</c> when
-        ///     the iterator closes); NumSharp returns the values the loop wrote.
+        ///     the iterator closed), so this was a <c>[Misaligned]</c> pin of NumSharp's answer until the bump.
         /// </summary>
         [TestMethod]
-        [Misaligned]
         public void Buffered_StringDTypeInAndOut_GivesTheValuesNumPyFailsToRead()
         {
             using var t = Sample();
@@ -932,7 +932,7 @@ namespace NumSharp.Tests.Backends.Strings
                             using var it = route.Open();
                             foreach (var _ in it) { }
                         };
-                        walk.Should().Throw<OutOfMemoryException>($"{route.Name}, after {successes} allocations")
+                        walk.Should().Throw<MemoryError>($"{route.Name}, after {successes} allocations")
                             .WithMessage("Failed to allocate string in string to string cast");
                     }
                     finally

@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The ONNX Runtime bridge's execution providers end to end ON ANDROID: an app with no activity, only an instrumentation
+    (ProviderCheck.cs), that runs test/NumSharp.Tests.Interop.OnnxRuntime/ProviderEndToEnd.cs - the code the desktop
+    suite's ProviderEndToEndTests runs - for every provider the Android ONNX Runtime carries (CPU, XNNPACK, NNAPI).
+    XNNPACK exists only in ONNX Runtime's mobile packages, so this is where its outputs, which live in XNNPACK's own
+    allocator, are imported for real. Not in NumSharp.sln (CI machines have no Android workload); README.md has the
+    build / install / run steps.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <ApplicationId>dev.numsharp.tests.ortproviders</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <!-- arm64 for devices, x64 for the emulator; an App Bundle cannot be installed with adb; the assemblies ride in the
+         APK in Debug too (it is installed with adb, not deployed by an IDE). Narrow the ABIs with -p:TestAbis=android-arm64,
+         never -p:RuntimeIdentifiers: a global RuntimeIdentifiers flows into every referenced project, and the
+         netstandard2.0 build analyzer NumSharp.Core references cannot build for an Android RID. -->
+    <TestAbis Condition="'$(TestAbis)' == ''">android-arm64;android-x64</TestAbis>
+    <RuntimeIdentifiers>$(TestAbis)</RuntimeIdentifiers>
+    <AndroidPackageFormats>apk</AndroidPackageFormats>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <!-- The current ONNX Runtime by default; the floor (1.16.0) works too: -p:OnnxRuntimeVersion=1.16.0. -->
+    <OnnxRuntimeVersion Condition="'$(OnnxRuntimeVersion)' == ''">1.31.1</OnnxRuntimeVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="$(OnnxRuntimeVersion)" />
+    <ProjectReference Include="..\..\src\NumSharp.Interop.OnnxRuntime\NumSharp.Interop.OnnxRuntime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\NumSharp.Tests.Interop.OnnxRuntime\ProviderEndToEnd.cs" Link="ProviderEndToEnd.cs" />
+    <AndroidAsset Include="..\NumSharp.Tests.Interop.OnnxRuntime\Models\matmul_const_f32.onnx" Link="Assets\matmul_const_f32.onnx" />
+  </ItemGroup>
+</Project>

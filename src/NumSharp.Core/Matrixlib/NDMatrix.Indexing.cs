@@ -51,12 +51,14 @@ namespace NumSharp
 
         /// <summary>
         ///     The element at (<paramref name="row"/>, <paramref name="column"/>) as a 0-d <see cref="NDArray"/>,
-        ///     NumSharp's scalar (NumPy's <c>m[i, j]</c> returns a scalar, not a matrix). Assigning stores one
+        ///     NumPy's scalar (NumPy's <c>m[i, j]</c> returns a scalar, not a matrix). Assigning stores one
         ///     element. Two <see cref="int"/> arguments bind here too (they convert to <see cref="long"/>).
         /// </summary>
         /// <param name="row">The row; negative counts from the end.</param>
         /// <param name="column">The column; negative counts from the end.</param>
-        /// <value>A 0-d view of the element. Convert it with a cast (<c>(double)m[0, 1]</c>).</value>
+        /// <value>NumPy's scalar: a read-only 0-d COPY of the element, which does not change when the matrix does
+        ///     (<c>matrix.__getitem__</c> returns <c>ndarray.__getitem__</c>'s item unwrapped). Convert it with a cast
+        ///     (<c>(double)m[0, 1]</c>); write an element through the setter.</value>
         /// <exception cref="IndexError">An index is out of bounds, or the matrix object does not have two axes.</exception>
         /// <exception cref="ValueError">(set) The matrix is read-only, or the value is an array with one or more
         ///     axes (NumPy's <c>setting an array element with a sequence.</c>).</exception>
@@ -70,9 +72,22 @@ namespace NumSharp
         /// </remarks>
         public NDArray this[long row, long column]
         {
-            get => new NDArray(ElementView(row, column));
+            get => ElementScalar(row, column);
             set => SetBasic(new Slice[] { Slice.Index(row), Slice.Index(column) }, value);
         }
+
+        /// <summary>
+        ///     The getter of <c>m[row, column]</c>: NumPy's scalar of the element (<see cref="NDArray.PyArray_Scalar"/>
+        ///     over <see cref="ElementView"/>'s 0-d view), checked with the matrix's own bounds texts.
+        /// </summary>
+        /// <param name="row">The row; negative counts from the end.</param>
+        /// <param name="column">The column; negative counts from the end.</param>
+        /// <returns>A new read-only 0-d array holding a copy of the element.</returns>
+        /// <exception cref="IndexError">An index is out of bounds, or the matrix object does not have two axes.</exception>
+        /// <remarks>Anchored: the element's bytes are read from this matrix's buffer after its last use in the body (the
+        ///     view storage holds no counted reference), so the weaver keeps <c>this</c> rooted until the copy is made.</remarks>
+        [NDAnchored]
+        private NDArray ElementScalar(long row, long column) => PyArray_Scalar(ElementView(row, column));
 
         /// <summary>
         ///     NumPy's <c>matrix.__getitem__(index)</c> as the one C# indexer: integers, slices, slice notation, index arrays,
@@ -177,10 +192,29 @@ namespace NumSharp
         ///     directly: no intermediate array is created.
         /// </summary>
         /// <param name="slices">The index entries.</param>
-        /// <returns>The matrix view (0-d when no axis is left).</returns>
+        /// <returns>The matrix view; for a full integer index (one integer per axis) NumPy's scalar instead, a read-only
+        ///     0-d COPY of the element (the general indexer's static type makes it a 0-d <see cref="NDMatrix"/>, the scalar
+        ///     stand-in).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="slices"/> is <c>null</c>.</exception>
         /// <exception cref="IndexError">An integer is out of bounds, or more entries than axes.</exception>
-        private NDMatrix GetBasic(Slice[] slices) => new NDMatrix(BasicView(slices));
+        /// <remarks>
+        ///     NumPy's <c>matrix.__getitem__</c> returns <c>ndarray.__getitem__</c>'s result unwrapped when it is no ndarray:
+        ///     a full integer index is the item, NumPy's scalar copy, never a view that changes with the matrix. The copy is
+        ///     taken while the 0-d view is fresh, then handed to the matrix wrapper (the scalar array's own wrapper is
+        ///     disposed once the matrix holds its counted reference). Anchored: the element's bytes are read from this
+        ///     matrix's buffer after its last use in the body.
+        /// </remarks>
+        [NDAnchored]
+        private NDMatrix GetBasic(Slice[] slices)
+        {
+            UnmanagedStorage view = BasicView(slices);
+            if (view.Shape.IsScalar && IsItemIndex(slices))
+            {
+                using NDArray item = PyArray_Scalar(view);
+                return new NDMatrix(item.Storage);
+            }
+            return new NDMatrix(view);
+        }
 
         /// <summary>The storage of <see cref="GetBasic"/>: the selected view with the matrix rule applied.</summary>
         /// <param name="slices">The index entries.</param>

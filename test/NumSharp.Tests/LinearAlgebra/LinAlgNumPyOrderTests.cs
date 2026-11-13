@@ -102,8 +102,11 @@ namespace NumSharp.Tests.LinearAlgebra
         {
             Action act = () => np.cross(np.ones(new Shape(2L, 3L)), np.ones(new Shape(2L, 3L)), axisc: 5);
             act.Should().Throw<AxisError>().WithMessage("axisc: axis 5 is out of bounds for array of dimension 2*");
-            // Two 2-vectors give the z-components only, and NumPy never checks axisc there.
-            np.cross(np.ones(new Shape(2L, 2L)), np.ones(new Shape(2L, 2L)), axisc: 5).ToArray<double>().Should().Equal(0.0, 0.0);
+            // Two 2-vectors raise their 3-component ValueError before axisc is read (NumPy 2.5; NumPy 2.4 returned the
+            // z-components and never checked axisc).
+            Action twoVectors = () => np.cross(np.ones(new Shape(2L, 2L)), np.ones(new Shape(2L, 2L)), axisc: 5);
+            twoVectors.Should().Throw<ValueError>().WithMessage(
+                "Both input arrays must be (arrays of) 3-dimensional vectors, but they are 2 and 2 dimensional instead.");
         }
 
         [TestMethod]

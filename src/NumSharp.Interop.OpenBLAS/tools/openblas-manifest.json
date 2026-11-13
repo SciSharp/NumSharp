@@ -1,8 +1,8 @@
 {
-  "_comment": "PIN. Do not edit by hand -- regenerate with `python fetch_openblas.py --refresh-manifest`. These are the exact prebuilt OpenBLAS artifacts NumPy 2.4.2 bundles (see numpy requirements/ci_requirements.txt), which is what makes NumSharp's matrix products bit-identical to that NumPy's.",
-  "numpy_version": "2.4.2",
-  "distribution_version": "0.3.31.22.0",
-  "openblas_version": "0.3.31.dev",
+  "_comment": "PIN. Do not edit by hand -- regenerate with `python fetch_openblas.py --refresh-manifest`. These are the exact prebuilt OpenBLAS artifacts NumPy 2.5.4 bundles (see numpy requirements/ci_requirements.txt), which is what makes NumSharp's matrix products bit-identical to that NumPy's.",
+  "numpy_version": "2.5.4",
+  "distribution_version": "0.3.34.106.0",
+  "openblas_version": "0.3.34.106.0",
   "licenses": [
     {
       "name": "OpenBLAS",
@@ -28,77 +28,77 @@
   "runtimes": {
     "win-x64": {
       "distribution": "scipy-openblas64",
-      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-win_amd64.whl",
-      "url": "https://files.pythonhosted.org/packages/64/a0/ea0517fdace38199c619ecef33e9866c9811e01dc55be2f7be2fed573497/scipy_openblas64-0.3.31.22.0-py3-none-win_amd64.whl",
-      "wheel_sha256": "b28e788201af8f474d28cc1191fe89ce4137a2654ffbc3c47674eaa52f8b3b41",
+      "wheel": "scipy_openblas64-0.3.34.106.0-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/0c/17/ffc91653b566011d7c790116759266ec0a588fdd0e2f839d0343f3f79e0e/scipy_openblas64-0.3.34.106.0-py3-none-win_amd64.whl",
+      "wheel_sha256": "ea34bf76b8427ac2eca7a99334cbd8937a040303fa8364f9ed8e667d7c8e2c7d",
       "member": "scipy_openblas64/lib/libscipy_openblas64_.dll",
       "file": "libscipy_openblas64_.dll",
-      "sha256": "74a408729250596b0973e69fdd954eea07a70ff527a1dbaccf9ae21247b80377",
-      "size": 20404736,
+      "sha256": "ed4f167a5330424524f45258e7ca2c8d7f03c0cba1f30ee4985553ac1f88ecf8",
+      "size": 20589056,
       "vendored": []
     },
     "win-arm64": {
       "distribution": "scipy-openblas32",
-      "wheel": "scipy_openblas32-0.3.31.22.0-py3-none-win_arm64.whl",
-      "url": "https://files.pythonhosted.org/packages/98/54/1f6417c5c51d9a91876e7026ac2676fb64b1f53e27ec2bc679b2c2770195/scipy_openblas32-0.3.31.22.0-py3-none-win_arm64.whl",
-      "wheel_sha256": "3fda47789866db95e07cdef98cd093de3032be426fb76fddab4799b86bc0a988",
+      "wheel": "scipy_openblas32-0.3.34.106.0-py3-none-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/77/71/e9b25a750a11d6e2c521f6eb99517cf30bf6a4d30c4d01649ecb27144c82/scipy_openblas32-0.3.34.106.0-py3-none-win_arm64.whl",
+      "wheel_sha256": "93d10aed63281c659eb169f4bc55381af97416694fbbd541e32b7cd7f3a4fd0f",
       "member": "scipy_openblas32/lib/scipy_openblas.dll",
       "file": "scipy_openblas.dll",
-      "sha256": "d732e798918b18abdd4ca268b093c070e0195259203d648efce8fc9a3acae524",
-      "size": 10079232,
+      "sha256": "2f2f02de380415e7f45196be713cff6e586001abed3e07355e8985ea3e95ac61",
+      "size": 10243584,
       "vendored": []
     },
     "linux-x64": {
       "distribution": "scipy-openblas64",
-      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
-      "url": "https://files.pythonhosted.org/packages/fd/1b/969b68113436c031233fa22b11123451ef50f3aa7993423a5eb1279a327a/scipy_openblas64-0.3.31.22.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
-      "wheel_sha256": "0d9adb32a47f8eed2cc0b0e9ce50b3a1cd47f57c889dcbb55d50a69b81ffd8aa",
+      "wheel": "scipy_openblas64-0.3.34.106.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/3a/87/127a5870cf8cb84b275046084ec93d9e218616fafff257ffb6e04b76499b/scipy_openblas64-0.3.34.106.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "wheel_sha256": "e3d0667352f91ad851141a99eb326a6bbb4142db898e4f68bff8665247f0e951",
       "member": "scipy_openblas64/lib/libscipy_openblas64_.so",
       "file": "libscipy_openblas64_.so",
-      "sha256": "096271d38e4fe419b241ca4fdb3a12370b7d2aa3519a58c5e3cd9b01761cdf1f",
-      "size": 24639425,
+      "sha256": "f48b354e83f1311dd88b7f7c081ee41bcb797b5eceb99df3b1835d538c70119c",
+      "size": 23965673,
       "vendored": [
         {
-          "member": "scipy_openblas64/lib/libgfortran-040039e1.so.5.0.0",
-          "file": "libgfortran-040039e1.so.5.0.0",
-          "sha256": "0352e75f0719d9a299cb52919977eb5d7bd249d1fcad06d5e14030b272aae619",
-          "size": 2723513
+          "member": "scipy_openblas64/lib/libgfortran-83c28eba.so.5.0.0",
+          "file": "libgfortran-83c28eba.so.5.0.0",
+          "sha256": "468e71e59e1d784821a76702e5ecd1e0dbcfc024499f74a552d1bea4b26f27ad",
+          "size": 2751569
         },
         {
-          "member": "scipy_openblas64/lib/libquadmath-96973f99.so.0.0.0",
-          "file": "libquadmath-96973f99.so.0.0.0",
-          "sha256": "934c22ded0e7d169c4d4678876c96051adf3d94545da962f60b41659b075da3b",
-          "size": 247609
+          "member": "scipy_openblas64/lib/libquadmath-2284e583.so.0.0.0",
+          "file": "libquadmath-2284e583.so.0.0.0",
+          "sha256": "a9307bbaa353623fa014e8b682d50c4629f5e5c7d61daa9a8652f7d165cd421a",
+          "size": 272193
         }
       ]
     },
     "linux-arm64": {
       "distribution": "scipy-openblas64",
-      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl",
-      "url": "https://files.pythonhosted.org/packages/d7/89/643b88f749a20d07a68477c4d82a253b42784b92fb9a0fdfec2fe20a5f1b/scipy_openblas64-0.3.31.22.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl",
-      "wheel_sha256": "476a07293ce5599743b48ab3ea232d768e965a9290fd4199e1eb22ca0eabe10f",
+      "wheel": "scipy_openblas64-0.3.34.106.0-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/61/8c/28eab44e05def6a008c109024a8c0159efd88a76e95892c888a1469d17f8/scipy_openblas64-0.3.34.106.0-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+      "wheel_sha256": "e038d5a53076f901a6f7175447df0b3fa015b31c49eba12c2709d550eee5af14",
       "member": "scipy_openblas64/lib/libscipy_openblas64_.so",
       "file": "libscipy_openblas64_.so",
-      "sha256": "e5a4d4144f39365556651139eb144be2181b099488571fa38c155d76ee297c9b",
-      "size": 27717217,
+      "sha256": "f552eb69eb8b1dde4a552c380fae3e1c6252ca5afe51b43e43c2bca691e3dada",
+      "size": 26138553,
       "vendored": [
         {
-          "member": "scipy_openblas64/lib/libgfortran-daac5196.so.5.0.0",
-          "file": "libgfortran-daac5196.so.5.0.0",
-          "sha256": "038a5e3c53dfc3e3c00dd55c7f734cc8a0afa08f5557e07a0158c8e7695254f5",
-          "size": 1540393
+          "member": "scipy_openblas64/lib/libgfortran-e1b7dfc8.so.5.0.0",
+          "file": "libgfortran-e1b7dfc8.so.5.0.0",
+          "sha256": "d8198c0142688f3455b9b09ab53427c38585dfd74857b6d895da2a47425b1cdf",
+          "size": 1540409
         }
       ]
     },
     "linux-musl-x64": {
       "distribution": "scipy-openblas64",
-      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-musllinux_1_2_x86_64.whl",
-      "url": "https://files.pythonhosted.org/packages/3f/bd/c1a85f711bf56a6e6136d41296330d322a4c07232b879b8a9b6c92c4dec1/scipy_openblas64-0.3.31.22.0-py3-none-musllinux_1_2_x86_64.whl",
-      "wheel_sha256": "fcbb6b0dcccc46e8afce0221ea22f56d8bb32d2939315c6e4a655821c0618eb7",
+      "wheel": "scipy_openblas64-0.3.34.106.0-py3-none-musllinux_1_2_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/f8/30/5485034818b13613b8685a92e874c9960e678bcc90cb78fcb8cadcdabd05/scipy_openblas64-0.3.34.106.0-py3-none-musllinux_1_2_x86_64.whl",
+      "wheel_sha256": "a61555d420b4d87bccf6cfab5b14ed16f30abba6e9cb215fa8b2a87b1d80f754",
       "member": "scipy_openblas64/lib/libscipy_openblas64_.so",
       "file": "libscipy_openblas64_.so",
-      "sha256": "c4fda62d0a503475b58923841bc2756a578a94ff30c2c70df5185878e61f0d44",
-      "size": 24872641,
+      "sha256": "bd2e523a33d5963d7c4e6a3235c2c24275edd6bab5dbfe1128772454b30e34b7",
+      "size": 24243985,
       "vendored": [
         {
           "member": "scipy_openblas64/lib/libgcc_s-0cd532bd.so.1",
@@ -122,13 +122,13 @@
     },
     "linux-musl-arm64": {
       "distribution": "scipy-openblas64",
-      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-musllinux_1_2_aarch64.whl",
-      "url": "https://files.pythonhosted.org/packages/85/34/2a1c79ab0dcfeb523ab8a573b8909851509aaafbc85e3381d7d6e7d3bc04/scipy_openblas64-0.3.31.22.0-py3-none-musllinux_1_2_aarch64.whl",
-      "wheel_sha256": "1b4076bc374705c17bb00531b770fc92a75186cd7c18bab3f8fc0f247659cd71",
+      "wheel": "scipy_openblas64-0.3.34.106.0-py3-none-musllinux_1_2_aarch64.whl",
+      "url": "https://files.pythonhosted.org/packages/eb/6d/2b074ad078a734f2f04aa7f66886cd2044fdd17cbaafb36afbdb7ec4c335/scipy_openblas64-0.3.34.106.0-py3-none-musllinux_1_2_aarch64.whl",
+      "wheel_sha256": "172d15f5612a1fdab4b7651603693a8fed7f7e3bfb528714e6fc5e926d7a7aff",
       "member": "scipy_openblas64/lib/libscipy_openblas64_.so",
       "file": "libscipy_openblas64_.so",
-      "sha256": "afe977a3e01813ab290afc8a7f1fd715362278cb4cfbde6b017f0885cf76e28c",
-      "size": 27651561,
+      "sha256": "e5ca6513057c04c0886c791b4893e49dd0f5ac670b4fa0adc3d99979850fec86",
+      "size": 26072889,
       "vendored": [
         {
           "member": "scipy_openblas64/lib/libgcc_s-2d945d6c.so.1",
@@ -139,20 +139,20 @@
         {
           "member": "scipy_openblas64/lib/libgfortran-67378ab2.so.5.0.0",
           "file": "libgfortran-67378ab2.so.5.0.0",
-          "sha256": "e7e7cfab184f8eb7c51b4d4cf08b2073fa4b5f3fd0550e18025b74412fd0015b",
-          "size": 1802417
+          "sha256": "defa49b50290b3417422203620c2365cecd129d841e8aa8a7e8078bf7aaf749c",
+          "size": 1801841
         }
       ]
     },
     "osx-x64": {
       "distribution": "scipy-openblas64",
-      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-macosx_10_9_x86_64.whl",
-      "url": "https://files.pythonhosted.org/packages/c0/9c/125a3aca0f6ce06ea939bc7bff1ade01e2052eb2fe1bf5742c22bdf7df3e/scipy_openblas64-0.3.31.22.0-py3-none-macosx_10_9_x86_64.whl",
-      "wheel_sha256": "611a565225a4a3d0ad045e457ab34ea6d6f766a6d95c93c7ccadc1b58c58af98",
+      "wheel": "scipy_openblas64-0.3.34.106.0-py3-none-macosx_10_9_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/21/65/16db2de034a3f92274348ea488d17efbfeefd6fd9b4a09e728c861f82556/scipy_openblas64-0.3.34.106.0-py3-none-macosx_10_9_x86_64.whl",
+      "wheel_sha256": "ddda0a7109fe69615023bd438146e031ea4fecebe2ed55b0b64a96ae64a9a011",
       "member": "scipy_openblas64/lib/libscipy_openblas64_.dylib",
       "file": "libscipy_openblas64_.dylib",
-      "sha256": "d9919a040a7c02961909166b9970c9a3aea39a62b1b9a73127a7fb1f23e39275",
-      "size": 25134800,
+      "sha256": "01647e9e92e2c87c1b4148dc5b3b6d525e721699dd3037c8ee89ca5e0ebf88cd",
+      "size": 25337200,
       "vendored": [
         {
           "member": "scipy_openblas64/.dylibs/libgfortran.5.dylib",
@@ -176,13 +176,13 @@
     },
     "osx-arm64": {
       "distribution": "scipy-openblas64",
-      "wheel": "scipy_openblas64-0.3.31.22.0-py3-none-macosx_11_0_arm64.whl",
-      "url": "https://files.pythonhosted.org/packages/92/2e/401d60c3ba10308b43f65d081ed491b890f99bd50bc46d4a6d03b7cfc127/scipy_openblas64-0.3.31.22.0-py3-none-macosx_11_0_arm64.whl",
-      "wheel_sha256": "422f0144f61b78e1a6cfe07638a79c9232abbfeb6ef2962ba517572db0649b33",
+      "wheel": "scipy_openblas64-0.3.34.106.0-py3-none-macosx_11_0_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/fc/40/a51c1aeba050f15a82e1c59fa58e0287f0c6b42430f720369e2e55696780/scipy_openblas64-0.3.34.106.0-py3-none-macosx_11_0_arm64.whl",
+      "wheel_sha256": "8c7e8d1fb200526064bbb5f772c990526fbbb9641a6129538cac2d4dd9952d0c",
       "member": "scipy_openblas64/lib/libscipy_openblas64_.dylib",
       "file": "libscipy_openblas64_.dylib",
-      "sha256": "179ac9b89548f2931771960fedabd6487efcdeafc4476be3122cd391c34dc6d0",
-      "size": 25206560,
+      "sha256": "b92de907c418baf67a275c0a02c93fa8da623f76155f0ac853f29e2c33c2866f",
+      "size": 13765008,
       "vendored": [
         {
           "member": "scipy_openblas64/.dylibs/libgfortran.5.dylib",

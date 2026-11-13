@@ -143,189 +143,109 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Returns True if the int value can be cast to the data type according to the casting rule.
+        ///     NumPy's <c>np.can_cast(from_, to, casting='safe')</c> for a source whose static type is <see cref="object"/>:
+        ///     <c>array_can_cast_safely</c>'s dispatch on <c>from_</c>, statement for statement — an array by its own
+        ///     descriptor (<c>PyArray_CanCastArrayTo</c>), a NumPy scalar by its dtype, a Python number REFUSED (NEP 50), and
+        ///     anything else converted as a dtype specifier.
         /// </summary>
-        /// <param name="value">Int value to check.</param>
-        /// <param name="to">Data type to cast to.</param>
-        /// <param name="casting">Controls what kind of data casting may occur.</param>
-        /// <returns>True if the value can be cast to the target type.</returns>
+        /// <param name="value">The source: an <see cref="NDArray"/>; a dtype spelling (<see cref="DType"/>,
+        ///     <see cref="NPTypeCode"/>, <see cref="Type"/>, <see cref="NDScalarType"/>, a dtype string); a NumPy scalar (a
+        ///     boxed <see cref="Half"/> or <c>char</c>, the C# values NumSharp treats as NumPy scalars); or a C# number, which
+        ///     NumPy 2 refuses.</param>
+        /// <param name="to">Data type to cast to; <see cref="NPTypeCode.Empty"/> is NumPy's <c>None</c>.</param>
+        /// <param name="casting">The casting rule (see <see cref="can_cast(DType, DType, string)"/>).</param>
+        /// <returns>True if the source's dtype casts to <paramref name="to"/> under <paramref name="casting"/>.</returns>
+        /// <exception cref="TypeError">A boxed C# number (<c>bool</c>, an integer primitive, <c>float</c>, <c>double</c>,
+        ///     <see cref="System.Numerics.Complex"/>): NumPy 2's refusal, <c>can_cast() does not support Python ints, floats,
+        ///     and complex because the result used to depend on the value.</c> (two lines, see
+        ///     <see cref="PythonNumberRefusal"/>). A null source, a null <paramref name="to"/>, or an object that names no
+        ///     dtype (a C# array, a list): <c>did not understand one of the types; 'None' not accepted</c>.</exception>
+        /// <exception cref="ValueError">An unknown <paramref name="casting"/> name, raised before the source is looked at (NumPy
+        ///     parses it with the arguments).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="to"/> is <see cref="NPTypeCode.String"/> for an array
+        ///     source (see <see cref="can_cast(NDArray, NPTypeCode, string)"/>).</exception>
         /// <remarks>
-        /// NumSharp extension: NumPy 2.x refuses Python scalars here ("can_cast() does not support Python ints, floats,
-        /// and complex because the result used to depend on the value", NEP 50); NumSharp keeps the value-based answer
-        /// as a documented convenience.
+        ///     API-parity batch 9. NumSharp kept eleven typed value overloads (<c>can_cast(int value, ...)</c> and its twins)
+        ///     with a value table, "does 300 fit int8", which NumPy 2 replaced by the refusal; the table also had holes
+        ///     (<c>can_cast(1, NPTypeCode.SByte)</c> was False). They went, so a bare C# number now binds
+        ///     <see cref="can_cast(NDArray, NPTypeCode, string)"/> through NDArray's implicit conversion, which refuses the
+        ///     literal-marked 0-d array the same way; this form refuses the boxed number. The literal <c>0</c> also converts
+        ///     to <see cref="NPTypeCode"/>, so <c>np.can_cast(0, NPTypeCode.Byte)</c> is CS0121 at compile time. A
+        ///     <c>decimal</c> has no NumPy analog: it is NumSharp's decimal dtype, judged by the dtype rule.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.can_cast.html
         /// </remarks>
-        public static bool can_cast(int value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the long value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(long value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the double value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(double value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the byte value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(byte value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the short value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(short value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the ushort value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(ushort value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the uint value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(uint value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the ulong value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(ulong value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the float value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(float value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the decimal value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(decimal value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if the bool value can be cast to the data type according to the casting rule.
-        /// </summary>
-        public static bool can_cast(bool value, NPTypeCode to, string casting = "safe")
-        {
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-            return ValueFitsInType(value, to);
-        }
-
-        /// <summary>
-        /// Returns True if cast between data types can occur according to the casting rule.
-        /// </summary>
-        /// <typeparam name="TFrom">Source type.</typeparam>
-        /// <typeparam name="TTo">Target type.</typeparam>
-        /// <param name="casting">Controls what kind of data casting may occur.</param>
-        /// <returns>True if cast can occur according to the casting rule.</returns>
-        /// <example>
-        /// <code>
-        /// np.can_cast&lt;int, long&gt;()           // True
-        /// np.can_cast&lt;long, int&gt;()           // False
-        /// np.can_cast&lt;int, float&gt;("safe")    // True (int to float is safe)
-        /// </code>
-        /// </example>
-        public static bool can_cast<TFrom, TTo>(string casting = "safe")
-            where TFrom : struct
-            where TTo : struct
-        {
-            return can_cast(typeof(TFrom).GetTypeCode(), typeof(TTo).GetTypeCode(), casting);
-        }
-
-        /// <summary>
-        /// Returns True if the scalar value can be cast to the data type according to the casting rule.
-        /// </summary>
-        /// <param name="value">Scalar value to check.</param>
-        /// <param name="to">Data type to cast to.</param>
-        /// <param name="casting">Controls what kind of data casting may occur.</param>
-        /// <returns>True if the value can be cast to the target type.</returns>
-        /// <remarks>
-        /// Scalar values can often be cast to smaller types if the value fits (NumSharp extension — see
-        /// <see cref="can_cast(int, NPTypeCode, string)"/>).
-        /// </remarks>
-        /// <example>
-        /// <code>
-        /// np.can_cast(100, NPTypeCode.Byte)    // True (100 fits in byte)
-        /// np.can_cast(1000, NPTypeCode.Byte)   // False (1000 > 255)
-        /// </code>
-        /// </example>
         public static bool can_cast(object value, NPTypeCode to, string casting = "safe")
         {
-            if (value == null)
-                return false;
-
-            // For "unsafe" casting, any value can be cast
-            if (DTypeCasting.ParseCasting(casting) == NPY_CASTING.NPY_UNSAFE_CASTING)
-                return true;
-
-            // Check if the value fits in the target type
-            return ValueFitsInType(value, to);
+            // npy_parse_arguments converts `to` and `casting` before array_can_cast_safely looks at from_, so their errors
+            // win over the source's (an unknown casting name is the ValueError even for a Python number).
+            DType toDescr = to; // NPTypeCode.Empty converts to null, NumPy's None
+            if (toDescr is null)
+                throw new TypeError("did not understand one of the types; 'None' not accepted");
+            DTypeCasting.ParseCasting(casting);
+            switch (value)
+            {
+                // `if (PyArray_Check(from_obj))`: the array's own descriptor; a literal-marked 0-d array refuses there.
+                case NDArray array:
+                    return can_cast(array, to, casting);
+                // `PyArray_IsPythonNumber(from_obj)`: NEP 50's refusal. NumPy tests NumPy scalars first, but no C# primitive
+                // below is one: NumSharp spells a NumPy scalar as a 0-d array (NDArray.Scalar) or as Half / char.
+                case bool or sbyte or byte or short or ushort or int or uint or long or ulong or float or double or System.Numerics.Complex:
+                    throw PythonNumberRefusal();
+                // `PyArray_IsScalar(from_obj, Generic)`: the C# values NumSharp's implicit conversions mark WasNumPyScalar
+                // are NumPy scalars, judged by their dtype.
+                case Half:
+                    return can_cast(NPTypeCode.Half, to, casting);
+                case char:
+                    return can_cast(NPTypeCode.Char, to, casting);
+                // No NumPy analog: NumSharp's decimal dtype (its implicit conversion leaves the 0-d array unmarked too).
+                case decimal:
+                    return can_cast(NPTypeCode.Decimal, to, casting);
+                // `PyArray_DescrConverter2(from_obj, &d1)`: a dtype specifier in any of NumSharp's spellings.
+                case DType descr:
+                    return can_cast(descr, toDescr, casting);
+                case NPTypeCode code when code != NPTypeCode.Empty:
+                    return can_cast(code, to, casting);
+                case Type type:
+                    return can_cast(DType.From(type), toDescr, casting);
+                case NDScalarType scalarType:
+                    return can_cast(scalarType.ToDescriptor(), toDescr, casting);
+                case string spec:
+                    return can_cast(spec, toDescr, casting);
+                // A null, a C# array or list, or any other object names no dtype: NumPy replaces the converter's error with
+                // this text (PyErr_SetString after PyArray_DescrConverter2 fails or yields NULL).
+                default:
+                    throw new TypeError("did not understand one of the types; 'None' not accepted");
+            }
         }
 
         /// <summary>
         /// Returns True if cast from array dtype can occur according to the casting rule.
         /// </summary>
-        /// <param name="from">Array to cast from.</param>
+        /// <param name="from">Array to cast from: arrays are judged by their dtype, never by value (NEP 50).</param>
         /// <param name="to">Data type to cast to.</param>
         /// <param name="casting">Controls what kind of data casting may occur.</param>
         /// <returns>True if the array can be cast to the target type.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="from"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="from"/> is the 0-d array a bare C# number became (a
+        ///     <c>bool</c>, an integer primitive, <c>float</c>, <c>double</c> or <see cref="System.Numerics.Complex"/>
+        ///     literal, which NumSharp's implicit conversions mark as NumPy's Python scalar): NumPy 2's NEP 50 refusal
+        ///     (<see cref="PythonNumberRefusal"/>). <c>np.array(1)</c>, <c>NDArray.Scalar(1)</c> and a <see cref="Half"/>
+        ///     keep the dtype rule, as NumPy's 0-d arrays and NumPy scalars do.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of NumPy's five casting names.</exception>
         /// <exception cref="NotSupportedException"><paramref name="to"/> is <see cref="NPTypeCode.String"/>: a storage
         ///     lane names neither the string class nor its width (pass a <see cref="DType"/> such as <c>np.dtype("U5")</c>).</exception>
+        /// <remarks>Since API-parity batch 9 this is the overload a bare C# number binds (<c>np.can_cast(1,
+        ///     NPTypeCode.SByte)</c>, through NDArray's implicit conversion), so it carries the refusal the removed typed value
+        ///     overloads never made.</remarks>
         public static bool can_cast(NDArray from, NPTypeCode to, string casting = "safe")
         {
             if (from is null) throw new ArgumentNullException(nameof(from));
+            if (from.WasPythonLiteral || from.WasPythonBool)
+            {
+                // NumPy parses `casting` with the arguments, before array_can_cast_safely looks at from_.
+                DTypeCasting.ParseCasting(casting);
+                throw PythonNumberRefusal();
+            }
             // Arrays use type-based casting, not value-based. A string array is judged by its DESCRIPTOR (class and
             // width): its storage lane alone cannot say whether <U2 reaches float64 or <U9.
             if (from.typecode == NPTypeCode.String)
@@ -342,196 +262,31 @@ namespace NumSharp
         /// <param name="to">Data type to cast to.</param>
         /// <param name="casting">The casting rule (see <see cref="can_cast(DType, DType, string)"/>).</param>
         /// <returns>True if the array's dtype can be cast to <paramref name="to"/> under <paramref name="casting"/>.</returns>
-        /// <exception cref="TypeError">A null argument (NumPy's texts, in NumPy's order: <c>to</c>, <c>casting</c>, then <c>from_</c>).</exception>
+        /// <exception cref="TypeError">A null argument (NumPy's texts, in NumPy's order: <c>to</c>, <c>casting</c>, then
+        ///     <c>from_</c>), or <paramref name="from"/> is the 0-d array a bare C# number became: NumPy 2's NEP 50 refusal
+        ///     (<see cref="PythonNumberRefusal"/>), after the <c>to</c> and <c>casting</c> checks.</exception>
         /// <exception cref="ValueError"><paramref name="casting"/> is not one of NumPy's five casting names.</exception>
         public static bool can_cast(NDArray from, DType to, string casting = "safe")
+        {
+            if (from is not null && (from.WasPythonLiteral || from.WasPythonBool))
+            {
+                // `to` and `casting` convert while NumPy parses the arguments, before from_ is looked at.
+                if (to is null) throw new TypeError("did not understand one of the types; 'None' not accepted");
+                DTypeCasting.ParseCasting(casting);
+                throw PythonNumberRefusal();
+            }
             // The array's own descriptor, never DType.From(typecode): the String lane carries no width. A null array is
             // NumPy's None, which the descriptor overload refuses with NumPy's text, after the checks NumPy makes first.
-            => can_cast(from?.dtype, to, casting);
+            return can_cast(from?.dtype, to, casting);
+        }
 
         /// <summary>
-        /// Check if a scalar value fits in the target type.
+        ///     NumPy 2's refusal of a Python number in <c>np.can_cast</c> (<c>array_can_cast_safely</c>, NEP 50): the result
+        ///     used to depend on the value (<c>can_cast(300, int8)</c>), which NEP 50 removed.
         /// </summary>
-        private static bool ValueFitsInType(object value, NPTypeCode to)
-        {
-            try
-            {
-                switch (value)
-                {
-                    case bool b:
-                        return true;  // Bool can fit in any numeric type
-
-                    case byte by:
-                        return to switch
-                        {
-                            NPTypeCode.Boolean => by == 0 || by == 1,
-                            NPTypeCode.Byte => true,
-                            // Byte range (0..255) fits exactly in Half (exact up to 2048).
-                            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => can_cast(NPTypeCode.Byte, to, "safe")
-                        };
-
-                    case sbyte sb:
-                        return to switch
-                        {
-                            NPTypeCode.Boolean => sb == 0 || sb == 1,
-                            NPTypeCode.Byte => sb >= 0,
-                            NPTypeCode.Int16 or NPTypeCode.Int32 or NPTypeCode.Int64 => true,
-                            NPTypeCode.UInt16 or NPTypeCode.UInt32 or NPTypeCode.UInt64 => sb >= 0,
-                            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => false
-                        };
-
-                    case short s:
-                        return to switch
-                        {
-                            NPTypeCode.Boolean => s == 0 || s == 1,
-                            NPTypeCode.Byte => s >= 0 && s <= 255,
-                            NPTypeCode.Int16 => true,
-                            NPTypeCode.UInt16 => s >= 0,
-                            NPTypeCode.Int32 or NPTypeCode.Int64 => true,
-                            NPTypeCode.UInt32 or NPTypeCode.UInt64 => s >= 0,
-                            // Half range ±65504 covers all int16 values.
-                            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => false
-                        };
-
-                    case ushort us:
-                        return to switch
-                        {
-                            NPTypeCode.Boolean => us == 0 || us == 1,
-                            NPTypeCode.Byte => us <= 255,
-                            NPTypeCode.Int16 => us <= short.MaxValue,
-                            NPTypeCode.UInt16 => true,
-                            NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
-                            // Half max is 65504; ushort max is 65535. Range check required.
-                            NPTypeCode.Half => us <= 65504,
-                            NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => false
-                        };
-
-                    case int i:
-                        return to switch
-                        {
-                            NPTypeCode.Boolean => i == 0 || i == 1,
-                            NPTypeCode.Byte => i >= 0 && i <= 255,
-                            NPTypeCode.Int16 => i >= short.MinValue && i <= short.MaxValue,
-                            NPTypeCode.UInt16 => i >= 0 && i <= ushort.MaxValue,
-                            NPTypeCode.Int32 => true,
-                            NPTypeCode.UInt32 => i >= 0,
-                            NPTypeCode.Int64 or NPTypeCode.UInt64 => i >= 0 || to == NPTypeCode.Int64,
-                            NPTypeCode.Half => i >= -65504 && i <= 65504,
-                            NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => false
-                        };
-
-                    case uint ui:
-                        return to switch
-                        {
-                            NPTypeCode.Boolean => ui == 0 || ui == 1,
-                            NPTypeCode.Byte => ui <= 255,
-                            NPTypeCode.Int16 => ui <= (uint)short.MaxValue,
-                            NPTypeCode.UInt16 => ui <= ushort.MaxValue,
-                            NPTypeCode.Int32 => ui <= int.MaxValue,
-                            NPTypeCode.UInt32 => true,
-                            NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
-                            NPTypeCode.Half => ui <= 65504,
-                            NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => false
-                        };
-
-                    case long l:
-                        return to switch
-                        {
-                            NPTypeCode.Boolean => l == 0 || l == 1,
-                            NPTypeCode.Byte => l >= 0 && l <= 255,
-                            NPTypeCode.Int16 => l >= short.MinValue && l <= short.MaxValue,
-                            NPTypeCode.UInt16 => l >= 0 && l <= ushort.MaxValue,
-                            NPTypeCode.Int32 => l >= int.MinValue && l <= int.MaxValue,
-                            NPTypeCode.UInt32 => l >= 0 && l <= uint.MaxValue,
-                            NPTypeCode.Int64 => true,
-                            NPTypeCode.UInt64 => l >= 0,
-                            NPTypeCode.Half => l >= -65504 && l <= 65504,
-                            NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => false
-                        };
-
-                    case ulong ul:
-                        return to switch
-                        {
-                            NPTypeCode.Boolean => ul == 0 || ul == 1,
-                            NPTypeCode.Byte => ul <= 255,
-                            NPTypeCode.Int16 => ul <= (ulong)short.MaxValue,
-                            NPTypeCode.UInt16 => ul <= ushort.MaxValue,
-                            NPTypeCode.Int32 => ul <= int.MaxValue,
-                            NPTypeCode.UInt32 => ul <= uint.MaxValue,
-                            NPTypeCode.Int64 => ul <= long.MaxValue,
-                            NPTypeCode.UInt64 => true,
-                            NPTypeCode.Half => ul <= 65504,
-                            NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => false
-                        };
-
-                    case Half h:
-                        return to switch
-                        {
-                            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => false  // Half to int requires explicit cast
-                        };
-
-                    case float f:
-                        return to switch
-                        {
-                            NPTypeCode.Half => f >= -65504f && f <= 65504f,
-                            NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Complex => true,
-                            _ => false  // Float to int requires explicit cast
-                        };
-
-                    case double d:
-                        return to switch
-                        {
-                            NPTypeCode.Double or NPTypeCode.Decimal => true,
-                            NPTypeCode.Half => d >= -65504.0 && d <= 65504.0,
-                            NPTypeCode.Single => d >= float.MinValue && d <= float.MaxValue,
-                            NPTypeCode.Complex => true,
-                            _ => false  // Double to int requires explicit cast
-                        };
-
-                    case decimal m:
-                        return to switch
-                        {
-                            NPTypeCode.Decimal => true,
-                            // Decimal -> Complex via double is lossy for large values but always
-                            // representable; align with NumPy which allows this.
-                            NPTypeCode.Complex => true,
-                            _ => false  // Decimal to other types requires explicit cast
-                        };
-
-                    case System.Numerics.Complex c:
-                        return to switch
-                        {
-                            NPTypeCode.Complex => true,
-                            _ => false  // Complex to other types requires explicit cast
-                        };
-
-                    default:
-                        return false;
-                }
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        /// <returns>The <see cref="TypeError"/> with NumPy's two-line text, for the caller to throw.</returns>
+        internal static TypeError PythonNumberRefusal()
+            => new TypeError("can_cast() does not support Python ints, floats, and complex because the result used to depend on the value.\n"
+                             + "This change was part of adopting NEP 50, we may explicitly allow them again in the future.");
     }
 }

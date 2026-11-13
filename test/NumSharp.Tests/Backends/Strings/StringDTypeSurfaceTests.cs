@@ -34,11 +34,6 @@ namespace NumSharp.Tests.Backends.Strings
         /// <summary><c>[1.5, 2.0, 3.0]</c> (float64).</summary>
         private static NDArray F3 => np.array(new[] { 1.5, 2.0, 3.0 });
 
-        /// <summary>NumPy's refusal of a <c>StringDType</c> operand by its legacy products (two lines, its typo included).</summary>
-        private const string LegacyOnly =
-            "This function currently only supports native NumPy dtypes and old-style user dtypes, but the dtype was " +
-            "StringDType().\n(The function may need to be updated to support arbitraryuser dtypes.)";
-
         /// <summary>The dispatcher's refusal text for a ufunc and its operand classes.</summary>
         /// <param name="ufunc">The ufunc name.</param>
         /// <param name="classes">The DType class names (<c>StringDType</c>, <c>Float64DType</c>, <c>_PyLongDType</c>, ...).</param>
@@ -61,17 +56,23 @@ namespace NumSharp.Tests.Backends.Strings
 
         // ------------------------------------------------------------------------------------------------ products
 
+        /// <summary>
+        ///     NumPy 2.5's vdot discovers the operands' common descriptor; StringDType has none with a number, so it multiplies
+        ///     Python objects and <c>a[0].conjugate()</c> comes first — a method <c>str</c> lacks (NumPy 2.4 refused the
+        ///     StringDType first operand by its legacy lookup instead).
+        /// </summary>
         [TestMethod]
-        public void Vdot_StringDTypeFirst_IsTheLegacyOnlyRefusal()
+        public void Vdot_StringDTypeFirst_IsAnObjectProduct()
         {
-            new Action(() => np.vdot(T3, F3)).Should().Throw<TypeError>().WithMessage(LegacyOnly);
+            new Action(() => np.vdot(T3, F3)).Should().Throw<AttributeError>()
+                .WithMessage("'str' object has no attribute 'conjugate'");
         }
 
         [TestMethod]
         public void Vdot_NumberBeforeStringDType_IsAnObjectProduct()
         {
-            // promote(number, StringDType) fails, and NumPy's legacy discovery goes on with OBJECT arrays: the first product
-            // conj(a[0]) * b[0] decides by the Python types.
+            // promote(StringDType, number) fails, and NumPy's descriptor discovery goes on with OBJECT arrays: the first
+            // product conj(a[0]) * b[0] decides by the Python types.
             new Action(() => np.vdot(F3, T3)).Should().Throw<TypeError>()
                 .WithMessage("can't multiply sequence by non-int of type 'float'");
             new Action(() => np.vdot(np.array(new[] { "a", "b", "c" }).astype(np.dtype("S1")), T3))
@@ -220,10 +221,15 @@ namespace NumSharp.Tests.Backends.Strings
                 .WithMessage(NoLoop("add", "Float64DType", "StringDType"));
             new Action(() => np.polyval(F3, T3)).Should().Throw<TypeError>()
                 .WithMessage(NoLoop("multiply", "StringDType", "StringDType"));
-            // poly1d of all-empty text is the text '0' (NumPy's array([0], dtype=...)); polymul then convolves.
+            // poly1d of all-empty text is the text '0' (NumPy's array([0], dtype=...)); polymul then convolves: a StringDType
+            // and a number have no common descriptor, so NumPy correlates Python objects and 'ab' * 1.5 refuses (two
+            // StringDType inputs convert, and their descriptor has no dot function).
             using (var p = new poly1d(Ts("", "")))
                 Texts(p.coeffs).Should().Equal("0");
-            new Action(() => np.polymul(T3, F3)).Should().Throw<TypeError>().WithMessage(LegacyOnly);
+            new Action(() => np.polymul(T3, F3)).Should().Throw<TypeError>()
+                .WithMessage("can't multiply sequence by non-int of type 'float'");
+            new Action(() => np.polymul(T3, T3)).Should().Throw<ValueError>()
+                .WithMessage("function not available for this data type");
             new Action(() => np.polymul(Ts(), F3)).Should().Throw<TypeError>()
                 .WithMessage("can't multiply sequence by non-int of type 'float'");
             new Action(() => np.polyint(T3)).Should().Throw<TypeError>()
@@ -391,7 +397,7 @@ namespace NumSharp.Tests.Backends.Strings
             np.max(np.zeros(3, np.@bool), initial: Ts("x").reshape(Array.Empty<long>())).GetBoolean().Should().BeTrue();
             np.max(np.zeros(3, np.@bool), initial: Ts("").reshape(Array.Empty<long>())).GetBoolean().Should().BeFalse();
             new Action(() => np.max(np.zeros(3, np.int8), initial: Ts("300").reshape(Array.Empty<long>()))).Should()
-                .Throw<OverflowException>().WithMessage("Integer 300 is out of bounds for byte");
+                .Throw<OverflowError>().WithMessage("Integer 300 is out of bounds for byte");
 
             using var f3 = np.zeros(3);
             f3.fill(np.array("4"));
@@ -501,9 +507,10 @@ namespace NumSharp.Tests.Backends.Strings
         // ---------------------------------------------------------------------------------------------- fields and fancy indexing
 
         /// <summary>
-        ///     <c>getfield</c> / <c>setfield</c> over a <c>StringDType</c> array follow NumPy's <c>_getfield_is_safe</c>: cells
-        ///     holding references may only be read as the whole element in their own descriptor (a view), anything else is
-        ///     <c>Cannot get/set field of an object array</c>.
+        ///     <c>getfield</c> / <c>setfield</c> over a <c>StringDType</c> array follow NumPy 2.5's <c>_getfield_is_safe</c>:
+        ///     cells holding references may only be read as the whole element through their own descriptor OBJECT (a view;
+        ///     an equal but separate <c>StringDType()</c> is refused too, where NumPy 2.4 compared by equality), anything else
+        ///     is <c>Cannot get/set field of an object array</c>.
         /// </summary>
         [TestMethod]
         public void GetfieldSetfield_OfStringDType_AreTheWholeElementOnly()
@@ -511,10 +518,14 @@ namespace NumSharp.Tests.Backends.Strings
             var t3 = T3;
             using (var same = t3.getfield(t3.dtype))
                 Texts(same).Should().Equal("ab", "c", "de");
+            new Action(() => t3.getfield(np.dtypes.StringDType())).Should().Throw<TypeError>().WithMessage("Cannot get/set field of an object array");
             new Action(() => t3.getfield(np.float64)).Should().Throw<TypeError>().WithMessage("Cannot get/set field of an object array");
             new Action(() => t3.getfield(t3.dtype, 8)).Should().Throw<TypeError>().WithMessage("Cannot get/set field of an object array");
             new Action(() => np.zeros(3).getfield(T)).Should().Throw<TypeError>().WithMessage("Cannot get/set field of an object array");
             t3.setfield(Ts("q", "r", "s"), t3.dtype);
+            Texts(t3).Should().Equal("q", "r", "s");
+            // setfield builds its target through getfield, so the same descriptor-object rule refuses an equal fresh instance.
+            new Action(() => t3.setfield(Ts("x", "y", "z"), np.dtypes.StringDType())).Should().Throw<TypeError>().WithMessage("Cannot get/set field of an object array");
             Texts(t3).Should().Equal("q", "r", "s");
             new Action(() => t3.setfield(1.0, np.float64)).Should().Throw<TypeError>().WithMessage("Cannot get/set field of an object array");
         }

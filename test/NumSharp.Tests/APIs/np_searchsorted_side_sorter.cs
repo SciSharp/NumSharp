@@ -196,8 +196,9 @@ public class NpSearchsortedSideSorterTests
     ///     A sorter entry outside the haystack is NumPy's <c>ValueError: Sorter index out of range.</c> when the bisection
     ///     reaches it (argbinsearch checks each entry it reads before the entry addresses the haystack), and never read, so
     ///     never an error, when it does not. NumSharp's kernel read the haystack at the entry: memory outside it, an answer
-    ///     that changed from run to run. NumPy 2.4.2's answers for every overload, both sides, an int32 sorter, a strided
-    ///     haystack and a huge index.
+    ///     that changed from run to run. NumPy 2.5.4's answers for every overload, both sides, an int32 sorter, a strided
+    ///     haystack and a huge index. NumPy 2.5's batched bisection reads the middle entry <c>sorter[a.size &gt;&gt; 1]</c>
+    ///     before any key, so a bad middle entry fails even with no key (2.4.2 returned the empty result).
     /// </summary>
     [TestMethod]
     public void Sorter_IndexOutsideTheHaystack_IsNumPysValueErrorWhenReached()
@@ -219,6 +220,18 @@ public class NpSearchsortedSideSorterTests
         // Not reached: the bisection for 15 reads sorter[2], sorter[1] and sorter[0] only.
         np.searchsorted(a, 15, sorter: oob).Should().Be(1);
         np.searchsorted(a, np.array(new long[] { 15, 12 }), sorter: oob).ToArray<long>().Should().Equal(1L, 1L);
+
+        // The middle entry (sorter[2]) is read before the first key: no key, still refused...
+        Refused(() => np.searchsorted(a, np.array(Array.Empty<long>()), sorter: np.array(new long[] { 0, 1, 4, 2 })));
+        // ...while a bad FIRST entry is read only by a key that bisects down to it (12 does, 45 does not).
+        np.searchsorted(a, np.array(Array.Empty<long>()), sorter: np.array(new long[] { 4, 1, 2, 3 })).size.Should().Be(0);
+        Refused(() => np.searchsorted(a, 12, sorter: np.array(new long[] { 5, 1, 2, 3 })));
+        np.searchsorted(a, 45, sorter: np.array(new long[] { 5, 1, 2, 3 })).Should().Be(4);
+        // A bad LAST entry: 45 reaches it, 12 does not, and an array of keys fails as soon as one key reaches it.
+        np.searchsorted(a, 12, sorter: np.array(new long[] { 0, 1, 2, 9 })).Should().Be(1);
+        Refused(() => np.searchsorted(a, 45, sorter: np.array(new long[] { 0, 1, 2, 9 })));
+        Refused(() => np.searchsorted(a, np.array(new long[] { 12, 45 }), sorter: np.array(new long[] { 0, 1, 2, 9 })));
+        Refused(() => np.searchsorted(a, np.array(new long[] { 45, 12 }), sorter: np.array(new long[] { 0, 1, 2, 9 })));
     }
 
     /// <summary>
@@ -449,6 +462,73 @@ public class NpSearchsortedSideSorterTests
         Assert.AreEqual(0L, r.GetInt64(0));
         Assert.AreEqual(0L, r.GetInt64(1));
         Assert.AreEqual(0L, r.GetInt64(2));
+    }
+
+    #endregion
+
+    #region Unsorted haystack (NumPy 2.5's batched bisection)
+
+    /// <summary>
+    ///     An unsorted haystack has no single insertion point, so the answer is whichever pivots the bisection visits:
+    ///     NumPy 2.5 (gh-30517) runs every key through one shared interval length, halved per pass (median first, then
+    ///     the quartiles, ...), where 2.4 bisected each key on its own and carried the previous key's bound. np.unique's
+    ///     NaN probe over a masked array's raw data searches such a haystack. NumPy 2.5.4's answers for both sides, with
+    ///     and without a sorter (2.4.2's differ in every row but the first keys), and a 1-element haystack.
+    /// </summary>
+    [TestMethod]
+    public void Unsorted_Int64_IsNumPy25sBatchedBisection()
+    {
+        var u = np.array(new long[] { 3, 1, 2, 5, 4, 0, 7 });
+        var keys = np.array(new long[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 2, 1, 0 });
+        np.searchsorted(u, keys).ToArray<long>().Should().Equal(0L, 0, 2, 3, 3, 3, 6, 6, 7, 2, 0, 0);
+        np.searchsorted(u, keys, side: "right").ToArray<long>().Should().Equal(0L, 2, 3, 3, 3, 6, 6, 7, 7, 3, 2, 0);
+
+        // The sorter is not a sorting permutation of u either: positions are bisected, each read through it.
+        var sorter = np.array(new long[] { 6, 1, 4, 3, 0, 2, 5 });
+        np.searchsorted(u, keys, sorter: sorter).ToArray<long>().Should().Equal(0L, 0, 2, 2, 2, 3, 7, 7, 7, 2, 0, 0);
+        np.searchsorted(u, keys, "right", sorter).ToArray<long>().Should().Equal(0L, 2, 2, 2, 3, 7, 7, 7, 7, 2, 2, 0);
+
+        // One element: half is 0, so the first pass writes 0 and the last pass alone decides.
+        np.searchsorted(np.array(new long[] { 5 }), np.array(new long[] { 1, 5, 9 })).ToArray<long>().Should().Equal(0L, 0, 1);
+        np.searchsorted(np.array(new long[] { 5 }), np.array(new long[] { 1, 5, 9 }), side: "right").ToArray<long>()
+            .Should().Equal(0L, 1, 1);
+    }
+
+    /// <summary>
+    ///     The NaN-aware comparators over an unsorted haystack (NaN sorts last: a NaN pivot is "greater" than every finite
+    ///     key, a NaN key greater than every finite pivot): float64, float16 and complex128 (CDOUBLE_LT's lexicographic
+    ///     order), and bool. NumPy 2.5.4's answers; a scalar key runs the same schedule with one key.
+    /// </summary>
+    [TestMethod]
+    public void Unsorted_NaNAwareDtypes_AreNumPy25sBatchedBisection()
+    {
+        var f = np.array(new[] { double.NaN, 1.0, double.NaN, 3.0, 2.0, double.NaN, 0.5 });
+        var fk = np.array(new[] { double.NaN, 0.0, 1.0, 2.5, 3.5, double.NaN, 0.75 });
+        np.searchsorted(f, fk).ToArray<long>().Should().Equal(5L, 0, 0, 2, 5, 5, 0);
+        np.searchsorted(f, fk, side: "right").ToArray<long>().Should().Equal(7L, 0, 2, 2, 5, 7, 0);
+        np.searchsorted(f, 0.5).Should().Be(0);
+
+        var h = np.array(new[] { (Half)3, (Half)1, (Half)2, Half.NaN, (Half)0 });
+        var hk = np.array(new[] { (Half)0, (Half)1, (Half)2, (Half)3, Half.NaN });
+        np.searchsorted(h, hk).ToArray<long>().Should().Equal(0L, 0, 2, 3, 3);
+
+        var c = np.array(new[]
+        {
+            new System.Numerics.Complex(1, 1), new System.Numerics.Complex(0, 2), new System.Numerics.Complex(3, 0),
+            new System.Numerics.Complex(double.NaN, 1), new System.Numerics.Complex(2, 2),
+        });
+        var ck = np.array(new[]
+        {
+            new System.Numerics.Complex(0, 0), new System.Numerics.Complex(1, 1), new System.Numerics.Complex(2, 2),
+            new System.Numerics.Complex(1, double.NaN), new System.Numerics.Complex(double.NaN, 0),
+        });
+        np.searchsorted(c, ck).ToArray<long>().Should().Equal(0L, 2, 2, 3, 3);
+        np.searchsorted(c, ck, side: "right").ToArray<long>().Should().Equal(0L, 2, 2, 3, 3);
+
+        var b = np.array(new[] { true, false, true, false, false });
+        var bk = np.array(new[] { false, true });
+        np.searchsorted(b, bk).ToArray<long>().Should().Equal(0L, 2);
+        np.searchsorted(b, bk, side: "right").ToArray<long>().Should().Equal(2L, 5);
     }
 
     #endregion

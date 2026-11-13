@@ -129,14 +129,11 @@ OBJECT_SURFACES = (
 OBJECT_SURFACE_PATHS = tuple("numpy." + surface.path for surface in OBJECT_SURFACES)
 
 # Reviewed spelling adapters, not case-folded matching. Method/property shape must
-# still agree. Mapping-like Keys/Values properties cannot satisfy keys()/values().
+# still agree. Mapping-like Keys/Values properties cannot satisfy keys()/values(). (NpzFile's adapters went with
+# API-parity batch 13: its members carry NumPy's names - files, zip, fid, allow_pickle, max_header_size, keys(),
+# values(), items(), get(), close() - and match exactly.)
 MEMBER_ALIASES = {
     ("flatiter", "base"): "Base",
-    ("lib.npyio.NpzFile", "files"): "Files",
-    ("lib.npyio.NpzFile", "allow_pickle"): "AllowPickle",
-    ("lib.npyio.NpzFile", "max_header_size"): "MaxHeaderSize",
-    ("lib.npyio.NpzFile", "zip"): "Zip",
-    ("lib.npyio.NpzFile", "close"): "Close",
 }
 
 
@@ -315,6 +312,19 @@ REVIEWED_PROTOCOL_ADAPTERS: dict[tuple[str, str], tuple[str, str | None, str]] =
     ("dtype", "__repr__"): ("ToString", "ToString(bool ", "DType.ToString(true) is repr(dtype)."),
     ("dtype", "__hash__"): ("GetHashCode", None,
                             "DType.GetHashCode() follows hash(dtype): class and canonical byte order."),
+    # np.dtypes.StringDType(...) returns a DType (CLASS_MEMBER_OWNERS), so numpy.dtype's three adapters hold for it.
+    ("dtypes.StringDType", "__str__"): ("ToString", "ToString()",
+                                        "np.dtypes.StringDType(...) is a DType, and DType.ToString() is str(dtype)."),
+    ("dtypes.StringDType", "__repr__"): ("ToString", "ToString(bool ",
+                                         "DType.ToString(true) is repr(dtype): StringDType() / StringDType(na_object=...)."),
+    ("dtypes.StringDType", "__hash__"): ("GetHashCode", None,
+                                         "DType.GetHashCode() follows hash(dtype): class and canonical byte order."),
+    # NDCharArray inherits NDArray's printing, which prints NumPy's chararray([...], dtype=...) for it; the string
+    # oracle's cha_repr / cha_str cases (section strchararray) compare both texts with NumPy's.
+    ("char.chararray", "__str__"): ("ToString", "ToString()",
+                                    "NDCharArray inherits NDArray.ToString(), NumPy's str(chararray)."),
+    ("char.chararray", "__repr__"): ("ToString", "ToString(bool ",
+                                     "NDCharArray inherits NDArray.ToString(true), NumPy's repr(): chararray([...])."),
     ("finfo", "__repr__"): ("ToString", "ToString()", "finfo.ToString() renders NumPy's finfo(...) repr."),
     ("iinfo", "__repr__"): ("ToString", "ToString()", "iinfo.ToString() renders NumPy's iinfo(...) repr."),
     ("poly1d", "__repr__"): ("ToString", "ToString()", "poly1d.ToString() is NumPy's repr: poly1d([...])."),
@@ -369,11 +379,73 @@ REFUSED_PROTOCOLS: dict[tuple[str, str], str] = {
 def protocol_refusal(owner: str, name: str) -> str | None:
     """Return why NumPy refuses every call of a protocol on an owner, or None when calls can succeed.
 
+    A refused protocol is never credited, whatever NumSharp declares under its C# spelling: NumPy offers no
+    computation to match (np.dtypes.StringDType(...) is a DType, whose ordering operators compare dtypes by
+    casting, while StringDType's ordering raises), and the row leaves every availability percentage anyway
+    (generate_coverage.is_api_row).
+
     :param owner: an object surface path, a canonical scalar type name or a class path.
     :param name: the protocol name.
     :returns: the reason for the row's note (REFUSED_PROTOCOLS), or None.
     """
     return REFUSED_PROTOCOLS.get((owner, name))
+
+
+#: The note a missing row gets when its owner type has a member spelled the same up to case (the wording the
+#: headline rows' near-miss check uses in generate_coverage).
+CASE_NEAR_MISS_NOTE = "Case-insensitive near-miss (NOT counted — NumPy parity is case-sensitive): "
+
+
+def case_only_twins(name: str, members: Iterable[str], clr_type: str | None) -> list[str]:
+    """Find the members of a NumSharp type that spell a NumPy member's name with other letter case.
+
+    Parity is case-sensitive, so a twin never credits the row (NumSharp.AxisError.Axis does not provide NumPy's
+    AxisError.axis: ``e.axis`` does not compile); it is reported so the difference cannot hide outside the headline.
+
+    :param name: the NumPy member name.
+    :param members: the member names of the owner's NumSharp type.
+    :param clr_type: the owner's CLR full name (nested types keep ``+``), or None when NumSharp has no such type.
+    :returns: the twins as ``NumSharp.Type.Member`` targets, sorted; empty without a type or a twin.
+    """
+    if not clr_type:
+        return []
+    folded = name.lower()
+    return sorted(f"{clr_type.replace('+', '.')}.{member}" for member in members
+                  if member.lower() == folded and member != name)
+
+
+def defining_class(cls: type, name: str) -> type | None:
+    """Return the class in ``cls``'s MRO whose own namespace defines ``name``.
+
+    :param cls: a class.
+    :param name: an attribute name.
+    :returns: the defining class, or None for a name only an instance carries (set in ``__init__``).
+    """
+    return next((klass for klass in cls.__mro__ if name in vars(klass)), None)
+
+
+def catalogued_owner_ids(np: Any) -> dict[int, str]:
+    """Map every class whose members the catalog lists at the class itself to that class's row id.
+
+    Those are numpy.ndarray (headline rows plus its object surface), every object surface's class and every
+    canonical scalar type. A member another class inherits UNCHANGED from one of them already has its row there.
+
+    :param np: the imported, version-pinned numpy module.
+    :returns: ``id(class)`` -> ``numpy.<path>``.
+    """
+    owners: dict[int, str] = {}
+    for spec in OBJECT_SURFACES:
+        try:
+            obj = _resolve(np, spec.path)
+        except (AttributeError, ImportError):
+            continue
+        if inspect.isclass(obj):
+            owners.setdefault(id(obj), "numpy." + spec.path)
+    for name in CANONICAL_SCALAR_TYPES:
+        cls = getattr(np, name, None)
+        if inspect.isclass(cls):
+            owners.setdefault(id(cls), "numpy." + name)
+    return owners
 
 
 @dataclass(frozen=True)
@@ -551,7 +623,7 @@ def ufunc_protocol_methods(np: Any) -> tuple[str, ...]:
     catalogued once as a ``numpy.ufunc.<name>`` object member.
 
     :param np: the imported, version-pinned ``numpy`` module.
-    :returns: the method names, sorted; at NumPy 2.4.2 ``("accumulate", "at", "outer",
+    :returns: the method names, sorted; at NumPy 2.5.4 (as at 2.4.2) ``("accumulate", "at", "outer",
         "reduce", "reduceat", "resolve_dtypes")``.
     """
     # getattr_static reads the descriptor on the type: a method descriptor is callable,
@@ -938,7 +1010,14 @@ def object_surface_rows(
     instance), the special members its spec names, and every Python protocol NumPy defines
     on the class or a NumPy base class (numpy_protocols). A protocol is credited by a member
     of its own name, else by protocol_credit's C# spellings; a protocol NumPy refuses for
-    every call is marked ``not_applicable`` (protocol_refusal).
+    every call is marked ``not_applicable`` (protocol_refusal) and never credited.
+
+    On a surface NumSharp has no type for (memmap, recarray, record, MaskedRecords), a member the class
+    inherits UNCHANGED from a class the catalog lists itself (numpy.ndarray, numpy.ma.MaskedArray, a scalar
+    type) is marked ``inherited_repeat`` with that class's id: the row repeats an API whose own row already
+    counts, so generate_coverage.is_api_row keeps it out of every percentage, and the missing class shows
+    through its class row and its own members. A missing member whose owner type spells it with other
+    letter case carries ``case_insensitive_matches`` (reported, never credited).
 
     :param np: the imported, version-pinned ``numpy`` module.
     :param inventory: the NumSharp reflection inventory (schema 5 or 6).
@@ -961,11 +1040,13 @@ def object_surface_rows(
         raise ValueError("Object inventory requires schema 5's 'objectTypes' map.")
     sources = _source_index(root)
     samples, archive = _samples(np)
+    owners = catalogued_owner_ids(np)
     rows: list[dict[str, Any]] = []
 
     def emit(spec: ObjectSurface, name: str, kind: str, obj: Any,
              member: dict[str, Any] | None, class_row: bool = False,
-             credit: ProtocolCredit | None = None, refusal: str | None = None) -> None:
+             credit: ProtocolCredit | None = None, refusal: str | None = None,
+             twins: Sequence[str] = (), repeat_of: str | None = None) -> None:
         """Append one object row unless its id was already emitted.
 
         :param spec: the object surface the row belongs to.
@@ -977,6 +1058,10 @@ def object_surface_rows(
         :param class_row: True for the surface's class row.
         :param credit: a protocol's C# spelling (protocol_credit), used when ``member`` is None.
         :param refusal: why NumPy refuses every call of the protocol (protocol_refusal), or None.
+        :param twins: the owner type's members that differ from ``name`` only by case (case_only_twins); reported
+            on an uncredited row, never counted.
+        :param repeat_of: the catalogued class this member is inherited unchanged from, on a surface NumSharp has
+            no type for (catalogued_owner_ids), or None; the row is marked ``inherited_repeat``.
         :raises ValueError: when a credited member or class has no source evidence.
         """
         row_id = "numpy." + spec.path + ("" if class_row else "." + name)
@@ -1015,6 +1100,12 @@ def object_surface_rows(
             notes += f" Explicit spelling adapter: {name} is exposed as {clr_name}."
         if refusal:
             notes += " " + refusal
+        if repeat_of:
+            notes += (f" Inherited unchanged from {repeat_of}, whose own row counts this API; NumSharp has no type "
+                      f"for numpy.{spec.path}, whose class row and own members carry that gap, so this row stays out "
+                      "of the availability percentages.")
+        if twins and not matched:
+            notes += " " + CASE_NEAR_MISS_NOTE + ", ".join(twins)
         if class_row:
             parent, _, short = spec.path.rpartition(".")
             doc_surface, doc_name = parent or "np", short
@@ -1049,6 +1140,10 @@ def object_surface_rows(
         if refusal:
             # The ufunc protocol rows' field and value: NumPy rejects every call of this member.
             row["applicability"] = "not_applicable"
+        if repeat_of:
+            row["inherited_repeat"] = repeat_of
+        if twins and not matched:
+            row["case_insensitive_matches"] = list(twins)
         rows.append(row)
 
     try:
@@ -1082,13 +1177,23 @@ def object_surface_rows(
                 member = members.get(clr_name)
                 if member and (member["kind"] == "method") != (kind == "method"):
                     member = None
+                refusal = protocol_refusal(spec.path, name)
                 # A protocol without a member of its own name may still be spelled in C#: an operator,
                 # a cast, the indexer, or a reviewed named member (protocol_credit). Only protocols are
-                # looked up this way; a named NumPy member needs a NumSharp member of the same name.
+                # looked up this way; a named NumPy member needs a NumSharp member of the same name. A
+                # protocol NumPy refuses is never credited (see protocol_refusal).
                 credit = None
-                if member is None and type_inventory is not None and is_protocol_name(name):
+                if member is None and type_inventory is not None and is_protocol_name(name) and not refusal:
                     credit = protocol_credit(spec.path, name, spec.clr_type, type_inventory)
-                emit(spec, name, kind, obj, member, credit=credit, refusal=protocol_refusal(spec.path, name))
+                # A class NumSharp lacks repeats every member it inherits unchanged from a catalogued class
+                # (memmap's 150 ndarray members): the row is kept, marked, and left out of the percentages.
+                repeat_of = None
+                if spec.clr_type is None and inspect.isclass(cls):
+                    definer = defining_class(cls, name)
+                    if definer is not None and definer is not cls:
+                        repeat_of = owners.get(id(definer))
+                emit(spec, name, kind, obj, member, credit=credit, refusal=refusal,
+                     twins=case_only_twins(name, members, spec.clr_type), repeat_of=repeat_of)
 
         # Every ufunc method on every ufunc-like export (106 top-level ufunc objects at the
         # pin, aliases included, plus submodule ufuncs and numpy.ma's masked wrappers) is
@@ -1127,10 +1232,14 @@ CANONICAL_SCALAR_TYPES = (
 #: The text generate_coverage.numpy_signature returns when a NumPy object exposes no signature at runtime.
 SIGNATURE_UNAVAILABLE = "Signature unavailable from runtime introspection"
 
-#: Why no NumSharp member can implement a scalar-type member (every scalar row's note ends with it).
-_NO_SCALAR_OBJECT = ("NumSharp has no NumPy scalar objects: a NumPy scalar is a C# primitive or a 0-d NDArray "
-                     "there, so no NumSharp member implements a scalar-type member. Catalogued outside the "
-                     "headline scope.")
+#: The NumSharp type a NumPy scalar is: a read-only 0-d NDArray that NDArray.IsNumPyScalar reports (NumPy's scalar
+#: returns, PyArray_Return and PyArray_Scalar, build it), so NDArray's members are the scalar types' C# spellings.
+SCALAR_CLR_TYPE = "NumSharp.NDArray"
+
+#: How NumSharp spells a scalar-type member (every scalar row's note says it).
+_SCALAR_IS_NDARRAY = ("A NumPy scalar is a read-only 0-d NDArray in NumSharp (NDArray.IsNumPyScalar), so NDArray's "
+                      "member of the same name, or its operator, cast or indexer for a protocol, spells the scalar "
+                      "member. Catalogued outside the headline scope.")
 
 
 def scalar_type_owners(np: Any) -> list[tuple[str, type]]:
@@ -1170,6 +1279,7 @@ def scalar_type_owners(np: Any) -> list[tuple[str, type]]:
 def scalar_type_rows(
     np: Any, seen_ids: set[str], *, signature: Callable[[Any, str], str],
     documentation_url: Callable[[str, str, str], str] | None = None,
+    inventory: Mapping[str, Any] | None = None, root: Path | None = None, source_base_url: str = "",
 ) -> list[dict[str, Any]]:
     """Return one row per member each NumPy scalar type defines, at the class that defines it.
 
@@ -1179,18 +1289,40 @@ def scalar_type_rows(
     slots, numpy.integer adds is_integer). Listing inherited members on every one of the 34 classes
     would repeat numpy.generic's members 34 times. Rows share the ``generic`` surface (the root of
     the hierarchy) and name the owner in ``name`` (``byte.__add__``), as ufunc protocol rows share
-    ``ufunc``. Every row is missing (_NO_SCALAR_OBJECT); a protocol NumPy refuses for every call is
-    marked ``not_applicable``.
+    ``ufunc``.
+
+    A NumPy scalar is a read-only 0-d NDArray in NumSharp (SCALAR_CLR_TYPE), so each row is credited
+    against NDArray exactly as ndarray's own rows are: by an NDArray member of the same name, or for a
+    protocol by protocol_credit with owner ``ndarray`` (its operators, casts, indexer and reviewed
+    adapters). The credit is a name claim: what NumPy's scalar does differently from a 0-d array (its
+    repr, its no-op mutators) is behaviour, which availability does not assert. A protocol NumPy refuses
+    for every call is marked ``not_applicable`` and never credited; a missing member that NDArray spells
+    with other letter case carries ``case_insensitive_matches``.
 
     :param np: the imported, version-pinned numpy module.
     :param seen_ids: ids emitted so far; updated in place, and an id already present is skipped.
     :param signature: renders a NumPy callable's signature.
     :param documentation_url: resolves a documented URL or its nearest documented parent; None links
         NumPy's scalars reference page.
+    :param inventory: the NumSharp reflection inventory (``objectTypes`` supplies NDArray's members and
+        operators); None credits nothing (the catalog-only callers: test_catalog, test_oracle_evidence).
+    :param root: repository root, for the source-file evidence of a credited row; required with ``inventory``.
+    :param source_base_url: URL prefix that turns a repository path into a source link.
     :returns: the rows, in CANONICAL_SCALAR_TYPES order, then member name. A method without a runtime
         signature on this platform takes the signature every other scalar class gives it, when they agree.
-    :raises ValueError: from scalar_type_owners when the canonical list no longer matches NumPy.
+    :raises ValueError: from scalar_type_owners when the canonical list no longer matches NumPy; when the
+        inventory lacks NDArray or ``root`` is missing beside it; when a credited member has no source
+        evidence; from protocol_credit when a reviewed adapter is stale.
     """
+    ndarray = None
+    if inventory is not None:
+        ndarray = (inventory.get("objectTypes") or {}).get(SCALAR_CLR_TYPE)
+        if ndarray is None or root is None:
+            raise ValueError(f"Crediting the scalar types needs {SCALAR_CLR_TYPE} in the inventory's objectTypes "
+                             "and the repository root for source evidence.")
+    members = {member["name"]: member for collection in ("methods", "properties", "fields")
+               for member in (ndarray or {}).get(collection, [])}
+    sources: _SourceIndex | None = None
     rows: list[dict[str, Any]] = []
     for canonical, cls in scalar_type_owners(np):
         names = set(own_public_names(cls)) | set(numpy_protocols(cls, own_only=True))
@@ -1201,10 +1333,36 @@ def scalar_type_rows(
             seen_ids.add(row_id)
             kind = member_kind(cls, name)
             refusal = protocol_refusal(canonical, name)
+            member = members.get(name)
+            if member and (member["kind"] == "method") != (kind == "method"):
+                member = None
+            # ndarray's adapters and spelling rules apply: the scalar IS the 0-d NDArray those rules describe.
+            credit = None
+            if member is None and ndarray is not None and is_protocol_name(name) and not refusal:
+                credit = protocol_credit("ndarray", name, SCALAR_CLR_TYPE, ndarray)
+            matched = member is not None or credit is not None
+            paths: list[str] = []
+            if matched:
+                sources = sources or _source_index(root)  # built only when something is credited
+                paths = (sources.locate_credit(SCALAR_CLR_TYPE, credit) if credit
+                         else sources.locate(SCALAR_CLR_TYPE, member))
+                if not paths:
+                    raise ValueError(f"Scalar member {row_id} matched {SCALAR_CLR_TYPE} without source evidence.")
+            twins = [] if matched or ndarray is None else case_only_twins(name, members, SCALAR_CLR_TYPE)
             notes = (f"Member of NumPy's scalar type numpy.{canonical}, catalogued at the class that defines it "
-                     "(its subclasses inherit it). " + _NO_SCALAR_OBJECT)
+                     "(its subclasses inherit it). " + _SCALAR_IS_NDARRAY)
+            if matched:
+                notes += (" Availability reflects a compiled declaration; it does not assert full behavioral parity "
+                          "(NumPy's scalar repr and its no-op mutators, for example, differ from a 0-d array's).")
+                if credit is not None:
+                    notes += " " + credit.note
+            else:
+                notes += " NDArray has no member of this name and no C# spelling of this protocol."
             if refusal:
                 notes += " " + refusal
+            if twins:
+                notes += " " + CASE_NEAR_MISS_NOTE + ", ".join(twins)
+            target = (SCALAR_CLR_TYPE + "." + (credit.member if credit else member["name"]) if matched else None)
             row = {
                 "id": row_id, "origin": "numpy", "surface": "generic", "name": f"{canonical}.{name}",
                 "kind": kind,
@@ -1213,15 +1371,25 @@ def scalar_type_rows(
                 "documentation_url": (documentation_url(canonical, name, kind) if documentation_url
                                       else "https://numpy.org/doc/stable/reference/arrays.scalars.html"),
                 "in_default_scope": False, "extended": True, "object_surface": True,
-                "object_type": "numpy." + canonical, "disposition": "subsystem", "category": "Scalar types",
-                "availability": "missing", "support": "missing", "status": "missing",
-                "numsharp_target": None, "numsharp_signatures": [], "numsharp_obsolete": False,
-                "numsharp_source_paths": [], "numsharp_source_urls": [], "notes": notes,
+                # The scalar types are implemented (as 0-d NDArrays); what is missing is a candidate, not a subsystem.
+                "object_type": "numpy." + canonical, "disposition": "candidate", "category": "Scalar types",
+                "availability": "alias" if credit is not None else "exact" if matched else "missing",
+                "support": "declared" if matched else "missing",
+                "status": "available" if matched else "missing",
+                "numsharp_target": target,
+                "numsharp_signatures": (member["signatures"] if member else list(credit.signatures) if credit
+                                        else []),
+                "numsharp_obsolete": member["obsolete"] if member else False,
+                "numsharp_source_paths": paths,
+                "numsharp_source_urls": [source_base_url + path for path in paths],
+                "notes": notes,
             }
             if is_protocol_name(name):
                 row["python_protocol"] = True
             if refusal:
                 row["applicability"] = "not_applicable"
+            if twins:
+                row["case_insensitive_matches"] = twins
             rows.append(row)
     # NumPy documents a few C methods only on the scalar classes that have a sized name: numpy.intc.bit_count
     # has no docstring (so no signature) on Windows, where intc is the one integer class without a sized alias,
@@ -1236,6 +1404,16 @@ def scalar_type_rows(
         if row["numpy_signature"] == SIGNATURE_UNAVAILABLE and len(known) == 1:
             row["numpy_signature"] = next(iter(known))
     return rows
+
+
+#: NumPy classes whose NumSharp counterpart is a type of ANOTHER name, keyed by the class's catalog id, valued by the
+#: CLR full name its members are credited against. np.dtypes.StringDType(...) is a factory method that returns a
+#: DType (DTypeRegistry.VString.Descr), so a StringDType instance's members are DType's: na_object and coerce are
+#: DType properties, == / != DType's operators, hash and str / repr DType's adapters (REVIEWED_PROTOCOL_ADAPTERS).
+#: Without the entry the class-name match finds no NumSharp type named StringDType and credits nothing.
+CLASS_MEMBER_OWNERS: dict[str, str] = {
+    "numpy.dtypes.StringDType": "NumSharp.DType",
+}
 
 
 def class_member_rows(
@@ -1257,9 +1435,11 @@ def class_member_rows(
     ctypes', numpy.testing.TestCase unittest's) and typing aliases (numpy.typing.NDArray) get no rows.
 
     A member is credited against the NumSharp type of the class's simple name, the type match that
-    credits the class row (numpy.exceptions.AxisError -> NumSharp.AxisError): by a member of the same
-    name, or for a protocol by protocol_credit. Matching is case-sensitive: NumSharp.AxisError.Axis does
-    not credit AxisError.axis.
+    credits the class row (numpy.exceptions.AxisError -> NumSharp.AxisError), or against the type
+    CLASS_MEMBER_OWNERS names for a class NumSharp builds under another type (numpy.dtypes.StringDType ->
+    NumSharp.DType): by a member of the same name, or for a protocol by protocol_credit (never for a
+    protocol NumPy refuses). Matching is case-sensitive: NumSharp.AxisError.Axis does not credit
+    AxisError.axis; the row reports it in ``case_insensitive_matches`` instead.
 
     :param np: the imported, version-pinned numpy module.
     :param catalog_rows: the rows emitted so far; their ``kind == "class"`` NumPy rows are the owners.
@@ -1305,7 +1485,7 @@ def class_member_rows(
             continue
         listed.add(id(cls))  # an alias of this class (a later id) is the same owner
         owner = api_id[len("numpy."):]
-        clr_type = types_by_simple_name.get(api_id.rsplit(".", 1)[-1])
+        clr_type = CLASS_MEMBER_OWNERS.get(api_id) or types_by_simple_name.get(api_id.rsplit(".", 1)[-1])
         type_inventory = object_types.get(clr_type) if clr_type else None
         members = {member["name"]: member for collection in ("methods", "properties", "fields")
                    for member in (type_inventory or {}).get(collection, [])}
@@ -1320,8 +1500,9 @@ def class_member_rows(
             member = members.get(name)
             if member and (member["kind"] == "method") != (kind == "method"):
                 member = None
+            refusal = protocol_refusal(owner, name)
             credit = None
-            if member is None and type_inventory is not None and is_protocol_name(name):
+            if member is None and type_inventory is not None and is_protocol_name(name) and not refusal:
                 credit = protocol_credit(owner, name, clr_type, type_inventory)
             matched = member is not None or credit is not None
             paths: list[str] = []
@@ -1330,11 +1511,13 @@ def class_member_rows(
                 paths = sources.locate_credit(clr_type, credit) if credit else sources.locate(clr_type, member)
                 if not paths:
                     raise ValueError(f"Class member {row_id} matched {clr_type} without source evidence.")
-            refusal = protocol_refusal(owner, name)
+            twins = [] if matched else case_only_twins(name, members, clr_type if type_inventory else None)
             notes = (f"Public member of the NumPy class {api_id}, catalogued at the class that defines it "
                      "(subclasses inherit it). Catalogued outside the headline scope.")
             if matched:
                 notes += " Availability reflects a compiled declaration; it does not assert full behavioral parity."
+                if api_id in CLASS_MEMBER_OWNERS:
+                    notes += f" NumSharp builds this class's instances as {clr_type}, which carries the member."
                 if credit is not None:
                     notes += " " + credit.note
             elif clr_type:
@@ -1343,6 +1526,8 @@ def class_member_rows(
                 notes += " NumSharp has no type corresponding to this class."
             if refusal:
                 notes += " " + refusal
+            if twins:
+                notes += " " + CASE_NEAR_MISS_NOTE + ", ".join(twins)
             target = (clr_type.replace("+", ".") + "." + (credit.member if credit else member["name"])
                       if matched else None)
             row = {
@@ -1367,5 +1552,7 @@ def class_member_rows(
                 row["python_protocol"] = True
             if refusal:
                 row["applicability"] = "not_applicable"
+            if twins:
+                row["case_insensitive_matches"] = twins
             rows.append(row)
     return rows

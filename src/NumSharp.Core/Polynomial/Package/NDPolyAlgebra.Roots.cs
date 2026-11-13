@@ -8,7 +8,7 @@ using NumSharp.Backends.Unmanaged.Pooling;
 // NDPolyAlgebra.Roots.cs — numpy.polynomial's companion matrices and roots (plan U7)
 // =============================================================================
 //
-// WHAT NUMPY DOES (numpy/polynomial/*.py, 2.4.2)
+// WHAT NUMPY DOES (numpy/polynomial/*.py, 2.5.4)
 // ----------------------------------------------
 // {p}companion(c): `[c] = as_series([c])` (trim + np.common_type + copy); fewer than two terms raise
 // `Series must have maximum degree of at least 1.`; two terms return the 1x1 matrix of the linear root (scalarmath on
@@ -30,7 +30,8 @@ using NumSharp.Backends.Unmanaged.Pooling;
 //
 // {p}roots(c): the same as_series; fewer than two terms give `np.array([], dtype=c.dtype)`, two the 1-element array of
 // the linear root; otherwise `np.linalg.eigvals` of the companion matrix — ROTATED (`[::-1, ::-1]`, "reduces error")
-// for every basis but the power series — sorted in place.
+// for every basis but the power series — sorted in place, then (NumPy 2.5, power / Laguerre / Hermite only) made real by
+// `_to_real_if_imag_zero(r, m)` when every eigenvalue of a real matrix is real; eigvals itself is always complex.
 //
 // DTYPES (the part that decides the bits)
 // ---------------------------------------
@@ -87,7 +88,7 @@ namespace NumSharp
         ///     three or more terms after trimming whose arithmetic does not raise — NumPy's object companion matrix, a dtype
         ///     NumSharp does not have — or one holding None / a str where NumPy's object arithmetic reaches it (CPython's
         ///     TypeError).</exception>
-        /// <exception cref="OverflowException">An object series whose arithmetic meets a Python int too large for a float:
+        /// <exception cref="OverflowError">An object series whose arithmetic meets a Python int too large for a float:
         ///     CPython's <c>integer division result too large for a float</c> (Python int / Python int) or <c>int too large to
         ///     convert to float</c> (any other operand), whichever NumPy's statements raise first.</exception>
         public static NDArray Companion(PolyBasis basis, object c)
@@ -135,8 +136,10 @@ namespace NumSharp
         /// <param name="c">The series.</param>
         /// <returns>
         ///     The roots, ascending (complex lexicographically): an empty array of the series' common type for a constant
-        ///     series, the one linear root for two terms, otherwise <c>np.linalg.eigvals</c>' result sorted in place — real when
-        ///     every eigenvalue is (a view of the complex result's real parts, as NumPy's), complex otherwise.
+        ///     series, the one linear root for two terms, otherwise <c>np.linalg.eigvals</c>' result sorted in place — always
+        ///     complex since NumPy 2.5 for the Chebyshev, Legendre and HermiteE bases; for the power, Laguerre and Hermite
+        ///     bases real when the companion matrix is real and every eigenvalue is (NumPy's <c>_to_real_if_imag_zero</c>:
+        ///     a view of the complex result's real parts), complex otherwise.
         /// </returns>
         /// <exception cref="ValueError">An empty or non-1-d series, or no common type (a bool or str series).</exception>
         /// <exception cref="TypeError">A float16 or decimal series of degree 2 or more (linalg's
@@ -150,7 +153,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">An object series of one term (NumPy's <c>np.array([], dtype=object)</c>), or
         ///     one holding None / a str where NumPy's object arithmetic reaches it (CPython's TypeError) — NumSharp has no
         ///     object dtype.</exception>
-        /// <exception cref="OverflowException">An object series whose arithmetic meets a Python int too large for a float:
+        /// <exception cref="OverflowError">An object series whose arithmetic meets a Python int too large for a float:
         ///     CPython's <c>integer division result too large for a float</c> (Python int / Python int) or <c>int too large to
         ///     convert to float</c> (any other operand), whichever NumPy's statements raise first.</exception>
         public static NDArray Roots(PolyBasis basis, object c)
@@ -193,7 +196,11 @@ namespace NumSharp
             var target = basis == PolyBasis.Power ? m : np.flip(m);
             var r = np.linalg.eigvals(target);
             r.sort();
-            return r;
+            // NumPy 2.5 made eigvals always complex; polyroots, lagroots and hermroots keep their old real result with
+            // `_to_real_if_imag_zero(r, m)` ("backwards compat"), while chebroots, legroots and hermeroots return it complex.
+            return basis is PolyBasis.Power or PolyBasis.Laguerre or PolyBasis.Hermite
+                ? Backends.DefaultLinalgEngine.ToRealIfImagZero(r, m.typecode)
+                : r;
         }
 
         // =============================================================================================
@@ -221,7 +228,7 @@ namespace NumSharp
         /// <param name="c0">The constant term.</param>
         /// <param name="c1">The linear term.</param>
         /// <returns>The root, of the kind and dtype NumPy's expression produces.</returns>
-        /// <exception cref="OverflowException">Python int operands whose quotient exceeds the float range (CPython's
+        /// <exception cref="OverflowError">Python int operands whose quotient exceeds the float range (CPython's
         ///     <c>integer division result too large for a float</c>). The linear term is never zero here: trimseq removed
         ///     it, so CPython's ZeroDivisionError cannot arise.</exception>
         private static PolyNumber LinearRoot(PolyBasis basis, in PolyNumber c0, in PolyNumber c1)
@@ -263,7 +270,7 @@ namespace NumSharp
         /// <returns>The fresh owning array.</returns>
         /// <exception cref="NotSupportedException">A None or str item: NumPy's object arithmetic raises its TypeError there
         ///     (<c>bad operand type for unary -: 'NoneType'</c>), and NumSharp has no object dtype to compute it with.</exception>
-        /// <exception cref="OverflowException">Python int items whose quotient exceeds the float range (CPython's
+        /// <exception cref="OverflowError">Python int items whose quotient exceeds the float range (CPython's
         ///     <c>integer division result too large for a float</c>).</exception>
         private static NDArray ObjectLinearRoot(PolyBasis basis, object c, Shape shape)
         {
@@ -311,7 +318,7 @@ namespace NumSharp
         ///     here (<see cref="PolyNumber.FromObject"/>), the documented object-arithmetic divergence.
         ///     </para>
         /// </remarks>
-        /// <exception cref="OverflowException">CPython's overflow texts above, from the first element that raises.</exception>
+        /// <exception cref="OverflowError">CPython's overflow texts above, from the first element that raises.</exception>
         /// <exception cref="NotSupportedException">An operation reaches None, a str or another object NumSharp cannot read as a
         ///     number (NumPy raises CPython's TypeError there).</exception>
         private static void ObjectCompanionArithmetic(PolyBasis basis, object c, long len)

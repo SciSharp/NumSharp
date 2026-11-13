@@ -31,7 +31,7 @@ namespace NumSharp.Backends
         ///     NumPy's <c>svd(a, hermitian=True)</c> with <c>compute_uv=True</c>, statement for statement:
         ///     <code>
         ///     s, u = eigh(a)
-        ///     sgn = sign(s)
+        ///     sgn = np.copysign(1.0, s)   # NumPy 2.5; 2.4: sign(s)
         ///     s = abs(s)
         ///     sidx = argsort(s)[..., ::-1]
         ///     sgn = np.take_along_axis(sgn, sidx, axis=-1)
@@ -51,20 +51,24 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">A text operand (eigh's gufunc input cast).</exception>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
         /// <remarks>
-        ///     A zero eigenvalue's sign is 0, so its row of Vh is zero (Vh is not unitary then), as in NumPy. NumPy's
+        ///     The sign is <c>np.copysign(1.0, s)</c> since NumPy 2.5 ("avoid zero sign"): a zero eigenvalue signs its row
+        ///     of Vh by the zero's own sign (+1 for 0.0, -1 for -0.0), so that row is its eigenvector and Vh stays unitary.
+        ///     NumPy 2.4's <c>sign(s)</c> was 0 there and zeroed the row. The <c>1.0</c> is a Python float, weak, so the
+        ///     sign keeps s's dtype (float32 for a float32 operand). NumPy's
         ///     <c>argsort</c> is its default kind, x86-simd-sort's bitonic argsort on an AVX2 host, which keeps equal values
         ///     in order up to three elements and reorders them from four; NumSharp's argsort is stable. Where two absolute
         ///     eigenvalues of a matrix of four or more rows are equal, S is the same and the tied columns of U, with their
         ///     rows of Vh, can come in another order.
         ///     <para>Each statement calls the member its main-namespace function dispatches to, on eigh's plain factors:
-        ///     the operand engine's sign, abs, argsort (ndarray.argsort), multiply, swapaxes and conjugate, the array
+        ///     the operand engine's copysign, abs, argsort (ndarray.argsort), multiply, swapaxes and conjugate, the array
         ///     object's take_along_axis, expand_dims and empty_like allocation.</para>
         /// </remarks>
         [NDScoped] // the eigh factors, the sign / abs / argsort temps and the product behind Vh; U, S and Vh are yielded
         private (NDArray U, NDArray S, NDArray Vh) SvdHermitian(NDArray a)
         {
             var (w, v) = Eigh(a, 'L');
-            var sgn = w.TensorEngine.Sign(w);
+            // np.copysign(1.0, s): the weak Python float adopts s's dtype; a ±0 eigenvalue gives ±1, never 0.
+            var sgn = w.TensorEngine.CopySign(NDArray.PythonLiteral(1.0), w);
             var s = w.TensorEngine.Abs(w);
             var sidx = ReverseLastAxis(s.TensorEngine.ArgSort(s, -1, null, null, null));
             sgn = NDArray.take_along_axis(sgn, sidx, -1);
@@ -136,6 +140,8 @@ namespace NumSharp.Backends
         ///     NumPy's statements: the tolerance arguments, NumPy's predicate below two axes (<c>int(not all(A == 0))</c>),
         ///     and otherwise the count of singular values (this engine's <see cref="Svd(NDArray, bool, bool, bool)"/>)
         ///     above the tolerance, through the members np.amax, np.multiply, np.greater and np.count_nonzero dispatch to.
+        ///     An empty matrix (and a stack of them) is rank 0: the largest singular value starts from NumPy 2.5's
+        ///     <c>initial=0</c>, where NumPy 2.4 raised the no-identity <c>ValueError</c>.
         /// </remarks>
         [NDScoped]
         public override NDArray MatrixRank(NDArray A, double? tol = null, bool hermitian = false, double? rtol = null)
@@ -177,8 +183,11 @@ namespace NumSharp.Backends
                 NDArray rtolArr = rtol.HasValue
                     ? NDArray.Scalar(rtol.Value)
                     : NDArray.Scalar(Math.Max(m, n) * eps).astype(s.typecode);
-                // amax(S, axis=-1, keepdims=True) * rtol: np.amax's member, then np.multiply's.
-                var largest = s.TensorEngine.ReduceAMax(s, -1, true, null, null, null, null);
+                // S.max(axis=-1, keepdims=True, initial=0) * rtol: ndarray.max's member, then np.multiply's. NumPy 2.5's
+                // `initial=0` (2.4.5, numpy#30422) gives an EMPTY matrix's empty singular-value axis a largest value of 0
+                // instead of the no-identity ValueError, so its rank counts nothing above 0 and is 0 (a stack of empty
+                // matrices: one 0 per matrix). A non-empty axis is unchanged: every singular value is >= 0.
+                var largest = s.TensorEngine.ReduceAMax(s, -1, true, null, null, 0, null);
                 tolArr = largest.TensorEngine.Multiply(largest, rtolArr);
             }
             else
@@ -194,11 +203,14 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's statements: the empty-operand refusal, the hashability of the order, the singular-value orders
-        ///     (through this engine's <see cref="Svdvals"/>, NumPy's <c>svd(x, compute_uv=False)</c>), or
-        ///     <c>norm(x, p) * norm(inv(x), p)</c> for the others (the inverse by <see cref="InvKernel"/> in float64 /
-        ///     complex128, NaN for a singular matrix; the norms by this engine's <see cref="Norm"/>), and NumPy's
-        ///     NaN-to-inf tail. The divisions and the product are np.divide's and np.multiply's members.
+        ///     NumPy 2.5's statements: the empty-operand refusal, the hashability of the order, the singular-value orders
+        ///     (<c>_assert_stacked_2d</c>, then <see cref="CondSvdvals"/>, NumPy's <c>_cond_svdvals(x)</c>: a non-finite or
+        ///     non-converging matrix reads NaN where <c>svd</c> raises), <c>sum(_cond_svdvals(x)) * sum(_cond_svdvals(invx))</c>
+        ///     for <c>'nuc'</c>, or <c>norm(x, p) * norm(inv(x), p)</c> for the others (the inverse by <see cref="InvKernel"/>
+        ///     in float64 / complex128, NaN for a singular matrix; the norms by this engine's <see cref="Norm"/>), and NumPy's
+        ///     NaN-to-inf tail. The divisions, the sums and the product are np.divide's, np.sum's and np.multiply's members.
+        ///     NumPy 2.4 took the singular values from <c>svd</c> and the nuclear order from <c>norm</c>, so a NaN matrix, and
+        ///     a singular one under <c>'nuc'</c>, raised <c>SVD did not converge</c> (gh-32591).
         /// </remarks>
         [NDScoped]
         public override NDArray Cond(NDArray x, object p = null)
@@ -216,7 +228,9 @@ namespace NumSharp.Backends
                 // The default and ±2 orders come straight from the singular values: the ratio of the
                 // largest to the smallest (2/None), or its reciprocal (-2). Division by a zero
                 // singular value gives inf/nan here rather than raising, matching NumPy's errstate.
-                var s = Svdvals(x);
+                // NumPy 2.5: `_assert_stacked_2d(x); s = _cond_svdvals(x)` — a failed matrix's NaN values reach the tail.
+                AssertStacked2d(x);
+                var s = CondSvdvals(x);
                 // NumPy's `s[..., 0]` / `s[..., -1]`. Built as Slice[] rather than the "..., 0"
                 // STRING form, whose per-call Regex.Split+Regex.Match parse (Slice.ParseSlices)
                 // costs ~1.7µs EACH — the dominant managed overhead of this tiny wrapper, on top
@@ -236,28 +250,131 @@ namespace NumSharp.Backends
                 // result_t = _realType(result_t): the condition number is real.
                 var realT = common == NPTypeCode.Complex ? NPTypeCode.Double : common;
 
-                // NumPy's statements, in order:
+                // NumPy 2.5's statements, in order:
                 //     signature = 'D->D' if isComplexType(t) else 'd->d'
                 //     with errstate(all='ignore'):
                 //         invx = _umath_linalg.inv(x, signature=signature)
-                //         r = norm(x, p, axis=(-2, -1)) * norm(invx, p, axis=(-2, -1))
+                //         if p == 'nuc':
+                //             r = (sum(_cond_svdvals(x), axis=-1, initial=0)
+                //                  * sum(_cond_svdvals(invx), axis=-1, initial=0))
+                //         else:
+                //             r = norm(x, p, axis=(-2, -1)) * norm(invx, p, axis=(-2, -1))
                 //     r = r.astype(result_t, copy=False)
                 // The inverse runs in float64 / complex128 whatever result_t is (a float32 matrix's inverse and its norm
-                // are float64), and a singular matrix's inverse is NaN instead of an error. Both norms are evaluated, x's
-                // first: a bad order is refused by norm ("Invalid norm order for matrices.") even for a singular matrix,
-                // and the nuclear norm of a singular matrix's NaN inverse raises the SVD's "SVD did not converge".
+                // are float64), and a singular matrix's inverse is NaN instead of an error. Both factors are evaluated,
+                // x's first: a bad order is refused by norm ("Invalid norm order for matrices.") even for a singular
+                // matrix. The nuclear order sums the singular values itself, because norm's svd would raise for the NaNs
+                // of a failed inversion (NumPy 2.4 did: "SVD did not converge"); a NaN sum is then the tail's inf.
                 var invx = InvIgnoringErrors(ToCommon(x, common == NPTypeCode.Complex ? NPTypeCode.Complex : NPTypeCode.Double));
-                var normX = Norm(x, p, new[] {-2, -1}, false);
-                var normInv = Norm(invx, p, new[] {-2, -1}, false);
-                // One matrix's two norms are NumPy scalars, so `*` is scalarmath (the float64 product: a float32 norm
+                NDArray factorX, factorInv;
+                if (p is string nuc && nuc == "nuc")
+                {
+                    // sum(..., axis=-1, initial=0): np.sum's member over the last axis, the Python int 0 its start.
+                    var sX = CondSvdvals(x);
+                    var sInv = CondSvdvals(invx);
+                    factorX = sX.TensorEngine.ReduceAdd(sX, -1, false, null, null, 0, null);
+                    factorInv = sInv.TensorEngine.ReduceAdd(sInv, -1, false, null, null, 0, null);
+                }
+                else
+                {
+                    factorX = Norm(x, p, new[] {-2, -1}, false);
+                    factorInv = Norm(invx, p, new[] {-2, -1}, false);
+                }
+                // One matrix's two factors are NumPy scalars, so `*` is scalarmath (the float64 product: a float32 factor
                 // widens exactly) and astype keeps a scalar; a stack's are arrays, multiplied by the ufunc (np.multiply's
                 // member).
-                r = normX.ndim == 0
-                    ? NDArray.Scalar(normX.astype(np.float64).GetDouble() * normInv.GetDouble()).astype(realT).MarkReductionScalar()
-                    : normX.TensorEngine.Multiply(normX, normInv).astype(realT, false);
+                r = factorX.ndim == 0
+                    ? NDArray.Scalar(factorX.astype(np.float64).GetDouble() * factorInv.GetDouble()).astype(realT).PyArray_Return()
+                    : factorX.TensorEngine.Multiply(factorX, factorInv).astype(realT, copy: false);
             }
 
             return CondNanToInf(r, x);
+        }
+
+        /// <summary>
+        ///     NumPy 2.5's <c>_cond_svdvals(x)</c> (gh-32591): <c>svd(x, compute_uv=False)</c>'s singular values under
+        ///     <c>errstate(all='ignore')</c>, so a matrix the svd gufunc cannot factorise — a non-finite one (umath_linalg's
+        ///     <c>all_finite</c> check), or one <c>gesdd</c> does not converge on — reads NaN where np.linalg.svd raises.
+        /// </summary>
+        /// <param name="x">The matrix or stack (two axes or more: the caller ran <c>_assert_stacked_2d</c>, or
+        ///     <c>_assert_stacked_square</c> for the inverse).</param>
+        /// <returns>The singular values, descending, of shape <c>x.shape[:-2] + (min(M, N),)</c> in
+        ///     <c>_realType(result_t)</c> (float32 for a float32 operand, float64 otherwise); NumPy's positive quiet NaN
+        ///     throughout each matrix that failed (the gufunc's <c>nan_matrix</c> fill).</returns>
+        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>), or a text operand (the svd
+        ///     gufunc's input cast).</exception>
+        /// <exception cref="OpenBlasMissingBackendException">A finite matrix that no backend serves (Core has no managed
+        ///     SVD).</exception>
+        /// <remarks>
+        ///     The common case is one <see cref="SvdKernel"/> call over the whole stack: every matrix finite and convergent.
+        ///     Otherwise the stack is factorised matrix by matrix, as the gufunc's loop does, and each failed matrix's slot
+        ///     is filled with NaN; every other matrix's values are the same bits either way (each is factorised on its own).
+        ///     <para>The reshapes, the allocation and the per-matrix stores are the array object's members (np.reshape's
+        ///     <c>reshape</c>, np.empty's allocation, np.copyto's <c>UnmanagedStorage.Copyto</c> with its default
+        ///     <c>same_kind</c> rule, under which the singular values or the NaN into their own dtype are always
+        ///     safe).</para>
+        /// </remarks>
+        [NDScopedCovered /* only caller: [NDScoped] cond; the cast, the per-matrix views, values and the NaN scalar ride its scope */]
+        private NDArray CondSvdvals(NDArray x)
+        {
+            var common = CommonType(x);
+            // NumPy's _umath_linalg.svd(x, signature=...): its input cast refuses text.
+            ThrowIfTextGufunc("svd", x);
+            var xc = ToCommon(x, common);
+            if (Backends.Kernels.FiniteScan.IsAllFinite(xc))
+            {
+                try
+                {
+                    return SvdKernel(xc, fullMatrices: false, computeUv: false).S;
+                }
+                catch (LinAlgError e) when (e.Message == "SVD did not converge")
+                {
+                    // errstate(all='ignore') swallows only the gufunc's invalid flag, which a failed gesdd sets; the
+                    // matrix-by-matrix pass below finds which matrices failed.
+                }
+            }
+
+            // At least one matrix failed, so there is at least one element: M, N > 0 (an empty stack is all-finite, and
+            // SvdKernel answers it through LinAlgEmpty without raising).
+            int nd = xc.ndim;
+            long m = xc.Shape.dimensions[nd - 2];
+            long n = xc.Shape.dimensions[nd - 1];
+            long k = Math.Min(m, n);
+            long count = xc.size / (m * n);
+            var matrices = xc.reshape(new Shape(new[] {count, m, n}, copy: false));
+            // _realType(result_t): the singular values' dtype, float32 only for a float32 operand.
+            var realT = common == NPTypeCode.Single ? NPTypeCode.Single : NPTypeCode.Double;
+            // np.empty's own allocation: uninitialised, every row is written by the loop below.
+            var values = xc.TensorEngine.NewArray(realT, new Shape(new[] {count, k}, copy: false), false);
+            // NPY_NAN in the values' dtype (.NET's double.NaN / float.NaN are negative quiet NaNs).
+            var nanValue = realT == NPTypeCode.Single
+                ? NDArray.Scalar(BitConverter.Int32BitsToSingle(0x7FC00000))
+                : NDArray.Scalar(BitConverter.Int64BitsToDouble(0x7FF8000000000000L));
+            for (long i = 0; i < count; i++)
+            {
+                var slot = values[new[] {Slice.Index(i)}];
+                var matrix = matrices[new[] {Slice.Index(i)}];
+                NDArray s = null;
+                if (Backends.Kernels.FiniteScan.IsAllFinite(matrix))
+                {
+                    try
+                    {
+                        s = SvdKernel(matrix, fullMatrices: false, computeUv: false).S;
+                    }
+                    catch (LinAlgError e) when (e.Message == "SVD did not converge")
+                    {
+                        // gesdd did not converge on this finite matrix: NaN, as the gufunc fills it.
+                    }
+                }
+                UnmanagedStorage.Copyto(slot, s ?? nanValue, NPY_CASTING.NPY_SAME_KIND_CASTING, null);
+            }
+
+            // Back to x.shape[:-2] + (min(M, N),).
+            var dims = new long[nd - 1];
+            for (int d = 0; d < nd - 2; d++)
+                dims[d] = xc.Shape.dimensions[d];
+            dims[nd - 2] = k;
+            return values.reshape(new Shape(dims, copy: false));
         }
 
         /// <summary>
@@ -388,7 +505,7 @@ namespace NumSharp.Backends
             // new scalar of r's dtype, or r itself when the matrix held the NaN.
             if (r.ndim == 0)
                 return apply.GetBoolean()
-                    ? NDArray.Scalar(double.PositiveInfinity).astype(r.typecode).MarkReductionScalar()
+                    ? NDArray.Scalar(double.PositiveInfinity).astype(r.typecode).PyArray_Return()
                     : r;
 
             return NDArray.where(apply, NDArray.Scalar(double.PositiveInfinity).astype(r.typecode), r);

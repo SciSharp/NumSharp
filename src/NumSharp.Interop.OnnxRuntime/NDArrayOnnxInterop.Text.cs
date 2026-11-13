@@ -176,11 +176,13 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="source">A <c>U</c> or <c>S</c> array.</param>
         /// <param name="ownsSource"><c>true</c> when <paramref name="source"/> is a temporary the handle should dispose.</param>
         /// <param name="mode">The requested mode (already validated); <see cref="OnnxCodecMode.View"/> is refused.</param>
+        /// <param name="transient"><c>true</c> for a synchronous <c>Run</c>-tier handle that never leaves the call (see
+        /// <see cref="AsOrtValueCore"/>); <c>false</c> for the public verbs.</param>
         /// <returns>A handle owning the string tensor.</returns>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>: text cannot be shared.</exception>
         /// <exception cref="NotSupportedException">The array is a <c>StringDType</c> array, or it holds more strings than ORT's string tensor API can index.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
-        internal static OrtTensor TextAsOrtValue(NDArray source, bool ownsSource, OnnxCodecMode mode)
+        internal static OrtTensor TextAsOrtValue(NDArray source, bool ownsSource, OnnxCodecMode mode, bool transient = false)
         {
             // The StringDType refusal comes before the View one: under every mode the array cannot cross, so the caller
             // should not be told to retry with Auto first.
@@ -193,7 +195,8 @@ namespace NumSharp.Interop.OnnxRuntime
             {
                 // No slice, no data pointer: the strings live in ORT's memory, so there is no NumSharp buffer to keep alive
                 // and the import verbs must not alias one (OrtTensor.IsNumSharpMemory is false).
-                return new OrtTensor(value, source, slice: null, data: IntPtr.Zero, byteLength: 0, ownsSource, isView: false, TensorElementType.String, dims);
+                return new OrtTensor(value, source, slice: null, data: IntPtr.Zero, byteLength: 0, ownsSource, isView: false, TensorElementType.String, dims,
+                    transient);
             }
             catch
             {

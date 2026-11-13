@@ -243,7 +243,7 @@ namespace NumSharp
             if (type == typeof(NDLaguerre)) return NDLaguerre.Class;
             if (type == typeof(NDHermite)) return NDHermite.Class;
             if (type == typeof(NDHermiteE)) return NDHermiteE.Class;
-            throw new AttributeError($"type object '{type.Name}' has no attribute 'domain'");
+            throw new AttributeError($"type object '{type.Name}' has no attribute 'domain'", "domain", type);
         }
     }
 }

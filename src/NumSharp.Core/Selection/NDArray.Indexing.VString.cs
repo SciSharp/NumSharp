@@ -22,7 +22,7 @@ namespace NumSharp
         /// <param name="normalized">The normalized index tuple.</param>
         /// <returns>The selected array (a fresh buffer with its own allocator; a view when the selection is one).</returns>
         /// <exception cref="Exception">The numeric route's indexing errors for this array's shape (IndexError, ValueError, …).</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's string <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's string <c>MemoryError</c> texts.</exception>
         private NDArray VStringFetchIndices(object[] normalized)
             => NDVStringMove.Gather(this, cells => cells.FetchIndices((object[])normalized.Clone()));
 
@@ -111,6 +111,6 @@ namespace NumSharp
         /// <exception cref="Exception">The cast's errors (a non-UTF-8 <c>S</c> value, a non-text value under
         ///     <c>coerce=False</c>).</exception>
         private NDArray ConvertForVStringStore(NDArray value)
-            => value.astype(dtype, true, 'K', "unsafe");
+            => value.astype(dtype);
     }
 }

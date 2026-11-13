@@ -83,20 +83,20 @@ namespace NumSharp.Tests.Indexing
         {
             // np.r_[np.array([1], np.int8), 1000] -> OverflowError: Python integer 1000 out of bounds for int8
             Action int8 = () => { _ = np.r_[np.array(new sbyte[] { 1 }), 1000]; };
-            int8.Should().ThrowExactly<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            int8.Should().ThrowExactly<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
             // np.r_[np.array([1], np.uint8), -1] -> OverflowError: Python integer -1 out of bounds for uint8
             Action uint8 = () => { _ = np.r_[np.array(new byte[] { 1 }), -1]; };
-            uint8.Should().ThrowExactly<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            uint8.Should().ThrowExactly<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
             // np.r_[np.array([1], np.int8), 2**64 - 1] -> OverflowError: Python int too large to convert to C long
             Action past = () => { _ = np.r_[np.array(new sbyte[] { 1 }), ulong.MaxValue]; };
-            past.Should().ThrowExactly<OverflowException>().WithMessage("Python int too large to convert to C long");
+            past.Should().ThrowExactly<OverflowError>().WithMessage("Python int too large to convert to C long");
             // np.r_[np.array([True]), 2**64 - 1] (int64, the default int a bool adopts) -> the same text
             Action fromBool = () => { _ = np.r_[np.array(new[] { true }), ulong.MaxValue]; };
-            fromBool.Should().ThrowExactly<OverflowException>().WithMessage("Python int too large to convert to C long");
+            fromBool.Should().ThrowExactly<OverflowError>().WithMessage("Python int too large to convert to C long");
             // Linux: np.r_[np.array([1], np.uint32), 2**64 - 1] -> Python integer 18446744073709551615 out of bounds for uint32
             // (uint32 converts through C unsigned long, which holds 2**64 - 1)
             Action uint32 = () => { _ = np.r_[np.array(new uint[] { 1 }), ulong.MaxValue]; };
-            uint32.Should().ThrowExactly<OverflowException>()
+            uint32.Should().ThrowExactly<OverflowError>()
                 .WithMessage("Python integer 18446744073709551615 out of bounds for uint32");
 
             // np.r_[np.array([1], np.uint64), 2**64 - 1] -> [1, 18446744073709551615]
@@ -154,7 +154,7 @@ namespace NumSharp.Tests.Indexing
             text.Should().ThrowExactly<ValueError>().WithMessage("invalid literal for int() with base 10: 'x'");
             // np.fill_diagonal(np.zeros((0, 3), np.int8), [300]) -> OverflowError: Python integer 300 out of bounds for int8
             Action list = () => np.fill_diagonal(np.zeros(new Shape(0, 3), np.int8), new object[] { 300 });
-            list.Should().ThrowExactly<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            list.Should().ThrowExactly<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
             // np.fill_diagonal(np.zeros((0, 3), np.int32), []) -> no error (an empty value assigns nothing)
             np.fill_diagonal(np.zeros(new Shape(0, 3), np.int32), new object[0]);
         }
@@ -165,7 +165,7 @@ namespace NumSharp.Tests.Indexing
         {
             // np.fill_diagonal(np.zeros((3, 3), np.int8), [300, 2]) -> OverflowError: Python integer 300 out of bounds for int8
             Action overflow = () => np.fill_diagonal(np.zeros(new Shape(3, 3), np.int8), new object[] { 300, 2 });
-            overflow.Should().ThrowExactly<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            overflow.Should().ThrowExactly<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
             // an ndarray is cast: np.fill_diagonal(np.zeros((3, 3), np.int8), np.array([300, 2])) -> diagonal [44, 2, 44]
             var cast = np.zeros(new Shape(3, 3), np.int8);
             np.fill_diagonal(cast, np.array(new long[] { 300, 2 }));

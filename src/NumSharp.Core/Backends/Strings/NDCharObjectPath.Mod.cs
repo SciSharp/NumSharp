@@ -109,7 +109,7 @@ namespace NumSharp.Backends.Strings
         ///     with an invalid code point.</exception>
         /// <exception cref="ValueError">A malformed format (<c>incomplete format</c>, <c>unsupported format character</c> ...);
         ///     a NaN under an integer conversion; a ragged <paramref name="values"/>.</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> argument out of range;
+        /// <exception cref="OverflowError">An infinity under an integer conversion; a <c>%c</c> argument out of range;
         ///     an int too large for a float conversion; a bytes format's unsupported conversion byte past 0x7F.</exception>
         /// <exception cref="IndexError">A <c>%(key)</c> lookup on a NumPy scalar or an ndarray.</exception>
         /// <exception cref="KeyError">A <c>%(key)</c> missing from a dict.</exception>
@@ -149,7 +149,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">A malformed format; <c>int()</c> / <c>float()</c> of a 0-d text array that holds no
         ///     number; a <c>StringDType</c> array under bytes formatting's <c>%s</c> (<c>cannot include dtype
         ///     'numpy.dtypes.StringDType' in a buffer</c>).</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> argument out of
+        /// <exception cref="OverflowError">An infinity under an integer conversion; a <c>%c</c> argument out of
         ///     range.</exception>
         /// <exception cref="IndexError">A <c>%(key)</c> lookup on an ndarray or a NumPy scalar.</exception>
         /// <exception cref="KeyError">A <c>%(key)</c> missing from a dict.</exception>
@@ -409,7 +409,7 @@ namespace NumSharp.Backends.Strings
                         bytes += new System.Text.Rune(cp).EncodeToUtf8(new Span<byte>(buf + bytes, 4));
                     }
                     if (_packAllocator.pack(_packCells + Position * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, buf, bytes) < 0)
-                        throw new OutOfMemoryException("Failed to allocate string in unicode to string cast");
+                        throw new MemoryError("Failed to allocate string in unicode to string cast");
                 }
             }
 
@@ -1264,7 +1264,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="w">The call's state.</param>
         /// <exception cref="TypeError">A conversion the value's type refuses.</exception>
         /// <exception cref="ValueError">A NaN under an integer conversion; an int with more than 4300 digits.</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> code point out of range;
+        /// <exception cref="OverflowError">An infinity under an integer conversion; a <c>%c</c> code point out of range;
         ///     an int too large for a float; <c>precision too large</c>.</exception>
         private static void ConvertStr(char conv, bool left, in ModFormat.Op op, int width, int precision, in Elem v, ModWalkState w)
         {
@@ -1478,7 +1478,7 @@ namespace NumSharp.Backends.Strings
         ///     an integer in range(256) or a single byte</c>, <c>float argument required, not str</c>, the integer
         ///     conversions' texts).</exception>
         /// <exception cref="ValueError">A NaN under an integer conversion.</exception>
-        /// <exception cref="OverflowException"><c>%c arg not in range(256)</c>; an infinity under an integer conversion;
+        /// <exception cref="OverflowError"><c>%c arg not in range(256)</c>; an infinity under an integer conversion;
         ///     <c>precision too large</c>.</exception>
         /// <exception cref="NotSupportedException">An ndarray object's bytes with no C-order copy in NumSharp.</exception>
         private static void ConvertBytes(char conv, bool left, in ModFormat.Op op, int width, int precision, in Elem v, ModWalkState w)
@@ -1580,7 +1580,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The field's text.</returns>
         /// <exception cref="TypeError">A value the conversion refuses.</exception>
         /// <exception cref="ValueError">A NaN under an integer conversion.</exception>
-        /// <exception cref="OverflowException">An infinity under an integer conversion; <c>precision too large</c>.</exception>
+        /// <exception cref="OverflowError">An infinity under an integer conversion; <c>precision too large</c>.</exception>
         private static string NumberText(char conv, bool left, in ModFormat.Op op, int width, int precision, in Elem v)
         {
             switch (v.Kind)
@@ -1631,7 +1631,7 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="v">The value.</param>
         /// <returns>The byte.</returns>
-        /// <exception cref="OverflowException"><c>%c arg not in range(256)</c>.</exception>
+        /// <exception cref="OverflowError"><c>%c arg not in range(256)</c>.</exception>
         /// <exception cref="TypeError"><c>%c requires an integer in range(256) or a single byte</c>.</exception>
         private static byte ByteConverter(in Elem v)
         {
@@ -1648,7 +1648,7 @@ namespace NumSharp.Backends.Strings
                         // PyLong_AsLongAndOverflow: an overflow of the C long is reported like any value out of range.
                         var big = IntegerOf(in v);
                         if (big.Sign < 0 || big > 255)
-                            throw new OverflowException("%c arg not in range(256)");
+                            throw new OverflowError("%c arg not in range(256)");
                         return (byte)big;
                     }
                     break;   // np.bool, the floats and complex have no __index__
@@ -1659,7 +1659,7 @@ namespace NumSharp.Backends.Strings
                         || v.Obj is NDArray array && PrintfFormatter.TryArrayIndex(array, out value))
                     {
                         if (value.Sign < 0 || value > 255)
-                            throw new OverflowException("%c arg not in range(256)");
+                            throw new OverflowError("%c arg not in range(256)");
                         return (byte)value;
                     }
                     break;
@@ -1962,13 +1962,13 @@ namespace NumSharp.Backends.Strings
         /// <param name="v">The argument.</param>
         /// <returns>The width (negative left-justifies).</returns>
         /// <exception cref="TypeError"><c>* wants int</c>.</exception>
-        /// <exception cref="OverflowException"><c>Python int too large to convert to C ssize_t</c>.</exception>
+        /// <exception cref="OverflowError"><c>Python int too large to convert to C ssize_t</c>.</exception>
         private static long StarWidth(in Elem v)
         {
             if (v.Kind != ElemKind.Object || !PrintfFormatter.TryPyInt(v.Obj, out BigInteger big))
                 throw new TypeError(StarWantsIntText);
             if (big < long.MinValue || big > long.MaxValue)
-                throw new OverflowException(SsizeOverflowText);
+                throw new OverflowError(SsizeOverflowText);
             return (long)big;
         }
 
@@ -1976,13 +1976,13 @@ namespace NumSharp.Backends.Strings
         /// <param name="v">The argument.</param>
         /// <returns>The precision (negative means 0).</returns>
         /// <exception cref="TypeError"><c>* wants int</c>.</exception>
-        /// <exception cref="OverflowException"><c>Python int too large to convert to C int</c>.</exception>
+        /// <exception cref="OverflowError"><c>Python int too large to convert to C int</c>.</exception>
         private static int StarPrecision(in Elem v)
         {
             if (v.Kind != ElemKind.Object || !PrintfFormatter.TryPyInt(v.Obj, out BigInteger big))
                 throw new TypeError(StarWantsIntText);
             if (big < int.MinValue || big > int.MaxValue)
-                throw new OverflowException("Python int too large to convert to C int");
+                throw new OverflowError("Python int too large to convert to C int");
             return (int)big;
         }
 
@@ -2020,7 +2020,7 @@ namespace NumSharp.Backends.Strings
         private static Exception UnsupportedBytesConversion(int c, int index)
         {
             if (c >= 0x80)
-                return new OverflowException("character argument not in range(0x110000)");
+                return new OverflowError("character argument not in range(0x110000)");
             return new ValueError(string.Create(CultureInfo.InvariantCulture, $"unsupported format character '{(char)c}' (0x{c:x}) at index {index}"));
         }
     }

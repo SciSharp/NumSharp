@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace NumSharp
 {
@@ -339,6 +340,184 @@ namespace NumSharp
             }
 
             return new Shape(dims, strides, copy: false);
+        }
+
+        /// <summary>
+        ///     The layout NumPy 2.4.2 allocates an elementwise ufunc's fresh output in — the one rule every fresh elementwise
+        ///     result follows. np.clip allocates with this method; the binary, unary and comparison engines, which write C
+        ///     and relabel, decide the same rule in two steps (<c>DefaultEngine.TrivialLoopLaysOut</c>, then
+        ///     <c>DefaultEngine.TryKOrderPlan</c>). With no <c>where=</c> mask and a single output, NumPy first
+        ///     tries its trivial loop (<c>try_trivial_single_output_loop</c>, <c>ufunc_object.c</c>): when every non-0-d input
+        ///     has one shape and each input of two or more dimensions is C- or F-contiguous with the very same pair of flags,
+        ///     it allocates the result itself, F-ordered when that pair is F-only and C-ordered otherwise. Every other call
+        ///     goes through NpyIter, which allocates the output in its inputs' memory order
+        ///     (<see cref="NpyIterOutputShape"/>).
+        /// </summary>
+        /// <param name="dims">The broadcast output shape (the inputs must broadcast to it; not checked). Adopted by the
+        ///     returned shape: pass a fresh array, or one nobody will ever write to.</param>
+        /// <param name="inputs">The ufunc's input operands, 0-d ones included (they never decide the layout). Each is read
+        ///     through its own dims, strides and C/F flags.</param>
+        /// <param name="trivialLoopEligible">Whether NumPy may try the trivial loop at all: true only for a call with no
+        ///     mask and one output in which no input of two or more dimensions needs a cast to the loop dtype or is unaligned
+        ///     (<c>check_for_trivial_loop</c> copies such a 0-d or short 1-D input and refuses the trivial loop for any
+        ///     other). False sends the decision straight to NpyIter's order — divmod, modf, frexp (two outputs) and every
+        ///     masked call.</param>
+        /// <returns>A fresh, offset-0, dense shape of <paramref name="dims"/>; the 0-d shape when <paramref name="dims"/> is
+        ///     empty.</returns>
+        /// <remarks>
+        ///     <para><b>Why both allocators matter.</b> They agree on the memory order of every axis longer than one, and
+        ///     differ on the strides of extent-1 axes: the trivial loop fills plain C/F strides, NpyIter gives an extent-1
+        ///     axis the stride of its sorted position (probed 2.4.2: <c>np.negative</c> of an int32 F-ordered (2,1,3) array
+        ///     has byte strides (4,8,8), <c>np.sqrt</c> of the same array — an int32 input cast to the float64 loop, so
+        ///     NpyIter — has (8,48,16)). Only <c>.strides</c> shows the difference: the C/F flags never read an extent-1
+        ///     axis.</para>
+        ///     <para><b>The flag pair is compared whole.</b> NumPy refuses the trivial loop when two N-D inputs' (C, F) flag
+        ///     pairs differ, so an F-only input next to a C-only one (<c>F + C</c>) goes to NpyIter, where C order wins the
+        ///     conflict. An input contiguous in both orders has at most one axis longer than one, so every same-shape input
+        ///     beside it is contiguous in both orders too, and the result is C (plain C strides).</para>
+        ///     <para><b>Zero-size outputs.</b> NumPy then zeroes every stride of the allocation (<c>PyArray_NewFromDescr</c>);
+        ///     this method still returns the dense strides — the zero-size rule belongs to the allocator, not to the
+        ///     order decision.</para>
+        /// </remarks>
+        internal static Shape UfuncOutputShape(long[] dims, ReadOnlySpan<Shape> inputs, bool trivialLoopEligible)
+        {
+            if (dims.Length == 0)
+                return NewScalar();
+            if (trivialLoopEligible && TrivialLoopIsFortran(inputs, out bool fortran))
+                return PlainInputOrAdopt(dims, inputs, fortran);
+            return NpyIterOutputShape(dims, inputs);
+        }
+
+        /// <summary>
+        ///     The trivial loop's C or F result layout, reusing an input's own shape when that input already is exactly it:
+        ///     the same dims, offset 0, a buffer of exactly its elements and the plain strides of the order (extent-1 axes
+        ///     included). The C bypass reuses its operand's shape the same way (<c>CanonicalResultShape</c>), which saves
+        ///     the strides allocation and the flag walks of a fresh <c>new Shape(dims, order, copy: false)</c> on every small call.
+        /// </summary>
+        /// <param name="dims">The result's dims; adopted when no input is reused.</param>
+        /// <param name="inputs">The ufunc's inputs (the trivial-loop test passed).</param>
+        /// <param name="fortran">Whether the trivial loop allocates F (else C).</param>
+        /// <returns>A dense, offset-0 shape of <paramref name="dims"/> in the requested order. A reused input shape may
+        ///     carry its own WRITEABLE / ALIGNED bits; the allocators lay every shape out through
+        ///     <see cref="ForFreshAllocation"/>, which makes a fresh result writeable.</returns>
+        private static Shape PlainInputOrAdopt(long[] dims, ReadOnlySpan<Shape> inputs, bool fortran)
+        {
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                ref readonly var s = ref inputs[i];
+                if (s.offset == 0 && s.bufferSize == s.size && s.size > 0 && SameDimensions(s.dimensions, dims)
+                    && (fortran ? s.IsFContiguous : s.IsContiguous) && HasPlainStrides(s, fortran))
+                    return s;
+            }
+
+            // copy: false adopts the result's own dims array (the caller built it for this result and never writes it).
+            return fortran ? new Shape(dims, 'F', copy: false) : new Shape(dims, copy: false);
+        }
+
+        /// <summary>
+        ///     Whether a shape's strides are exactly the plain C (or F) strides of its dims, extent-1 axes included — what
+        ///     <c>new Shape(dims, copy: false)</c> / <c>new Shape(dims, 'F', copy: false)</c> build. A contiguous shape can fail it: the
+        ///     flags never read an extent-1 axis, so a <c>newaxis</c> view's stride 0 there passes the contiguity test, and
+        ///     a result reusing such a shape would report that stride where NumPy's fresh array has the plain one.
+        /// </summary>
+        /// <param name="s">The shape.</param>
+        /// <param name="fortran">Compare against the F strides (else C).</param>
+        /// <returns>True when a fresh allocation of the same dims would have these very strides.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool HasPlainStrides(in Shape s, bool fortran)
+        {
+            var d = s.dimensions;
+            var st = s.strides;
+            long expected = 1;
+            if (fortran)
+            {
+                for (int k = 0; k < d.Length; k++)
+                {
+                    if (st[k] != expected)
+                        return false;
+                    expected *= d[k];
+                }
+            }
+            else
+            {
+                for (int k = d.Length - 1; k >= 0; k--)
+                {
+                    if (st[k] != expected)
+                        return false;
+                    expected *= d[k];
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        ///     The operand test of NumPy's <c>try_trivial_single_output_loop</c> for a freshly allocated output: 0-d inputs
+        ///     are skipped (they broadcast with step 0), every other input must have the first one's rank and dimensions,
+        ///     and each input of two or more dimensions must be C- or F-contiguous with exactly the (C, F) flag pair the
+        ///     first such input fixed (a 1-D input may have any stride and fixes nothing).
+        /// </summary>
+        /// <param name="inputs">The input operands' shapes, in operand order.</param>
+        /// <param name="fortran">When this returns true: whether NumPy allocates the result F-ordered — only when the
+        ///     shared flag pair is F-only (<c>operation_order == NPY_ARRAY_F_CONTIGUOUS</c>).</param>
+        /// <returns>True when NumPy takes the trivial loop; false when it falls through to NpyIter.</returns>
+        internal static bool TrivialLoopIsFortran(ReadOnlySpan<Shape> inputs, out bool fortran)
+        {
+            fortran = false;
+            int operationNdim = 0;
+            long[] operationShape = null;
+            int operationOrder = 0;   // 0 = not fixed yet; else C (1) | F (2), read off the flags as NumPy does
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                ref readonly var s = ref inputs[i];
+                int nd = s.dimensions.Length;
+                if (nd == 0)
+                    continue;   // a 0-d input broadcasts with a 0 step and never decides anything
+
+                // The first non-0-d input fixes the operation's shape; any other shape is a broadcast.
+                if (operationNdim == 0)
+                {
+                    operationNdim = nd;
+                    operationShape = s.dimensions;
+                }
+                else if (nd != operationNdim || !SameDimensions(s.dimensions, operationShape))
+                {
+                    return false;
+                }
+
+                if (nd == 1)
+                    continue;   // a 1-D input is walked with its own stride and fixes no order
+
+                int order = (s.IsContiguous ? 1 : 0) | (s.IsFContiguous ? 2 : 0);
+                if (order == 0)
+                    return false;   // an N-D input must be contiguous
+                if (operationOrder == 0)
+                    operationOrder = order;
+                else if (operationOrder != order)
+                    return false;   // the whole pair is compared: C-only beside F-only is NpyIter's case
+            }
+
+            fortran = operationOrder == 2;
+            return true;
+        }
+
+        /// <summary>
+        ///     Whether two dimension arrays describe the same shape. The engine's layout decision uses it to skip a
+        ///     broadcast whose only product would be the dims it already has.
+        /// </summary>
+        /// <param name="a">The first dims.</param>
+        /// <param name="b">The second dims.</param>
+        /// <returns>True when both have the same rank and every extent matches.</returns>
+        internal static bool SameDimensions(long[] a, long[] b)
+        {
+            if (a.Length != b.Length)
+                return false;
+            for (int k = 0; k < a.Length; k++)
+            {
+                if (a[k] != b[k])
+                    return false;
+            }
+            return true;
         }
 
         /// <summary>

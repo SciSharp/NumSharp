@@ -82,10 +82,11 @@ namespace NumSharp.Tests.Selection
             GetAndSetRaise(np.arange(4), np.array(new[] { Complex.Zero }), text);
             GetAndSetRaise(np.arange(4), np.array(new[] { 1m }), text);
             // The dtype is checked before a 0-d target's too-many check, an empty index array included (probed 2.4.2:
-            // np.array(5.0)[np.array([], float)] is this error, not "too many indices").
-            GetAndSetRaise(NDArray.Scalar(7L), np.array(new[] { 0.0 }), text);
-            GetAndSetRaise(NDArray.Scalar(7L), np.array(new double[0]), text);
-            GetAndSetRaise(NDArray.Scalar(7L), np.zeros(new Shape(0, 2)), text);
+            // np.array(5.0)[np.array([], float)] is this error, not "too many indices"). The target is a 0-d ARRAY: a NumPy
+            // scalar (NDArray.Scalar) answers every refused key with "invalid index to scalar variable." instead.
+            GetAndSetRaise(np.array(7L), np.array(new[] { 0.0 }), text);
+            GetAndSetRaise(np.array(7L), np.array(new double[0]), text);
+            GetAndSetRaise(np.array(7L), np.zeros(new Shape(0, 2)), text);
             // An empty INTEGER array is the empty fancy index.
             np.arange(4)[np.zeros(new Shape(0, 3), np.int64)].shape.Should().Equal(0L, 3L);
         }

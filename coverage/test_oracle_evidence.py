@@ -4,10 +4,10 @@ Two layers:
 
 * ``SyntheticJoinTests`` builds throwaway corpus trees and pins every resolution rule and every
   problem class, so a rule change fails with a precise message instead of silently moving evidence.
-* ``CommittedCorpusTests`` joins the REAL committed corpora against the real NumPy 2.4.2 catalog
-  (built from NumPy alone, no dotnet inventory): the committed map must resolve every contract with
-  zero problems, a few load-bearing rows are pinned, and the reviewed aliases are cross-checked against
-  the C# oracle gate's own alias classifications so the two cannot drift.
+* ``CommittedCorpusTests`` joins the REAL committed corpora against the real catalog of the pinned
+  NumPy (built from NumPy alone, no dotnet inventory): the committed map must resolve every contract
+  with zero problems, a few load-bearing rows are pinned, and the reviewed aliases are cross-checked
+  against the C# oracle gate's own alias classifications so the two cannot drift.
 
 Run:
     python -m unittest discover -s coverage -p test_oracle_evidence.py
@@ -29,7 +29,8 @@ from pathlib import Path
 import generate_coverage as coverage
 import oracle_evidence as oe
 from numpy_documentation import documentation_url
-from object_surfaces import class_member_rows, object_surface_rows, scalar_type_rows
+from object_surfaces import (OPERATOR_PROTOCOLS, _OPERATOR_SYMBOLS, class_member_rows, object_surface_rows,
+                             scalar_type_rows)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -196,6 +197,77 @@ class SyntheticJoinTests(unittest.TestCase):
         self.assertEqual({"grnd:rs_bytes"}, result.evidence["numpy.random.bytes"].keys)
         self.assertIn("numpy.random.Generator.normal", result.evidence)
 
+    def test_operator_keys_also_prove_the_operator_protocol_on_the_operator_route_only(self):
+        """A key OpRegistry.cs replays through a C# operator proves ndarray's protocol for the cases that reach it.
+
+        OpRegistry replays subtract as ops[0] - ops[1], except with a numpy.matrix operand (TryApplyFunctionForm calls
+        np.subtract); add / multiply with params.dtype call np.add(a, b, dtype=). Those cases prove the ufunc only.
+        """
+        oracle_map = minimal_map(
+            subtract={"ids": ["numpy.subtract"], "operator_ids": ["numpy.ndarray.__sub__"]},
+            add={"ids": ["numpy.add"], "operator_ids": ["numpy.ndarray.__add__"], "function_params": ["dtype"]})
+        rows = catalog("numpy.subtract", "numpy.ndarray.__sub__", "numpy.add", "numpy.ndarray.__add__",
+                       kinds={"numpy.ndarray.__sub__": "method", "numpy.ndarray.__add__": "method"})
+        matrix = [{"dtype": "float64", "matrix": True}, {"dtype": "float64"}]
+        corpus = {"a.jsonl": [case("subtract"), case("subtract"), case("subtract", operands=matrix),
+                              case("add"), case("add", params={"dtype": "float32"})]}
+        _, result = self.join(corpus, rows, oracle_map)
+        self.assertEqual([], result.problems, "an operator entry may repeat the automatic ids: it exists for operator_ids")
+        self.assertEqual(3, result.evidence["numpy.subtract"].contracts, "every route proves the ufunc row")
+        self.assertEqual({"subtract", "subtract:operator"}, result.evidence["numpy.subtract"].keys)
+        sub = result.evidence["numpy.ndarray.__sub__"]
+        self.assertEqual((2, {"subtract:operator"}), (sub.contracts, sub.keys), "a matrix operand calls np.subtract")
+        self.assertEqual(2, result.evidence["numpy.add"].contracts)
+        self.assertEqual(1, result.evidence["numpy.ndarray.__add__"].contracts, "params.dtype calls np.add(dtype=)")
+
+    def test_operator_entries_must_reach_the_operator_and_cannot_be_param_driven(self):
+        oracle_map = minimal_map(
+            subtract={"ids": ["numpy.subtract"], "operator_ids": ["numpy.ndarray.__sub__"]},
+            out_binary={"param": "ufunc", "ids": ["numpy.{value}"], "operator_ids": ["numpy.ndarray.__add__"]})
+        rows = catalog("numpy.subtract", "numpy.ndarray.__sub__", "numpy.add", "numpy.ndarray.__add__")
+        corpus = {"a.jsonl": [case("subtract", operands=[{"dtype": "float64", "matrix": True}]),
+                              case("out_binary", params={"ufunc": "add"})]}
+        _, result = self.join(corpus, rows, oracle_map)
+        text = "\n".join(result.problems)
+        self.assertIn("fuzz.keys['subtract'].operator_ids matches no contract replayed through the C# operator", text)
+        self.assertIn("fuzz.keys['out_binary'] has both 'param' and 'operator_ids'", text)
+        self.assertNotIn("numpy.ndarray.__sub__", result.evidence, "no case reached the operator")
+
+    def test_numpy_char_ops_resolve_by_name_operand_side_and_explicit_entry(self):
+        """The string oracle's numpy.char ops: a template per op that names its API, an explicit entry before the
+        template (the flat_* members are chararray.flat), and the chararray protocol a C# operator's side selects."""
+        oracle_map = minimal_map()
+        oracle_map["strings"].update({
+            "char_cmp:{name}": ["numpy.char.{name}"], "cha_call:{name}": ["numpy.char.chararray.{name}"],
+            "cha_member:{name}": ["numpy.char.chararray.{name}"], "cha_member:flat_index": ["numpy.char.chararray.flat"],
+            "cha_op:{name}": ["numpy.char.chararray.{name}"], "cobj_fn:{name}": ["numpy.char.{name}"]})
+        chararray = {"op": 0, "cha": True}
+        char_cases = [
+            {"op": "char_cmp", "params": {"name": "less"}},
+            {"op": "cha_call", "params": {"name": "center"}},
+            {"op": "cha_member", "params": {"name": "flat_index"}},
+            {"op": "cha_member", "params": {"name": "T"}},
+            {"op": "cha_op", "params": {"sym": "+", "args": [chararray, {"v": 1}]}},
+            # A chararray on the right runs Python's reflection: `x < c` is c.__gt__(x), `x + c` c.__radd__(x).
+            {"op": "cha_op", "params": {"sym": "<", "args": [{"v": 1}, chararray]}},
+            {"op": "cha_op", "params": {"sym": "+", "args": [{"v": 1}, chararray]}},
+            {"op": "cobj_fn", "params": {"fn": "split"}},
+            {"op": "cha_op", "params": {"sym": "@", "args": [chararray, chararray]}},
+        ]
+        # The minimal map's numpy.strings entries need a contract each, or they read as stale entries.
+        strings = {"strfn": [{"op": "str_fn", "params": {"name": "find"}, "operands": [], "expected": {}},
+                             {"op": "strings_multiply", "params": {}, "operands": [], "expected": {}}],
+                   "strchar": [{**item, "operands": [], "expected": {}} for item in char_cases]}
+        ids = ("numpy.char.less", "numpy.char.chararray.center", "numpy.char.chararray.flat", "numpy.char.chararray.T",
+               "numpy.char.chararray.__add__", "numpy.char.chararray.__gt__", "numpy.char.chararray.__radd__",
+               "numpy.char.split")
+        _, result = self.join({"a.jsonl": [case("add")]}, catalog("numpy.add", *ids), oracle_map, strings=strings)
+        self.assertEqual(["strings_strchar.jsonl:9 op 'cha_op' lacks the parameters that name the API it calls (a "
+                          "function, a chararray member or an operator symbol)."], result.problems)
+        for row_id, key in zip(ids, ("char_cmp:less", "cha_call:center", "cha_member:flat_index", "cha_member:T",
+                                     "cha_op:__add__", "cha_op:__gt__", "cha_op:__radd__", "cobj_fn:split")):
+            self.assertEqual({"strings:" + key}, result.evidence[row_id].keys, row_id)
+
     def test_unresolvable_keys_and_unknown_ids_are_problems_not_silent_drops(self):
         oracle_map = minimal_map(typo={"ids": ["numpy.nope"]})
         _, result = self.join({"a.jsonl": [case("mystery"), case("typo")]}, catalog("numpy.add"), oracle_map)
@@ -321,9 +393,9 @@ class SyntheticJoinTests(unittest.TestCase):
         sources, result = self.join({"a.jsonl": [case("add")]}, catalog("numpy.add"), minimal_map(), strings=strings,
                                     strings_replay='Run("strfn"); Run("nameless"); Run("other");')
         problems = "\n".join(result.problems)
-        self.assertIn("String oracle section strings_orphan.jsonl holds numpy.strings contracts but no replay test", problems)
-        self.assertIn("strings_nameless.jsonl:1 op 'str_fn' lacks the parameter that names its numpy.strings function",
-                      problems)
+        self.assertIn("String oracle section strings_orphan.jsonl holds numpy.strings / numpy.char contracts but no "
+                      "replay test", problems)
+        self.assertIn("strings_nameless.jsonl:1 op 'str_fn' lacks the parameters that name the API it calls", problems)
         self.assertEqual(1, result.evidence["numpy.strings.find"].contracts, "the orphan's contracts must not count")
         self.assertEqual(["strings_strfn.jsonl"], [item["name"] for item in sources.files if item["source"] == "strings"],
                          "a section without a numpy.strings call is not a strings file")
@@ -466,7 +538,8 @@ class CommittedCorpusTests(unittest.TestCase):
         self.assertIsNone(absolute.via, "numpy.absolute has direct contracts")
         self.assertIn("viewflags:absolute", absolute.keys)
         self.assertIn("outflags:absolute", absolute.keys)
-        self.assertEqual("numpy.vstack", self.evidence("numpy.row_stack").via["id"])
+        # numpy.row_stack (vstack's alias) was the example until NumPy 2.5 removed it; numpy.ma keeps its own.
+        self.assertEqual("numpy.ma.vstack", self.evidence("numpy.ma.row_stack").via["id"])
         # np.amax / np.amin were aliases of np.max / np.min until the minmax_kwargs tier (plan api-parameter-parity A4)
         # gated them directly through their own NumPy-shaped overloads.
         for row_id, fn in (("numpy.amax", "amax"), ("numpy.amin", "amin")):
@@ -474,6 +547,13 @@ class CommittedCorpusTests(unittest.TestCase):
             self.assertIsNone(evidence.via, f"{row_id} has direct contracts")
             self.assertIn(f"minmax_kwargs:{fn}", evidence.keys)
         self.assertEqual(["numpy.power"], self.labels["power"], "np.power shadows np.random.power")
+        # The layout oracle's ufunc family (a fresh ufunc result's layout, 18314cac) names each case by the function it
+        # calls: its contracts land on that function's row, one variant per case name. Without the per-name rule the
+        # whole family had no map entry and the generator refused to publish (journey5 at 882a66a0).
+        self.assertEqual("ufunc:around0", oe._layout_variant({"fam": "ufunc", "key": "around0_bcx"}))
+        self.assertIn("layout:ufunc:neg", self.evidence("numpy.negative").keys)
+        self.assertIn("layout:ufunc:mediank1", self.evidence("numpy.median").keys)
+        self.assertTrue({"layout:ufunc:add0d", "layout:ufunc:adds111"} <= self.evidence("numpy.add").keys)
         # The string oracle verifies every numpy.strings function by name: the 44 str_fn names (search, strip, pad,
         # replace, partition, slice, the comparison names, predicates, case maps, translate, mod, codecs over S / U /
         # StringDType) and np.strings.add / multiply.
@@ -486,6 +566,52 @@ class CommittedCorpusTests(unittest.TestCase):
         self.assertGreater(find.contracts, 1000)
         self.assertGreater(find.errors, 0)
         self.assertTrue({"strings_strfn.jsonl", "strings_tfn.jsonl"} <= find.files)
+        # The 13 keys OpRegistry.cs replays through a C# operator also prove the operator's ndarray protocol, on the
+        # cases that reach it: a numpy.matrix operand (matrix_operand.jsonl) and add / multiply with dtype= take the
+        # np.* function, which keeps every contract.
+        for protocol, key in (("__add__", "add"), ("__sub__", "subtract"), ("__truediv__", "divide"),
+                              ("__eq__", "equal"), ("__ge__", "greater_equal"), ("__xor__", "bitwise_xor")):
+            operator_row = self.evidence(f"numpy.ndarray.{protocol}")
+            self.assertEqual({f"{key}:operator"}, operator_row.keys, protocol)
+            self.assertGreater(operator_row.contracts, 300, protocol)
+            self.assertNotIn("matrix_operand.jsonl", operator_row.files, f"{protocol}: matrix operands call np.{key}")
+            self.assertTrue({key, f"{key}:operator"} <= self.evidence(f"numpy.{key}").keys, key)
+        # numpy.char (plan item C6): the string oracle's numpy.char functions, chararray constructor, members,
+        # protocols and operators by name, the numpy.char names that ARE numpy.strings objects through reviewed aliases.
+        self.assertEqual({"strings:char_cmp:less"}, self.evidence("numpy.char.less").keys)
+        self.assertEqual({"strings:char_compare"}, self.evidence("numpy.char.compare_chararrays").keys)
+        self.assertEqual({"strings:cobj_fn:split"}, self.evidence("numpy.char.split").keys)
+        self.assertEqual({"strings:cha_array"}, self.evidence("numpy.char.array").keys)
+        center = self.evidence("numpy.char.center")
+        self.assertEqual((0, "numpy.strings.center", "reviewed"), (center.contracts, center.via["id"], center.via["rule"]))
+        self.assertIn("strings:cha_call:center", self.evidence("numpy.char.chararray.center").keys)
+        self.assertIn("strings:cha_op:__radd__", self.evidence("numpy.char.chararray.__radd__").keys)
+        self.assertEqual({"strings:cha_repr"}, self.evidence("numpy.char.chararray.__repr__").keys)
+        self.assertTrue({f"strings:cha_member:flat_{name}" for name in ("index", "slice", "fancy", "copy")}
+                        <= self.evidence("numpy.char.chararray.flat").keys)
+
+    def test_operator_entries_mirror_opregistry(self):
+        """Every OpRegistry.cs case that replays a key through a C# operator has an operator entry naming the operator's
+        ndarray protocol, every operator entry names such a case, and the matrix-operand function form covers each key
+        (replays_operator's other route), so the map cannot drift from the replay."""
+        fuzz = ROOT / "test" / "NumSharp.Tests.Oracle" / "Fuzz"
+        text = (fuzz / "OpRegistry.cs").read_text(encoding="utf-8")
+        found = dict(re.findall(r'case "(\w+)":\s*return ops\[0\] (==|!=|<=|>=|<|>|\+|-|\*|/|&|\||\^) ops\[1\];', text))
+        # add / multiply call np.add(..., dtype=) when params.dtype is present, else the operator.
+        dtype_first = dict(re.findall(
+            r'case "(\w+)":\s*return p\.TryGetValue\("dtype"[^;]*?:\s*ops\[0\] (\+|\*) ops\[1\];', text, re.S))
+        self.assertEqual({"add": "+", "multiply": "*"}, dtype_first)
+        found.update(dtype_first)
+        entries = {key: entry for key, entry in oe._entries(self.map["fuzz"]["keys"]).items() if "operator_ids" in entry}
+        self.assertEqual(set(found), set(entries))
+        for key, symbol in found.items():
+            protocols = [name for name, (op_name, position) in OPERATOR_PROTOCOLS.items()
+                         if _OPERATOR_SYMBOLS[op_name] == symbol and position in ("left", "either")]
+            self.assertEqual(["numpy.ndarray." + protocols[0]], entries[key]["operator_ids"], key)
+            self.assertEqual(["dtype"] if key in dtype_first else [], entries[key].get("function_params", []), key)
+        function_form = (fuzz / "OpRegistry.MatrixOperand.cs").read_text(encoding="utf-8")
+        for key in found:
+            self.assertRegex(function_form, rf'case "{key}": result = np\.{key}\(ops\[0\], ops\[1\]\); return true;', key)
 
     def test_reviewed_aliases_mirror_the_csharp_oracle_gate(self):
         text = (ROOT / "test" / "NumSharp.Tests.Oracle" / "Fuzz" / "OracleSurfaceCoverageTests.cs").read_text(encoding="utf-8")

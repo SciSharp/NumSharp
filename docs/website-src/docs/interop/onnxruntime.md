@@ -381,7 +381,9 @@ against all three:
 
 - **Values: an ARC on every value the bridge touches.** A `ToOrtValue` result, the value of an `AsOrtValue` handle and
   a `GetMapKeys` result carry it from birth; a value ORT allocated (an output of ORT's own `Run`,
-  `CreateAllocatedTensorValue`, an element read with `GetValue`) gets it at its first bridge verb. A verb holds a lease
+  `CreateAllocatedTensorValue`, an element read with `GetValue`) gets it at its first bridge verb. The values the
+  synchronous `Run` and `RunInto` make for their own inputs and pre-allocated outputs carry none: they are created, read
+  by ORT and released within the one call, on its thread, and never reach you (an asynchronous run's keep theirs). A verb holds a lease
   while it calls ORT on the value, a view - and every slice of it - for its whole life. `Dispose`, on any thread and any
   number of times at once, waits for the verbs in flight, and then ONNX Runtime releases the value exactly once: at
   once, or when its last view is gone. A verb that starts after the `Dispose` began throws `ObjectDisposedException`.
@@ -419,7 +421,7 @@ own type so the verbs stay conversion-only:
 |---|---|---|
 | `Softmax(logits, axis = -1)` · `LogSoftmax` · `Sigmoid` | the `Math.Exp` / `Sum` / `Select` loop | max-shifted (stable for huge logits); float32 in, float32 out; a bool or integer input is promoted to NumPy's float tier first; `LogSoftmax` follows `scipy.special.log_softmax` for a non-finite row maximum |
 | `Argmax(scores, axis = -1)` | `GetMaxValueIndex` | int64, first occurrence - ONNX `ArgMax(select_last_index=0)`; the axis is checked |
-| `TopK(scores, k, axis = -1, largest = true)` → `(values, indices)` | `OrderByDescending().Take(k)` | ONNX `TopK`: sorted, ties **lower index first**; values keep the input dtype |
+| `TopK(scores, k, axis = -1, largest = true)` → `(values, indices)` | `OrderByDescending().Take(k)` | ONNX `TopK`: sorted, ties **lower index first**; values keep the input dtype; `k = 1` is `np.argmax`'s answer, a `k` up to half the axis of an array of 4,096 or more elements is selected with `np.argpartition` and only those `k` are sorted (a vocabulary-wide top-5 is a selection pass, not a sort of the row; equal values straddling the `k`-th one are chosen lower index first), and the whole axis is sorted for a larger `k`, a smaller array, a complex input or a NaN in a largest-first call |
 
 The tests run ORT's own `Softmax` / `ArgMax` / `TopK` operators on the same data and compare - to float
 tolerance for softmax, exactly for the indices.
@@ -490,7 +492,7 @@ an older ORT the tests of their behaviour report Inconclusive and the test of th
 | 7 | The source may die while exported; `resize` refuses while exported; forgotten handles/views are released by GC | `LifetimeTests` |
 | 8 | `Run` coerces int32 → int64 under `safe`, refuses float64 → float16, validates declared shapes with the input named | `SessionRunTests` |
 | 9 | The input mode on every form; the casting rule on every call; optional inputs; overridable initializers; an output that overlaps an input is computed from a copy or refused | `SessionRunModeTests` |
-| 10 | Softmax / Argmax / TopK agree with ORT's own operators, ties lower-index-first; integer inputs give the mathematical result | `PostprocessTests`, `PostprocessEdgeTests` |
+| 10 | Softmax / Argmax / TopK agree with ORT's own operators, ties lower-index-first; integer inputs give the mathematical result; TopK's argmax and selection routes agree with ORT on vocabulary-wide rows, ties at the k-th value included, and hand a NaN to the sort | `PostprocessTests`, `PostprocessEdgeTests`, `PostprocessTopKSelectionTests` |
 | 11 | The #512 BGRA → NCHW example and the Stable-Diffusion step run as written | `DocExampleTests` |
 | 12 | A released source is refused by every verb and `Run`, in every layout, conversion and cast; dtype and size refusals come first, and an oversize copy is refused before anything is allocated | `ReleasedSourceTests` |
 | 13 | Every export verb satisfies its contract in every mode (bytes against NumSharp's and ORT's own reads, write-through, round trips, the refusals) for every dtype × 47 catalogued layouts - 0-d, empties, offsets, negative strides, broadcasts, F-order, rank 40 and 70 - and for seeded random views per dtype plus every slice of a small vector and every axis-slice pair of a small matrix | `LayoutMatrixTests`, `PropertyBasedTests` |

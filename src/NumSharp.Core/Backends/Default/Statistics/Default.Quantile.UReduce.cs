@@ -102,9 +102,6 @@ namespace NumSharp.Backends
         /// <exception cref="IndexError">Under keepdims, an out of fewer dimensions than the data (<c>too many indices for
         ///     array: array is 1-dimensional, but 2 were indexed</c>) or with a reduced axis of length 0 (<c>index 0 is out of
         ///     bounds for axis 0 with size 0</c>).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: the merge's
-        ///     <c>-1</c> cannot be resolved (NumPy's ValueError <c>cannot reshape array of size 0 into shape
-        ///     (0,newaxis)</c>).</exception>
         /// <remarks>
         ///     The np-layer dtype plan's P1a (step 2) made this the family's one copy: the numeric route
         ///     (<see cref="QuantileCompute"/>) merged the axes with an explicit length after q's rank and the method were checked, so a
@@ -127,7 +124,7 @@ namespace NumSharp.Backends
             if (reduced.Length == 1)
                 return new UReduced(a, reduced[0], reduced, target, weights);
             // Several axes (or none): the kept ones first, the reduced ones merged into one last axis (`reshape_arr`), the
-            // weights alike. NumPy's reshape cannot resolve the -1 beside a kept axis of length 0, so that data raises here.
+            // weights alike — of the merged axes' product length, so a kept axis of length 0 merges too (NumPy 2.5.4).
             int[] keep = KeptAxes(nd, reduced);
             NDArray data = MergeReducedAxes(a, keep);
             NDArray mergedWeights = weights is null ? null : MergeReducedAxes(weights, keep);
@@ -188,14 +185,19 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>reshape_arr</c>: the kept axes moved to the front (<c>np.moveaxis(x, keep, range(nkeep))</c>), the
-        ///     others merged into one last axis (<c>reshape(x.shape[:nkeep] + (-1,))</c>), in their original order.
+        ///     others merged into one last axis of their product's length
+        ///     (<c>reshape(x.shape[:nkeep] + (math.prod(x.shape[nkeep:]),))</c>), in their original order.
         /// </summary>
         /// <param name="x">The data or the weights (its own dimensions are merged: weights of length 1 at a kept axis stay
         ///     length 1 there).</param>
         /// <param name="keep">The kept axes, increasing.</param>
         /// <returns>The merged array (a view when the layout allows, else a copy).</returns>
-        /// <exception cref="IncorrectShapeException">A kept axis of length 0 beside merged ones: the -1 cannot be resolved
-        ///     (<c>cannot reshape array of size 0 into shape (0,newaxis)</c>).</exception>
+        /// <remarks>
+        ///     NumPy 2.5.4 spells the merged length as the explicit product (gh-32536). NumPy 2.4's <c>-1</c> could not be
+        ///     resolved beside a kept axis of length 0, so a reduction over several axes of data with an empty KEPT axis
+        ///     raised <c>cannot reshape array of size 0 into shape (0,newaxis)</c>; it now merges to <c>(0, n)</c> and reduces
+        ///     to an empty result. An empty tuple of merged axes has the product 1 (<c>math.prod(())</c>).
+        /// </remarks>
         private static NDArray MergeReducedAxes(NDArray x, int[] keep)
         {
             var destinations = new int[keep.Length];
@@ -206,7 +208,11 @@ namespace NumSharp.Backends
             var merged = new long[keep.Length + 1];
             for (int d = 0; d < keep.Length; d++)
                 merged[d] = moved.Shape.dimensions[d];
-            merged[keep.Length] = -1;
+            // math.prod(a.shape[nkeep:]): the merged axes' product, 1 when none is merged.
+            long product = 1;
+            for (int d = keep.Length; d < moved.ndim; d++)
+                product *= moved.Shape.dimensions[d];
+            merged[keep.Length] = product;
             return moved.reshape(new Shape(merged, copy: false));
         }
     }

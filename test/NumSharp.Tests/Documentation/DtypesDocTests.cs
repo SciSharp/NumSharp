@@ -141,6 +141,27 @@ namespace NumSharp.Tests.Documentation
             ((bool)oneD).Should().BeTrue();   // bool() reads the only element of a one-element array of any rank
         }
 
+        /// <summary>The "NumPy Scalars" element snippet: an element is a read-only copy a later write does not reach, and
+        /// <c>s[...]</c> of a scalar is a writeable 0-d array over a copy of its value (NumPy 2.4.2's answers).</summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from the page.</exception>
+        [TestMethod]
+        public void NumPyScalars_ElementAndScalarIndex_AsDocumented()
+        {
+            var a = np.arange(5.0);
+            var x = a[2];
+            x.flags.writeable.Should().BeFalse();
+            a[2] = 99.0;
+            ((double)x).Should().Be(2.0);
+
+            var s = a.sum();
+            var v = s[Slice.Ellipsis];
+            v.ndim.Should().Be(0);
+            v.flags.writeable.Should().BeTrue();
+            ((double)v).Should().Be((double)s);
+            Action refused = () => _ = s[0];
+            refused.Should().Throw<IndexError>().WithMessage("invalid index to scalar variable.");
+        }
+
         /// <summary>The "Special Values" snippets: NaN and infinity survive a scalar round trip, and a complex value is NaN
         /// or infinite through either part, as in NumPy.</summary>
         /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from the page.</exception>
@@ -280,7 +301,7 @@ namespace NumSharp.Tests.Documentation
             np.ones_like(template).ToString(true).Should().Be("array(['1', '1'], dtype='<U8')");
 
             np.array([300.0]).astype(NPTypeCode.Byte).ToArray<byte>().Should().Equal((byte)44);
-            Action safe = () => np.array([300.0]).astype(np.uint8, true, 'K', "safe");
+            Action safe = () => np.array([300.0]).astype(np.uint8, 'K', "safe");
             safe.Should().Throw<InvalidCastException>()
                 .WithMessage("Cannot cast array data from dtype('float64') to dtype('uint8') according to the rule 'safe'");
         }

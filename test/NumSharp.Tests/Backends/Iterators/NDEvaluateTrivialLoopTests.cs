@@ -288,7 +288,8 @@ namespace NumSharp.Tests.Backends.Iterators
             AssertSameBothWays(() =>
             {
                 var a = Pool(new long[] { 8 }, NPTypeCode.Double, 47);
-                var k = a[2];
+                // NumPy's a[2, ...]: a 0-d VIEW of the element (a[2] alone is the item, NumPy's scalar copy).
+                var k = a[Slice.Index(2), Slice.Ellipsis];
                 Assert.AreEqual(0, k.ndim);
                 var h = (NDExpr.Input(0) + NDExpr.Input(1)).Compile(NPTypeCode.Double, NPTypeCode.Double);
                 h.Evaluate(new[] { a, k }, @out: a);

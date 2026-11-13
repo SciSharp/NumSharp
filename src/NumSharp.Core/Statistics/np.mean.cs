@@ -24,7 +24,8 @@ namespace NumSharp
         /// <param name="a">Array containing numbers whose mean is desired.</param>
         /// <param name="axis">The axis to average over (negative counts from the end); <c>null</c> averages every element.
         ///     Unlike np.sum, a 0-d array takes no axis (np.mean normalizes it first), unless <paramref name="where"/> is a
-        ///     mask.</param>
+        ///     mask. A tuple (<c>(0, 2)</c>) reduces every axis it names together, in one pass (NumPy's tuple axis; the
+        ///     empty tuple reduces none, and a tuple item gets no 0-d allowance).</param>
         /// <param name="dtype">The dtype the sum is computed in and the mean returned in. <c>null</c> is NumPy's default:
         ///     float64 for bool and integer input, float32 for float16 (with a float16 result), the input's own dtype
         ///     otherwise.</param>
@@ -40,7 +41,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, or a text out's missing
-        ///     division.</exception>
+        ///     division. Also a tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> or <paramref name="where"/> does not
         ///     broadcast.</exception>
@@ -49,7 +50,7 @@ namespace NumSharp
         ///     (<c>matrix.mean() got an unexpected keyword argument 'keepdims'</c>).</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
-        public static NDArray mean(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+        public static NDArray mean(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             NDArray @where = null)
         {
             if (a is null)
@@ -58,5 +59,26 @@ namespace NumSharp
             // The whole call is the engine's: TensorEngine.ReduceMean of a's engine takes every keyword.
             return a.TensorEngine.ReduceMean(a, axis, keepdims, dtype, @out, @where);
         }
+
+        /// <summary>
+        ///     <see cref="mean(NDArray, NDAxis?, DType, NDArray, bool, NDArray)"/> with the axis as one <c>int</c>: the
+        ///     overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="mean(NDArray, NDAxis?, DType, NDArray, bool, NDArray)"/>
+        public static NDArray mean(NDArray a, int axis, DType dtype = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
+            => mean(a, (NDAxis?)axis, dtype, @out, keepdims, @where);
+
+        /// <summary>
+        ///     <see cref="mean(NDArray, NDAxis?, DType, NDArray, bool, NDArray)"/> with the axes as an <c>int[]</c>:
+        ///     the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better
+        ///     than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's
+        ///     tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="mean(NDArray, NDAxis?, DType, NDArray, bool, NDArray)"/>
+        public static NDArray mean(NDArray a, int[] axis, DType dtype = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
+            => mean(a, (NDAxis?)axis, dtype, @out, keepdims, @where);
     }
 }

@@ -85,14 +85,17 @@ namespace NumSharp
         /// </code>
         /// </example>
         /// <exception cref="ValueError"><c>kind argument is a string, but '…' is not a known kind name.</c> — verbatim NumPy.</exception>
-        /// <exception cref="TypeError"><paramref name="dtype"/> is a <c>StringDType</c> descriptor (checked FIRST, as NumPy
-        ///     preprocesses the dtype before any kind): <c>dtype argument must be a NumPy dtype, but it is a &lt;class
-        ///     'numpy.dtypes.StringDType'&gt;.</c></exception>
+        /// <exception cref="TypeError"><paramref name="kind"/> is null.</exception>
+        /// <remarks>A <c>StringDType</c> descriptor is accepted since NumPy 2.5.2 (its preprocessing yields the
+        ///     <c>StringDType</c> class, gh-32030) and belongs to none of the named kinds; NumPy 2.4 refused it.</remarks>
         public static bool isdtype(DType dtype, string kind)
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
             ThrowIfNotNumPyDType(dtype);
             CheckIsdtypeKind(kind);
+            // The StringDType class is in no named kind (they are sets of NumPy scalar classes).
+            if (IsStringDTypeClass(dtype))
+                return false;
             // The kind is a set of CONCRETE scalar classes (NumPy builds it from sctypes, which leave datetime64 /
             // timedelta64 out): the descriptor's class answers.
             return ((NDScalarType)dtype).IsInKind(kind);
@@ -169,12 +172,17 @@ namespace NumSharp
         /// <param name="kind">The scalar class.</param>
         /// <returns>True when the dtype's scalar class is <paramref name="kind"/> itself.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="kind"/> is null or Python's built-in <c>str</c>, or <paramref name="dtype"/> is a <c>StringDType</c> descriptor (NumPy's <c>_preprocess_dtype</c> texts).</exception>
+        /// <exception cref="TypeError"><paramref name="kind"/> is null or Python's built-in <c>str</c> (NumPy's
+        ///     <c>_preprocess_dtype</c> texts).</exception>
+        /// <remarks>A <c>StringDType</c> <paramref name="dtype"/> is the <c>StringDType</c> class (NumPy 2.5.2), which no
+        ///     scalar class is: False.</remarks>
         public static bool isdtype(DType dtype, NDScalarType kind)
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
             ThrowIfNotNumPyDType(dtype);
             CheckIsdtypeKindClass(kind);
+            if (IsStringDTypeClass(dtype))
+                return false;
             return ReferenceEquals((NDScalarType)dtype, kind);
         }
 
@@ -201,13 +209,16 @@ namespace NumSharp
         /// <param name="dtype">The scalar class tested.</param>
         /// <param name="kind">The dtype (any spelling).</param>
         /// <returns>True when <paramref name="dtype"/> is <paramref name="kind"/>'s scalar class.</returns>
-        /// <exception cref="TypeError">Either argument is null, <paramref name="dtype"/> is Python's built-in <c>str</c>, or <paramref name="kind"/> is a <c>StringDType</c> descriptor (NumPy's texts).</exception>
+        /// <exception cref="TypeError">Either argument is null, or <paramref name="dtype"/> is Python's built-in <c>str</c>
+        ///     (NumPy's texts).</exception>
+        /// <remarks>A <c>StringDType</c> <paramref name="kind"/> is the <c>StringDType</c> class (NumPy 2.5.2), which no
+        ///     scalar class is: False.</remarks>
         public static bool isdtype(NDScalarType dtype, DType kind)
         {
             CheckIsdtypeDtype(dtype);
-            if (kind is null) throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a <class 'NoneType'>.");
-            if (!kind.Meta._legacy)
-                throw new TypeError($"kind argument must be comprised of NumPy dtypes or strings only, but is a {kind.Meta}.");
+            ThrowIfNotNumPyDTypeKind(kind);
+            if (IsStringDTypeClass(kind))
+                return false;
             return ReferenceEquals(dtype, (NDScalarType)kind);
         }
 
@@ -221,13 +232,17 @@ namespace NumSharp
         /// <param name="kinds">Each a kind name (<see cref="string"/>), a <see cref="DType"/>, an <see cref="NDScalarType"/>, a C# element <see cref="Type"/> or an <see cref="NPTypeCode"/>.</param>
         /// <returns>True when the dtype belongs to at least one kind.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> or <paramref name="kinds"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="dtype"/> is a <c>StringDType</c> descriptor (checked first), or a kind is a <c>StringDType</c> descriptor, Python's built-in <c>str</c>, of another type, or null: <c>kind argument must be comprised of NumPy dtypes or strings only, but is a &lt;class 'int'&gt;.</c> (NumPy's text, Python's class name).</exception>
+        /// <exception cref="TypeError">A kind is Python's built-in <c>str</c>, of another type, or null: <c>kind argument must
+        ///     be comprised of NumPy dtypes or strings only, but is a &lt;class 'int'&gt;.</c> (NumPy's text, Python's class
+        ///     name).</exception>
         /// <exception cref="ValueError">An unknown kind name.</exception>
+        /// <remarks>A <c>StringDType</c> dtype or kind is the <c>StringDType</c> class (NumPy 2.5.2): it matches only
+        ///     itself.</remarks>
         public static bool isdtype(DType dtype, params object[] kinds)
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
             ThrowIfNotNumPyDType(dtype); // before any kind, as NumPy preprocesses the dtype first
-            return IsdtypeOfKinds(dtype, kinds);
+            return IsStringDTypeClass(dtype) ? IsdtypeOfKinds(null, true, kinds) : IsdtypeOfKinds(dtype, false, kinds);
         }
 
         /// <summary><see cref="isdtype(DType, object[])"/> with a scalar class as <paramref name="dtype"/>: an abstract class matches only itself, never a kind name.</summary>
@@ -240,20 +255,23 @@ namespace NumSharp
         public static bool isdtype(NDScalarType dtype, params object[] kinds)
         {
             CheckIsdtypeDtype(dtype);
-            return IsdtypeOfKinds(dtype, kinds);
+            return IsdtypeOfKinds(dtype, false, kinds);
         }
 
         /// <summary>
         ///     The body of NumPy's <c>isdtype</c> over a tuple of mixed kinds: every kind is resolved (and refused) in order,
         ///     then the class is tested for membership — so a later invalid kind raises even when an earlier one matched.
         /// </summary>
-        /// <param name="sctype">The scalar class of the tested dtype.</param>
+        /// <param name="sctype">The scalar class of the tested dtype (null when <paramref name="stringDType"/> is set).</param>
+        /// <param name="stringDType">Whether the tested dtype is the <c>StringDType</c> class (NumPy 2.5.2's
+        ///     <c>_preprocess_dtype</c> of a <c>StringDType</c> descriptor): it is in no named kind and is no scalar class, and
+        ///     only a <c>StringDType</c> kind matches it.</param>
         /// <param name="kinds">The kinds.</param>
         /// <returns>True when the class belongs to at least one kind.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="kinds"/> is null.</exception>
         /// <exception cref="TypeError">A kind that is neither a name, a dtype spelling nor a scalar class.</exception>
         /// <exception cref="ValueError">An unknown kind name.</exception>
-        private static bool IsdtypeOfKinds(NDScalarType sctype, object[] kinds)
+        private static bool IsdtypeOfKinds(NDScalarType sctype, bool stringDType, object[] kinds)
         {
             if (kinds is null) throw new ArgumentNullException(nameof(kinds));
             bool result = false;
@@ -263,21 +281,21 @@ namespace NumSharp
                 {
                     case string name:
                         CheckIsdtypeKind(name);
-                        // A named kind holds concrete classes only; an abstract class is in none of them.
-                        result |= sctype.IsInKind(name);
+                        // A named kind holds concrete classes only; an abstract class (and the StringDType class) is in none.
+                        result |= !stringDType && sctype.IsInKind(name);
                         break;
                     case NDScalarType cls:
                         CheckIsdtypeKindClass(cls);
-                        result |= ReferenceEquals(sctype, cls);
+                        result |= !stringDType && ReferenceEquals(sctype, cls);
                         break;
                     case DType d:
-                        // A StringDType descriptor's class is Python's str, which NumPy refuses as a kind (its type's name).
-                        if (!d.Meta._legacy)
-                            throw new TypeError($"kind argument must be comprised of NumPy dtypes or strings only, but is a {d.Meta}.");
-                        result |= ReferenceEquals(sctype, (NDScalarType)d);
+                        // NumPy 2.5.2 preprocesses a StringDType descriptor into the StringDType class: it matches only that
+                        // class. Any other non-legacy descriptor is still refused.
+                        ThrowIfNotNumPyDTypeKind(d);
+                        result |= IsStringDTypeClass(d) ? stringDType : !stringDType && ReferenceEquals(sctype, (NDScalarType)d);
                         break;
                     case NPTypeCode code:
-                        result |= ReferenceEquals(sctype, (NDScalarType)DType.From(code));
+                        result |= !stringDType && ReferenceEquals(sctype, (NDScalarType)DType.From(code));
                         break;
                     case Type t:
                         // NumSharp's dtype spelling of a class: a C# element type (typeof(double)). A type no dtype stores is
@@ -285,7 +303,7 @@ namespace NumSharp
                         var element = NDScalarType.OfElementType(t);
                         if (element is null)
                             throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a <class 'type'>.");
-                        result |= ReferenceEquals(sctype, element);
+                        result |= !stringDType && ReferenceEquals(sctype, element);
                         break;
                     default:
                         throw new TypeError($"kind argument must be comprised of NumPy dtypes or strings only, but is a <class '{(kind is null ? "NoneType" : NumSharp.Backends.Unmanaged.NDBuffer.PythonTypeName(kind))}'>.");
@@ -329,8 +347,7 @@ namespace NumSharp
         /// <param name="kinds">The category names (see <see cref="isdtype(DType, string)"/>).</param>
         /// <returns>True when <paramref name="dtype"/> is under any of the categories.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> or <paramref name="kinds"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="dtype"/> is a <c>StringDType</c> descriptor (checked first), or an
-        ///     entry is null.</exception>
+        /// <exception cref="TypeError">An entry is null.</exception>
         /// <exception cref="ValueError">An entry is not a known kind name.</exception>
         public static bool isdtype(DType dtype, params string[] kinds)
         {
@@ -351,33 +368,58 @@ namespace NumSharp
         /// <param name="kind">The descriptor whose class counts as a match.</param>
         /// <returns>True when both are instances of one class.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="kind"/> is null, or either is a <c>StringDType</c> descriptor
-        ///     (NumPy's <c>_preprocess_dtype</c> accepts only the builtin scalar types: <c>dtype argument must be a NumPy
-        ///     dtype, but it is a …</c> for the dtype, checked first; <c>kind argument must be comprised of NumPy dtypes or
-        ///     strings only, but is a …</c> for the kind).</exception>
+        /// <exception cref="TypeError"><paramref name="kind"/> is null (<c>kind argument must be comprised of NumPy dtypes or
+        ///     strings only, but is a &lt;class 'NoneType'&gt;.</c>).</exception>
+        /// <remarks>A <c>StringDType</c> descriptor is the <c>StringDType</c> class on either side (NumPy 2.5.2's
+        ///     <c>_preprocess_dtype</c>, gh-32030): <c>np.isdtype(StringDType(), StringDType(na_object=None))</c> is True, and
+        ///     a <c>StringDType</c> beside any NumPy class is False. NumPy 2.4 refused it on either side.</remarks>
         public static bool isdtype(DType dtype, DType kind)
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
             ThrowIfNotNumPyDType(dtype);
-            if (kind is null) throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a <class 'NoneType'>.");
-            if (!kind.Meta._legacy)
-                throw new TypeError($"kind argument must be comprised of NumPy dtypes or strings only, but is a {kind.Meta}.");
+            ThrowIfNotNumPyDTypeKind(kind);
             return ReferenceEquals(dtype.Meta, kind.Meta);
         }
 
         /// <summary>
-        ///     NumPy's <c>_preprocess_dtype</c> refusal for the dtype argument of <c>np.isdtype</c>: only a dtype whose scalar
-        ///     type is one of NumPy's builtin scalar types is accepted, and a <c>StringDType</c> descriptor's type is Python's
-        ///     own <c>str</c>.
+        ///     NumPy's <c>_preprocess_dtype</c> refusal for the dtype argument of <c>np.isdtype</c>: a dtype whose scalar type
+        ///     is one of NumPy's builtin scalar types is accepted, and so — since NumPy 2.5.2 (gh-32030) — is a
+        ///     <c>StringDType</c> descriptor, whose type is Python's own <c>str</c> and which preprocesses to the
+        ///     <c>StringDType</c> class instead (<see cref="IsStringDTypeClass"/>).
         /// </summary>
         /// <param name="dtype">The dtype argument (not null).</param>
-        /// <exception cref="TypeError">A non-legacy (<c>StringDType</c>) descriptor: <c>dtype argument must be a NumPy
-        ///     dtype, but it is a &lt;class 'numpy.dtypes.StringDType'&gt;.</c></exception>
+        /// <exception cref="TypeError">Any other non-legacy descriptor: <c>dtype argument must be a NumPy dtype, but it is a
+        ///     …</c> naming its class.</exception>
         private static void ThrowIfNotNumPyDType(DType dtype)
         {
-            if (!dtype.Meta._legacy)
+            if (!dtype.Meta._legacy && !IsStringDTypeClass(dtype))
                 throw new TypeError($"dtype argument must be a NumPy dtype, but it is a {dtype.Meta}.");
         }
+
+        /// <summary>
+        ///     NumPy's <c>_preprocess_dtype</c> refusal for one KIND of <c>np.isdtype</c> given as a descriptor: null
+        ///     (Python's <c>None</c>) or a non-legacy descriptor other than <c>StringDType</c> (accepted since NumPy 2.5.2 as
+        ///     the <c>StringDType</c> class).
+        /// </summary>
+        /// <param name="kind">The kind descriptor.</param>
+        /// <exception cref="TypeError">NumPy's <c>kind argument must be comprised of NumPy dtypes or strings only, but is a
+        ///     …</c>, naming <c>NoneType</c> or the descriptor's class.</exception>
+        private static void ThrowIfNotNumPyDTypeKind(DType kind)
+        {
+            if (kind is null)
+                throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a <class 'NoneType'>.");
+            if (!kind.Meta._legacy && !IsStringDTypeClass(kind))
+                throw new TypeError($"kind argument must be comprised of NumPy dtypes or strings only, but is a {kind.Meta}.");
+        }
+
+        /// <summary>
+        ///     Whether NumPy 2.5.2's <c>_preprocess_dtype</c> turns this descriptor into the <c>StringDType</c> CLASS (any
+        ///     <c>StringDType</c> instance: its scalar type is Python's <c>str</c>, which is not a NumPy scalar type, so NumPy
+        ///     identifies it by its DType class — every NA object and <c>coerce</c> flag alike).
+        /// </summary>
+        /// <param name="d">The descriptor (not null).</param>
+        /// <returns>True for a <c>StringDType</c> descriptor.</returns>
+        private static bool IsStringDTypeClass(DType d) => d.Meta is VStringDTypeMeta;
 
         /// <summary>
         /// Returns True if the descriptor is an instance of ANY of the given dtypes' classes — NumPy's tuple form
@@ -388,8 +430,8 @@ namespace NumSharp
         /// <param name="kinds">The dtypes whose classes count as a match.</param>
         /// <returns>True when <paramref name="dtype"/>'s class is the class of any entry.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> or <paramref name="kinds"/> is null.</exception>
-        /// <exception cref="TypeError">An entry is null (NumPy: <c>kind argument must be comprised of NumPy dtypes or strings only</c>),
-        ///     or <paramref name="dtype"/> (checked first) or an entry is a <c>StringDType</c> descriptor.</exception>
+        /// <exception cref="TypeError">An entry is null (NumPy: <c>kind argument must be comprised of NumPy dtypes or strings
+        ///     only</c>).</exception>
         public static bool isdtype(DType dtype, params DType[] kinds)
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
@@ -416,35 +458,6 @@ namespace NumSharp
         {
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
             return isdtype(np.dtype(dtype), kinds);
-        }
-
-        /// <summary>
-        /// Returns True if the array's dtype is of a specified category (NumSharp convenience: NumPy's <c>isdtype</c> takes
-        /// only a dtype, so this is <c>np.isdtype(arr.dtype, kind)</c>).
-        /// </summary>
-        /// <param name="arr">The NDArray to check.</param>
-        /// <param name="kind">The dtype category.</param>
-        /// <returns>True if array's dtype belongs to the specified category.</returns>
-        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
-        public static bool isdtype(NDArray arr, string kind)
-        {
-            if (arr is null)
-                throw new ArgumentNullException(nameof(arr));
-            return isdtype(arr.dtype, kind);
-        }
-
-        /// <summary>
-        /// Returns True if the array's dtype is of any of the specified categories.
-        /// </summary>
-        /// <param name="arr">The NDArray to check.</param>
-        /// <param name="kinds">Array of dtype categories to check.</param>
-        /// <returns>True if array's dtype belongs to any of the specified categories.</returns>
-        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
-        public static bool isdtype(NDArray arr, string[] kinds)
-        {
-            if (arr is null)
-                throw new ArgumentNullException(nameof(arr));
-            return isdtype(arr.dtype, kinds);
         }
 
         /// <summary>

@@ -14,10 +14,18 @@ namespace NumSharp.Backends
         ///     with a NaN in EITHER part counts as zero, and an integer / bool input is plain <c>np.sum</c>.
         /// </summary>
         /// <param name="a">The array to reduce; any dtype, any layout.</param>
-        /// <param name="axis">The axis to reduce, or null for every axis (a 0-d input also takes 0 / -1, np.sum's rule).</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes (np.sum over the set: one pass of NumPy's reduction
+        ///     iterator), or null for every axis (a 0-d input also takes the INTEGERS 0 / -1, np.sum's rule).</param>
         /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
-        /// <returns>The NaN-skipping sum (a read-only 0-d scalar for a full reduction).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <param name="dtype">np.sum's / np.prod's <c>dtype=</c>, or null.</param>
+        /// <param name="out">np.sum's / np.prod's <c>out=</c> (returned), or null.</param>
+        /// <param name="initial">np.sum's / np.prod's <c>initial=</c>, or null for none.</param>
+        /// <param name="where">np.sum's / np.prod's <c>where=</c> mask, or null.</param>
+        /// <returns>The NaN-skipping sum (a read-only 0-d scalar for a full reduction; <paramref name="out"/> itself when
+        ///     given).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of range.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (np.sum's <c>duplicate value in 'axis'</c>); np.sum's
+        ///     keyword errors.</exception>
         /// <remarks><see cref="NDAnchoredAttribute"/>: the flat and axis kernels read <paramref name="a"/>'s raw address
         ///     (<see cref="NanReductionElementWise"/>, <see cref="ExecuteNanAxisReduction"/>), and <c>np.nansum(a)</c> reaches
         ///     them through this method, which opens no scope; the weaver roots <paramref name="a"/> until it returns, so a
@@ -25,8 +33,46 @@ namespace NumSharp.Backends
         ///     during the axis kernel returned a sum of other memory or ended the process with an access violation
         ///     (lifetime gap LT30).</remarks>
         [NDAnchored]
-        public override NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false)
+        public override NDArray NanSum(NDArray a, NDAxis? axis = null, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            object initial = null, NDArray @where = null)
         {
+            // A tuple: one axis or every axis is the integer / None route (np.sum's same flags); any other tuple is NumPy's
+            // two statements as written - _replace_nan, then np.sum over the set with every keyword - which raise in
+            // np.sum's order.
+            if (axis is { IsTuple: true } tuple)
+            {
+                if (ReductionArguments.TryIntegerForm(a.ndim, tuple, out int? single))
+                    return NanSumAlong(a, single, keepdims, dtype, @out, initial, @where);
+                return NanReplacedReduceKeywords(a, tuple, keepdims, dtype, @out, initial, @where, prod: false);
+            }
+            return NanSumAlong(a, ReductionArguments.IntegerAxis(axis), keepdims, dtype, @out, initial, @where);
+        }
+
+        /// <summary>
+        ///     The integer-axis and <c>None</c> routes of <see cref="NanSum"/> (see it for the whole contract): the keyword
+        ///     statements, the text routes and the fused NaN-skipping sums over one axis or every axis.
+        /// </summary>
+        /// <param name="a">The array to reduce.</param>
+        /// <param name="axis">The axis, or null for every axis (a 0-d input also takes 0 / -1).</param>
+        /// <param name="keepdims">When true the reduced axes stay with length 1.</param>
+        /// <param name="dtype">np.sum's <c>dtype=</c>, or null.</param>
+        /// <param name="out">np.sum's <c>out=</c>, or null.</param>
+        /// <param name="initial">np.sum's <c>initial=</c>, or null.</param>
+        /// <param name="where">np.sum's <c>where=</c>, or null.</param>
+        /// <returns>The NaN-skipping sum (see <see cref="NanSum"/>).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="ValueError">np.sum's keyword errors.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>, as on <see cref="NanSum"/>: the kernels below read
+        ///     <paramref name="a"/>'s raw address (lifetime gap LT30).</remarks>
+        [NDAnchored]
+        private NDArray NanSumAlong(NDArray a, int? axis, bool keepdims, DType dtype, NDArray @out, object initial,
+            NDArray @where)
+        {
+            // np.sum's other keywords: NumPy's two statements as written (np.sum of _replace_nan(a, 0) with every keyword);
+            // the keyword-free call keeps the fused routes below, which are the same statements' bits.
+            if (dtype is not null || @out is not null || initial is not null || @where is not null)
+                return NanReplacedReduceKeywords(a, axis, keepdims, dtype, @out, initial, @where, prod: false);
+
             // StringDType is not inexact: _replace_nan leaves it alone and nansum IS np.sum, which computes.
             if (Strings.NDStringUfuncs.VStringReduces("nansum", a, axis))
                 return Strings.NDVStringReduction.Sum(a, axis, keepdims, null);
@@ -70,10 +116,18 @@ namespace NumSharp.Backends
         ///     identity start <c>1</c>, the result shape). An integer / bool input is plain <c>np.prod</c>.
         /// </summary>
         /// <param name="a">The array to reduce; any dtype, any layout.</param>
-        /// <param name="axis">The axis to reduce, or null for every axis (a 0-d input also takes 0 / -1, np.prod's rule).</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes (np.prod over the set: one pass of NumPy's reduction
+        ///     iterator), or null for every axis (a 0-d input also takes the INTEGERS 0 / -1, np.prod's rule).</param>
         /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
-        /// <returns>The NaN-skipping product (a read-only 0-d scalar for a full reduction).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <param name="dtype">np.sum's / np.prod's <c>dtype=</c>, or null.</param>
+        /// <param name="out">np.sum's / np.prod's <c>out=</c> (returned), or null.</param>
+        /// <param name="initial">np.sum's / np.prod's <c>initial=</c>, or null for none.</param>
+        /// <param name="where">np.sum's / np.prod's <c>where=</c> mask, or null.</param>
+        /// <returns>The NaN-skipping product (a read-only 0-d scalar for a full reduction; <paramref name="out"/> itself
+        ///     when given).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of range.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (np.prod's <c>duplicate value in 'axis'</c>); np.prod's
+        ///     keyword errors.</exception>
         /// <remarks>
         ///     <para>Since parity QA-15 (2026-11-05) every inexact input runs NumPy's two statements
         ///     (<see cref="NanReplacedReduceNumPy"/>): a complex element with a NaN in either part is replaced by <c>1</c>
@@ -85,8 +139,42 @@ namespace NumSharp.Backends
         ///     <paramref name="a"/> until it returns (lifetime gap LT30, as <see cref="NanSum"/>).</para>
         /// </remarks>
         [NDAnchored]
-        public override NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false)
+        public override NDArray NanProd(NDArray a, NDAxis? axis = null, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            object initial = null, NDArray @where = null)
         {
+            // A tuple: one axis or every axis is the integer / None route; any other tuple is _replace_nan, then np.prod over
+            // the set with every keyword (see NanSum).
+            if (axis is { IsTuple: true } tuple)
+            {
+                if (ReductionArguments.TryIntegerForm(a.ndim, tuple, out int? single))
+                    return NanProdAlong(a, single, keepdims, dtype, @out, initial, @where);
+                return NanReplacedReduceKeywords(a, tuple, keepdims, dtype, @out, initial, @where, prod: true);
+            }
+            return NanProdAlong(a, ReductionArguments.IntegerAxis(axis), keepdims, dtype, @out, initial, @where);
+        }
+
+        /// <summary>
+        ///     The integer-axis and <c>None</c> routes of <see cref="NanProd"/> (see it for the whole contract).
+        /// </summary>
+        /// <param name="a">The array to reduce.</param>
+        /// <param name="axis">The axis, or null for every axis (a 0-d input also takes 0 / -1).</param>
+        /// <param name="keepdims">When true the reduced axes stay with length 1.</param>
+        /// <param name="dtype">np.prod's <c>dtype=</c>, or null.</param>
+        /// <param name="out">np.prod's <c>out=</c>, or null.</param>
+        /// <param name="initial">np.prod's <c>initial=</c>, or null.</param>
+        /// <param name="where">np.prod's <c>where=</c>, or null.</param>
+        /// <returns>The NaN-skipping product (see <see cref="NanProd"/>).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="ValueError">np.prod's keyword errors.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>, as on <see cref="NanProd"/>.</remarks>
+        [NDAnchored]
+        private NDArray NanProdAlong(NDArray a, int? axis, bool keepdims, DType dtype, NDArray @out, object initial,
+            NDArray @where)
+        {
+            // np.prod's other keywords: NumPy's two statements as written (np.prod of _replace_nan(a, 1) with every keyword).
+            if (dtype is not null || @out is not null || initial is not null || @where is not null)
+                return NanReplacedReduceKeywords(a, axis, keepdims, dtype, @out, initial, @where, prod: true);
+
             // Text, or a string dtype= request: NumPy's nanprod checks its arguments first (the axis, and the dtype= class where
             // NumPy reads it), then refuses with its verbatim text (no multiply loop reduces text).
             Strings.NDStringUfuncs.ThrowIfReduce("nanprod", a, axis);
@@ -115,6 +203,45 @@ namespace NumSharp.Backends
 
             // NumPy's two statements (parity QA-15): np.prod of _replace_nan(a, 1).
             return NanReplacedReduceNumPy(arr, axis, keepdims, prod: true);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>nansum</c> / <c>nanprod</c> with any of np.sum's other keywords (<c>dtype</c>, <c>out</c>,
+        ///     <c>initial</c>, <c>where</c>), statement for statement: <c>a, mask = _replace_nan(a, val)</c> - for an inexact
+        ///     input the K-order copy with <paramref name="prod"/>'s identity at every NaN (a complex element with a NaN in
+        ///     either part included, isnan's rule), otherwise the input itself (NumPy's mask is None) - then
+        ///     <c>np.sum</c> / <c>np.prod</c> of it with every keyword.
+        /// </summary>
+        /// <param name="a">The array; any dtype, any layout.</param>
+        /// <param name="axis">The reduced axis, a tuple of axes, or null for every axis (the reduction's own axis rules).</param>
+        /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
+        /// <param name="dtype">The reduction's <c>dtype=</c>, or null.</param>
+        /// <param name="out">The reduction's <c>out=</c> (returned), or null.</param>
+        /// <param name="initial">The reduction's <c>initial=</c>, or null for none.</param>
+        /// <param name="where">The reduction's bool <c>where=</c> mask, or null.</param>
+        /// <param name="prod">True for nanprod (identity 1, np.prod's route), false for nansum (identity 0, np.sum's).</param>
+        /// <returns>np.sum's / np.prod's result over the replaced copy (<paramref name="out"/> itself when given).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
+        /// <remarks>Every error is the reduction's own (np.sum / np.prod raise them for nansum / nanprod): the out shape, the
+        ///     out cast, the where mask. The scope reclaims the copy and the mask; the result is yielded.</remarks>
+        [NDScoped]
+        private NDArray NanReplacedReduceKeywords(NDArray a, NDAxis? axis, bool keepdims, DType dtype, NDArray @out, object initial,
+            NDArray @where, bool prod)
+        {
+            // _replace_nan: the mask is None unless a is inexact (decimal holds no NaN), and then nansum IS np.sum (nanprod
+            // np.prod) with every keyword - text and integers included, their refusals np.sum's own.
+            NDArray arr = a;
+            if (a.GetTypeCode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex)
+            {
+                // np.array(a, subok=True, copy=True) - PyArray_NewLikeArray's K order - then np.copyto(a, val, where=mask).
+                arr = NewArray(a.GetTypeCode, a.Shape.KeepOrder(), false);
+                UnmanagedStorage.Copyto(arr, a, NPY_CASTING.NPY_SAME_KIND_CASTING);
+                var mask = IsNan(a);
+                UnmanagedStorage.CopytoPythonScalar(arr, prod ? 1 : 0, PyScalarKind.Int, NPY_CASTING.NPY_UNSAFE_CASTING, mask);
+            }
+            return prod
+                ? ReduceProduct(arr, axis, keepdims, dtype, @out, initial, @where)
+                : ReduceAdd(arr, axis, keepdims, dtype, @out, initial, @where);
         }
 
         /// <summary>
@@ -204,7 +331,7 @@ namespace NumSharp.Backends
                 }
             }
 
-            return tot.ndim == 0 ? tot.MarkReductionScalar() : tot;
+            return tot.ndim == 0 ? tot.PyArray_Return() : tot;
         }
 
         /// <summary>
@@ -238,7 +365,7 @@ namespace NumSharp.Backends
             }
 
             if (keepdims)
-                tot.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(tot, inputShape, axis);
             return tot;
         }
 
@@ -247,7 +374,8 @@ namespace NumSharp.Backends
         /// ndarray IS <c>np.fmin.reduce</c> (see <see cref="NanMinMax"/>).
         /// </summary>
         /// <param name="a">The array to reduce.</param>
-        /// <param name="axis">The axis to reduce (null = all axes).</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes reduced together (fmax / fmin.reduce over the set), or
+        /// null for all axes.</param>
         /// <param name="keepdims">Keep the reduced axes as size 1.</param>
         /// <param name="out">NumPy's <c>out=</c>, or null.</param>
         /// <param name="initial">NumPy's <c>initial=</c>, or null.</param>
@@ -256,21 +384,19 @@ namespace NumSharp.Backends
         /// itself when given.</returns>
         /// <exception cref="ArgumentException">The reduction is empty — "zero-size array to reduction operation fmin which
         /// has no identity", NumPy's ValueError.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of bounds.</exception>
         /// <exception cref="ValueError">With a keyword, NumPy's keyword errors (see <see cref="MaxMinNumPy"/>).</exception>
-        public override NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+        public override NDArray NanMin(NDArray a, NDAxis? axis = null, bool keepdims = false, NDArray @out = null,
             object initial = null, NDArray @where = null)
-            // A keyword takes np.fmin.reduce's keyword path (MaxMinNumPy); a keyword-less call the NaN-aware schedules.
-            => @out is not null || initial is not null || @where is not null
-                ? MaxMinNumPy(a, axis, @out, keepdims, initial, @where, MinMaxOp.FMin)
-                : NanMinMax(a, axis, keepdims, MinMaxOp.FMin);
+            => NanMinMaxDispatch(a, axis, keepdims, @out, initial, @where, MinMaxOp.FMin);
 
         /// <summary>
         /// Return maximum of an array or maximum along an axis, ignoring NaNs — NumPy's <c>np.nanmax</c>, which on an
         /// ndarray IS <c>np.fmax.reduce</c> (see <see cref="NanMinMax"/>).
         /// </summary>
         /// <param name="a">The array to reduce.</param>
-        /// <param name="axis">The axis to reduce (null = all axes).</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes reduced together (fmax / fmin.reduce over the set), or
+        /// null for all axes.</param>
         /// <param name="keepdims">Keep the reduced axes as size 1.</param>
         /// <param name="out">NumPy's <c>out=</c>, or null.</param>
         /// <param name="initial">NumPy's <c>initial=</c>, or null.</param>
@@ -279,14 +405,43 @@ namespace NumSharp.Backends
         /// itself when given.</returns>
         /// <exception cref="ArgumentException">The reduction is empty — "zero-size array to reduction operation fmax which
         /// has no identity", NumPy's ValueError.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of bounds.</exception>
         /// <exception cref="ValueError">With a keyword, NumPy's keyword errors (see <see cref="MaxMinNumPy"/>).</exception>
-        public override NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+        public override NDArray NanMax(NDArray a, NDAxis? axis = null, bool keepdims = false, NDArray @out = null,
             object initial = null, NDArray @where = null)
-            // A keyword takes np.fmax.reduce's keyword path (MaxMinNumPy); a keyword-less call the NaN-aware schedules.
-            => @out is not null || initial is not null || @where is not null
-                ? MaxMinNumPy(a, axis, @out, keepdims, initial, @where, MinMaxOp.FMax)
-                : NanMinMax(a, axis, keepdims, MinMaxOp.FMax);
+            => NanMinMaxDispatch(a, axis, keepdims, @out, initial, @where, MinMaxOp.FMax);
+
+        /// <summary>
+        ///     The routes of <see cref="NanMax"/> / <see cref="NanMin"/>: a keyword takes <c>np.fmax.reduce</c>'s keyword path
+        ///     (<see cref="MaxMinNumPy"/>), a keyword-less call over one axis or every axis the NaN-aware schedules
+        ///     (<see cref="NanMinMax"/>), and a tuple that is neither one axis nor every axis (or one NumPy refuses) the keyword
+        ///     path's reduction iterator over the whole set, which raises in NumPy's order.
+        /// </summary>
+        /// <param name="a">The array to reduce.</param>
+        /// <param name="axis">The axis, a tuple of axes, or null for every axis.</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <param name="out">NumPy's <c>out=</c>, or null.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>, or null.</param>
+        /// <param name="where">NumPy's <c>where=</c> bool mask, or null.</param>
+        /// <param name="op"><see cref="MinMaxOp.FMax"/> or <see cref="MinMaxOp.FMin"/>.</param>
+        /// <returns>The reduced array, or <paramref name="out"/> itself when given.</returns>
+        /// <exception cref="ArgumentException">An empty reduction without an initial value (NumPy's ValueError text); a
+        ///     non-bool mask.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of bounds.</exception>
+        /// <exception cref="ValueError">A repeated tuple axis; NumPy's keyword errors.</exception>
+        /// <exception cref="TypeError">Text (fmax / fmin have no text loop).</exception>
+        private NDArray NanMinMaxDispatch(NDArray a, NDAxis? axis, bool keepdims, NDArray @out, object initial, NDArray @where,
+            MinMaxOp op)
+        {
+            int? single = null;
+            if (axis is { IsTuple: true } tuple && !ReductionArguments.TryIntegerForm(a.ndim, tuple, out single))
+                return MaxMinNumPy(a, tuple, @out, keepdims, initial, @where, op);
+            if (axis is not { IsTuple: true })
+                single = ReductionArguments.IntegerAxis(axis);
+            return @out is not null || initial is not null || @where is not null
+                ? MaxMinNumPy(a, single, @out, keepdims, initial, @where, op)
+                : NanMinMax(a, single, keepdims, op);
+        }
 
         /// <summary>
         /// The shared body of <see cref="NanMax"/> / <see cref="NanMin"/>. NumPy's <c>nanmax(a)</c> for a plain ndarray is
@@ -395,7 +550,7 @@ namespace NumSharp.Backends
                             r.Storage.Reshape(new Shape(ks, copy: false));
                         }
 
-                        return r.MarkReductionScalar();
+                        return r.PyArray_Return();
                     }
                 }
 
@@ -415,9 +570,9 @@ namespace NumSharp.Backends
                 if (exact is not null)
                 {
                     if (keepdims)
-                        exact.Storage.ExpandDimension(ax);
+                        ExpandReducedAxis(exact, arr.Shape, ax);
                     // Same PyArray_Return rule as ReduceAMax: a fresh 0-d result is a read-only scalar.
-                    return exact.MarkReductionScalar();
+                    return exact.PyArray_Return();
                 }
             }
 
@@ -489,7 +644,7 @@ namespace NumSharp.Backends
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
                 }
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
             else
             {
@@ -527,7 +682,7 @@ namespace NumSharp.Backends
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
             }
-            return r.MarkReductionScalar();
+            return r.PyArray_Return();
         }
 
         private static float NanReduceScalarFloat(NDArray arr, ReductionOp op)
@@ -678,7 +833,7 @@ namespace NumSharp.Backends
             if (result.size == 0)
             {
                 if (keepdims)
-                    result.Storage.ExpandDimension(axis);
+                    ExpandReducedAxis(result, arr.Shape, axis);
                 return result;
             }
 
@@ -695,10 +850,10 @@ namespace NumSharp.Backends
 
             // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout.
             if (keepdims)
-                result.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(result, arr.Shape, axis);
             // A 1-D input along its only axis leaves a 0-d result, which NumPy returns as a scalar (np.nansum(v, axis=0)
             // is np.float64, empty or not); this exit returned it writeable. A no-op for an array result.
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         /// <summary>
@@ -732,7 +887,7 @@ namespace NumSharp.Backends
             if (result.size == 0)
             {
                 if (keepdims)
-                    result.Storage.ExpandDimension(axis);
+                    ExpandReducedAxis(result, arr.Shape, axis);
                 return result;
             }
 
@@ -785,9 +940,9 @@ namespace NumSharp.Backends
 
             // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout.
             if (keepdims)
-                result.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(result, arr.Shape, axis);
             // The 0-d result of a 1-D input is NumPy's scalar, as in ExecuteNanAxisReduction; a no-op for an array.
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         /// <summary>
@@ -983,7 +1138,7 @@ namespace NumSharp.Backends
                     for (int i = 0; i < arr.ndim; i++) ks[i] = 1;
                     r.Storage.Reshape(new Shape(ks, copy: false));
                 }
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
 
             // Axis reduction: NumPy's own structure, np.sum(where(isnan(a), 0, a), axis, keepdims). The per-slice

@@ -1,11 +1,11 @@
 # Adding a new op to the differential-fuzz oracle
 
-Goal: make NumSharp's `np.<op>` provably bit-identical to NumPy 2.4.2 across the layout × dtype matrix, wired into
+Goal: make NumSharp's `np.<op>` provably bit-identical to NumPy 2.5.4 across the layout × dtype matrix, wired into
 the `FuzzMatrix` gate exactly like every other op. Two edits (generator + registry), one regeneration, one gate run.
 
 ## 0. Prerequisite
 
-`python -c "import numpy; print(numpy.__version__)"` must print `2.4.2`. Anything else can shift the recorded bytes
+`python -c "import numpy; print(numpy.__version__)"` must print `2.5.4` (the release in `numpy-version.txt`). Anything else can shift the recorded bytes
 and make the committed corpus disagree with real NumPy.
 
 ## 1. Choose the tier (`gen_oracle.py`)

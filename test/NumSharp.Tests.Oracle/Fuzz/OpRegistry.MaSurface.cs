@@ -314,8 +314,10 @@ namespace NumSharp.Tests.Fuzz
             return facet;
         }
 
-        /// <summary>The fromfunction callable menu — the C# twin of <c>gen_ma_surface_oracle.FROMFUNCTION_FUNCS</c>. No int
-        /// literals: a C# and a Python literal promote differently against a narrow grid.</summary>
+        /// <summary>The fromfunction callable menu — the C# twin of <c>gen_ma_surface_oracle.FROMFUNCTION_FUNCS</c> and of
+        /// <c>gen_surface_oracle.FROMFUNCTION_FUNCS</c> (np.fromfunction's batch-7 cases take the same names, so both
+        /// replays share this one). No int literals: a C# and a Python literal promote differently against a narrow
+        /// grid.</summary>
         /// <param name="name">The menu name.</param>
         /// <returns>The vectorized function of the per-axis index grids.</returns>
         /// <exception cref="NotSupportedException">An unknown name (a corpus/registry drift).</exception>
@@ -472,7 +474,7 @@ namespace NumSharp.Tests.Fuzz
                 // replay's and is released after the assignment (which copies what it needs), on a throw too.
                 using var d = np.array(new long[] { 5, 6 });
                 using var m = np.array(new[] { true, false });
-                var cast = np.ma.array(d, m).astype(a.dtype);
+                var cast = np.ma.array(d, mask: m).astype(a.dtype);
                 try
                 {
                     a[key] = cast;

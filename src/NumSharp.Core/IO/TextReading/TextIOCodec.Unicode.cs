@@ -246,7 +246,7 @@ namespace NumSharp.IO
                     continue;
                 }
                 if (char.IsSurrogate(c))
-                    throw NDStringCodec.EncodeErrorFor(c, position, position + 1, codecName, "surrogates not allowed");
+                    throw NDStringCodec.EncodeErrorFor(text.ToString(), c, position, position + 1, codecName, "surrogates not allowed");
                 i++;
                 position++;
             }

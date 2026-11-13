@@ -17,6 +17,11 @@ namespace NumSharp.Tests.Build.Analyzer
     ///     generated project that imports the targets file and references the built NumSharp assembly. Categorised
     ///     <c>AnalyzerBuild</c> so the fast in-process unit run can exclude them.
     /// </summary>
+    /// <remarks>
+    ///     They also back the NDW021 claim of the answers that closed GitHub #455 and #511 (Unity's IL2CPP, an ahead-of-time
+    ///     compiler, cannot run NumSharp: "a <c>PublishAot</c> build gets warning NDW021 for the same reason"); the rest of
+    ///     those answers is backed by NumSharp.Tests' <c>Issues/455.cs</c> and <c>Issues/511.cs</c>.
+    /// </remarks>
     [TestClass]
     [TestCategory("AnalyzerBuild")]
     public class Ndw021BuildTests

@@ -45,6 +45,22 @@
     <!-- See the GC posture note above: the server GC's heap count, fixed (a fixed count also turns DATAS off). -->
     <RuntimeHostConfigurationOption Include="System.GC.HeapCount" Value="8" />
   </ItemGroup>
+
+  <!-- The repository's one NumPy pin (../../numpy-version.txt, the release every committed corpus is generated with),
+       compiled in as assembly metadata "NumPyVersion" and read by Utilities/NumPyPin.cs. A corpus-version gate compares
+       a corpus's recorded NumPy against it, so bumping NumPy stays one edit of that file: a corpus left unregenerated
+       fails its gate instead of a literal in a test silently agreeing with the old corpus. A missing or empty pin file
+       fails the build (the Error below), never a test run with an empty version. -->
+  <PropertyGroup>
+    <NumPyPinFile>$(MSBuildThisFileDirectory)..\..\numpy-version.txt</NumPyPinFile>
+    <NumPyVersion Condition="Exists('$(NumPyPinFile)')">$([System.IO.File]::ReadAllText('$(NumPyPinFile)').Trim())</NumPyVersion>
+  </PropertyGroup>
+  <Target Name="CheckNumPyPin" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(NumPyVersion)' == ''" Text="The NumPy pin $(NumPyPinFile) is missing or empty: the corpus-version gates need the pinned release." />
+  </Target>
+  <ItemGroup>
+    <AssemblyMetadata Include="NumPyVersion" Value="$(NumPyVersion)" />
+  </ItemGroup>
 	
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
     <DocumentationFile />
@@ -92,14 +108,14 @@
 
   <!-- The differential-fuzzer oracle corpus (Fuzz/corpus/**) moved to NumSharp.Tests.Oracle. -->
 
-  <!-- .npy/.npz format oracle: real NumPy 2.4.2 output, replayed by NpyOracleTests (no Python in CI). -->
+  <!-- .npy/.npz format oracle: real output of the pinned NumPy (numpy-version.txt), replayed by NpyOracleTests (no Python in CI). -->
   <ItemGroup>
     <None Update="IO\corpus\npy_oracle.zip">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
-  <!-- numpy.dtype / DType-class oracle: real NumPy 2.4.2 member names, descriptor attributes, errors, comparisons,
+  <!-- numpy.dtype / DType-class oracle: the pinned NumPy's real member names, descriptor attributes, errors, comparisons,
        promotions, class attributes and casting resolutions, one file per C long model (llp64 = Windows NumPy,
        lp64 = Linux NumPy), replayed by DTypeOracleTests (no Python in CI). Regenerate:
        python test/oracle/gen_dtype_oracle.py, and the same under WSL's Linux NumPy for lp64. -->
@@ -118,15 +134,15 @@
     </None>
   </ItemGroup>
 
-  <!-- np.asanyarray(object[]) oracle: the dtype NumPy 2.4.2's array coercion gives mixed scalars, in every order,
+  <!-- np.asanyarray(object[]) oracle: the dtype the pinned NumPy's array coercion gives mixed scalars, in every order,
        replayed by np_asanyarray_mixed_scalars_tests. Regenerate: python test/oracle/gen_asanyarray_mixed_oracle.py -->
   <ItemGroup>
-    <None Update="Creation\corpus\asanyarray_mixed.numpy242.jsonl">
+    <None Update="Creation\corpus\asanyarray_mixed.jsonl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
-  <!-- ndarray.flags / ndarray.setflags oracle: real NumPy 2.4.2 flag records + verbatim errors,
+  <!-- ndarray.flags / ndarray.setflags oracle: the pinned NumPy's real flag records + verbatim errors,
        replayed by FlagsOracleTests (no Python in CI). Regenerate: python test/oracle/gen_flags_oracle.py -->
   <ItemGroup>
     <None Update="Backends\corpus\flags_oracle.jsonl">
@@ -134,7 +150,7 @@
     </None>
   </ItemGroup>
 
-  <!-- Layout-parity oracle: real NumPy 2.4.2 layout/strides/flags/shares/VALUES records for the
+  <!-- Layout-parity oracle: the pinned NumPy's real layout/strides/flags/shares/VALUES records for the
        modelled numpy-internal representations (reshape nocopy-views, KEEPORDER sorts/copies, the
        concat/stack stride vote, nonzero shared-buffer views, linspace owndata, read-only reduction
        scalars, broadcast writeable inherit), replayed bit-exact by LayoutParityOracleTests

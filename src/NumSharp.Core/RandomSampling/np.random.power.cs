@@ -27,11 +27,11 @@ namespace NumSharp
         ///     reproduce. One draw per value (bulk-filled, transformed in place); byte-identical to
         ///     <c>np.random.RandomState(seed).power</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray power(double a, Shape size)
+        public NDArray power(double a, Shape? size)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_POSITIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -39,11 +39,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyPower(ref one, a));
+                        return NDArray.WritableScalar(LegacyPower(ref one, a));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;
@@ -61,60 +61,6 @@ namespace NumSharp
 
             return ret;
         }
-
-        /// <summary>
-        ///     Draws samples in [0, 1] from a power distribution with positive exponent a - 1.
-        /// </summary>
-        /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
-        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray power(double a, int[] size)
-            => power(a, new Shape(size));
-
-        /// <summary>
-        ///     Draws samples in [0, 1] from a power distribution with positive exponent a - 1.
-        /// </summary>
-        /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
-        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray power(double a, long[] size)
-            => power(a, new Shape(size));
-
-        /// <summary>
-        ///     Draws samples in [0, 1] from a power distribution with positive exponent a - 1.
-        /// </summary>
-        /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
-        /// <param name="size">Output shape as a single integer — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
-        /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
-        /// <exception cref="ValueError"><paramref name="a"/> is <c>&lt;= 0</c>, or <paramref name="size"/> is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray power(double a, long size)
-            => power(a, new Shape(new long[] { size }, copy: false));
 
         /// <summary>
         ///     Draws a single sample in [0, 1] from a power distribution with positive exponent a - 1.

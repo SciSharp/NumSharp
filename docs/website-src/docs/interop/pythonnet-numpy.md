@@ -16,7 +16,7 @@ survive the crossing, who frees what, the codec, the GIL, dtypes and versions.
 [The GIL](#the-gil) · [Dtypes](#dtypes) · [Versions](#versions) ·
 [Troubleshooting](#troubleshooting) · [Claims](#claims-ledger)
 
-> Verified on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 · net8.0/net10.0.
+> Verified on CPython 3.12.12 · numpy 2.5.4 · pythonnet 3.0.5 · net8.0/net10.0.
 > Every claim below is reproduced by a test in `NumSharp.Tests.Interop`.
 
 ---
@@ -330,7 +330,7 @@ int leased = NDArrayPythonInterop.LiveImports;   // Python buffers held by NumSh
 `BufferError: Existing exports of data: object cannot be re-sized`; numpy's
 `resize(refcheck=True)` refuses the same way. Mirror image: while Python holds a view of a NumSharp
 array, `nd.resize(...)` raises NumPy's own wording - `cannot resize an array that references or is
-referenced by another array in this way`. Dispose the view and both locks lift.
+referenced by another object in this way`. Dispose the view and both locks lift.
 
 <sub>See here [`Lifetime_ALiveConversionLocksResizing_BothSides`][gate]</sub>
 
@@ -680,7 +680,7 @@ import route works uniformly across pythonnet 3.0.x.
 | `the exporter's buffer is read-only` | You asked for a writable view of `bytes` or a `writeable=False` array. Pass `allowReadonly: true`, or `ToNDArray()` to copy |
 | `assignment destination is read-only` | You wrote through a non-writeable view - a read-only or broadcast source. Copy first if you need to mutate |
 | `Existing exports of data: object cannot be re-sized` | A live NumSharp view leases that object. `Dispose()` the view to release the lock |
-| `cannot resize an array that references or is referenced by another array in this way` | A live Python export (or another NumSharp view) pins the buffer. Release it, or copy first |
+| `cannot resize an array that references or is referenced by another object in this way` | A live Python export (or another NumSharp view) pins the buffer. Release it, or copy first |
 | `cannot resize this array: it does not own its data` | Import views never own their memory. `np.require(view, null, "O")` for an owning copy |
 | `big-endian dtype '>f8' cannot be shared with a native-endian NumSharp buffer` | Only the zero-copy *view* refuses big-endian. `ToNDArray()` copies it and byte-reverses each value; or byte-swap on the Python side first: `arr.astype(arr.dtype.newbyteorder('<'))` |
 | `big-endian UCS-4 text '>U2' cannot be shared with a native-endian NumSharp buffer` | Only the zero-copy *view* refuses big-endian text. `ToNDArray()` copies it and byte-reverses each code point into a native `U2` |

@@ -157,7 +157,7 @@ public class np_average_BattleTests
     {
         // NumPy: returns (avg, scl); for axis=1 weights=[0.25,0.75], scl=[1,1,1]
         var data = np.arange(6).reshape(3, 2);
-        var (avg, scl) = np.average_returned(data, axis: 1, weights: np.array(new[] { 0.25, 0.75 }));
+        var (avg, scl) = np.average(data, axis: 1, weights: np.array(new[] { 0.25, 0.75 }), returned: true);
         avg.shape.Should().Equal(new long[] { 3 });
         scl.shape.Should().Equal(new long[] { 3 });
         At(avg, 0).Should().BeApproximately(0.75, 1e-12);
@@ -171,7 +171,7 @@ public class np_average_BattleTests
     {
         // NumPy: scl broadcast to avg shape; for shape (3,2) axis=1, count=2 each
         var data = np.arange(6).reshape(3, 2);
-        var (avg, scl) = np.average_returned(data, axis: 1);
+        var (avg, scl) = np.average(data, axis: 1, returned: true);
         avg.shape.Should().Equal(new long[] { 3 });
         scl.shape.Should().Equal(new long[] { 3 });
         for (int i = 0; i < 3; i++) At(scl, i).Should().Be(2.0);
@@ -182,7 +182,7 @@ public class np_average_BattleTests
     {
         // NumPy: np.average(data, returned=True) -> (2.5, 6.0)
         var data = np.arange(6).reshape(3, 2);
-        var (avg, scl) = np.average_returned(data);
+        var (avg, scl) = np.average(data, returned: true);
         At(avg, 0).Should().Be(2.5);
         At(scl, 0).Should().Be(6.0);
     }
@@ -193,7 +193,7 @@ public class np_average_BattleTests
         // NumPy: data=arange(6).reshape(3,2); W=[[1,2],[3,4],[5,6]] -> avg=10/3, scl=21
         var data = np.arange(6).reshape(3, 2).astype(NPTypeCode.Double);
         var W = np.array(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 } });
-        var (avg, scl) = np.average_returned(data, weights: W);
+        var (avg, scl) = np.average(data, weights: W, returned: true);
         At(avg, 0).Should().BeApproximately(10.0 / 3.0, 1e-12);
         At(scl, 0).Should().BeApproximately(21.0, 1e-12);
     }
@@ -272,7 +272,7 @@ public class np_average_BattleTests
         var a = np.array(new[] { 1.0, 2.0, 3.0 });
         var w = np.array(new[] { 1.0, -1.0, 0.0 });
         Action act = () => np.average(a, weights: w);
-        act.Should().Throw<DivideByZeroException>();
+        act.Should().Throw<ZeroDivisionError>();
     }
 
     [TestMethod]
@@ -407,7 +407,7 @@ public class np_average_BattleTests
         var a = np.array(new System.Numerics.Complex[] { new(1, 0), new(2, 0), new(3, 0) });
         var w = np.array(new System.Numerics.Complex[] { new(1, 0), new(-1, 0), new(0, 0) });
         Action act = () => np.average(a, weights: w);
-        act.Should().Throw<DivideByZeroException>();
+        act.Should().Throw<ZeroDivisionError>();
     }
 
     [TestMethod]
@@ -445,7 +445,7 @@ public class np_average_BattleTests
         // because avg.size == 0 and scl = a.size / avg.size = 0/0
         var a = np.zeros(new Shape(0, 3));
         Action act = () => np.average(a, axis: 1);
-        act.Should().Throw<DivideByZeroException>();
+        act.Should().Throw<ZeroDivisionError>();
     }
 
     [TestMethod]
@@ -523,7 +523,7 @@ public class np_average_BattleTests
     {
         // NumPy: returned axis=None unweighted -> avg=scalar, scl=scalar count
         var data = np.arange(6).reshape(3, 2);
-        var (avg, scl) = np.average_returned(data);
+        var (avg, scl) = np.average(data, returned: true);
         avg.shape.Should().Equal(Array.Empty<long>());
         scl.shape.Should().Equal(Array.Empty<long>());
         At(avg, 0).Should().Be(2.5);
@@ -535,7 +535,7 @@ public class np_average_BattleTests
     {
         // NumPy: returned, axis=None, keepdims=True -> shapes (1,1) both
         var data = np.arange(6).reshape(3, 2);
-        var (avg, scl) = np.average_returned(data, axis: (int?)null, keepdims: true);
+        var (avg, scl) = np.average(data, axis: (int?)null, keepdims: true, returned: true);
         avg.shape.Should().Equal(new long[] { 1, 1 });
         scl.shape.Should().Equal(new long[] { 1, 1 });
         At(avg, 0).Should().Be(2.5);

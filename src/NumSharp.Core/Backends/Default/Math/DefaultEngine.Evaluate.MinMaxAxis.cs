@@ -173,7 +173,7 @@ namespace NumSharp.Backends
                 Buffer.MemoryCopy(slot, (byte*)flat.Address + flat.Shape.offset * t.SizeOf(), t.SizeOf(), t.SizeOf());
                 childNdim = nd;
                 // The engine's np.nanmax returns a read-only numpy-scalar 0-d (PyArray_Return); keep that contract.
-                return flat.MarkReductionScalar();
+                return flat.PyArray_Return();
             }
 
             int axis = NormalizeAxis(reduce.Axis.Value, nd);
@@ -191,7 +191,7 @@ namespace NumSharp.Backends
             childNdim = nd;
             if (reduce.Keepdims)
                 reduced.Storage.ExpandDimension(axis);   // a fresh result: relabelling its shape in place is safe
-            return reduced.MarkReductionScalar();
+            return reduced.PyArray_Return();
         }
 
         /// <summary>

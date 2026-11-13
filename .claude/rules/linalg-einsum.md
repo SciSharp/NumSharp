@@ -80,12 +80,17 @@ numerics exist WITHOUT a backend depends on what a portable managed algorithm co
   and `([5,0],[0,1])` are index errors); mismatched extents and unequal list lengths → `ValueError("shape-mismatch for
   sum")`, and since the extent comparison short-circuits, a mismatch found earlier hides a later out-of-range axis
   (`([0,1],[0,5])` is the shape mismatch). A negative count contracts nothing (`axes=-1` ≡ `axes=0` ≡ the outer product).
+  NumPy's `axes` is ONE argument: `np.tensordot` / `np.linalg.tensordot` take an `int`, an `(int, int)` pair or a
+  `(int[] AxesA, int[] AxesB)` pair of lists (`axes: (new[] {1, 0}, new[] {0, 1})` is NumPy's `axes=([1, 0], [0, 1])`);
+  the engine members keep their two-list parameters.
 - `np.linalg.multi_dot` requires every non-endpoint operand to be 2-D: NumPy promotes a 1-D first/last operand (row /
   column) and then runs `_assert_2d` over all of them, so a 0-D, a 3-D+, or a 1-D operand in a middle position raises
   `LinAlgError("{ndim}-dimensional array given. Array must be two-dimensional")` (without it the Cormen cost model would
   read a phantom `dimensions[1]`). `out=` is threaded into the final dot, so it takes the TWO-dimensional product shape
   even for a vector endpoint (`multi_dot([v, B, C], out)` wants `(1,k)` and returns a raveled `(k,)` view). Exactly two
-  operands is a plain `np.dot` and skips the 2-D check.
+  operands is a plain `np.dot` and skips the 2-D check. Its one signature is NumPy's `multi_dot(NDArray[] arrays, NDArray
+  out = null)`: separate arrays (`multi_dot(A, B, C)`, NumPy's TypeError) and a single stacked ndarray (NumPy's sequence
+  of its first-axis slices, QB-61's q168 family) do not compile.
 - The `np.linalg` Array-API forms are not aliases: `linalg.trace`/`linalg.diagonal` reduce the LAST two axes where
   `np.trace`/`np.diagonal` take the first (a `(2,3,3)` stack gives `(2,)` against `(3,)`); `linalg.outer` demands 1-D
   where `np.outer` flattens anything; `linalg.cross` demands 3-vectors.
@@ -126,7 +131,10 @@ parser).
   byte-identical to NumPy's `einsum(..., optimize=True)`. NumPy's default `einsum` (`optimize=False`) is its own C
   `sum_of_products` loop and not BLAS-identical even inside NumPy, so a float comparison with a plain NumPy einsum call is
   a ≤ 3-ULP comparison. There is no `TryEinsum` seam: N operands fold left to right in `TensorEngine.Einsum`, each step
-  through `PairwiseContract`.
+  through `PairwiseContract`. Kept by decision (the owner, 2026-11-12, "Keep the BLAS route", the OptunaSharp brief's
+  item 3): a bit-exact default would port `c_einsum` and give up BLAS there (NumPy's own default takes 29.7 ms for
+  `'ij,jk->ik'` over 500 x 500, 2.0 ms with `optimize=True`); `LinearAlgebra/EinsumContractionOrder.Test.cs` is the
+  `[Misaligned]` record (NSGA-III's `"ni,pi,p,pm->npm"`: within 2 ULP, 19 of 60 elements bit-identical on this host).
 - Values: integer and boolean contractions are byte-exact everywhere; product-shaped cases (matmul, batched matmul,
   matvec, `ij,kj->ik`, tensor contractions, inner/outer/kron) equal `np.matmul`/`np.multiply` bit for bit. A pure float
   summation outside a product (`ij->i`, a diagonal then a sum, the accumulation across three or more float operands) can
@@ -176,7 +184,7 @@ parser).
   - Every diagonal is validated BEFORE any cross-operand extent (NumPy collapses all diagonals first).
   - The implicit output is ASCII-ordered, so an upper-case label sorts before a lower-case one (`einsum("zA", a)`
     transposes a `(2,3)`; `einsum("Az", a)` does not).
-  - The sublist alphabet is `'ABC…Zabc…z'`, upper case first (NumPy 2.4.2's `einsum_symbols`), so index order equals
+  - The sublist alphabet is `'ABC…Zabc…z'`, upper case first (NumPy 2.5.4's `einsum_symbols`), so index order equals
     ASCII order (`einsum(a, [0,26])` on `(2,3)` keeps `(2,3)`).
   - Spaces are legal anywhere; a `>` without its `-` is scanned as a label and rejected as an invalid subscript; a lone
     `-` gets the missing-arrow message.
@@ -188,7 +196,7 @@ parser).
 - `np.einsum_path` (the statements: `TensorEngine.EinsumPath`, `Backends/Default/LinearAlgebra/Default.EinsumPath.cs`,
   on the first operand's engine; the facades, the planner and the path type:
   `LinearAlgebra/{np.einsum_path,EinsumPathPlanner,EinsumPath}.cs`), a route-for-route port of NumPy
-  2.4.2's `einsumfunc.py`: `_parse_einsum_input`, the `_greedy_path`/`_optimal_path` searches with the `_flop_count` cost
+  2.5.4's `einsumfunc.py`: `_parse_einsum_input`, the `_greedy_path`/`_optimal_path` searches with the `_flop_count` cost
   model, and the info-string builder. `np.einsum_path(subscripts, operands, optimize)` returns `(EinsumPath path, string
   repr)`; `EinsumPath` is a `readonly struct` (Deconstruct, indexer, `Steps`/`Count`, `ToList()` for NumPy's raw list,
   NumPy-format `ToString`). The path and every metric are byte-identical to NumPy. `optimize=` takes NumPy's whole
@@ -206,7 +214,7 @@ parser).
   (.NET's `"0.000e+00"` rounds half away). Ellipsis placeholder letters are drawn deterministically (NumPy's come from a
   hash-randomized set; only those display letters differ). `einsum_call=True` is not ported (NumPy-internal).
 - Gates: `LinearAlgebra/EinsumPathTests.cs`, `EinsumSubscriptParityTests.cs` (the grammar), `EinsumContractionTests.cs`
-  (the values against NumPy 2.4.2), and the `einsum` tier.
+  (the values against NumPy 2.5.4), and the `einsum` tier.
 
 ## Gates of the linear-algebra surface
 

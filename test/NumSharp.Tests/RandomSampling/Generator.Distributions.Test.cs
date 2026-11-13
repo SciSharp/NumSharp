@@ -703,7 +703,9 @@ namespace NumSharp.Tests.RandomSampling
         ///     <c>expm1</c> divergence is pinned by <see cref="ParetoPower_InBandExpm1_WithinDocumentedUlp"/>.
         /// </summary>
         /// <param name="probe">The stream, as NumPy's generator named it (see <see cref="LongStreamCalls"/>).</param>
-        /// <param name="sha256">NumPy 2.4.2's <c>hashlib.sha256(a.tobytes()).hexdigest()</c>.</param>
+        /// <param name="sha256">NumPy 2.5.4's <c>hashlib.sha256(a.tobytes()).hexdigest()</c>. Only <c>binomial 1000,0.7</c>
+        ///     differs from NumPy 2.4.2's (<c>1637b610…</c>): NumPy 2.5's corrected BTPE Stirling bound (gh-31238) moved one
+        ///     of its Step52 acceptances; every other stream hashes identically on both versions.</param>
         /// <exception cref="AssertFailedException">On the pinned win-amd64 host, the digest differs.</exception>
         /// <exception cref="AssertInconclusiveException">Off the pinned host, the digest differs.</exception>
         /// <remarks>
@@ -750,7 +752,7 @@ namespace NumSharp.Tests.RandomSampling
         [DataRow("triangular 0,0,1", "45e288f9e55533faa05dbce254128cca2ad7f826e183188d49c6d8e4fe7da2b2")]
         [DataRow("binomial 10,0.35", "bd97bd99a6fb4c00285f7b05433d92124003eace49242d2e4dfaff221775279a")]
         [DataRow("binomial 100,0.4", "9ad44487142f8bc09cf13a0e416279a2cd0633adfd2cb147411aaf96d9f8e9c0")]
-        [DataRow("binomial 1000,0.7", "1637b6102ef861ca1f1800708b21bf465cdd39b452b69d27a1940619198360cd")]
+        [DataRow("binomial 1000,0.7", "2ed1c4c7cd4213c68a92b693a9e7715c551603b0ba961d0b7e74931eda1b1b5d")]
         [DataRow("binomial 20,0.9", "407b3a6d012e71bc487cf74801a67a15ba6faed99be9ae83af9762c17e9695e6")]
         [DataRow("negative_binomial 5,0.4", "2b08d8f7e570c03639421f60ad908b65b9df4c5428ba7a94be4d0d4d73cfeb61")]
         [DataRow("negative_binomial 0.5,0.5", "38cc6ab37d40b0ad8450de00f03de76c1fbe614df0243e395f0cbdf83650c811")]
@@ -785,7 +787,7 @@ namespace NumSharp.Tests.RandomSampling
         {
             string actual = Sha256(LongStreamCalls[probe](np.random.default_rng(2024)));
             if (actual != sha256)
-                HostLibm.InconclusiveOffPinnedHost($"{probe}: the 20000-draw stream hashes to {actual}, NumPy 2.4.2's to {sha256}");
+                HostLibm.InconclusiveOffPinnedHost($"{probe}: the 20000-draw stream hashes to {actual}, NumPy 2.5.4's to {sha256}");
             Assert.AreEqual(sha256, actual, probe);
         }
 
@@ -884,6 +886,16 @@ namespace NumSharp.Tests.RandomSampling
                 Assert.ThrowsException<LinAlgError>(() => r.multivariate_normal(new[] { 0.0, 0.0 }, indef, new Shape(2), method: "cholesky"));
                 return r.random(new Shape(1));
             };
+            // NumPy 2.5's svd gufunc refuses a non-finite covariance before gesdd (all_finite): an inf raises like a NaN,
+            // after the normals were drawn (NumPy 2.4 sampled NaN for an inf).
+            var infCov = new double[,] { { double.PositiveInfinity, 0 }, { 0, 1 } };
+            d["inf cov svd"] = r => r.multivariate_normal(new[] { 0.0, 0.0 }, infCov, new Shape(2));
+            d["nan cov svd"] = r => r.multivariate_normal(new[] { 0.0, 0.0 }, new double[,] { { double.NaN, 0 }, { 0, 1 } }, new Shape(2));
+            d["after svd non-finite"] = r =>
+            {
+                Assert.ThrowsException<LinAlgError>(() => r.multivariate_normal(new[] { 0.0, 0.0 }, infCov, new Shape(2)));
+                return r.random(new Shape(1));
+            };
             return d;
         }
 
@@ -895,12 +907,13 @@ namespace NumSharp.Tests.RandomSampling
         ///     failure has already advanced the stream).
         /// </summary>
         /// <param name="probe">The call, as NumPy's generator named it (see <see cref="MultivariateNormalCalls"/>).</param>
-        /// <param name="expected">NumPy 2.4.2's values in C order, or <c>ERR Type: message</c>.</param>
+        /// <param name="expected">NumPy 2.5.4's values in C order (its scipy-openblas moved one gesdd bit of the c3 rows from
+        ///     2.4.2's), or <c>ERR Type: message</c>.</param>
         [TestMethod]
         [DataRow("identity svd", "0.30471707975443135, -1.0399841062404955, 0.7504511958064572, 0.9405647163912139, -1.9510351886538364, -1.302179506862318")]
         [DataRow("c2 svd", "-0.6823179059679519, 1.7726219956159874, 1.2004210980718155, 1.7095233938671255")]
-        [DataRow("c3 svd size(2,)", "0.2781853118087412, 2.637609032475059, 3.749286633008141, -0.8709623927900345, 3.6383514183201138, 2.6795286088545063")]
-        [DataRow("c3 svd size(2,2)", "0.2781853118087412, 2.637609032475059, 3.749286633008141, -0.8709623927900345, 3.6383514183201138, 2.6795286088545063, 0.7312520150650741, 2.2331240573456426, 3.0715425492640787, 2.4376702327446305, 1.3930169789850748, 3.3213038502097505")]
+        [DataRow("c3 svd size(2,)", "0.2781853118087412, 2.637609032475059, 3.749286633008141, -0.8709623927900347, 3.6383514183201138, 2.6795286088545063")]
+        [DataRow("c3 svd size(2,2)", "0.2781853118087412, 2.637609032475059, 3.749286633008141, -0.8709623927900347, 3.6383514183201138, 2.6795286088545063, 0.7312520150650741, 2.2331240573456426, 3.0715425492640787, 2.4376702327446305, 1.3930169789850748, 3.3213038502097505")]
         [DataRow("c3 svd size None", "0.2781853118087412, 2.637609032475059, 3.749286633008141")]
         [DataRow("singular svd", "-0.30471707975443124, -0.30471707975443135, -0.750451195806457, -0.7504511958064572")]
         [DataRow("indefinite svd warn", "0.36217913319422373, -1.1085804945035467, -1.5841909423986724, -0.2540315641886145")]
@@ -941,6 +954,9 @@ namespace NumSharp.Tests.RandomSampling
         [DataRow("empty", "ERR ValueError: cannot reshape array of size 0 into shape (0)")]
         [DataRow("after raise", "0.09417734788764953")]
         [DataRow("after cholesky failure", "0.09417734788764953")]
+        [DataRow("inf cov svd", "ERR LinAlgError: SVD did not converge")]
+        [DataRow("nan cov svd", "ERR LinAlgError: SVD did not converge")]
+        [DataRow("after svd non-finite", "0.09417734788764953")]
         [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
         public void MultivariateNormal_WithLapackBackend_ByteIdenticalToNumPy(string probe, string expected)
         {
@@ -1016,6 +1032,10 @@ namespace NumSharp.Tests.RandomSampling
             AssertProbe(() => MultivariateNormalCalls["empty"](np.random.default_rng(42)), "ERR ValueError: cannot reshape array of size 0 into shape (0)", "empty");
             AssertProbe(() => MultivariateNormalCalls["after raise"](np.random.default_rng(42)), "0.09417734788764953", "after raise");
             AssertProbe(() => MultivariateNormalCalls["after cholesky failure"](np.random.default_rng(42)), "0.09417734788764953", "after cholesky failure");
+            // NumPy 2.5's non-finite refusal is NumPy's own check, not LAPACK's: the managed SVD route makes it too.
+            AssertProbe(() => MultivariateNormalCalls["inf cov svd"](np.random.default_rng(42)), "ERR LinAlgError: SVD did not converge", "inf cov svd");
+            AssertProbe(() => MultivariateNormalCalls["nan cov svd"](np.random.default_rng(42)), "ERR LinAlgError: SVD did not converge", "nan cov svd");
+            AssertProbe(() => MultivariateNormalCalls["after svd non-finite"](np.random.default_rng(42)), "0.09417734788764953", "after svd non-finite");
             // check_valid is not validated for cholesky (NumPy skips it: the factorization already proves validity).
             AssertValues(MultivariateNormalCalls["bad check_valid cholesky"](np.random.default_rng(42)),
                 "0.30471707975443135, -1.0399841062404955, 0.7504511958064572, 0.9405647163912139", "bad check_valid cholesky");

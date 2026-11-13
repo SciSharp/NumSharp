@@ -28,9 +28,9 @@ namespace NumSharp
         ///     which drew a different stream. Byte-identical to <c>np.random.RandomState(seed).standard_cauchy</c>; holds the
         ///     bit generator's lock for the draws.
         /// </remarks>
-        public NDArray standard_cauchy(Shape size)
+        public NDArray standard_cauchy(Shape? size)
         {
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -38,11 +38,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyStandardCauchy(ref one));
+                        return NDArray.WritableScalar(LegacyStandardCauchy(ref one));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

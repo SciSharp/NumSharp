@@ -56,11 +56,51 @@ namespace NumSharp
                 return x1.TensorEngine.Linalg.Tensordot(x1, x2, axes);
             }
 
-            /// <inheritdoc cref="tensordot(NDArray, NDArray, int)"/>
-            public static NDArray tensordot(NDArray x1, NDArray x2, int[] axesA, int[] axesB)
+            /// <summary>
+            ///     Tensor contraction pairing ONE axis of <paramref name="x1"/> with one of <paramref name="x2"/> — NumPy's
+            ///     <c>np.linalg.tensordot(x1, x2, axes=(1, 0))</c>, the Array-API spelling of
+            ///     <see cref="np.tensordot(NDArray, NDArray, ValueTuple{int, int})"/>.
+            /// </summary>
+            /// <param name="x1">The first tensor.</param>
+            /// <param name="x2">The second tensor.</param>
+            /// <param name="axes">The axis of <paramref name="x1"/> and the axis of <paramref name="x2"/> to contract (NumPy's
+            ///     <c>axes_a, axes_b = axes</c> makes each a one-element list).</param>
+            /// <returns>A new array of <paramref name="x1"/>'s kept axes followed by <paramref name="x2"/>'s.</returns>
+            /// <exception cref="ArgumentNullException"><paramref name="x1"/> is null.</exception>
+            /// <exception cref="IndexError">An axis out of range (<c>tuple index out of range</c>).</exception>
+            /// <exception cref="ValueError">Extents that differ (<c>shape-mismatch for sum</c>).</exception>
+            /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensordot.html — NumPy's axes is
+            ///     keyword-only there; C# cannot refuse a positional pair, so <c>tensordot(x1, x2, (1, 0))</c> also binds.
+            ///     Added in API-parity batch 7 (np.tensordot had the pair already).</remarks>
+            public static NDArray tensordot(NDArray x1, NDArray x2, (int AxisA, int AxisB) axes)
             {
                 if (x1 is null) throw new ArgumentNullException(nameof(x1));
-                return x1.TensorEngine.Linalg.Tensordot(x1, x2, axesA, axesB);
+                return x1.TensorEngine.Linalg.Tensordot(x1, x2, new[] { axes.AxisA }, new[] { axes.AxisB });
+            }
+
+            /// <summary>
+            ///     Tensor contraction pairing a list of axes of <paramref name="x1"/> with a list of axes of
+            ///     <paramref name="x2"/>, element by element — NumPy's <c>np.linalg.tensordot(x1, x2, axes=([1, 0], [0, 1]))</c>,
+            ///     the pair as ONE argument: <c>np.linalg.tensordot(x1, x2, axes: (new[] { 1, 0 }, new[] { 0, 1 }))</c>.
+            /// </summary>
+            /// <param name="x1">The first tensor.</param>
+            /// <param name="x2">The second tensor.</param>
+            /// <param name="axes">NumPy's pair of axis lists: <c>AxesA</c> of <paramref name="x1"/>, <c>AxesB</c> of
+            ///     <paramref name="x2"/>, paired element by element.</param>
+            /// <returns>A new array of <paramref name="x1"/>'s kept axes followed by <paramref name="x2"/>'s.</returns>
+            /// <exception cref="ArgumentNullException"><paramref name="x1"/> is null.</exception>
+            /// <exception cref="ValueError"><c>duplicate axes are not allowed in tensordot</c> (checked first), or
+            ///     <c>shape-mismatch for sum</c> for unequal list lengths and mismatched extents.</exception>
+            /// <exception cref="IndexError">A contraction axis out of range (<c>tuple index out of range</c>).</exception>
+            /// <exception cref="System.NullReferenceException">An axis list is null.</exception>
+            /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensordot.html — the statements are
+            ///     the Linalg engine's <c>Tensordot(x1, x2, int[], int[])</c>. Until API-parity batch 7 the pair was split into
+            ///     two parameters, <c>tensordot(x1, x2, int[] axesA, int[] axesB)</c>, a four-argument call NumPy refuses
+            ///     (<c>tensordot() takes 2 positional arguments but 4 were given</c>).</remarks>
+            public static NDArray tensordot(NDArray x1, NDArray x2, (int[] AxesA, int[] AxesB) axes)
+            {
+                if (x1 is null) throw new ArgumentNullException(nameof(x1));
+                return x1.TensorEngine.Linalg.Tensordot(x1, x2, axes.AxesA, axes.AxesB);
             }
 
             /// <summary>

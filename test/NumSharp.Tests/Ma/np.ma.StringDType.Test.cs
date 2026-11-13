@@ -95,9 +95,9 @@ namespace NumSharp.Tests.Ma
             masked.Should().Throw<TypeError>().WithMessage("Unsuitable type StringDType() for calculating minimum.");
             var three = np.ma.unique(np.ma.array(np.array(new[] { "de", "c", "ab", "c" }, T)));
             three.shape.Should().Equal(3L);
-            three._data.GetAtIndex(0).Should().Be("ab");
-            three._data.GetAtIndex(1).Should().Be("c");
-            three._data.GetAtIndex(2).Should().Be("de");
+            three.values._data.GetAtIndex(0).Should().Be("ab");
+            three.values._data.GetAtIndex(1).Should().Be("c");
+            three.values._data.GetAtIndex(2).Should().Be("de");
             three.dtype.Should().Be(T);
             ReferenceEquals(three.mask, np.ma.nomask).Should().BeTrue();
 
@@ -107,7 +107,7 @@ namespace NumSharp.Tests.Ma
             ReferenceEquals(empty.mask, np.ma.nomask).Should().BeTrue();
             var one = np.ma.unique(np.ma.array(np.array("ab", T)));
             one.shape.Should().Equal(1L);
-            one._data.GetAtIndex(0).Should().Be("ab");
+            one.values._data.GetAtIndex(0).Should().Be("ab");
         }
 
         /// <summary>
@@ -170,19 +170,24 @@ namespace NumSharp.Tests.Ma
         }
 
         /// <summary>
-        ///     The legacy products (<c>dot</c>, <c>inner</c>, <c>convolve</c>, <c>correlate</c>) look a legacy descriptor up
-        ///     first: a <c>StringDType</c> first operand (or a <c>U</c> one beside it) is refused there; any other class has no
-        ///     common DType with <c>StringDType</c>, so NumPy multiplies Python objects and its first product decides
-        ///     (<c>1.5 * 'x'</c>, <c>b'a' * 'x'</c>, <c>1.5 * None</c>); a product that does not raise builds an object array.
+        ///     NumPy 2.5's products (<c>dot</c>, <c>inner</c>, <c>convolve</c>, <c>correlate</c>) discover the operands' common
+        ///     descriptor first: <c>StringDType</c> with <c>StringDType</c> (or a <c>U</c> operand, which then fails its 'safe'
+        ///     conversion) is a <c>StringDType</c> product with no dot function; any other class has no common descriptor with
+        ///     <c>StringDType</c>, so NumPy multiplies Python objects and its first product decides (<c>'ab' * 1.5</c>,
+        ///     <c>b'a' * 'x'</c>, <c>1.5 * None</c>), in either operand order; a product that does not raise builds an object
+        ///     array. NumPy 2.4 refused a <c>StringDType</c> first operand by its legacy type lookup instead.
         /// </summary>
         [TestMethod]
-        public void Products_LegacyDescriptorOrFirstObjectProduct()
+        public void Products_CommonDescriptorOrFirstObjectProduct()
         {
-            const string legacy = "This function currently only supports native NumPy dtypes and old-style user dtypes, but " +
-                "the dtype was StringDType().\n(The function may need to be updated to support arbitraryuser dtypes.)";
             var f3 = np.array(new[] { 1.5, 2.0, 3.0 });
             Action dotTF = () => np.ma.dot(MT(), f3);
-            dotTF.Should().Throw<TypeError>().Which.Message.Should().Be(legacy);
+            dotTF.Should().Throw<TypeError>().WithMessage("can't multiply sequence by non-int of type 'float'");
+            Action dotTT = () => np.ma.dot(MT(), MT());
+            dotTT.Should().Throw<ValueError>().WithMessage("dot not available for this type");
+            Action dotTU = () => np.ma.dot(MT(), np.ma.array(np.array(new[] { "ab", "c", "de" }), mask: new[] { true, false, false }));
+            dotTU.Should().Throw<TypeError>()
+                .WithMessage("Cannot cast array data from dtype('<U2') to StringDType() according to the rule 'safe'");
             Action dotFT = () => np.ma.dot(f3, MT());
             dotFT.Should().Throw<TypeError>().WithMessage("can't multiply sequence by non-int of type 'float'");
             Action dotST = () => np.dot(np.array(new[] { "a", "b" }, np.dtype("|S1")), np.array(new[] { "x", "y" }, T));
@@ -196,9 +201,10 @@ namespace NumSharp.Tests.Ma
             Action misaligned = () => np.dot(f3, np.array(new[] { "x", "y" }, T));
             misaligned.Should().Throw<IncorrectShapeException>().WithMessage("shapes (3,) and (2,) not aligned: 3 (dim 0) != 2 (dim 0)");
 
-            // np.convolve swaps by length in Python first: the StringDType operand then comes first.
+            // np.convolve swaps by length in Python first: the StringDType operand then comes first, and 'x' * 2.0 names the
+            // float too.
             Action convolveSwap = () => np.convolve(np.array(new[] { 1.5, 2.0 }), np.array(new[] { "x", "y", "z" }, T));
-            convolveSwap.Should().Throw<TypeError>().Which.Message.Should().Be(legacy);
+            convolveSwap.Should().Throw<TypeError>().WithMessage("can't multiply sequence by non-int of type 'float'");
             Action convolve = () => np.convolve(f3, np.array(new[] { "x", "y", "z" }, T));
             convolve.Should().Throw<TypeError>().WithMessage("can't multiply sequence by non-int of type 'float'");
             // np.correlate's C swap makes the StringDType operand the left factor: 'x' * 1.5 names the float too.

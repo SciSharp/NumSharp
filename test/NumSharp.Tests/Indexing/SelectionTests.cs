@@ -315,7 +315,7 @@ public class SelectionTests
     {
         var a = np.array(new int[] { 10, 20, 30, 40, 50 });
         var idx = np.array(new int[] { 0, 2, 4 });
-        var outArr = np.zeros<int>(new int[] { 3 });
+        var outArr = np.zeros(new int[] { 3 }, np.int32);
         var r = np.take(a, idx, @out: outArr);
         ReferenceEquals(r, outArr).Should().BeTrue("out= must return the supplied buffer");
         outArr.ToArray<int>().Should().Equal(10, 30, 50);
@@ -324,12 +324,10 @@ public class SelectionTests
     [TestMethod]
     public void Take_OutParam_DtypeCast_FillsWithCastedValues()
     {
-        // NumPy out= permits unsafe writeback IF the source's dtype can be safely
-        // cast back from out's dtype (i.e. can_cast(out, src, "safe") = True).
-        // src=float64, out=int32 satisfies that direction (int32→float64 is safe),
-        // so the writeback truncates values into int32.
+        // NumPy's take writes into any out dtype through an unsafe writeback (NumPy 2.5's FORCECAST; a float source into
+        // an int out only warns that the kinds differ), so the writeback truncates values into int32.
         var a = np.array(new double[] { 10.7, 20.5, 30.0 });
-        var outInt = np.zeros<int>(new int[] { 2 });
+        var outInt = np.zeros(new int[] { 2 }, np.int32);
         np.take(a, np.array(new int[] { 0, 2 }), @out: outInt);
         outInt.ToArray<int>().Should().Equal(10, 30);
     }
@@ -338,7 +336,7 @@ public class SelectionTests
     public void Take_OutParam_ShapeMismatch_Throws()
     {
         var a = np.array(new int[] { 10, 20, 30 });
-        var outBad = np.zeros<int>(new int[] { 5 });
+        var outBad = np.zeros(new int[] { 5 }, np.int32);
         var act = () => np.take(a, np.array(new int[] { 0 }), @out: outBad);
         act.Should().Throw<ArgumentException>().WithMessage("*output array does not match*");
     }
@@ -348,7 +346,7 @@ public class SelectionTests
     {
         var a = np.array(new int[] { 10, 20, 30, 40, 50 });
         var idx = np.array(new int[,] { { 0, 2 }, { 4, 1 } });
-        var outArr = np.zeros<int>(new int[] { 2, 2 });
+        var outArr = np.zeros(new int[] { 2, 2 }, np.int32);
         np.take(a, idx, @out: outArr);
         outArr.GetInt32(0, 0).Should().Be(10);
         outArr.GetInt32(0, 1).Should().Be(30);
@@ -637,7 +635,7 @@ public class SelectionTests
     public void Place_0d_Arr_WritesScalar()
     {
         // NumPy accepts 0-d arrays — np.place(np.array(5), True, [99]) → 99.
-        var a = NDArray.Scalar(5);
+        var a = np.array(5);
         np.place(a, NDArray.Scalar(true), np.array(new int[] { 99 }));
         a.GetInt32(0).Should().Be(99);
     }
@@ -1007,16 +1005,19 @@ public class SelectionTests
         np.ravel(r).ToArray<int>().Should().Equal(1, 2, 5, 6);
     }
 
+    /// <summary>
+    ///     compress rides take's out: since NumPy 2.5 an out of a wider dtype is written through the writeback (NumPy 2.4
+    ///     checked the wrong direction, out → source under 'safe', and raised <c>Cannot cast array data from
+    ///     dtype('int64') to dtype('int32') according to the rule 'safe'</c> here).
+    /// </summary>
     [TestMethod]
-    public void Compress_OutDispatch_UnsafeCastDirection_Raises()
+    public void Compress_OutDispatch_WiderOut_IsWritten()
     {
-        // out.dtype int64 cannot be safely cast to src.dtype int32 — NumPy
-        // raises TypeError with this exact message.
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
         var outArr = np.zeros(new Shape(2, 2), NPTypeCode.Int64);
-        var action = () => np.compress(np.array(new bool[] { true, false, true }), a, axis: 0, @out: outArr);
-        action.Should().Throw<TypeError>()
-            .WithMessage("Cannot cast array data from dtype('int64') to dtype('int32') according to the rule 'safe'");
+        var r = np.compress(np.array(new bool[] { true, false, true }), a, axis: 0, @out: outArr);
+        ReferenceEquals(r, outArr).Should().BeTrue("NumPy returns the out itself");
+        outArr.ToArray<long>().Should().Equal(1L, 2L, 5L, 6L);
     }
 
     [TestMethod]

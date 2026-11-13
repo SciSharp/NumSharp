@@ -98,37 +98,26 @@ namespace NumSharp
         public object trimseq(object seq) => NDPolySeries.TrimSeqAny(seq);
 
         /// <summary>
-        ///     Removes the trailing coefficients whose magnitude does not exceed <c>tol = 0</c> — i.e. the trailing
-        ///     exact zeros — and returns the rest as a fresh copy of the coefficient dtype; an all-zero series
-        ///     becomes <c>c[:1]*0</c>. See <see cref="trimcoef(object, object)"/>.
-        /// </summary>
-        /// <param name="c">The series (1-D).</param>
-        /// <returns>The trimmed copy.</returns>
-        /// <exception cref="ValueError">An empty or non-1-d series, or no common type (bool).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.trimcoef.html</remarks>
-        [NDScoped]
-        public NDArray trimcoef(object c) => NDPolySeries.TrimCoef(c, PolyNumber.FromPython(PyScalar.Int(0)));
-
-        /// <summary>
         ///     Removes the trailing coefficients whose magnitude is at most <paramref name="tol"/>
         ///     (<c>np.abs(c) &gt; tol</c> decides what stays) and returns the rest as a fresh copy of the coefficient
         ///     dtype; when nothing exceeds the tolerance the result is <c>c[:1]*0</c> (a zero that keeps -0.0 and
         ///     NaN the way NumPy's multiply does). A complex series is judged by its float64 magnitude.
         /// </summary>
         /// <param name="c">The series (1-D).</param>
-        /// <param name="tol">The tolerance: a Python number (C# primitive — adopts the coefficients' precision, so a
-        ///     float16 series compares against the float16-rounded tolerance) or a NumPy scalar / 0-d array (strong:
-        ///     the comparison runs in the promoted dtype). A NaN tolerance trims everything.</param>
+        /// <param name="tol">The non-negative tolerance, NumPy's Python number (0, the default, trims only the trailing
+        ///     exact zeros): it adopts the coefficients' precision, so a float16 series compares against the
+        ///     float16-rounded tolerance; a NaN tolerance trims everything.</param>
         /// <returns>The trimmed copy.</returns>
-        /// <exception cref="ValueError"><c>tol must be non-negative</c>; an empty or non-1-d series; no common type;
-        ///     a tolerance array of several elements (NumPy's truth-value error).</exception>
-        /// <exception cref="TypeError">A Python complex tolerance (<c>'&lt;' not supported between instances of
-        ///     'complex' and 'int'</c>), or a null one.</exception>
-        /// <exception cref="OverflowException">A Python int tolerance too large to convert (<c>int too large to convert
-        ///     to float</c>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.trimcoef.html</remarks>
+        /// <exception cref="ValueError"><c>tol must be non-negative</c>; an empty or non-1-d series; no common type
+        ///     (bool).</exception>
+        /// <remarks>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.trimcoef.html</para>
+        ///     <para>API-parity batch 11 (the owner's decision 2, typed parameters only): one signature with NumPy's
+        ///     default; the <c>(object c)</c> and <c>(object c, object tol)</c> forms went, so a NumPy scalar or a 0-d
+        ///     array tolerance (strong: compared in the promoted dtype) is no longer a C# spelling - pass the number.</para>
+        /// </remarks>
         [NDScoped]
-        public NDArray trimcoef(object c, object tol) => NDPolySeries.TrimCoef(c, Tolerance(tol));
+        public NDArray trimcoef(object c, double tol = 0) => NDPolySeries.TrimCoef(c, Tolerance(tol));
 
         /// <summary>
         ///     The smallest domain containing the points: <c>[x.min(), x.max()]</c> of the points converted to their
@@ -155,8 +144,8 @@ namespace NumSharp
         ///     scalar — or an <see cref="NDArray"/> when a domain is 2-D (its items are then arrays).</returns>
         /// <exception cref="IndexError">A domain shorter than 2 (NumPy's / CPython's text), a 0-d array.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable (a number, null), or NumPy's bool subtraction.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers (ZeroDivisionError).</exception>
-        /// <exception cref="OverflowException">A Python int too large (<c>integer division result too large for a
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers (ZeroDivisionError).</exception>
+        /// <exception cref="OverflowError">A Python int too large (<c>integer division result too large for a
         ///     float</c>, or out of a NumPy integer dtype's range).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapparms.html</remarks>
         public (object off, object scl) mapparms(object old, object @new)
@@ -189,10 +178,10 @@ namespace NumSharp
         /// <returns><c>(off, scl)</c> — a boxed <c>double</c> or <see cref="Complex"/> each for Python-number domains
         ///     (true division never yields a Python int), otherwise as <see cref="mapparms(object, object)"/> returns
         ///     them.</returns>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers (<c>division by zero</c> for
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers (<c>division by zero</c> for
         ///     ints, <c>float division by zero</c> once a float is involved — CPython 3.12's texts).</exception>
         /// <exception cref="TypeError">NumPy's bool subtraction (NumPy bool elements).</exception>
-        /// <exception cref="OverflowException">A Python int too large (see <see cref="mapparms(object, object)"/>).</exception>
+        /// <exception cref="OverflowError">A Python int too large (see <see cref="mapparms(object, object)"/>).</exception>
         /// <exception cref="TypeError">A string element (a Python str): Python's subtraction error naming both items' types,
         ///     in NumPy's order (old's subtraction before new's).</exception>
         /// <exception cref="NotSupportedException">A null element.</exception>
@@ -266,8 +255,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <exception cref="IndexError">A domain shorter than 2.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         [NDScoped]
         public NDArray mapdomain(NDArray x, object old, object @new)
@@ -290,8 +279,8 @@ namespace NumSharp
         ///     dtype's C# type for another NumPy scalar), or an <see cref="NDArray"/> for a 2-D domain.</returns>
         /// <exception cref="IndexError">A domain shorter than 2.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         public object mapdomain(double x, object old, object @new) => MapDomainBoxed(PolyNumber.FromPython(PyScalar.Float(x)), old, @new);
 
@@ -305,8 +294,8 @@ namespace NumSharp
         /// <returns>The mapped point as a boxed C# number, or an <see cref="NDArray"/> for a 2-D domain.</returns>
         /// <exception cref="IndexError">A domain shorter than 2.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         public object mapdomain(Complex x, object old, object @new) => MapDomainBoxed(PolyNumber.FromPython(PyScalar.Cplx(x)), old, @new);
 
@@ -324,8 +313,8 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <exception cref="IndexError">A domain shorter than 2.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <exception cref="ValueError">A ragged tuple / list of points (np.array's inhomogeneous-shape text).</exception>
         /// <exception cref="NotSupportedException">A list NumPy makes an object array of (None, a Python int past uint64).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
@@ -390,8 +379,8 @@ namespace NumSharp
         ///     list of strs is NumPy's str array, whose <c>scl*x</c> raises NumPy's TypeError.</exception>
         /// <exception cref="IndexError">A domain shorter than 2.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         public NDArray mapdomain(object[] x, object old, object @new)
         {
@@ -453,9 +442,9 @@ namespace NumSharp
         /// <param name="new">The target domain.</param>
         /// <returns>The mapped points (a new array; 0-d for a 0-d x).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
         /// <exception cref="TypeError">NumPy's bool subtraction (NumPy bool elements).</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <exception cref="NotSupportedException">A null or string domain element.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         public NDArray mapdomain<T0, T1, T2, T3>(NDArray x, (T0, T1) old, (T2, T3) @new)
@@ -483,9 +472,9 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <exception cref="ValueError">A ragged list (np.array's inhomogeneous-shape text).</exception>
         /// <exception cref="NotSupportedException">A list holding a str or null, or a null / string domain element.</exception>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
         /// <exception cref="TypeError">NumPy's bool subtraction (NumPy bool elements).</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         public NDArray mapdomain<T0, T1, T2, T3>(object[] x, (T0, T1) old, (T2, T3) @new)
         {
@@ -510,9 +499,9 @@ namespace NumSharp
         /// <param name="new">The target domain.</param>
         /// <returns>The mapped point as a boxed C# number (<c>double</c> for a real Python domain, <see cref="Complex"/>
         ///     for a complex one), or an <see cref="NDArray"/> for a domain of arrays.</returns>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
         /// <exception cref="TypeError">NumPy's bool subtraction.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <exception cref="NotSupportedException">A null or string domain element.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         public object mapdomain<T0, T1, T2, T3>(double x, (T0, T1) old, (T2, T3) @new)
@@ -539,9 +528,9 @@ namespace NumSharp
         /// <param name="new">The target domain.</param>
         /// <returns>The mapped point as a boxed C# number (<see cref="Complex"/> for a Python domain), or an
         ///     <see cref="NDArray"/> for a domain of arrays.</returns>
-        /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
+        /// <exception cref="ZeroDivisionError">A zero-length domain of Python numbers.</exception>
         /// <exception cref="TypeError">NumPy's bool subtraction.</exception>
-        /// <exception cref="OverflowException">Python int overflow.</exception>
+        /// <exception cref="OverflowError">Python int overflow.</exception>
         /// <exception cref="NotSupportedException">A null or string domain element.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         public object mapdomain<T0, T1, T2, T3>(Complex x, (T0, T1) old, (T2, T3) @new)
@@ -614,7 +603,7 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy's statements (<see cref="NDPolyPrinting.FormatFloat"/>): the thresholds are Python literals, so they
         ///     compare in the value's own dtype (a float16 sees 1e8 as infinity); the digits are NumPy's Dragon4, ported.
-        ///     https://github.com/numpy/numpy/blob/v2.4.2/numpy/polynomial/polyutils.py
+        ///     https://github.com/numpy/numpy/blob/v2.5.4/numpy/polynomial/polyutils.py
         /// </remarks>
         public string format_float(object x, bool parens = false) => NDPolyPrinting.FormatFloat(x, parens);
 

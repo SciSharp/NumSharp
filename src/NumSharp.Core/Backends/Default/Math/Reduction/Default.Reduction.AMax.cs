@@ -7,12 +7,14 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        ///     NumPy's <c>np.max</c> / <c>np.amax</c> (<c>np.maximum.reduce</c>) over <paramref name="axis_"/>, or over
+        ///     NumPy's <c>np.max</c> / <c>np.amax</c> (<c>np.maximum.reduce</c>) over <paramref name="axis"/>, or over
         ///     every axis when it is null.
         /// </summary>
         /// <param name="arr">The array.</param>
-        /// <param name="axis_">The reduced axis (negative values count from the end), or null for every axis. A 0-d input
-        ///     accepts 0 and -1 (NumPy's backward-compatibility rule) and nothing else.</param>
+        /// <param name="axis">The reduced axis (negative values count from the end), a tuple of axes reduced together in ONE
+        ///     pass of NumPy's reduction iterator (the NaN and the +-0 tie NumPy's visiting order keeps; the empty tuple
+        ///     reduces none: every output is its element), or null for every axis. A 0-d input accepts the INTEGERS 0 and -1
+        ///     (NumPy's backward-compatibility rule) and nothing else; a tuple item gets no such allowance.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the input's.</param>
         /// <param name="out">NumPy's <c>out=</c>, or null; any keyword takes <see cref="MaxMinNumPy"/>.</param>
@@ -21,7 +23,11 @@ namespace NumSharp.Backends
         /// <returns>The maximum (a read-only 0-d scalar for a full reduction), or
         ///     <paramref name="out"/> itself when given.</returns>
         /// <exception cref="NotSupportedException"><paramref name="dtype"/> together with a keyword.</exception>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of range — checked before any
+        ///     shortcut.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (<c>duplicate value in 'axis'</c>, after the out / where
+        ///     checks); a <c>StringDType</c> max over two axes or more (<c>reduction operation 'maximum' is not
+        ///     reorderable, so at most one axis may be specified</c>).</exception>
         /// <exception cref="ArgumentException">An empty reduction ("zero-size array to reduction operation maximum which has
         ///     no identity", NumPy's ValueError).</exception>
         /// <exception cref="TypeError">Fixed-width text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim
@@ -34,8 +40,43 @@ namespace NumSharp.Backends
         ///     scope; the weaver roots <paramref name="arr"/> until it returns, so a caller's temporary cannot be collected
         ///     under the kernel.</remarks>
         [NDAnchored]
-        public override NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null,
+        public override NDArray ReduceAMax(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null,
             NDArray @out = null, object initial = null, NDArray @where = null)
+        {
+            // A tuple: one axis or every axis is the integer / None route (NumPy's same flags); any other tuple is
+            // maximum.reduce's own statements over the whole set (MaxMinOverAxisSet: the keyword path's reduction iterator),
+            // which raise in NumPy's order.
+            if (axis is { IsTuple: true } tuple)
+            {
+                if (ReductionArguments.TryIntegerForm(arr.ndim, tuple, out int? single))
+                    return ReduceAMaxAlong(arr, single, keepdims, dtype, @out, initial, @where);
+                return MaxMinOverAxisSet(arr, tuple, keepdims, dtype, @out, initial, @where, MinMaxOp.Max);
+            }
+            return ReduceAMaxAlong(arr, ReductionArguments.IntegerAxis(axis), keepdims, dtype, @out, initial, @where);
+        }
+
+        /// <summary>
+        ///     The integer-axis and <c>None</c> routes of <see cref="ReduceAMax"/> (see it for the whole contract): the keyword
+        ///     path, the text routes, and the exact schedules / kernels over one axis or every axis.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The reduced axis, or null for every axis; a 0-d input accepts 0 and -1.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="dtype">The loop dtype, or null for the input's.</param>
+        /// <param name="out">NumPy's <c>out=</c>, or null.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>, or null.</param>
+        /// <param name="where">NumPy's <c>where=</c>, or null.</param>
+        /// <returns>The maximum (see <see cref="ReduceAMax"/>).</returns>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> together with a keyword.</exception>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="ArgumentException">An empty reduction (NumPy's ValueError text).</exception>
+        /// <exception cref="TypeError">See <see cref="ReduceAMax"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="ReduceAMax"/>.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>, as on <see cref="ReduceAMax"/>: the engines below read
+        ///     <paramref name="arr"/>'s raw address, so the weaver roots it until this returns.</remarks>
+        [NDAnchored]
+        private NDArray ReduceAMaxAlong(NDArray arr, int? axis_, bool keepdims, DType dtype, NDArray @out, object initial,
+            NDArray @where)
         {
             // NumPy's out= / initial= / where=: ufunc.reduce's keyword path, the reduction iterator and the seeded exact
             // engines (MaxMinNumPy), whose prologue checks the arguments in NumPy's order. A keyword-less call keeps the
@@ -110,7 +151,7 @@ namespace NumSharp.Backends
                 r ??= NewScalar(max_elementwise_il(arr, typeCode));
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks, copy: false)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
 
             var axis = NormalizeAxis(axis_.Value, arr.ndim);
@@ -129,9 +170,9 @@ namespace NumSharp.Backends
                 if (exact is not null)
                 {
                     if (keepdims)
-                        exact.Storage.ExpandDimension(axis);
+                        ExpandReducedAxis(exact, arr.Shape, axis);
                     // Same PyArray_Return rule as ExecuteAxisReduction: a fresh 0-d result is a read-only scalar.
-                    return exact.MarkReductionScalar();
+                    return exact.PyArray_Return();
                 }
             }
 

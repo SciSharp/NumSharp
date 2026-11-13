@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Text.Json;
 using NumSharp;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Tests.Fuzz
 {
@@ -59,9 +60,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "mulx" => m.polymulx(a.Get("c")),
                         "mul" => m.polymul(a.Get("c1"), a.Get("c2")),
-                        "pow" => PolyPow(a, (c, k) => m.polypow(c, k), (c, k, x) => m.polypow(c, k, x),
-                                         (c, d) => m.polypow(c, d), (c, d, x) => m.polypow(c, d, x),
-                                         (c, k) => m.polypow(c, k), (c, k, x) => m.polypow(c, k, x)),
+                        "pow" => PolyPow(a, PolyBasis.Power, (c, k) => m.polypow(c, k), (c, k, x) => m.polypow(c, k, x)),
                         "fromroots" => m.polyfromroots(a.Get("roots")),
                         _ => null,
                     };
@@ -74,9 +73,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "mulx" => m.chebmulx(a.Get("c")),
                         "mul" => m.chebmul(a.Get("c1"), a.Get("c2")),
-                        "pow" => PolyPow(a, (c, k) => m.chebpow(c, k), (c, k, x) => m.chebpow(c, k, x),
-                                         (c, d) => m.chebpow(c, d), (c, d, x) => m.chebpow(c, d, x),
-                                         (c, k) => m.chebpow(c, k), (c, k, x) => m.chebpow(c, k, x)),
+                        "pow" => PolyPow(a, PolyBasis.Chebyshev, (c, k) => m.chebpow(c, k), (c, k, x) => m.chebpow(c, k, x)),
                         "fromroots" => m.chebfromroots(a.Get("roots")),
                         "2poly" => m.cheb2poly(a.Get("c")),
                         "poly2cheb" => m.poly2cheb(a.Get("pol")),
@@ -91,9 +88,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "mulx" => m.legmulx(a.Get("c")),
                         "mul" => m.legmul(a.Get("c1"), a.Get("c2")),
-                        "pow" => PolyPow(a, (c, k) => m.legpow(c, k), (c, k, x) => m.legpow(c, k, x),
-                                         (c, d) => m.legpow(c, d), (c, d, x) => m.legpow(c, d, x),
-                                         (c, k) => m.legpow(c, k), (c, k, x) => m.legpow(c, k, x)),
+                        "pow" => PolyPow(a, PolyBasis.Legendre, (c, k) => m.legpow(c, k), (c, k, x) => m.legpow(c, k, x)),
                         "fromroots" => m.legfromroots(a.Get("roots")),
                         "2poly" => m.leg2poly(a.Get("c")),
                         "poly2leg" => m.poly2leg(a.Get("pol")),
@@ -108,9 +103,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "mulx" => m.lagmulx(a.Get("c")),
                         "mul" => m.lagmul(a.Get("c1"), a.Get("c2")),
-                        "pow" => PolyPow(a, (c, k) => m.lagpow(c, k), (c, k, x) => m.lagpow(c, k, x),
-                                         (c, d) => m.lagpow(c, d), (c, d, x) => m.lagpow(c, d, x),
-                                         (c, k) => m.lagpow(c, k), (c, k, x) => m.lagpow(c, k, x)),
+                        "pow" => PolyPow(a, PolyBasis.Laguerre, (c, k) => m.lagpow(c, k), (c, k, x) => m.lagpow(c, k, x)),
                         "fromroots" => m.lagfromroots(a.Get("roots")),
                         "2poly" => m.lag2poly(a.Get("c")),
                         "poly2lag" => m.poly2lag(a.Get("pol")),
@@ -125,9 +118,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "mulx" => m.hermmulx(a.Get("c")),
                         "mul" => m.hermmul(a.Get("c1"), a.Get("c2")),
-                        "pow" => PolyPow(a, (c, k) => m.hermpow(c, k), (c, k, x) => m.hermpow(c, k, x),
-                                         (c, d) => m.hermpow(c, d), (c, d, x) => m.hermpow(c, d, x),
-                                         (c, k) => m.hermpow(c, k), (c, k, x) => m.hermpow(c, k, x)),
+                        "pow" => PolyPow(a, PolyBasis.Hermite, (c, k) => m.hermpow(c, k), (c, k, x) => m.hermpow(c, k, x)),
                         "fromroots" => m.hermfromroots(a.Get("roots")),
                         "2poly" => m.herm2poly(a.Get("c")),
                         "poly2herm" => m.poly2herm(a.Get("pol")),
@@ -142,9 +133,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "mulx" => m.hermemulx(a.Get("c")),
                         "mul" => m.hermemul(a.Get("c1"), a.Get("c2")),
-                        "pow" => PolyPow(a, (c, k) => m.hermepow(c, k), (c, k, x) => m.hermepow(c, k, x),
-                                         (c, d) => m.hermepow(c, d), (c, d, x) => m.hermepow(c, d, x),
-                                         (c, k) => m.hermepow(c, k), (c, k, x) => m.hermepow(c, k, x)),
+                        "pow" => PolyPow(a, PolyBasis.HermiteE, (c, k) => m.hermepow(c, k), (c, k, x) => m.hermepow(c, k, x)),
                         "fromroots" => m.hermefromroots(a.Get("roots")),
                         "2poly" => m.herme2poly(a.Get("c")),
                         "poly2herme" => m.poly2herme(a.Get("pol")),
@@ -186,49 +175,48 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
-        ///     Calls a <c>{p}pow</c> facade the way C# source spelling the case would bind it: the <c>int</c> overload for
-        ///     a Python int within <see cref="int"/>'s range, the <c>double</c> overload for a Python float or a larger
-        ///     int that converts implicitly (a C# <see cref="long"/> or <see cref="ulong"/> converts to
-        ///     <see cref="double"/>, never to <see cref="int"/>) — both only while <c>maxpower</c> is absent, None or a
-        ///     plain int (what their <c>int?</c> parameter takes) — and the <c>object</c> overloads for everything else:
-        ///     a bool, a BigInteger, np.float16 (Half), a complex, a str, None, a list / tuple, an ndarray, or any
-        ///     <c>maxpower</c> that is not a plain int.
+        ///     Replays a <c>{p}pow</c> case the way C# source can spell it. The facade's one signature,
+        ///     <c>(c, int pow, int? maxpower)</c> (API-parity batch 11, the owner's decision 2: typed parameters only), takes
+        ///     a Python int within <see cref="int"/>'s range with <c>maxpower</c> absent, None or a plain int. Every other
+        ///     power or limit - a float, a bool, a BigInteger, np.float16, a complex, a str, None, a list / tuple, an ndarray,
+        ///     a Python int past int's range, a spec-encoded limit - has no C# spelling since then, so the case replays
+        ///     through the computation the removed object facades called, <see cref="NDPolyAlgebra.Pow(PolyBasis, object,
+        ///     object, object)"/>: NumPy's <c>int(pow)</c> and <c>power &gt; maxpower</c> over any value, the machinery the
+        ///     series class's <c>**</c> still reaches. The corpus stays whole.
         /// </summary>
         /// <param name="a">The case's argument decoder (<c>c</c>, <c>pow</c>, optional <c>maxpower</c>: a raw JSON int or
         ///     null, or a spec for any other kind).</param>
-        /// <param name="intDefault">The int overload at the facade's default maxpower.</param>
-        /// <param name="intMax">The int overload with an explicit maxpower.</param>
-        /// <param name="dblDefault">The double overload at the facade's default maxpower.</param>
-        /// <param name="dblMax">The double overload with an explicit maxpower.</param>
-        /// <param name="objDefault">The object overload at the facade's default maxpower.</param>
-        /// <param name="objMax">The object overload with an explicit maxpower.</param>
-        /// <returns>The facade's result.</returns>
-        private static NDArray PolyPow(PolyArgs a,
-                                       Func<object, int, NDArray> intDefault, Func<object, int, int?, NDArray> intMax,
-                                       Func<object, double, NDArray> dblDefault, Func<object, double, int?, NDArray> dblMax,
-                                       Func<object, object, NDArray> objDefault, Func<object, object, object, NDArray> objMax)
+        /// <param name="basis">The case's basis (the computation's first argument).</param>
+        /// <param name="intDefault">The facade at its default maxpower.</param>
+        /// <param name="intMax">The facade with an explicit maxpower.</param>
+        /// <returns>The facade's or the computation's result.</returns>
+        private static NDArray PolyPow(PolyArgs a, PolyBasis basis,
+                                       Func<object, int, NDArray> intDefault, Func<object, int, int?, NDArray> intMax)
         {
             // Operand order: the series first (it may consume an operand), then the power, then the limit.
             object c = a.Get("c");
             object pow = a.Get("pow");
             bool hasMax = a.Has("maxpower");
-            // A plain JSON int / null is what an int? parameter takes; any spec-encoded limit (a float, a bool, a str, an
-            // ndarray, a Python int past int's range, ...) only binds the object overload.
+            // A plain JSON int / null is what the facade's int? parameter takes; any spec-encoded limit (a float, a bool, a
+            // str, an ndarray, a Python int past int's range, ...) has no C# spelling.
             bool plainMax = !hasMax || a.Raw("maxpower").ValueKind is JsonValueKind.Null or JsonValueKind.Number;
-            if (plainMax)
+            if (plainMax && pow is long l && l >= int.MinValue && l <= int.MaxValue)
             {
                 int? maxpower = hasMax ? a.NullableInt("maxpower") : null;
-                if (pow is long l && l >= int.MinValue && l <= int.MaxValue)
-                    return hasMax ? intMax(c, (int)l, maxpower) : intDefault(c, (int)l);
-                // long / ulong / double convert implicitly to double; C# prefers that to boxing into object.
-                if (pow is long or ulong or double)
-                {
-                    double d = pow switch { long v => v, ulong v => v, _ => (double)pow };
-                    return hasMax ? dblMax(c, d, maxpower) : dblDefault(c, d);
-                }
-                return hasMax ? objMax(c, pow, maxpower) : objDefault(c, pow);
+                return hasMax ? intMax(c, (int)l, maxpower) : intDefault(c, (int)l);
             }
-            return objMax(c, pow, a.Get("maxpower"));
+
+            // The facades' defaults: polypow has no limit (None), every other basis 16 (the boxed Python int the removed
+            // object facades passed).
+            object limit = hasMax
+                ? (plainMax ? (object)a.NullableInt("maxpower") : a.Get("maxpower"))
+                : basis == PolyBasis.Power ? null : NDPolyAlgebra.DefaultMaxPower;
+            // The removed facades were [NDScoped]: the scope reclaims the computation's intermediates (the scope-audit
+            // sweep replays through this registry and would count them as undisposed) and hands the result back.
+            using var scope = NDScope.Open();
+            var result = NDPolyAlgebra.Pow(basis, c, pow, limit);
+            scope.Returns(result);
+            return result;
         }
     }
 }

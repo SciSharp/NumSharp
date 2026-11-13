@@ -14,8 +14,14 @@ namespace NumSharp
     ///     reproduced (C# has a single <c>ToString</c>).
     ///     </para>
     /// </summary>
-    /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.poly1d.html</remarks>
-    public sealed class poly1d : IDisposable
+    /// <remarks>
+    ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.poly1d.html</para>
+    ///     <para>Unsealed, as NumPy's <c>poly1d</c> is a plain Python class: a subclass adds members of its own, and every
+    ///     operation returns a plain <see cref="poly1d"/>, which is NumPy's answer too (its operators build
+    ///     <c>poly1d(...)</c> explicitly, so <c>type(Named([1, 2]) + Named([1, 2]))</c> is <c>poly1d</c>). A subclass that
+    ///     owns resources overrides <see cref="Dispose(bool)"/>.</para>
+    /// </remarks>
+    public class poly1d : IDisposable
     {
         // OWNED: the constructor yields the normalized coefficient array into this field (or copies
         // the source's), so the polynomial is the array's owner and Dispose releases it — the
@@ -94,6 +100,22 @@ namespace NumSharp
         /// </summary>
         public void Dispose()
         {
+            Dispose(true);
+            // The class has no finalizer, but a subclass may add one; Dispose() has released everything it would.
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        ///     Releases the coefficient array; what a subclass overrides to release resources of its own, calling the base
+        ///     afterwards.
+        /// </summary>
+        /// <param name="disposing">True from <see cref="Dispose()"/>. False from a subclass's finalizer, which must not
+        ///     touch other managed objects: the coefficient array then releases its buffer through its own finalizer.</param>
+        /// <remarks>Idempotent: the field is cleared before the array is disposed, so a second call releases nothing.</remarks>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposing)
+                return;
             var c = _coeffs;
             _coeffs = null;
             c?.Dispose();

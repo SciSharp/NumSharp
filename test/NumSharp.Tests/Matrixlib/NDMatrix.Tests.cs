@@ -891,10 +891,10 @@ namespace NumSharp.Tests.Matrixlib
         {
             NDMatrix m = np.matrix(np.arange(12).reshape(3, 4));
             Action flat = () => m.std(dtype: np.int64);
-            flat.Should().ThrowExactly<TypeError>().WithMessage(
+            flat.Should().ThrowExactly<UFuncOutputCastingError>().WithMessage(
                 "Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
             Action dispatched = () => np.std((NDArray)m, dtype: np.int64);
-            dispatched.Should().ThrowExactly<TypeError>().WithMessage(
+            dispatched.Should().ThrowExactly<UFuncOutputCastingError>().WithMessage(
                 "Cannot cast ufunc 'sqrt' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'");
             ((long)np.std(m.A, dtype: np.int64)).Should().Be(3L);
             ((long)m.var(dtype: np.int64)).Should().Be(12L);
@@ -943,7 +943,7 @@ namespace NumSharp.Tests.Matrixlib
             m.Should().BeOfValues(1.5f, 300f);
 
             Action overflow = () => np.matrix(new object[] { 1.5, 300L }, np.int8);
-            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            overflow.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
 
             Action complexIntoFloat = () => np.matrix("1+2j 3", np.float32);
             complexIntoFloat.Should().Throw<TypeError>().WithMessage("float() argument must be a string or a real number, not 'complex'");

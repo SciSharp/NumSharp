@@ -278,9 +278,9 @@ namespace NumSharp.Tests.Manipulation
                 cell[8] = 5;
                 cell[15] = 0x40;
                 Action list = () => a.tolist();
-                list.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string in StringDType getitem");
+                list.Should().Throw<MemoryError>().WithMessage("Failed to load string in StringDType getitem");
                 Action item = () => a.item(2);
-                item.Should().Throw<OutOfMemoryException>().WithMessage("Failed to load string in StringDType getitem");
+                item.Should().Throw<MemoryError>().WithMessage("Failed to load string in StringDType getitem");
                 a.item(1).Should().Be("b");
             }
             finally

@@ -18,6 +18,11 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.left_shift.html
         ///
+        /// One signature, NumPy's ufunc form (2026-11-11): the former overload that took the shift count as an
+        /// <c>object</c> read a boxed number as a STRONG array; a C# literal converts to a 0-d array marked as the
+        /// Python scalar it stands for (NEP 50's weak scalar), and a value held in an <c>object</c> variable goes
+        /// through <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/>.
+        ///
         /// Bits are shifted to the left by appending x2 0s at the right of x1.
         /// Since the internal representation of numbers is in binary format,
         /// this operation is equivalent to multiplying x1 by 2**x2.
@@ -30,19 +35,26 @@ namespace NumSharp
             => x1.TensorEngine.LeftShift(x1, x2, dtype, @out, where);
 
         /// <summary>
-        /// Shift the bits of an integer to the left by a scalar or array-like amount.
+        ///     Shift the bits of an integer to the left, element-wise (NumPy's <c>np.bitwise_left_shift</c>,
+        ///     the Array-API name NumPy 2.0 added: <c>np.bitwise_left_shift is np.left_shift</c>, the
+        ///     same ufunc object, so this forwards to <see cref="left_shift(NDArray, NDArray, NDArray, NDArray, DType)"/> and
+        ///     answers bit for bit as it does).
         /// </summary>
-        /// <param name="x1">Value operand (integer/bool/char only).</param>
-        /// <param name="x2">Shift-count (scalar or array-like).</param>
-        /// <param name="out">Optional provided output (see the array overload).</param>
-        /// <param name="where">Optional bool write mask.</param>
-        /// <param name="dtype">Optional integer/char loop dtype override.</param>
-        /// <returns>Array with bits shifted left (or <paramref name="out"/> when provided).</returns>
+        /// <param name="x1">Value operand (integer / bool / char only).</param>
+        /// <param name="x2">Shift-count operand (integer / bool / char only).</param>
+        /// <param name="out">A location into which the result is stored (NumPy ufunc <c>out=</c>); <c>null</c> allocates the
+        ///     result.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed / written (NumPy ufunc <c>where=</c>);
+        ///     <c>null</c> is NumPy's <c>where=True</c>.</param>
+        /// <param name="dtype">The loop dtype (NumPy ufunc <c>dtype=</c>); must be an integer / bool loop - a float request raises NumPy's no-loop TypeError.</param>
+        /// <returns>The result of <see cref="left_shift(NDArray, NDArray, NDArray, NDArray, DType)"/>: <paramref name="out"/>
+        ///     itself when it was given.</returns>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        // Scope: reclaims the np.asanyarray(x2) temp for a scalar/array-like shift count
-        // (the a<<obj operator analog); an NDArray-input passthrough and a provided out stay untracked.
-        [NDScoped]
-        public static NDArray left_shift(NDArray x1, object x2, NDArray @out = null, NDArray where = null, DType dtype = null)
-            => x1.TensorEngine.LeftShift(x1, np.asanyarray(x2), dtype, @out, where);
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_left_shift.html
+        ///     <para>One signature, the ufunc form of the original's. A C# literal operand converts to a 0-d array marked as
+        ///     the Python scalar it stands for, so NEP 50's weak-scalar promotion holds without the original's
+        ///     <c>object</c> overload (<c>np.bitwise_left_shift(int32_array, 2)</c> stays int32, as NumPy's).</para></remarks>
+        public static NDArray bitwise_left_shift(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => left_shift(x1, x2, @out, where, dtype);
     }
 }

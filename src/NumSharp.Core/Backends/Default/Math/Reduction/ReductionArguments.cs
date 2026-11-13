@@ -200,6 +200,88 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     NumPy's conversion of ANY <c>axis</c> argument into reduction flags (<c>PyUFunc_GenericReduction</c>, then the
+        ///     repeat check of <c>PyUFunc_Reduce</c>): <c>None</c> reduces every axis, an integer one axis, a tuple every axis
+        ///     it names (the empty tuple none).
+        /// </summary>
+        /// <param name="ndim">The input's rank.</param>
+        /// <param name="axis">The axis argument: <c>null</c> for <c>None</c>, an integer, or a tuple.</param>
+        /// <returns>The reduced-axis flags, one per input axis.</returns>
+        /// <exception cref="AxisError">An axis is out of bounds. Footgun: the 0-d allowance (axis 0 and -1 as "no axis") is the
+        ///     INTEGER form's only - a tuple item is checked against the rank like any other, so <c>(0,)</c> on a 0-d input
+        ///     raises where <c>0</c> does not (probed 2.4.2: <c>np.sum(np.array(5.0), (0,))</c> is the AxisError).</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice ("duplicate value in 'axis'"), raised after every item's
+        ///     bounds check.</exception>
+        internal static bool[] AxisFlags(int ndim, NDAxis? axis)
+            => axis is { IsTuple: true } tuple ? AxisFlags(ndim, tuple.ToArray()) : AxisFlags(ndim, IntegerAxis(axis));
+
+        /// <summary>
+        ///     The integer form of an axis argument that is not a tuple: the axis as given, or <c>null</c> for <c>None</c>.
+        ///     The bridge from the <see cref="NDAxis"/> parameters to the single-axis routes, which take <c>int?</c>.
+        /// </summary>
+        /// <param name="axis">The axis argument (an integer or <c>None</c>).</param>
+        /// <returns>The axis, not normalized (negative counts from the end), or <c>null</c>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="axis"/> is a tuple: a wiring error inside NumSharp (every caller
+        ///     routes a tuple through <see cref="TryIntegerForm"/> or an axis-set route first), never a silent first item.</exception>
+        internal static int? IntegerAxis(NDAxis? axis)
+        {
+            if (axis is not { } given)
+                return null;
+            if (given.IsTuple)
+                throw new ArgumentException(
+                    $"The tuple axis {given} has no integer form; it must take the axis-set route of the reduction.", nameof(axis));
+            return given[0];
+        }
+
+        /// <summary>
+        ///     The integer form NumPy's reduction gives a tuple axis when it reduces exactly like one: a tuple of ONE axis
+        ///     reduces that axis, and a tuple of EVERY axis reduces like <c>None</c> (the same flags, so the same iteration and
+        ///     bits; a 0-d input's empty tuple is every axis). The engine members send such a tuple down their integer or
+        ///     <c>None</c> route and every other tuple - a set of two axes or more short of every axis, the empty tuple of an
+        ///     input with dimensions, or a tuple NumPy refuses - down their axis-set route, which raises in NumPy's order.
+        /// </summary>
+        /// <param name="ndim">The input's rank.</param>
+        /// <param name="tuple">The tuple axis.</param>
+        /// <param name="axis">Receives the normalized single axis, or <c>null</c> for every axis; <c>null</c> as well when
+        ///     the method returns false.</param>
+        /// <returns>True when the tuple is in bounds, has no repeat, and names one axis or every axis.</returns>
+        /// <remarks>Never raises: a tuple NumPy refuses answers false, so the error comes from the axis-set route at the point
+        ///     NumPy raises it (after the out / where converters for a ufunc reduction; from <c>_count_reduce_items</c> for
+        ///     np.mean's family).</remarks>
+        internal static bool TryIntegerForm(int ndim, NDAxis tuple, out int? axis)
+        {
+            axis = null;
+            int count = tuple.Count;
+            // A set larger than the rank repeats an axis or leaves the bounds; neither collapses.
+            if (count > ndim)
+                return false;
+            var seen = count == 0 ? null : new bool[ndim];
+            int first = 0;
+            for (int i = 0; i < count; i++)
+            {
+                int ax = tuple[i];
+                if (ax < -ndim || ax >= ndim)
+                    return false;
+                if (ax < 0)
+                    ax += ndim;
+                if (seen[ax])
+                    return false;
+                seen[ax] = true;
+                if (i == 0)
+                    first = ax;
+            }
+
+            // One axis is checked before every axis: a 1-D input's (0,) keeps the integer route of the axis it names.
+            if (count == 1)
+            {
+                axis = first;
+                return true;
+            }
+
+            return count == ndim;
+        }
+
+        /// <summary>
         ///     The shape checks of <c>PyUFunc_ReduceWrapper</c> and the reduction iterator it builds over
         ///     <c>[out, input, where]</c>.
         /// </summary>

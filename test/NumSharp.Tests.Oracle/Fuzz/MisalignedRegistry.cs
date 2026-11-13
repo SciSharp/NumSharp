@@ -512,6 +512,13 @@ namespace NumSharp.Tests.Fuzz
             if (c.Valueclass == "negzero")
                 return null;
 
+            // cast_boundary.jsonl (valueclass "castedge": float -> int8 / uint8 / int16 / uint16 / int32 at the integer
+            // widths' edges, NaN payloads and infinities) is held to ZERO excuses: NumPy's answer for every float32 input
+            // is one value whatever the layout (proven over all 2^32 inputs on 2026-11-09), so no cast blanket may hide a
+            // difference of the scalar converter or the vector body.
+            if (c.Valueclass == "castedge")
+                return null;
+
             // The FLAT np.sum / np.mean of a float loop is NumPy's add.reduce bit for bit (NumPyAddReduce,
             // Default.Reduction.Add.Exact.cs: the identity start, NpyIter's call schedule over the operand's layout, a
             // pairwise sum per call, _mean's loop dtype and its float64 division by the count; an operand with a broadcast
@@ -546,8 +553,11 @@ namespace NumSharp.Tests.Fuzz
             // radix argsort is STABLE. Excused ONLY when the two index vectors are provably
             // equivalent sorts of the same 1-D operand — element-for-element the indexed values
             // compare IEEE-equal — so a genuinely wrong ordering still fails. The main sort tier
-            // generates distinct values on purpose and never reaches this branch.
+            // generates distinct values on purpose and never reaches this branch. NOT for a
+            // descending case (NumPy 2.5's descending=True): NumSharp reproduces NumPy's descending
+            // introsort permutation exactly, ties included, so its tie order is held bit-exact.
             if (kind == DivergenceKind.Value && c.Op == "argsort" && expected != null && actual != null
+                && !(c.Params?.ContainsKey("descending") ?? false)
                 && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 1
                 && ArgsortPermutationsEquivalent(c.Operands[0], expected, actual))
                 return "argsort tie order under NumPy's unstable default introsort (equivalent permutation verified; NumSharp's radix argsort is stable)";
@@ -974,12 +984,13 @@ namespace NumSharp.Tests.Fuzz
                 // P1/P2 truthful branch above instead — a divergence that is LESS truthful than
                 // NumPy would otherwise hide in here.
                 // A signed-zero flip of sum / mean is NOT order (IsIdentitySumSignedZeroFlip) and stays red.
-                // prod's share is a decision, not a gap: its float32 / float64 SIMD lane order is the owner's documented
-                // divergence (np-layer NL3, D24 2026-11-06: "Keep SIMD lanes"; Math/np.prod.LaneOrder.Test.cs pins it).
+                // prod is NOT excused: since 2026-11-12 (the owner's D25, reversing NL3 / D24 "Keep SIMD lanes") every
+                // float32 / float64 / float16 / complex128 product is NumPy's sequential multiply.reduce, bit for bit, so
+                // any prod value divergence is a real bug (Math/np.prod.SequentialOrder.Test.cs pins the order).
                 if (kind == DivergenceKind.Value && truth == null
                     && (tc == NPTypeCode.Half || tc == NPTypeCode.Single
                         || tc == NPTypeCode.Double || tc == NPTypeCode.Complex)
-                    && (c.Op == "sum" || c.Op == "prod")
+                    && c.Op == "sum"
                     && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))
                     return "reduction summation/two-pass precision (algorithm order)";
             }
@@ -1342,7 +1353,7 @@ namespace NumSharp.Tests.Fuzz
 
             // (K12) A unary FLOAT-CLASSIFICATION PREDICATE (isnan / isinf / isfinite / signbit) into
             // a rank>=2 [..., ::2]-STRIDED bool `out`: NumSharp writes the CORRECT full overwrite,
-            // NumPy 2.4.2 does NOT. This is a NumPy BUG, not a NumSharp one (2026-09-18 audit):
+            // NumPy (2.4.2 and 2.5.4) does NOT. This is a NumPy BUG, not a NumSharp one (2026-09-18 audit, re-probed on 2.5.4):
             // np.isnan(x, out=view) leaks the view's PRIOR contents into the gap-strided slots its
             // buffered predicate loop (loops_unary_fp_le) fails to cover on write-back — so with a
             // non-zero prior the result != isnan(x). Probed exhaustively: the leak is confined to
@@ -1357,7 +1368,7 @@ namespace NumSharp.Tests.Fuzz
                 && c.Params != null && c.Params.TryGetValue("ufunc", out var ufEl)
                 && ufEl.GetString() is "isnan" or "isinf" or "isfinite" or "signbit")
                 return "unary float predicate into a rank>=2 skip-strided bool out=: NumSharp "
-                     + "overwrites correctly while NumPy 2.4.2 leaks the out's prior contents "
+                     + "overwrites correctly while NumPy (2.4.2 and 2.5.4) leaks the out's prior contents "
                      + "(its buffered predicate loop bug) — NumSharp is MORE correct [numpy bug]";
 
             // (K13) min/max family (maximum/minimum/fmax/fmin): the SIGN of a ±0 result is

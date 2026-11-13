@@ -403,7 +403,7 @@ namespace NumSharp.Statistics
         /// <typeparam name="TQ">An integer type.</typeparam>
         /// <param name="value">The Python int.</param>
         /// <returns><paramref name="value"/>.</returns>
-        /// <exception cref="OverflowException">NumPy's <c>Python integer 200 out of bounds for int8</c>.</exception>
+        /// <exception cref="OverflowError">NumPy's <c>Python integer 200 out of bounds for int8</c>.</exception>
         private static long PyInt<TQ>(long value) where TQ : unmanaged
         {
             bool fits;
@@ -416,7 +416,7 @@ namespace NumSharp.Statistics
             else if (typeof(TQ) == typeof(ulong)) fits = value >= 0;
             else fits = true;
             if (!fits)
-                throw new OverflowException(string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {IntegerName<TQ>()}"));
+                throw new OverflowError(string.Create(CultureInfo.InvariantCulture, $"Python integer {value} out of bounds for {IntegerName<TQ>()}"));
             return value;
         }
 
@@ -462,7 +462,7 @@ namespace NumSharp.Statistics
         /// <param name="inexact">Whether the data is a float array (only the float64 virtual indexes read it).</param>
         /// <param name="raw">Receives the raw indexes (2 per quantile).</param>
         /// <param name="weight">Receives the weights (2 per quantile): integers of q's dtype for the integer methods.</param>
-        /// <exception cref="OverflowException"><c>n</c> (or <c>n - 1</c>) outside q's dtype; an unsigned q under weibull,
+        /// <exception cref="OverflowError"><c>n</c> (or <c>n - 1</c>) outside q's dtype; an unsigned q under weibull,
         ///     averaged_inverted_cdf or interpolated_inverted_cdf (NumPy's <c>previous_indexes[above] = -1</c>: <c>Python
         ///     integer -1 out of bounds for uint8</c>).</exception>
         internal static unsafe void IntegerPlan<TQ>(QuantileMethod method, long n, double* q, int nQs, bool inexact,
@@ -569,7 +569,7 @@ namespace NumSharp.Statistics
         /// <param name="next">The next index.</param>
         /// <param name="t">The weight, an integer of q's dtype.</param>
         /// <param name="oneMinusT"><c>1 - t</c> in q's dtype.</param>
-        /// <exception cref="OverflowException">An unsigned q whose virtual index reaches the last index (every one does,
+        /// <exception cref="OverflowError">An unsigned q whose virtual index reaches the last index (every one does,
         ///     q being 0 or 1): NumPy's <c>previous_indexes[indexes_above_bounds] = -1</c>, <c>Python integer -1 out of bounds
         ///     for uint8</c>.</exception>
         private static void IntegerNeighbours<TQ>(QuantileMethod method, long n, long virtualIndex,
@@ -582,7 +582,7 @@ namespace NumSharp.Statistics
             {
                 // A setitem of the Python int -1 into q's dtype.
                 if (IsUnsigned<TQ>())
-                    throw new OverflowException($"Python integer -1 out of bounds for {IntegerName<TQ>()}");
+                    throw new OverflowError($"Python integer -1 out of bounds for {IntegerName<TQ>()}");
                 low = -1;
                 high = -1;
             }
@@ -652,6 +652,67 @@ namespace NumSharp.Statistics
             CheckKth(smallest, n);
             if (firstPastEnd != long.MaxValue)
                 CheckKth(firstPastEnd, n);
+        }
+
+        /// <summary>
+        ///     The positions NumPy's quantile family partitions a line of FLOAT data at, sorted ascending without repeats:
+        ///     <list type="bullet">
+        ///         <item><c>np.median</c> (<c>_median</c>): <c>[n//2 - 1, n//2]</c> for an even length, <c>[(n-1)//2]</c> for
+        ///             an odd one, then <c>-1</c> (the NaN check);</item>
+        ///         <item>a take (the selection methods, and 'linear' with an integer q): the indexes, then <c>-1</c>;</item>
+        ///         <item>an interpolation: <c>np.unique(np.concatenate(([0, -1], previous, next)))</c>.</item>
+        ///     </list>
+        ///     <c>-1</c> is the last position. The partition's swaps depend on this list, so it decides which zero of a ±0
+        ///     tie each neighbour reads and which NaN a NaN slice answers (the one left at <c>arr[-1]</c>).
+        /// </summary>
+        /// <param name="raw">The plan's indexes, two per quantile (previous / next, or the take index twice); negative
+        ///     values count from the end.</param>
+        /// <param name="count">How many values <paramref name="raw"/> holds.</param>
+        /// <param name="n">The line's length, at least 2.</param>
+        /// <param name="discrete">True for a take (no 0 is added).</param>
+        /// <param name="medianMean">True for np.median / np.nanmedian (the list is the median's own, from
+        ///     <paramref name="n"/> alone).</param>
+        /// <param name="kth">Receives the list: room for <paramref name="count"/> + 3 values.</param>
+        /// <returns>The number of positions written.</returns>
+        /// <remarks>
+        ///     Only float data needs NumPy's exact list. Over integer data equal values are identical and no NaN exists,
+        ///     so the arrangement is invisible and the callers partition at the needed neighbours alone: NumPy's extra
+        ///     0 and -1 cost an integer line a whole quickselect pass (an integer type has no last-maximum shortcut).
+        ///     NumPy's list may repeat a position (an explicit <c>n - 1</c> beside the <c>-1</c>); a repeated kth leaves
+        ///     the arrangement as it is, so dropping repeats changes nothing.
+        /// </remarks>
+        internal static unsafe int FloatPartitionKth(long* raw, int count, long n, bool discrete, bool medianMean, int* kth)
+        {
+            int c = 0;
+            if (medianMean)
+            {
+                if (n % 2 == 0)
+                {
+                    kth[c++] = (int)(n / 2 - 1);
+                    kth[c++] = (int)(n / 2);
+                }
+                else
+                    kth[c++] = (int)((n - 1) / 2);
+            }
+            else
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    long k = raw[i];
+                    kth[c++] = (int)(k < 0 ? k + n : k);
+                }
+                if (!discrete)
+                    kth[c++] = 0;
+            }
+            kth[c++] = (int)(n - 1);
+
+            // Sorted (a q array can hold thousands of quantiles: an O(c log c) sort), repeats dropped.
+            new Span<int>(kth, c).Sort();
+            int u = 0;
+            for (int i = 0; i < c; i++)
+                if (u == 0 || kth[u - 1] != kth[i])
+                    kth[u++] = kth[i];
+            return u;
         }
 
         /// <summary>One kth of <c>partition_prep_kth_array</c>: a negative kth gains n; the result must lie in [0, n).</summary>

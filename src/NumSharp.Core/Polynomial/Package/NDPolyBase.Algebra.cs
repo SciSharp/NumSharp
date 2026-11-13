@@ -270,7 +270,7 @@ namespace NumSharp
         /// <returns>The series.</returns>
         /// <exception cref="ValueError"><c>deg must be non-negative integer</c>; int()'s ValueErrors.</exception>
         /// <exception cref="TypeError">int() refuses <paramref name="deg"/>.</exception>
-        /// <exception cref="OverflowException">A degree no list can have (<c>cannot fit 'int' into an index-sized integer</c>).</exception>
+        /// <exception cref="OverflowError">A degree no list can have (<c>cannot fit 'int' into an index-sized integer</c>).</exception>
         private protected static NDPolyBase BasisOf(NDPolyClass kind, object deg, object domain, object window, string symbol)
         {
             using var scope = NDScope.Open();
@@ -280,7 +280,7 @@ namespace NumSharp
             if (differs || ideg.Sign < 0)
                 throw new ValueError("deg must be non-negative integer");
             if (ideg >= long.MaxValue)
-                throw new OverflowException("cannot fit 'int' into an index-sized integer");
+                throw new OverflowError("cannot fit 'int' into an index-sized integer");
             long n = (long)ideg + 1;
             var coef = np.zeros(new Shape(n), NPTypeCode.Double);
             unsafe
@@ -305,7 +305,7 @@ namespace NumSharp
         /// <param name="symbol">The symbol.</param>
         /// <returns>The series with those roots.</returns>
         /// <exception cref="ValueError">as_series' errors for the roots; the constructor's errors.</exception>
-        /// <exception cref="OverflowException">A Python-float scale whose power overflows (<c>(34, 'Numerical result out of
+        /// <exception cref="OverflowError">A Python-float scale whose power overflows (<c>(34, 'Numerical result out of
         ///     range')</c>, CPython's float power).</exception>
         private protected static NDPolyBase FromRootsOf(NDPolyClass kind, object roots, object domain, object window, string symbol)
         {
@@ -404,7 +404,7 @@ namespace NumSharp
         private protected static NDPolyBase CastOf(NDPolyClass kind, NDPolyBase series, object domain, object window)
         {
             if (series is null)
-                throw new AttributeError("'NoneType' object has no attribute 'convert'");
+                throw new AttributeError("'NoneType' object has no attribute 'convert'", "convert", null);
             object d = domain ?? kind.domain;
             object w = window ?? kind.window;
             return series.convert(d, kind.ClrType, w);
@@ -505,7 +505,7 @@ namespace NumSharp
         /// <param name="scl">The scale.</param>
         /// <param name="deg">The exponent (≥ 1, the root count).</param>
         /// <returns>The power (a NumPy scalar for a NumPy scale, a Python value for a Python one).</returns>
-        /// <exception cref="OverflowException">CPython's float overflow (<c>(34, 'Numerical result out of range')</c>) or
+        /// <exception cref="OverflowError">CPython's float overflow (<c>(34, 'Numerical result out of range')</c>) or
         ///     complex overflow (<c>complex exponentiation</c>).</exception>
         /// <exception cref="NotSupportedException">A scale of another dtype (an integer, decimal or complex64 scale, which no
         ///     domain as_series makes).</exception>
@@ -560,7 +560,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="iv">The base.</param><param name="n">The exponent (≥ 1).</param>
         /// <returns>The power.</returns>
-        /// <exception cref="OverflowException"><c>(34, 'Numerical result out of range')</c>.</exception>
+        /// <exception cref="OverflowError"><c>(34, 'Numerical result out of range')</c>.</exception>
         private static double PyFloatPow(double iv, long n)
         {
             double iw = n;
@@ -581,7 +581,7 @@ namespace NumSharp
                 return negate ? -1.0 : 1.0;
             double ix = Math.Pow(iv, iw);
             if (double.IsInfinity(ix))
-                throw new OverflowException("(34, 'Numerical result out of range')");
+                throw new OverflowError("(34, 'Numerical result out of range')");
             return negate ? -ix : ix;
         }
 
@@ -592,7 +592,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The base.</param><param name="n">The exponent (≥ 1).</param>
         /// <returns>The power.</returns>
-        /// <exception cref="OverflowException"><c>complex exponentiation</c>.</exception>
+        /// <exception cref="OverflowError"><c>complex exponentiation</c>.</exception>
         private static Complex PyComplexPow(Complex a, long n)
         {
             Complex r;
@@ -621,7 +621,7 @@ namespace NumSharp
                 r = new Complex(len * Math.Cos(phase), len * Math.Sin(phase));
             }
             if (double.IsInfinity(r.Real) || double.IsInfinity(r.Imaginary))
-                throw new OverflowException("complex exponentiation");
+                throw new OverflowError("complex exponentiation");
             return r;
         }
 

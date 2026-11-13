@@ -26,13 +26,13 @@ namespace NumSharp.Tests.Logic
             readOnly.setflags(write: false);
             const string noLoop = "No loop matching the specified signature and casting was found for ufunc logical_not";
 
-            new Action(() => np.logical_not(u, dtype: np.@bool)).Should().ThrowExactly<TypeError>()
+            new Action(() => np.logical_not(u, dtype: np.@bool)).Should().ThrowExactly<UFuncInputCastingError>()
                 .WithMessage("Cannot cast ufunc 'logical_not' input from dtype('<U2') to dtype('bool') with casting rule 'same_kind'");
             new Action(() => np.logical_not(s, dtype: np.float64)).Should().ThrowExactly<IncorrectTypeException>().WithMessage(noLoop);
             new Action(() => np.logical_not(u, dtype: np.int8)).Should().ThrowExactly<IncorrectTypeException>().WithMessage(noLoop);
-            new Action(() => np.logical_not(t, dtype: np.float64)).Should().ThrowExactly<TypeError>().WithMessage(
+            new Action(() => np.logical_not(t, dtype: np.float64)).Should().ThrowExactly<UFuncNoLoopError>().WithMessage(
                 "ufunc 'logical_not' did not contain a loop with signature matching types <class 'numpy.dtypes.StringDType'> -> <class 'numpy.dtypes.Float64DType'>");
-            new Action(() => np.logical_not(t, dtype: np.@bool)).Should().ThrowExactly<TypeError>().WithMessage(
+            new Action(() => np.logical_not(t, dtype: np.@bool)).Should().ThrowExactly<UFuncNoLoopError>().WithMessage(
                 "ufunc 'logical_not' did not contain a loop with signature matching types <class 'numpy.dtypes.StringDType'> -> <class 'numpy.dtypes.BoolDType'>");
             // The parse errors come first, ahead of the loop answer.
             new Action(() => np.logical_not(u, @out: readOnly, dtype: np.float64)).Should().ThrowExactly<ValueError>()
@@ -42,7 +42,7 @@ namespace NumSharp.Tests.Logic
             // Without dtype= the answers were NumPy's already.
             new Action(() => np.logical_not(u)).Should().ThrowExactly<TypeError>().WithMessage(
                 "ufunc 'logical_not' not supported for the input types, and the inputs could not be safely coerced to any supported types according to the casting rule ''safe''");
-            new Action(() => np.logical_not(t)).Should().ThrowExactly<TypeError>().WithMessage(
+            new Action(() => np.logical_not(t)).Should().ThrowExactly<UFuncNoLoopError>().WithMessage(
                 "ufunc 'logical_not' did not contain a loop with signature matching types <class 'numpy.dtypes.StringDType'> -> None");
         }
 

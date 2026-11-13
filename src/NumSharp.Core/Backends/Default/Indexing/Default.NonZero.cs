@@ -260,6 +260,104 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     NumPy's <c>np.count_nonzero(a, axis=None, *, keepdims=False)</c>: the flat count as NumPy's scalar without an
+        ///     axis or keepdims, otherwise the int64 sum of the truth values over the given axes.
+        /// </summary>
+        /// <param name="nd">The array (any dtype, any layout).</param>
+        /// <param name="axis">null (None), one axis, or a tuple of axes.</param>
+        /// <param name="keepdims">Whether the counted axes stay with length one.</param>
+        /// <returns>The int64 counts (see <see cref="TensorEngine.CountNonZero(NDArray, NDAxis?, bool)"/>).</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
+        /// <remarks>An integer axis keeps its own route (the sum's 0-d special case, the empty-array zeros); a tuple, even of
+        ///     one axis, has no 0-d special case, exactly as NumPy's sum of the truth values answers each.</remarks>
+        public override NDArray CountNonZero(NDArray nd, NDAxis? axis, bool keepdims = false)
+        {
+            if (axis is null)
+                return CountNonZeroEveryAxis(nd, keepdims);
+            if (!axis.Value.IsTuple)
+                return CountNonZeroAlong(nd, axis.Value[0], keepdims);
+            return CountNonZeroAlong(nd, axis.Value.ToArray(), keepdims);
+        }
+
+        /// <summary>
+        ///     <c>np.count_nonzero(a, axis=None, keepdims=)</c>: <c>multiarray.count_nonzero(a)</c> (NumPy's intp scalar)
+        ///     without keepdims, <c>a_bool.sum(axis=None, dtype=intp, keepdims=True)</c> with it - the one count in an int64
+        ///     array of <paramref name="nd"/>'s rank, every axis of length one.
+        /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <param name="keepdims">Whether every axis stays with length one.</param>
+        /// <returns>A read-only 0-d int64 array (NumPy's scalar) without keepdims or for a 0-d input (NumPy's sum of a 0-d
+        ///     array is its scalar, keepdims or not); otherwise a fresh writeable int64 array of shape (1, …, 1).</returns>
+        private NDArray CountNonZeroEveryAxis(NDArray nd, bool keepdims)
+        {
+            // The flat count answers every form: text by its truth values, an array with no element with 0.
+            NDArray counted = NewScalar(CountNonZero(nd));
+            if (!keepdims || nd.ndim == 0)
+                return counted.PyArray_Return();
+
+            // keepdims: the one count at the reduced shape (1, ..., 1), as add.reduce allocates it - a fresh owner. The 0-d
+            // owner's storage takes the kept rank in place (one element either way; its strides are all zero-length axes).
+            var dims = new long[nd.ndim];
+            for (int i = 0; i < dims.Length; i++)
+                dims[i] = 1;
+            counted.Storage.Reshape(new Shape(dims, copy: false));
+            return counted;
+        }
+
+        /// <summary>
+        ///     <c>np.count_nonzero(a, axis=tuple, keepdims=)</c>: <c>a.astype(bool, copy=False).sum(axis=tuple, dtype=intp,
+        ///     keepdims=keepdims)</c> - NumPy's ONE add.reduce over the axis set.
+        /// </summary>
+        /// <param name="nd">The array (any dtype; text is counted by its truth values).</param>
+        /// <param name="axes">The axes as given (not normalized; possibly empty).</param>
+        /// <param name="keepdims">Whether the counted axes stay with length one.</param>
+        /// <returns>The int64 counts, laid out as NumPy's reduction allocates them (the input's memory order); a read-only
+        ///     0-d array (NumPy's scalar) when every axis is counted without keepdims.</returns>
+        /// <exception cref="AxisError">An axis is out of range (the first one, as given; a 0-d input has no axis for a tuple
+        ///     to name).</exception>
+        /// <exception cref="ValueError">A tuple names an axis twice (<c>duplicate value in 'axis'</c>), after every axis'
+        ///     range.</exception>
+        [NDScoped]
+        private NDArray CountNonZeroAlong(NDArray nd, int[] axes, bool keepdims)
+        {
+            // Text: the tuple is checked item by item, then for repeats, before NumPy reads the strings' truth values
+            // (a != ''): the stand-in is the truth array, counted below.
+            if (Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", nd, axes) is { } standIn)
+            {
+                using (standIn)
+                    return CountNonZeroAlong(standIn, axes, keepdims);
+            }
+
+            // The sum's axis conversion: every axis' range first (an AxisError naming the axis as given), then a repeat. A
+            // tuple has no 0-d special case: (0,) on a 0-d array is the AxisError NumPy raises.
+            bool[] flags = ReductionArguments.AxisFlags(nd.ndim, axes);
+            int count = 0;
+            foreach (bool f in flags)
+                if (f)
+                    count++;
+            var reduced = new int[count];
+            for (int d = 0, k = 0; d < flags.Length; d++)
+                if (flags[d])
+                    reduced[k++] = d;
+
+            // a.astype(bool, copy=False), then add.reduce over the whole set in the intp loop: np.sum's own routes for one
+            // axis and for every axis, NumPy's reduction iterator for any other set (two or more axes, or none). The counts
+            // are integers, so no order of the adds changes them.
+            NDArray truth = nd.typecode == NPTypeCode.Boolean ? nd : nd.astype(np.@bool, copy: false);
+            try
+            {
+                return ReduceAddOverAxes(truth, reduced, keepdims, NPTypeCode.Int64);
+            }
+            finally
+            {
+                // The cast copy is this call's temporary; a bool input is the caller's array and stays alive.
+                if (!ReferenceEquals(truth, nd))
+                    truth.Dispose();
+            }
+        }
+
+        /// <summary>
         /// Count non-zero elements along a specific axis.
         /// </summary>
         /// <param name="nd">The array.</param>
@@ -271,14 +369,14 @@ namespace NumSharp.Backends
         ///     inherits (<c>a.astype(bool).sum(axis)</c>), so a 0-d input accepts 0 and -1 and nothing else.</exception>
         /// <remarks>A string array is counted by its truth values: NumPy's <c>(a != '').sum(axis)</c> (never raises).</remarks>
         [NDScoped]
-        public override NDArray CountNonZero(NDArray nd, int axis, bool keepdims = false)
+        private NDArray CountNonZeroAlong(NDArray nd, int axis, bool keepdims)
         {
             // Text: NumPy's count_nonzero is (a != '').sum(axis) — the strings' truth values, after the sum's axis check (a
             // 0-d input accepts 0 and -1): the stand-in is the truth array, summed below.
             if (Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", nd, (int?)axis) is { } standIn)
             {
                 using (standIn)
-                    return CountNonZero(standIn, axis, keepdims);
+                    return CountNonZeroAlong(standIn, axis, keepdims);
             }
             if (nd.size == 0)
             {
@@ -293,17 +391,13 @@ namespace NumSharp.Backends
                 var resultShape = Shape.GetAxis(nd.Shape, axis);
                 // np.zeros(shape, int64)'s own allocation (a zero-filled owner), without the call up into np.*.
                 var empty = NewArray(NPTypeCode.Int64, new Shape(resultShape, copy: false), true);
+                // The kept axis at NumPy's keepdims place (all-zero strides for an empty result).
                 if (keepdims)
-                {
-                    var ks = new long[nd.ndim];
-                    for (int d = 0, sd = 0; d < nd.ndim; d++)
-                        ks[d] = (d == axis) ? 1 : resultShape[sd++];
-                    empty.Storage.Reshape(new Shape(ks, copy: false));
-                }
+                    ExpandReducedAxis(empty, nd.Shape, axis);
                 // NumPy's count is a.astype(bool).sum(axis), so a 1-D input's 0-d count is the sum's scalar, as the
                 // non-empty route below returns it (np.linalg.matrix_rank of an empty matrix with a tolerance came back
                 // writeable through here). A no-op for an array result.
-                return empty.MarkReductionScalar();
+                return empty.PyArray_Return();
             }
             // Boundary scope: reclaims the cast copy of a failed call and the scalar path's temporaries; the result is yielded.
 
@@ -317,7 +411,7 @@ namespace NumSharp.Backends
                     throw new AxisError(axis, 0);
                 // The sum of a 0-d input is NumPy's scalar, keepdims or not (np.count_nonzero(np.array(5), axis=0) is
                 // np.int64(1)); NDArray.Scalar alone is a writeable 0-d array.
-                return NewScalar(CountNonZero(nd)).MarkReductionScalar();
+                return NewScalar(CountNonZero(nd)).PyArray_Return();
             }
 
             axis = Shape.check_and_adjust_axis(nd.ndim, axis);
@@ -328,7 +422,7 @@ namespace NumSharp.Backends
             // layout — the reduce iterator's allocation in the input's memory order, F for an F input (plan
             // api-parameter-parity X10) — and np.sum's bool axis-count routes; the per-output scalar loop it replaces
             // wrote C order and ran 15-100x slower than these routes at 100K-1M elements.
-            NDArray truth = nd.typecode == NPTypeCode.Boolean ? nd : nd.astype(np.@bool, false);
+            NDArray truth = nd.typecode == NPTypeCode.Boolean ? nd : nd.astype(np.@bool, copy: false);
             try
             {
                 return Sum(truth, axis, np.int64, keepdims);

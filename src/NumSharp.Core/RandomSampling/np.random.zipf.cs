@@ -39,14 +39,14 @@ namespace NumSharp
         ///     and never returns; NumSharp returns 1 — the value the distribution degenerates to, and the modern sampler's
         ///     answer — without drawing. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray zipf(double a, Shape size)
+        public NDArray zipf(double a, Shape? size)
         {
             RandomConstraints.Check(a, "a", ConstraintType.CONS_GT_1);
 
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyZipfSetup(a);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -54,11 +54,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyZipf(ref one, in setup, null));
+                        return NDArray.WritableScalar(LegacyZipf(ref one, in setup, null));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Int64, size);
+            var ret = LegacyOutput(NPTypeCode.Int64, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (long*)ret.Address;

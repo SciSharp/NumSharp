@@ -28,9 +28,21 @@ namespace NumSharp.Tests.Fuzz
         internal static readonly Dictionary<string, string> EquivalentAliases = new()
         {
             ["absolute"] = "abs",
+            // NumPy 2.0's Array-API names ARE their originals (np.acos is np.arccos): np.acos & co. forward to them with
+            // the original's one ufunc signature (API-parity batch 1, 2026-11-11), so the original's corpus gates them.
+            ["acos"] = "arccos",
+            ["asin"] = "arcsin",
+            ["atan"] = "arctan",
+            ["atan2"] = "arctan2",
+            ["bitwise_invert"] = "invert",
+            ["bitwise_left_shift"] = "left_shift",
+            ["bitwise_right_shift"] = "right_shift",
+            ["pow"] = "power",
             ["amax"] = "max",
             ["amin"] = "min",
             ["around"] = "round_",
+            // np.round is NumPy 2.x's name of the function the corpus keys as round_ (np.round_ itself went with NumPy 2.0).
+            ["round"] = "round_",
             ["bitwise_not"] = "invert",
             ["broadcast"] = "broadcast_values",
             ["common_type_code"] = "common_type",
@@ -43,6 +55,10 @@ namespace NumSharp.Tests.Fuzz
             ["radians"] = "deg2rad",
             ["remainder"] = "mod",
             ["result_type"] = "result_type_arrays",
+            // np.row_stack is vstack under NumPy 2.4's other name (shape_base.py returns vstack(tup, dtype=dtype,
+            // casting=casting)); NumPy 2.5 removed it and NumSharp keeps it on purpose, forwarding to vstack's
+            // statements (API-parity batch 12), so vstack's cases are its evidence.
+            ["row_stack"] = "vstack",
             ["true_divide"] = "divide",
         };
 
@@ -519,9 +535,10 @@ namespace NumSharp.Tests.Fuzz
             ["innerproduct"] = "ma.inner",
             ["outerproduct"] = "ma.outer",
             ["asanyarray"] = "ma.asarray",
-            // The returned=True twin of ma.average — same weighted-average value path, plus the
-            // sum-of-weights slot pinned by NDMaskedArrayTests.
-            ["average_returned"] = "ma.average",
+            // NumPy's ma.MaskedArray IS ma.masked_array (API-parity batch 13's class call).
+            ["MaskedArray"] = "ma.masked_array",
+            // (average_returned retired with API-parity batch 11: NumPy's returned=True is ma.average's own parameter
+            // now, so the ma.average op covers the one member.)
         };
 
         // Gated by the NDMaskedArrayTests suite + the ledger in docs/MA_ORACLE_DESIGN.md. Since 2026-10-08 the

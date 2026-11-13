@@ -30,14 +30,13 @@ namespace NumSharp.Backends
         ///     loop dtype with the text cast around it.</exception>
         /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number, or a
         ///     read-only <paramref name="out"/> (<c>output array is read-only</c>).</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape and NumPy's
-        ///     accumulate refuses it: the text of the statement that refuses (parity QA-31, <see cref="StoreIntoMisfitOut"/>):
-        ///     NpyIter's <c>operands could not be broadcast together with remapped shapes [original-&gt;remapped]:
-        ///     (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> (or its <c>op_axes</c> / non-broadcastable-output siblings) on NumPy's
-        ///     iterator path, an input of more than one dimension among its triggers; <c>provided out is the wrong size for
-        ///     the accumulation.</c> on the direct 1-D path. The outs NumPy accepts are written where its iterator writes
-        ///     (more trailing out axes at index 0, an extent-1 input broadcast, the accumulated axis cut to the input's
-        ///     extent), and an empty input or out comes back untouched (parity QA-54).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape: the text of the
+        ///     statement that refuses it (parity QA-31, <see cref="MisfitOutError"/>): NpyIter's <c>operands could not be
+        ///     broadcast together with remapped shapes [original-&gt;remapped]: (4,3)-&gt;(4,3) (3,4)-&gt;(3,4) </c> (or its
+        ///     <c>op_axes</c> / non-broadcastable-output siblings) on NumPy's iterator path, an input of more than one
+        ///     dimension among its triggers; otherwise — an out the iterator accepts, the direct 1-D path, an empty input or
+        ///     out included — <c>provided out is the wrong size for the accumulation.</c> (NumPy 2.5 compares the dimensions on
+        ///     every path before the empty exits; 2.4 wrote into a longer or broadcast out, parity QA-54).</exception>
         /// <remarks>
         ///     The statements are np.cumprod's, in its order (moved from <c>APIs/np.cumprod.cs</c> by the np-layer dtype
         ///     plan's P0 pilot): multiply.accumulate's loop resolution on (out, arr) answers FIRST for text or a string
@@ -162,8 +161,11 @@ namespace NumSharp.Backends
                 // An axis of length 1: the values are unchanged, but multiply.accumulate still has its NEP 50 accumulator
                 // dtype (signed integers narrower than int64 -> int64, unsigned -> uint64) whatever the axis length, and the
                 // result is a fresh copy. It returned an un-promoted copy (cumprod(int32 (2, 1, 3), axis=1) int32 where NumPy
-                // gives int64; parity QA-09), np.cumsum's twin branch was already fixed the same way.
-                return Cast(arr, typeCode ?? arr.GetTypeCode.GetAccumulatingType(), copy: true);
+                // gives int64; parity QA-09), np.cumsum's twin branch was already fixed the same way. The copy is laid out
+                // as the accumulate's iterator allocates it (AccumulateOutputLayout), not as astype's K copy: an F input's
+                // extent-1 axis lands outermost (np.cumprod(np.asfortranarray(np.ones((1, 3, 2))), axis=0).strides ==
+                // (48, 8, 24) in NumPy 2.4.2, where the K copy has (8, 8, 24)).
+                return LengthOneAxisScan(arr, typeCode ?? arr.GetTypeCode.GetAccumulatingType());
             }
 
             var retTypeCode = typeCode ?? arr.GetTypeCode.GetAccumulatingType();

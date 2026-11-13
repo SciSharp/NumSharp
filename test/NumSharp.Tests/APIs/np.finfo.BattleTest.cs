@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace NumSharp.Tests.APIs;
 
@@ -17,7 +18,7 @@ public class NpFInfoBattleTests
         info.bits.Should().Be(32);
         info.precision.Should().Be(6);
         info.maxexp.Should().Be(128);
-        info.minexp.Should().Be(-125);
+        info.minexp.Should().Be(-126);   // NumPy 2.4.2 (2**-126 is smallest_normal); -125 before API-parity batch 7
         // max/min are stored as double, so compare with tolerance
         info.max.Should().BeGreaterThan(3.4e38);
         info.min.Should().BeLessThan(-3.4e38);
@@ -37,7 +38,7 @@ public class NpFInfoBattleTests
         info.bits.Should().Be(64);
         info.precision.Should().Be(15);
         info.maxexp.Should().Be(1024);
-        info.minexp.Should().Be(-1021);
+        info.minexp.Should().Be(-1022);  // NumPy 2.4.2 (2**-1022 is smallest_normal); -1021 before API-parity batch 7
         info.max.Should().Be(double.MaxValue);
         info.min.Should().Be(-double.MaxValue);
         info.smallest_subnormal.Should().Be(double.Epsilon);
@@ -91,9 +92,12 @@ public class NpFInfoBattleTests
     }
 
     [TestMethod]
-    public void FInfo_NullArray_Throws()
+    public void FInfo_HasNoArrayOverload_AsNumPyRefusesAnArray()
     {
-        new Action(() => np.finfo((NDArray)null!)).Should().Throw<Exception>();
+        // NumPy 2.5.4: np.finfo(np.ones(2)) is "data type dtype('O') not compatible with finfo" (an array is not a dtype);
+        // API-parity batch 7 removed the NDArray form, so a C# array argument does not compile: pass arr.dtype.
+        typeof(np).GetMethods().Where(m => m.Name == "finfo")
+            .Any(m => m.GetParameters().Any(p => p.ParameterType == typeof(NDArray))).Should().BeFalse();
     }
 
     [TestMethod]
@@ -110,35 +114,53 @@ public class NpFInfoBattleTests
 
     #endregion
 
-    #region Generic Overload Tests
+    #region C# type spellings (the generic finfo<T> went in API-parity batch 9, OD7)
 
+    /// <summary>
+    ///     The generic <c>finfo&lt;float&gt;()</c> went (OD7): <c>np.finfo(typeof(float))</c> is NumPy's
+    ///     <c>np.finfo(np.float32)</c> (32 bits, precision 6).
+    /// </summary>
     [TestMethod]
-    public void FInfo_Generic_Float()
+    public void FInfo_TypeofFloat()
     {
-        var info = np.finfo<float>();
+        // NumPy: np.finfo(np.float32).bits == 32, .precision == 6.
+        var info = np.finfo(typeof(float));
         info.bits.Should().Be(32);
         info.precision.Should().Be(6);
     }
 
+    /// <summary>
+    ///     <c>np.finfo(typeof(double))</c> is NumPy's <c>np.finfo(np.float64)</c> (64 bits, precision 15).
+    /// </summary>
     [TestMethod]
-    public void FInfo_Generic_Double()
+    public void FInfo_TypeofDouble()
     {
-        var info = np.finfo<double>();
+        var info = np.finfo(typeof(double));
         info.bits.Should().Be(64);
         info.precision.Should().Be(15);
     }
 
+    /// <summary>
+    ///     NumSharp's decimal dtype is inexact, so <c>np.finfo(typeof(decimal))</c> answers (128 bits).
+    /// </summary>
     [TestMethod]
-    public void FInfo_Generic_Decimal()
+    public void FInfo_TypeofDecimal()
     {
-        var info = np.finfo<decimal>();
+        var info = np.finfo(typeof(decimal));
         info.bits.Should().Be(128);
     }
 
+    /// <summary>
+    ///     An integer type is NumPy 2.5's <c>ValueError: data type dtype('int32') not compatible with finfo</c> (NumPy 2.4
+    ///     named the scalar class, <c>data type &lt;class 'numpy.int32'&gt; not inexact</c>; the generic form threw some
+    ///     exception; the dtype form throws NumPy's).
+    /// </summary>
     [TestMethod]
-    public void FInfo_Generic_Int_Throws()
+    public void FInfo_TypeofInt_IsNumPysValueError()
     {
-        new Action(() => np.finfo<int>()).Should().Throw<Exception>();
+        // NumPy 2.5.4: np.finfo(np.int32) -> ValueError: data type dtype('int32') not compatible with finfo
+        new Action(() => np.finfo(typeof(int))).Should().Throw<ValueError>()
+            .WithMessage("data type dtype('int32') not compatible with finfo");
     }
 
     #endregion
@@ -146,26 +168,28 @@ public class NpFInfoBattleTests
     #region NDArray Overload Tests
 
     [TestMethod]
-    public void FInfo_NDArray_Float32()
+    public void FInfo_ArrayDtype_Float32()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f, 3.0f });
-        var info = np.finfo(arr);
+        var info = np.finfo(arr.dtype);
         info.bits.Should().Be(32);
     }
 
     [TestMethod]
-    public void FInfo_NDArray_Float64()
+    public void FInfo_ArrayDtype_Float64()
     {
         var arr = np.array(new double[] { 1.0, 2.0, 3.0 });
-        var info = np.finfo(arr);
+        var info = np.finfo(arr.dtype);
         info.bits.Should().Be(64);
     }
 
     [TestMethod]
-    public void FInfo_NDArray_Int_Throws()
+    public void FInfo_ArrayDtype_Int_Throws()
     {
+        // NumPy 2.5.4: np.finfo(np.int32) names the descriptor (2.4 named the scalar class).
         var arr = np.array(new int[] { 1, 2, 3 });
-        new Action(() => np.finfo(arr)).Should().Throw<Exception>();
+        new Action(() => np.finfo(arr.dtype)).Should().Throw<ValueError>()
+            .WithMessage("data type dtype('int32') not compatible with finfo");
     }
 
     #endregion

@@ -6,104 +6,40 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     Return a new double array of given shape, filled with zeros.
+        ///     Return a new array of given shape and type, filled with zeros — NumPy's one signature,
+        ///     <c>np.zeros(shape, dtype=None, order='C', *, device=None)</c>.
         /// </summary>
-        /// <param name="shapes">Shape of the new array,</param>
-        /// <returns>Array of zeros with the given shape, dtype.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(int shape)
-        {
-            return zeros(new Shape(shape), (Type)null);
-        }
-
-        /// <summary>
-        ///     Return a new double array of given shape, filled with zeros.
-        /// </summary>
-        /// <param name="shape">Shape of the new array,</param>
-        /// <returns>Array of zeros with the given shape, dtype.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(int[] shape)
-        {
-            return zeros(new Shape(shape), (Type)null);
-        }
-
-        /// <summary>
-        ///     Return a new double array of given shape, filled with zeros.
-        /// </summary>
-        /// <param name="shape">Shape of the new array,</param>
-        /// <returns>Array of zeros with the given shape, dtype.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(long[] shape)
-        {
-            return zeros(new Shape(shape), (Type)null);
-        }
-
-        /// <summary>
-        ///     Return a new double array of given shape, filled with zeros.
-        /// </summary>
-        /// <param name="shape">Shape of the new array,</param>
-        /// <returns>Array of zeros with the given shape, type <typeparamref name="T"/>.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros<T>(int[] shape) where T : unmanaged
-        {
-            return zeros(new Shape(shape), typeof(T));
-        }
-
-        /// <summary>
-        ///     Return a new double array of given shape, filled with zeros.
-        /// </summary>
-        /// <param name="shape">Shape of the new array,</param>
-        /// <returns>Array of zeros with the given shape, type <typeparamref name="T"/>.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros<T>(long[] shape) where T : unmanaged
-        {
-            return zeros(new Shape(shape), typeof(T));
-        }
-
-        /// <summary>
-        ///     Return a new double array of given shape, filled with zeros.
-        /// </summary>
-        /// <param name="shape">Shape of the new array,</param>
+        /// <param name="shape">The dimensions: an int (<c>2</c>), a tuple (<c>(2, 3)</c>), an <c>int[]</c> / <c>long[]</c> or a
+        ///     <see cref="Shape"/> (all convert implicitly). Only the dimensions are read: the layout comes from
+        ///     <paramref name="order"/>, as NumPy's shape is a tuple of ints — a <see cref="Shape"/> taken from a transposed
+        ///     view gives a C-ordered array unless <paramref name="order"/> says <c>'F'</c>.</param>
         /// <param name="dtype">
-        ///     The desired dtype for the array — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>, an
-        ///     <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> (<see cref="uint8"/>) all convert
-        ///     implicitly. Default (null) is <see cref="float64"/> / <see cref="double"/>.
+        ///     The desired dtype — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>, an
+        ///     <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> (<see cref="uint8"/>) all
+        ///     convert implicitly. Null (NumPy's None) is float64.
         /// </param>
-        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
-        /// <returns>Array of zeros with the given shape, dtype.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(Shape shape, DType dtype, string device = null)
-        {
-            DeviceArguments.ValidateDevice(device);
-            return new NDArray(dtype ?? DType.Double, shape, true); //already allocates inside.
-        }
-
-        /// <summary>
-        ///     Return a new double array of given shape, filled with zeros.
-        /// </summary>
-        /// <param name="shape">Shape of the new array,</param>
-        /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
-        /// <returns>Array of zeros with the given shape, dtype.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(Shape shape)
-        {
-            return new NDArray(NPTypeCode.Double, shape, true); //already allocates inside.
-        }
-
-        /// <summary>
-        ///     Return a new array of zeros with a specified memory layout — the port of NumPy's
-        ///     <c>np.zeros(shape, dtype, order='C')</c> order parameter (mirrors <see cref="empty(Shape, char, DType)"/>).
-        /// </summary>
-        /// <param name="shape">Shape of the new array.</param>
-        /// <param name="order">Memory layout: 'C' (row-major), 'F' (column-major), 'A'/'K' (default to 'C' with no source).</param>
-        /// <param name="dtype">Desired dtype (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly). Default is <see cref="float64"/> / <see cref="double"/>.</param>
-        /// <returns>Array of zeros in the requested layout (the fill is order-independent, so only the flags differ).</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(Shape shape, char order, DType dtype = null)
-        {
-            char physical = OrderResolver.Resolve(order);
-            var orderedShape = new Shape(shape.dimensions, physical, copy: false);
-            return new NDArray(dtype ?? DType.Double, orderedShape, true);
-        }
+        /// <param name="order"><c>'C'</c> (row-major, the default) or <c>'F'</c> (column-major), in either case. NumPy's
+        ///     <c>'A'</c> and <c>'K'</c> mean nothing without a source array and are refused. The fill is order-independent,
+        ///     so only the layout (strides, flags) differs.</param>
+        /// <param name="device">Null or <c>"cpu"</c> (the Array-API device; NumPy has no other).</param>
+        /// <returns>A new, owned, writeable array of zeros (empty strings for a text dtype).</returns>
+        /// <exception cref="ValueError">In NumPy's order: <paramref name="order"/> is not one of C, F, A, K (<c>order must be
+        ///     one of 'C', 'F', 'A', or 'K' (got 'X')</c>); <paramref name="device"/> is not <c>"cpu"</c> (<c>Device not
+        ///     understood. Only "cpu" is allowed, but received: gpu</c>); <paramref name="order"/> is A or K (<c>only 'C' or 'F'
+        ///     order is permitted</c>); a negative dimension (<c>negative dimensions are not allowed</c>) or a byte count past
+        ///     the allocation limit.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> names a class NumSharp has no storage for.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.zeros.html — NumPy's <c>array_zeros</c>
+        ///     (<c>multiarraymodule.c</c>), whose argument handling is <see cref="CreationLayout"/>.
+        ///     <para>One signature since API-parity batch 8 (2026-11-12): the <c>int</c> / <c>int[]</c> / <c>long[]</c> /
+        ///     <c>Shape</c>-only overloads, the <c>(Shape, DType dtype, string device)</c> form whose dtype was required (so
+        ///     <c>np.zeros(s, device: "cpu")</c> did not compile) and the <c>(Shape, char order, DType)</c> form with the order
+        ///     before the dtype all went, as did the generic <c>zeros&lt;T&gt;</c> forms (write the dtype:
+        ///     <c>np.zeros(shape, np.float64)</c>). A positional char after the shape no longer compiles: NumPy reads
+        ///     <c>np.zeros(s, 'F')</c>'s <c>'F'</c> as the DTYPE (complex64), so write <c>order: 'F'</c>.</para>
+        /// </remarks>
+        public static NDArray zeros(Shape shape, DType dtype = null, char order = 'C', string device = null)
+            => new NDArray(dtype ?? DType.Double, CreationLayout(shape, order, device), true);
     }
 }

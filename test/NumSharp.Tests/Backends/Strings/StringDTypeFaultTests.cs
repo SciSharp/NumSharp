@@ -50,7 +50,7 @@ namespace NumSharp.Tests.Backends.Strings
                 VStringAllocator.FailAllocationAfter(successes);
                 try
                 {
-                    operation.Should().Throw<OutOfMemoryException>().WithMessage(text);
+                    operation.Should().Throw<MemoryError>().WithMessage(text);
                 }
                 finally
                 {
@@ -81,7 +81,7 @@ namespace NumSharp.Tests.Backends.Strings
             a[0] = "short"; // a short string allocates nothing
             a[1] = Medium('a');
             Action third = () => a[2] = Medium('b');
-            third.Should().Throw<OutOfMemoryException>().WithMessage("Failed to pack string during StringDType setitem");
+            third.Should().Throw<MemoryError>().WithMessage("Failed to pack string during StringDType setitem");
             a[3] = Medium('c'); // fired once: later allocations succeed
             a.GetValue(3).Should().Be(Medium('c'));
             VStringAllocator.FailAllocationAfter(0);
@@ -89,7 +89,7 @@ namespace NumSharp.Tests.Backends.Strings
             other.Start();
             other.Join(); // another thread's allocations are not counted
             Action mine = () => a[0] = Medium('e');
-            mine.Should().Throw<OutOfMemoryException>();
+            mine.Should().Throw<MemoryError>();
         }
 
         /// <summary>
@@ -184,7 +184,7 @@ namespace NumSharp.Tests.Backends.Strings
                 s[1] = Medium('b');
                 VStringAllocator.FailAllocationAfter(1);
                 Action clone = () => s.Clone();
-                clone.Should().Throw<OutOfMemoryException>().WithMessage("Failed to allocate string in string to string cast");
+                clone.Should().Throw<MemoryError>().WithMessage("Failed to allocate string in string to string cast");
                 VStringAllocator.DisarmFaultInjection();
 
                 var al = s.Allocator;
@@ -211,7 +211,7 @@ namespace NumSharp.Tests.Backends.Strings
                 {
                     VStringAllocator.FailAllocationAfter(0);
                     Action copy = () => VStringAllocator.FreeAndCopy(s.Allocator, d.Allocator, s.Address + 16, d.Address, "string to string cast");
-                    copy.Should().Throw<OutOfMemoryException>().WithMessage("Failed to allocate string in string to string cast");
+                    copy.Should().Throw<MemoryError>().WithMessage("Failed to allocate string in string to string cast");
                 }
                 finally
                 {
@@ -247,22 +247,22 @@ namespace NumSharp.Tests.Backends.Strings
             {
                 Corrupt(0x40, 20); // an arena string of 20 bytes, no arena
                 Action text = () => t[0] = "x";
-                text.Should().Throw<OutOfMemoryException>().WithMessage("Failed to pack string during StringDType setitem");
+                text.Should().Throw<MemoryError>().WithMessage("Failed to pack string during StringDType setitem");
                 Action na = () => t[0] = null;
-                na.Should().Throw<OutOfMemoryException>().WithMessage("Failed to pack null string during StringDType setitem");
+                na.Should().Throw<MemoryError>().WithMessage("Failed to pack null string during StringDType setitem");
                 const string Free = "Failed to deallocate string in string to string cast";
                 Action sliceNA = () => t[":"] = null;
-                sliceNA.Should().Throw<OutOfMemoryException>().WithMessage(Free);
+                sliceNA.Should().Throw<MemoryError>().WithMessage(Free);
                 Action sliceText = () => t[":"] = "x";
-                sliceText.Should().Throw<OutOfMemoryException>().WithMessage(Free);
+                sliceText.Should().Throw<MemoryError>().WithMessage(Free);
                 Action fill = () => t.fill("x");
-                fill.Should().Throw<OutOfMemoryException>().WithMessage(Free);
+                fill.Should().Throw<MemoryError>().WithMessage(Free);
                 Action fillNA = () => t.fill(null);
-                fillNA.Should().Throw<OutOfMemoryException>().WithMessage(Free);
+                fillNA.Should().Throw<MemoryError>().WithMessage(Free);
 
                 Corrupt(0x40, 0); // an emptied arena string (its allocation would be reused), no arena
                 Action reuse = () => t[0] = Medium('r');
-                reuse.Should().Throw<OutOfMemoryException>().WithMessage("Failed to pack string during StringDType setitem");
+                reuse.Should().Throw<MemoryError>().WithMessage("Failed to pack string during StringDType setitem");
             }
             finally
             {

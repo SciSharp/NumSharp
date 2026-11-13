@@ -265,7 +265,7 @@ public class FlatNonZeroTests
     public void FlatNonZero_Bool_Large_AllFalse_CountZeroFastPath()
     {
         // All-zero → count kernel returns 0 → early return with empty array.
-        var a = np.zeros<bool>(new int[] { 4096 });
+        var a = np.zeros(new int[] { 4096 }, np.@bool);
         var r = np.flatnonzero(a);
         r.size.Should().Be(0);
         r.typecode.Should().Be(NPTypeCode.Int64);

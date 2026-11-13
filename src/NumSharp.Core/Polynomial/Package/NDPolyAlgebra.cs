@@ -389,7 +389,7 @@ namespace NumSharp
         /// <param name="c2">Divisor.</param>
         /// <returns>(quotient, remainder), each a new array or a view of one.</returns>
         /// <exception cref="ValueError">An empty or non-1-d series, or no common type.</exception>
-        /// <exception cref="DivideByZeroException">The divisor is zero (NumPy's bare ZeroDivisionError).</exception>
+        /// <exception cref="ZeroDivisionError">The divisor is zero (NumPy's bare ZeroDivisionError).</exception>
         /// <exception cref="NotSupportedException">An object series (None, or one holding None, a non-numeric object or a Python int past uint64 — NumPy computes with Python objects), refused where NumPy starts computing with it.</exception>
         public static (NDArray quo, NDArray rem) Div(PolyBasis basis, object c1, object c2)
         {
@@ -404,7 +404,7 @@ namespace NumSharp
                 // still runs before any object arithmetic: a numeric divisor whose trimmed last coefficient is zero (a False
                 // bool included) raises it; an object or str divisor's last element never equals 0.
                 if (!v2.NonNumeric && IsZero(v2.Ptr + (NDPolySeries.TrimLength(v2) - 1) * v2.Stride, v2.Dtype))
-                    throw new DivideByZeroException(string.Empty);
+                    throw new ZeroDivisionError(string.Empty);
                 throw NDPolySeries.FirstObjectRefusal(views);
             }
             var a = PolyArena.Enter();
@@ -505,7 +505,7 @@ namespace NumSharp
         /// <returns>The power series.</returns>
         /// <exception cref="ValueError">An invalid series; <c>cannot convert float NaN to integer</c>; a non-integral or
         ///     negative power; a power above <paramref name="maxpower"/>.</exception>
-        /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>, or a power beyond int64
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>, or a power beyond int64
         ///     (NumPy would loop until memory runs out).</exception>
         /// <exception cref="NotSupportedException">An object series, once the power checks have passed.</exception>
         public static NDArray Pow(PolyBasis basis, object c, double pow, long? maxpower)
@@ -517,7 +517,7 @@ namespace NumSharp
             if (double.IsNaN(pow))
                 throw new ValueError("cannot convert float NaN to integer");
             if (double.IsInfinity(pow))
-                throw new OverflowException("cannot convert float infinity to integer");
+                throw new OverflowError("cannot convert float infinity to integer");
             double truncated = Math.Truncate(pow);
             if (truncated != pow || pow < 0)
                 throw new ValueError("Power must be a non-negative integer.");
@@ -552,7 +552,7 @@ namespace NumSharp
         ///     ndarray limit with no element or several (NumPy's truth-value texts).</exception>
         /// <exception cref="TypeError">A power int() refuses (complex, None, list, tuple, an ndarray of one or more dims), or
         ///     a limit that does not compare with an int (complex, str, list, tuple).</exception>
-        /// <exception cref="OverflowException"><c>cannot convert float infinity to integer</c>; a power too large for the
+        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power too large for the
         ///     limit's comparison dtype; a power beyond int64 with no limit (NumPy would loop until memory runs out).</exception>
         /// <exception cref="NotSupportedException">An object series, once the power checks have passed.</exception>
         public static NDArray Pow(PolyBasis basis, object c, object pow, object maxpower)
@@ -1234,11 +1234,11 @@ namespace NumSharp
         /// <param name="c1">Dividend (as_series copy).</param>
         /// <param name="c2">Divisor (as_series copy, same dtype).</param>
         /// <returns>(quotient, remainder).</returns>
-        /// <exception cref="DivideByZeroException">c2's last coefficient is zero (only an all-zero divisor, after trimming).</exception>
+        /// <exception cref="ZeroDivisionError">c2's last coefficient is zero (only an all-zero divisor, after trimming).</exception>
         private static (PolySer quo, PolySer rem) DivCore(PolyArena a, PolyBasis basis, in PolySer c1, in PolySer c2)
         {
             if (IsZero(c2.At(c2.N - 1), c2.T))
-                throw new DivideByZeroException("");
+                throw new ZeroDivisionError("");
             long lc1 = c1.N, lc2 = c2.N;
             if (lc1 < lc2)
                 return (ZeroLike(a, c1), c1);

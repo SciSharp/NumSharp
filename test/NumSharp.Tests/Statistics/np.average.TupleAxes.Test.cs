@@ -142,7 +142,7 @@ namespace NumSharp.Tests.Statistics
         {
             // scl = avg.dtype.type(a.size / avg.size): the mean is float64, so the count is float64 1.0, broadcast to the
             // mean's shape (it was the operand's int32 dtype while the operand itself came back).
-            var (avg, scl) = np.average_returned(np.array(new[,] { { 1, -2 }, { 3, 4 } }), Array.Empty<int>());
+            var (avg, scl) = np.average(np.array(new[,] { { 1, -2 }, { 3, 4 } }), Array.Empty<int>(), returned: true);
             using (avg)
             using (scl)
             {
@@ -196,7 +196,7 @@ namespace NumSharp.Tests.Statistics
             // tuple, NumPy's wgt.sum(axis=(0, 1), dtype=complex128) and np.multiply(a, wgt).sum(axis=(0, 1)).
             using var z = np.arange(24.0).reshape(2, 3, 4) * new Complex(1.0, 0.5);
             using var w = np.ones(new Shape(2, 3, 4)) * np.array(new[] { 0.5, 2.0, 1.0, 3.0 });
-            var (avg, scl) = np.average_returned(z, new[] { 0, 1 }, w);
+            var (avg, scl) = np.average(z, new[] { 0, 1 }, w, returned: true);
             using (avg)
             using (scl)
             {

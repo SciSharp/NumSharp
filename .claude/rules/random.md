@@ -10,8 +10,9 @@ paths:
 
 The legacy API and `Generator` match NumPy 1-to-1: MT19937 (NumPy's Mersenne Twister, `RandomSampling/MT19937.cs`) with
 the Marsaglia-polar Gaussian and its cached-Gaussian carry, NumPy's state-tuple `get_state`/`set_state` format, and
-PCG64/`default_rng`, so a seed produces NumPy 2.4.2's byte-identical sequences. Oracles: the `random_parity` tiers and
-the random-API oracle (`oracle.md`).
+PCG64/`default_rng`, so a seed produces NumPy 2.5.4's byte-identical sequences. The BTPE binomial has two copies, as in
+NumPy: `Generator`'s with NumPy 2.5's corrected Stirling error terms, the legacy samplers' (`binomial`, `multinomial`)
+frozen with the original ones. Oracles: the `random_parity` tiers and the random-API oracle (`oracle.md`).
 
 ## Integer types
 
@@ -28,8 +29,8 @@ Gate `RandomSampling/RandomTypeParity.Test.cs`.
   `uint`, `pool`/`generate_state(long n_words, …)` NDArrays) and NumPy's string rule (`"0x…"` hex, a leading digit
   DECIMAL, no octal: `"012"` is 12). `Seed` is a `uint`.
 - After `set_bit_generator` swaps the singleton to a non-MT19937 engine, `np.random.seed(x)` re-seeds it as NumPy's MODULE
-  function does (`engine.state = type(engine)(x).state`, the cached Gaussian kept), only for `np.random` itself; another
-  `RandomState` over such an engine refuses (the method rule).
+  function does (`set_state(type(engine)(x).state)`, which also discards the cached Gaussian), only for `np.random`
+  itself; another `RandomState` over such an engine refuses (the method rule).
 
 ## Call spellings port verbatim
 
@@ -46,9 +47,16 @@ The random-API oracle binds overloads by reflection, so call shapes are pinned a
 3. A bare `null` seed binds (`[OverloadResolutionPriority(1)]` on the overload that takes it, polyfilled for net8.0 in
    `Assembly/OverloadResolutionPriorityAttribute.cs` and honored across assemblies), and a typed null seed ARRAY is
    NumPy's `None` too: fresh entropy.
-4. `size: default` is NumPy's `size=None` (`Shape` is a struct, so `size: null` cannot compile) and binds the `Shape`
-   overload; the `int[]`/`long[]`/`long` size shims carry priority -1 (otherwise
-   `multivariate_normal(mean, cov, size: default)` would bind the `long` shim: size 0, an empty result).
+4. NumPy's `size=None`: every sampler takes `Shape? size = null` (OD4) - the Generator's since API-parity batch 5, the
+   legacy np.random samplers' and `BitGenerator.random_raw`'s since batch 6 - so `size: null` is None (one draw) and
+   `size: Shape.Scalar` (`()`) a 0-d array request; `default(Shape)` reads as None too (`Generator.IsNoSize`; the legacy
+   bodies hand `size.GetValueOrDefault()` to their `Shape` helpers). An int, an `int[]` / `long[]`, a `long` and a tuple
+   literal convert to `Shape?` through Shape's implicit conversions, so the `int[]` / `long[]` / `long` size shims (which
+   carried priority -1, a priority C# 12 ignores: they made `pareto(3.0, null)` CS0121 for a net8.0 consumer) are gone.
+   NumPy's `random_sample(size=None)` and its aliases `random`, `ranf`, `sample` take ONE size (`random_sample((2, 3))`;
+   `random_sample(2, 3)` is NumPy's TypeError and does not compile), and only `rand(d0, ..., dn)` / `randn` take loose
+   dimensions (NumPy's `rand((2, 3))` is a TypeError: no `Shape` overload). `NumPyRandom.FillUniform(Shape)` is the
+   shared [0, 1) fill (rand, random_sample, np.random.choice's uniform draws).
 5. `integers` and `randint` take NumPy's ARRAY bounds (`BoundedIntegers.Broadcast.cs`, the `_rand_<dtype>` broadcast path:
    `can_cast`-skipped bound checks in NumPy's order and words, buffered words carried across positions, the
    size-smaller-than-broadcast and non-C-layout-float-bounds quirks) and `BigInteger` (Python-int) bounds:

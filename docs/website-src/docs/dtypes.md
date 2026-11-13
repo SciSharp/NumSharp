@@ -432,7 +432,7 @@ NDArray s3 = new Complex(1, 2); // 0-d complex128 scalar
 Explicit casts back to .NET scalars require a 0-dimensional array (`ndim == 0`):
 
 ```csharp
-var scalar = np.array([42])[0];  // 0-d view
+var scalar = np.array([42])[0];  // the element: NumPy's scalar (a read-only 0-d copy)
 int x = (int)scalar;                     // works
 
 var oneD = np.array([42]);
@@ -478,6 +478,84 @@ np.finfo(np.float64).max;              // double.MaxValue
 `iinfo.max` is declared as `long`-for `uint64` its value is clamped to `long.MaxValue`. Use `maxUnsigned` (a `ulong`) to get the true 64-bit-unsigned max.
 
 `np.finfo(np.complex128)` reports the **underlying float64 precision**, matching NumPy-its `dtype` property is `Double`, `bits == 64`, `precision == 15`. This is NumPy's convention: a complex number's precision is the precision of its real and imaginary components.
+
+---
+
+## NumPy Scalars
+
+A NumPy scalar (`np.float64(1.5)`, the result of `a.sum()`) is a 0-dimensional `NDArray` in NumSharp. It computes,
+promotes and prints as the array it is, and it follows NumPy's scalar rules: it is **read-only**, and it is not an
+explicit 0-d array.
+
+```csharp
+var s = np.float64(1.5);        // NumPy's class call: a read-only 0-d float64 scalar
+var t = np.int8("12");          // 12: text is parsed by Python's int()
+var c = np.complex128(1, 2);    // (1+2j)
+var u = np.str_(5);             // '5', a <U1 scalar
+var z = np.float64();           // 0.0: no argument is the zero
+var n = np.float64(null);       // nan: null is Python's None
+var arr = np.float64(new object[] { 1, 2 });   // a list gives the ndarray [1., 2.], as in NumPy
+
+s.flags.writeable;              // False (np.float64(1.5).flags.writeable is False)
+np.isscalar(s);                 // True
+np.isscalar(np.array(5));       // False: np.array(x) builds a 0-d ARRAY, not a scalar
+```
+
+Scalars come back where NumPy returns them: a full reduction (`a.sum()`), every ufunc and operator whose operands are
+all 0-d (`np.add(np.array(1), 1)`, `np.sqrt(np.array(4.0))`, `a0 < b0`), and `np.clip`, `np.round`, `np.dot` / `np.vdot`
+/ `np.inner`, `np.sinc`, `np.nan_to_num` and `np.interp` of 0-d input. A result written into `out=` is that array, as
+given. Functions that build an array keep a 0-d ndarray: `np.where`, `np.copy`, `astype` and the views (`np.squeeze`,
+`.real`, `.T`, `view`).
+
+An element is a scalar too: an integer for every axis (`a[1, 2]`, `a[0]` of a 1-D array, `z[()]` of a 0-d array, a
+matrix's `m[0, 1]`) reads a COPY of the element, which a later write to the array does not reach; write an element
+through the setter (`a[1, 2] = v`). Any other index stays a view, and a 0-d view (`a[1, 2, ...]`, `z[...]`) is an array
+that writes through. Indexing a scalar indexes a copy of its value, as NumPy's scalar does: `s[...]` is a writeable 0-d
+array, `s[np.newaxis]` a 1-element array, and a key a 0-d array refuses raises `IndexError: invalid index to scalar
+variable.`
+
+```csharp
+var a = np.arange(5.0);
+var x = a[2];                   // 2.0, read-only
+a[2] = 99.0;                    // x is still 2.0
+var s = a.sum();
+var v = s[Slice.Ellipsis];      // a writeable 0-d array over a copy of s
+```
+
+Every NumPy scalar class with a NumSharp dtype has a call: `np.bool` / `np.bool_`, `np.int8` … `np.int64`, `np.uint8` …
+`np.uint64`, the C-type names (`np.byte`, `np.short`, `np.intc`, `np.int_`, `np.long`, `np.longlong`, `np.intp` and their
+unsigned twins `np.ubyte` … `np.uintp`), `np.float16` / `np.half`, `np.float32` / `np.single`, `np.float64` /
+`np.double`, `np.longdouble`, `np.complex128` / `np.cdouble`, `np.clongdouble`, `np.str_` and `np.bytes_`. Without
+parentheses each name is still the `DType` it always was (`np.zeros(3, np.float64)`).
+
+The conversion is NumPy's constructor:
+
+- A C# number is NumPy's Python scalar, stored with NEP 50's range check: `np.int8(300)` raises `OverflowError: Python
+  integer 300 out of bounds for int8`, and a float is truncated first (`np.int8(3.9)` is 3).
+- A NumPy scalar or an array is cast: `np.uint8(np.int64(-1))` is 255, `np.int8((Half)300)` is 44.
+- Text is parsed by Python's `int()` / `float()` / `complex()` grammar, with their errors.
+- `np.str_(x)` is Python's `str(x)` (`np.str_(new object[] { 1, 2 })` is `'[1, 2]'`); `np.bytes_(x)` is Python's
+  `bytes(x)` first (`np.bytes_(5)` is five NUL bytes) and NumPy's conversion where `bytes()` refuses (`np.bytes_(1.5)` is
+  `b'1.5'`). Both take Python's `encoding` / `errors` arguments.
+- `np.complex128(real, imag)` takes two real numbers.
+
+The call needs C# 14 at the call site (any target framework with the .NET 10 SDK). C# 12 code writes the class's own
+spelling, `NDScalarClassCalls.float64(x)`. The call is an extension member, so three forms do not compile: a bare
+`float64(x)` under `using static NumSharp.np;` (import `NDScalarClassCalls` instead), a method-group conversion
+`Func<object, NDArray> f = np.float64;` (use a lambda), and a `dynamic` argument (cast it to `object`).
+
+`NDArray.Scalar(value)` and `NDArray.Scalar(value, dtype)` build the same read-only scalar. A 0-d array you write into is
+an array: create it with `np.array(x)` or `np.zeros(Shape.Scalar, dtype)`. Converting a scalar into an array gives a new
+writeable array, as in NumPy: `np.asarray(s)` and `np.array(s)` copy it, and `np.asarray(s, copy: false)` raises.
+
+```csharp
+var dt = np.array(1e-4f);       // a mutable 0-d parameter (np.evaluate reads it per call)
+dt.SetValue(5e-5f);             // fine: an array
+NDArray.Scalar(1e-4f).SetValue(5e-5f);   // ValueError: assignment destination is read-only
+```
+
+A 0-d array that `np.array` / `np.asarray` did not build is read as a scalar (`np.isscalar(np.zeros(()))` is True, where
+NumPy's is False); it stays writeable.
 
 ---
 
@@ -551,9 +629,9 @@ Rules worth knowing:
   because `"float"` is float64. Families are classes (`np.floating`), never strings.
 - **`np.isdtype` compares classes by identity**, not by subclass: `np.isdtype(np.int64, np.integer)` is False. Use
   `np.issubdtype` for the hierarchy, or `np.isdtype`'s kind names (`"integral"`, `"real floating"`, ...).
-- **A C# value is a NumPy scalar and a Python object.** NumSharp has no scalar objects, so `__instancecheck__` treats a
-  C# value of a dtype's element type as a scalar of that dtype (a `double` is a `numpy.float64`), and a 0-d array that
-  NumSharp computed (`a.sum()`, `a[0]`) as well. A C# value is also the Python object it stands for (an `int` is a Python
+- **A C# value is a NumPy scalar and a Python object.** NumSharp's scalars are 0-d arrays, not objects of scalar classes,
+  so `__instancecheck__` treats a C# value of a dtype's element type as a scalar of that dtype (a `double` is a
+  `numpy.float64`), and a 0-d array that is NumPy's scalar (`a.sum()`, an element `a[0]`, `NDArray.Scalar(...)`) as well. A C# value is also the Python object it stands for (an `int` is a Python
   `int`, a `double` a `float`, a `string` a `str`), so `NDScalarType.PyFloat.__instancecheck__(1.5)` is True. A 0-d
   array follows NumPy's classes exactly: a float64 scalar is a Python `float`, an int64 one is not an `int`. An explicit
   `np.array(5)` is a 0-d ndarray, not a scalar, exactly as in NumPy.
@@ -750,7 +828,7 @@ var forced = np.array([300.0]).astype(NPTypeCode.Byte);
 // forced[0] == 44 (300 wrapped modulo 256)
 
 // Safe: casting "safe" checks the dtype pair, not the values: float64 never casts safely to uint8
-np.array([300.0]).astype(np.uint8, true, 'K', "safe");
+np.array([300.0]).astype(np.uint8, casting: "safe");   // NumPy's order: astype(dtype, order, casting, copy)
 // InvalidCastException (NumPy's TypeError): Cannot cast array data from dtype('float64') to dtype('uint8') according to the rule 'safe'
 ```
 
@@ -798,7 +876,7 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | Function | Returns | Works for |
 |----------|---------|-----------|
 | `np.iinfo(dtype)` | `iinfo` with `bits`, `min`, `max`, `kind` | integer dtypes + Boolean + Char |
-| `np.finfo(dtype)` | `finfo` with `bits`, `eps`, `min`, `max`, `precision`, `resolution`, `maxexp`, `minexp`, `smallest_normal`, `smallest_subnormal` | `Half`, `Single`, `Double`, `Decimal`, `Complex` |
+| `np.finfo(dtype)` | `finfo` with `bits`, `eps`, `epsneg`, `min`, `max`, `precision`, `resolution`, `maxexp`, `minexp`, `nmant`, `iexp` / `nexp`, `machep`, `negep`, `smallest_normal`, `smallest_subnormal` (NumPy's values; `2**minexp == smallest_normal`) | `Half`, `Single`, `Double`, `Decimal`, `Complex` |
 
 ### Exceptions
 

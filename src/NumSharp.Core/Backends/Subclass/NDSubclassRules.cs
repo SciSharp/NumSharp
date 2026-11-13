@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 
 // =============================================================================
 // NDSubclassRules - the NumPy answers no shared mechanism expresses
@@ -44,8 +45,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="result">The array computed on the plain view (the operand itself, a view or a copy).</param>
         /// <param name="a">The caller's operand.</param>
-        /// <param name="requirements">The caller's requirements: a <c>string[]</c> of flag names, a <c>string</c> whose
-        ///     characters are the flags, or <c>null</c>.</param>
+        /// <param name="requirements">The caller's requirements as np.require received them (an <c>IEnumerable</c>): a
+        ///     <c>string</c> whose characters are the flags, a sequence of flag names, or <c>null</c>.</param>
         /// <returns>A plain array for ENSUREARRAY, otherwise the result as <paramref name="a"/>'s class.</returns>
         /// <exception cref="ValueError">A chararray result whose dtype is not string data.</exception>
         internal static NDArray Require(NDArray result, NDArray a, object requirements)
@@ -54,22 +55,29 @@ namespace NumSharp
                 : NDSubclass.NewSubtype(result, null, a, keepRank: false, NewSubtypeZeroDim.Array);
 
         /// <summary>Whether <c>np.require</c>'s requirements ask for a base-class array (<c>'E'</c> / <c>'ENSUREARRAY'</c>).</summary>
-        /// <param name="requirements">A <c>string[]</c> of names, a <c>string</c> of one-letter flags, or anything else (none).</param>
+        /// <param name="requirements">A <c>string</c> of one-letter flags, a sequence of names (or characters), or anything
+        ///     else (none).</param>
         /// <returns>True when ENSUREARRAY is requested.</returns>
-        /// <remarks>An unknown flag never reaches here: the computation rejects it with NumPy's KeyError first.</remarks>
+        /// <remarks>An unknown flag or a non-string item never reaches here: the computation rejects it with NumPy's KeyError
+        ///     / AttributeError first, so every item read here is a valid name. A lazy sequence is enumerated a second time
+        ///     here (the computation enumerated it once), which is safe for every collection and repeatable query.</remarks>
         private static bool EnsuresArray(object requirements)
         {
             switch (requirements)
             {
-                case string[] names:
-                    foreach (string name in names)
+                case string letters:
+                    // NumPy iterates a str: each character is a flag.
+                    return letters.IndexOf('E') >= 0 || letters.IndexOf('e') >= 0;
+                case IEnumerable names:
+                    foreach (object item in names)
+                    {
+                        // A sequence's items are names (a char is a one-letter name, as in an iterated string).
+                        string name = item is char c ? c.ToString() : item as string;
                         if (string.Equals(name, "E", StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(name, "ENSUREARRAY", StringComparison.OrdinalIgnoreCase))
                             return true;
+                    }
                     return false;
-                case string letters:
-                    // The string overload iterates its characters, as NumPy iterates a str: each one is a flag.
-                    return letters.IndexOf('E') >= 0 || letters.IndexOf('e') >= 0;
                 default:
                     return false;
             }
@@ -199,7 +207,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="result">The concatenation computed on the plain views.</param>
         /// <param name="arr">The caller's array.</param>
-        /// <param name="values">The caller's values (<c>null</c> when an overload takes them as a Python object).</param>
+        /// <param name="values">The caller's values (a C# literal's 0-d array is never a matrix, so it only lets
+        ///     <paramref name="arr"/>'s class decide).</param>
         /// <returns>The matrix view of the result, or the result.</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
         internal static NDArray Append(NDArray result, NDArray arr, NDArray values)
@@ -358,31 +367,33 @@ namespace NumSharp
         #region Ufuncs with several outputs
 
         /// <summary>
-        ///     <c>np.frexp(x, out1, out2)</c>: a two-output ufunc - each output wrapped by <paramref name="x"/>'s class, except a
-        ///     caller's out array, which comes back itself.
+        ///     <c>np.frexp(x, out=(o1, o2))</c>: a two-output ufunc - each output wrapped by <paramref name="x"/>'s class,
+        ///     except a caller's out array, which comes back itself.
         /// </summary>
         /// <param name="result">The mantissa and exponent computed on the plain views.</param>
         /// <param name="x">The caller's input.</param>
-        /// <param name="out1">The caller's mantissa out, or <c>null</c>.</param>
-        /// <param name="out2">The caller's exponent out, or <c>null</c>.</param>
+        /// <param name="out">The caller's pair of out arrays (<c>default</c> when none). Bound by NAME to np.frexp's
+        ///     <c>out</c>: a rename there must rename this, or NumSharp.Build silently binds <c>default</c> and a caller's
+        ///     out array no longer comes back itself.</param>
         /// <returns>NumPy's pair.</returns>
         /// <exception cref="ValueError">A matrix output with more than two axes longer than 1.</exception>
-        internal static (NDArray, NDArray) Frexp((NDArray, NDArray) result, NDArray x, NDArray out1, NDArray out2)
-            => (NDSubclass.ArrayWrap(result.Item1, out1, x, null, null), NDSubclass.ArrayWrap(result.Item2, out2, x, null, null));
+        internal static (NDArray, NDArray) Frexp((NDArray, NDArray) result, NDArray x, (NDArray, NDArray) @out = default)
+            => (NDSubclass.ArrayWrap(result.Item1, @out.Item1, x, null, null),
+                NDSubclass.ArrayWrap(result.Item2, @out.Item2, x, null, null));
 
         /// <summary>
-        ///     <c>np.modf(x, outFrac, outIntegral)</c>: a two-output ufunc - each output wrapped by <paramref name="x"/>'s class,
+        ///     <c>np.modf(x, out=(o1, o2))</c>: a two-output ufunc - each output wrapped by <paramref name="x"/>'s class,
         ///     except a caller's out array, which comes back itself.
         /// </summary>
         /// <param name="result">The fractional and integral parts computed on the plain views.</param>
         /// <param name="x">The caller's input.</param>
-        /// <param name="outFrac">The caller's fractional out, or <c>null</c>.</param>
-        /// <param name="outIntegral">The caller's integral out, or <c>null</c>.</param>
+        /// <param name="out">The caller's pair of out arrays (<c>default</c> when none). Bound by NAME to np.modf's
+        ///     <c>out</c>, as <see cref="Frexp"/>'s.</param>
         /// <returns>NumPy's pair.</returns>
         /// <exception cref="ValueError">A matrix output with more than two axes longer than 1.</exception>
-        internal static (NDArray, NDArray) Modf((NDArray, NDArray) result, NDArray x, NDArray outFrac, NDArray outIntegral)
-            => (NDSubclass.ArrayWrap(result.Item1, outFrac, x, null, null),
-                NDSubclass.ArrayWrap(result.Item2, outIntegral, x, null, null));
+        internal static (NDArray, NDArray) Modf((NDArray, NDArray) result, NDArray x, (NDArray, NDArray) @out = default)
+            => (NDSubclass.ArrayWrap(result.Item1, @out.Item1, x, null, null),
+                NDSubclass.ArrayWrap(result.Item2, @out.Item2, x, null, null));
 
         /// <summary>
         ///     <c>np.divmod(x1, x2, out)</c>: a two-output ufunc - each output wrapped by the input chosen by priority, except a
@@ -390,7 +401,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="result">The quotient and remainder computed on the plain views.</param>
         /// <param name="x1">The caller's first input.</param>
-        /// <param name="x2">The caller's second input (<c>null</c> when an overload takes it as a Python object).</param>
+        /// <param name="x2">The caller's second input.</param>
         /// <param name="out">The caller's pair of out arrays (<c>default</c> when the overload has none).</param>
         /// <returns>NumPy's pair.</returns>
         /// <exception cref="ValueError">A matrix output with more than two axes longer than 1.</exception>
@@ -404,18 +415,42 @@ namespace NumSharp
         #region Math and statistics
 
         /// <summary>
-        ///     <c>np.round(x, decimals, out)</c> / <c>np.around</c>: <c>_wrapfunc(a, 'round', ...)</c> is <c>ndarray.round</c>,
+        ///     <c>np.cumulative_sum</c> / <c>np.cumulative_prod</c> (NumPy's <c>_cumulative_func</c>): the class depends on the
+        ///     route. Without <c>include_initial</c> the result is <c>func.accumulate(x, out=out)</c>, a ufunc's (wrapped by
+        ///     the operand's class, or out's own); with it and no out, NumPy prepends <c>np.full_like(res, identity, ...)</c>
+        ///     (subok, so both pieces have <c>res</c>'s class) with <c>np.concat</c>, whose <c>PyArray_GetSubType</c> keeps a
+        ///     matrix and drops a chararray; with it and an out, NumPy's own <c>return out</c> hands the caller's object back.
+        /// </summary>
+        /// <param name="result">The cumulative result computed on the plain view (the caller's <c>out</c> when given).</param>
+        /// <param name="x">The caller's operand (bound by NAME to the public function's <c>x</c>).</param>
+        /// <param name="out">The caller's out, or <c>null</c>.</param>
+        /// <param name="include_initial">The caller's include_initial.</param>
+        /// <returns>NumPy's answer for the route the call took.</returns>
+        /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
+        internal static NDArray Cumulative(NDArray result, NDArray x, NDArray @out, bool include_initial)
+        {
+            // out + include_initial: `return out` - the caller's object itself, not a ufunc's wrap of it.
+            if (@out is not null && include_initial)
+                return @out;
+            return include_initial
+                ? NDSubclass.GetSubType(result, null, new[] { x, x })      // concat([full_like(res), res]): both as x's class
+                : NDSubclass.ArrayWrap(result, @out, x, null, null);       // func.accumulate(x, ..., out=out)
+        }
+
+        /// <summary>
+        ///     <c>np.round(a, decimals, out)</c> / <c>np.around</c>: <c>_wrapfunc(a, 'round', ...)</c> is <c>ndarray.round</c>,
         ///     whose <c>decimals=0</c> route is the <c>rint</c> ufunc (wrapped by the operand's class); any other
         ///     <c>decimals</c> runs multiply / rint / true_divide into a result NumPy returns as a plain array (probed 2.4.2).
         /// </summary>
         /// <param name="result">The rounded array computed on the plain view (or the caller's <c>out</c>).</param>
-        /// <param name="x">The caller's operand.</param>
+        /// <param name="a">The caller's operand (bound by NAME to np.round's / np.around's <c>a</c>: a rename there
+        ///     must rename this, or NumSharp.Build silently binds null and a matrix operand comes back plain).</param>
         /// <param name="decimals">The caller's decimals.</param>
         /// <param name="out">The caller's out, or <c>null</c>.</param>
         /// <returns>The wrapped result for <c>decimals=0</c>, otherwise a plain array (a matrix out's plain view).</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
-        internal static NDArray Round(NDArray result, NDArray x, int decimals, NDArray @out)
-            => decimals == 0 ? NDSubclass.ArrayWrap(result, @out, x, null, null) : NDSubclass.AsArray(result);
+        internal static NDArray Round(NDArray result, NDArray a, int decimals, NDArray @out)
+            => decimals == 0 ? NDSubclass.ArrayWrap(result, @out, a, null, null) : NDSubclass.AsArray(result);
 
         /// <summary>
         ///     <c>np.trapezoid(y, x, dx, axis)</c>: NumPy ends in <c>(d * (y[1:] + y[:-1]) / 2.0).sum(axis)</c> - for a matrix
@@ -454,38 +489,42 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>np.average(a, axis, weights)</c> of a matrix: the matrix METHOD's reduction - <c>keepdims=True</c>, then
-        ///     <c>_collapse(axis)</c>, which is the scalar without an axis and the kept axes as they are otherwise. The
-        ///     computation reduced a matrix operand's axes with keepdims (<c>NDArray.average</c>), so a given axis needs only the
-        ///     class; any other operand keeps the plain answer.
+        ///     <c>np.average(a, axis, weights, returned)</c> of a matrix: the matrix METHOD's reduction - <c>keepdims=True</c>,
+        ///     then <c>_collapse(axis)</c>, which is the scalar without an axis and the kept axes as they are otherwise - for
+        ///     the average; the sum of weights stays plain (NumPy's <c>np.broadcast_to(scl, avg_as_array.shape).copy()</c>).
+        ///     The computation reduced a matrix operand's axes with keepdims (<c>NDArray.average</c>), so a given axis needs
+        ///     only the class; any other operand keeps the plain answer.
         /// </summary>
-        /// <param name="result">The average computed on the plain view.</param>
+        /// <param name="result">The average (and the sum of weights) computed on the plain view.</param>
         /// <param name="a">The caller's operand.</param>
-        /// <param name="axis">The caller's axis: <c>null</c>, an <c>int</c> (boxed) or an <c>int[]</c>.</param>
-        /// <returns>The scalar or the matrix view of a matrix operand's average, otherwise <paramref name="result"/>.</returns>
+        /// <param name="axis">The caller's axis, boxed: <c>null</c> for None, or its <see cref="NDAxis"/> (an int or a
+        ///     tuple: either keeps the reduced axes, so only None collapses to the scalar).</param>
+        /// <returns>The result with a matrix operand's average as the scalar or the matrix view, otherwise
+        ///     <paramref name="result"/>.</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
-        internal static NDArray Average(NDArray result, NDArray a, object axis)
+        internal static np.AverageResult Average(np.AverageResult result, NDArray a, object axis)
         {
             if (NDSubclass.KindOf(a) != NDSubclassKind.Matrix)
                 return result;
-            // _collapse(None): the computation reduced every axis to the scalar.
-            if (axis is null)
-                return NDSubclass.Collapse(result, null, a, null, subtypeOthers: false, NewSubtypeZeroDim.Array);
-            return NDSubclass.NewSubtype(result, null, a, keepRank: false, NewSubtypeZeroDim.Array);
+            return new np.AverageResult(AverageOfMatrix(result.values, a, axis), result.sum_of_weights);
         }
 
         /// <summary>
-        ///     <c>np.average(..., returned=True)</c>: the average as <see cref="Average"/>, and NumPy's sum of weights, which
-        ///     ends in the average's shape (<c>np.broadcast_to(scl, avg_as_array.shape).copy()</c>, a plain array) - the
-        ///     computation reduced it with the same keepdims as the average, so it already has that shape.
+        ///     The class of a matrix operand's average (<see cref="Average"/>'s first slot): <c>_collapse(None)</c> is the
+        ///     scalar of the every-axis reduction, any given axis keeps the reduced axes as a matrix.
         /// </summary>
-        /// <param name="result">The average and the sum of weights computed on the plain views.</param>
-        /// <param name="a">The caller's operand.</param>
-        /// <param name="axis">The caller's axis: <c>null</c>, an <c>int</c> (boxed) or an <c>int[]</c>.</param>
-        /// <returns>The pair, the average shaped as <see cref="Average"/>.</returns>
+        /// <param name="average">The plain average.</param>
+        /// <param name="a">The caller's matrix operand.</param>
+        /// <param name="axis">The caller's axis, boxed (null for None).</param>
+        /// <returns>The scalar or the matrix view.</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
-        internal static (NDArray, NDArray) AverageReturned((NDArray, NDArray) result, NDArray a, object axis)
-            => (Average(result.Item1, a, axis), result.Item2);
+        private static NDArray AverageOfMatrix(NDArray average, NDArray a, object axis)
+        {
+            // _collapse(None): the computation reduced every axis to the scalar.
+            if (axis is null)
+                return NDSubclass.Collapse(average, null, a, null, subtypeOthers: false, NewSubtypeZeroDim.Array);
+            return NDSubclass.NewSubtype(average, null, a, keepRank: false, NewSubtypeZeroDim.Array);
+        }
 
         #endregion
 
@@ -496,11 +535,12 @@ namespace NumSharp
         ///     operand's class); any other dtype is a new <c>zeros(ax.shape, bool)</c>, plain.
         /// </summary>
         /// <param name="result">The mask computed on the plain view.</param>
-        /// <param name="a">The caller's operand.</param>
+        /// <param name="x">The caller's operand (bound by NAME to np.iscomplex's <c>x</c>: a rename there must rename
+        ///     this, or NumSharp.Build silently binds null and a complex matrix's mask comes back plain).</param>
         /// <returns>The wrapped mask of a complex operand, otherwise the plain mask.</returns>
-        internal static NDArray Iscomplex(NDArray result, NDArray a)
-            => a is not null && a.typecode == NPTypeCode.Complex
-                ? NDSubclass.ArrayWrap(result, null, a, null, null)
+        internal static NDArray Iscomplex(NDArray result, NDArray x)
+            => x is not null && x.typecode == NPTypeCode.Complex
+                ? NDSubclass.ArrayWrap(result, null, x, null, null)
                 : NDSubclass.AsArray(result);
 
         #endregion

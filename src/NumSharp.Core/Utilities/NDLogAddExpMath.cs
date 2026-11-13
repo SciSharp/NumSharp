@@ -269,9 +269,14 @@ namespace NumSharp.Utilities
         // NPY_HALF_NAN — canonical quiet NaN pattern npy_half_nextafter returns.
         private const ushort NPY_HALF_NAN = 0x7e00;
 
-        /// <summary>Port of <c>npy_half_nextafter</c> (halffloat.cpp): raw 16-bit stepping.
-        /// Note NumPy's half returns <b>x</b> when x==y (incl. signed-zero-equal), unlike the C99
-        /// double/float path which returns y.</summary>
+        /// <summary>Port of <c>npy_half_nextafter</c> (halffloat.cpp): raw 16-bit stepping. Equal operands return
+        /// <b>y</b> (NumPy 2.5: <c>nextafter(+0, -0)</c> is -0 and <c>nextafter(-0, +0)</c> is +0), as C99's
+        /// double/float <c>nextafter</c> does; NumPy 2.4 returned x there, so the sign of an equal zero followed the
+        /// first operand.</summary>
+        /// <param name="x">The value to step from.</param>
+        /// <param name="y">The direction to step toward.</param>
+        /// <returns>The next representable half after <paramref name="x"/> toward <paramref name="y"/>; <paramref name="y"/>
+        /// when they compare equal; NumPy's canonical quiet NaN (<c>0x7e00</c>) when either is NaN.</returns>
         [MethodImpl(OptimizeAndInline)]
         public static Half NextAfterHalf(Half x, Half y)
         {
@@ -280,8 +285,8 @@ namespace NumSharp.Utilities
             ushort ret;
             if (Half.IsNaN(x) || Half.IsNaN(y))
                 ret = NPY_HALF_NAN;
-            else if (x == y)                           // eq_nonan: +0 == -0 -> returns x
-                ret = hx;
+            else if (x == y)                           // eq_nonan: +0 == -0 -> returns y (NumPy 2.5; 2.4 returned x)
+                ret = hy;
             else if ((hx & 0x7fffu) == 0)              // x == 0 -> smallest subnormal, sign of y
                 ret = (ushort)((hy & 0x8000u) + 1);
             else if ((hx & 0x8000u) == 0)              // x > 0

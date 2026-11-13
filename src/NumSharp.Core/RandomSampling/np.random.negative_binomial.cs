@@ -38,7 +38,7 @@ namespace NumSharp
         ///     (<see cref="long.MinValue"/> here; <c>-2147483648</c> on NumPy's win-amd64 build, whose C <c>long</c> is 32-bit).
         ///     int64 output. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray negative_binomial(double n, double p, Shape size)
+        public NDArray negative_binomial(double n, double p, Shape? size)
         {
             RandomConstraints.Check(n, "n", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_0_1);
@@ -46,7 +46,7 @@ namespace NumSharp
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyNegativeBinomialSetup(n, p);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -54,11 +54,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyNegativeBinomial(ref one, in setup));
+                        return NDArray.WritableScalar(LegacyNegativeBinomial(ref one, in setup));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Int64, size);
+            var ret = LegacyOutput(NPTypeCode.Int64, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (long*)ret.Address;

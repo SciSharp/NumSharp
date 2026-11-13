@@ -73,6 +73,26 @@ namespace NumSharp.Tests.Documentation
             jagged.Should().BeShaped(2, 2);
         }
 
+        /// <summary>
+        ///     The character-dtype snippet: <c>np.dtype("c")</c> splits each text into one byte per character when an array
+        ///     is created from values (NumPy 2.4.2's shapes and repr), refuses texts of different lengths, and a cast keeps
+        ///     the first byte instead.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from the page.</exception>
+        [TestMethod]
+        public void Creating_CharacterDtypeSplitsTexts()
+        {
+            var c = np.dtype("c");
+            np.array(new[] { "SFFF", "FHFH" }, c).ToString(true)
+              .Should().Be("array([[b'S', b'F', b'F', b'F'],\n       [b'F', b'H', b'F', b'H']], dtype='|S1')");
+            np.array("abc", c).ToString(true).Should().Be("array([b'a', b'b', b'c'], dtype='|S1')");
+            Action ragged = () => np.array(new[] { "ab", "abc" }, c);
+            ragged.Should().Throw<ValueError>().WithMessage("*inhomogeneous shape after 1 dimensions*");
+
+            // A cast never splits.
+            np.array(new[] { "ab", "cd" }).astype(c).ToString(true).Should().Be("array([b'a', b'c'], dtype='|S1')");
+        }
+
         // ── Reading and writing elements ──────────────────────────────────────────────────────────
 
         [TestMethod]
@@ -82,7 +102,8 @@ namespace NumSharp.Tests.Documentation
             names.item(1).Should().Be("dog");
             ((byte[])names.astype("S4").item(1)).Should().Equal((byte)'d', (byte)'o', (byte)'g');
             NDArray.AsStringArray(names).Should().Equal("cat", "dog", "bird");
-            names[1].ToString(true).Should().Be("array('dog', dtype='<U4')");
+            // The item is NumPy's scalar: a read-only copy as wide as its text (NumPy's PyArray_Scalar trims the itemsize).
+            names[1].ToString(true).Should().Be("array('dog', dtype='<U3')");
             ((System.Collections.IEnumerable)names.tolist()).Cast<object>().Should().Equal("cat", "dog", "bird");
 
             names[1] = "zebras";
@@ -180,7 +201,7 @@ namespace NumSharp.Tests.Documentation
             Action badFloat = () => np.array(new[] { "1", "a" }).astype(np.float64);
             badFloat.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('a')");
             Action overflow = () => np.array(new[] { "300" }).astype(np.int8);
-            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            overflow.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
 
             var a = np.zeros(new Shape(3), np.int32);
             a[0] = "12";
@@ -365,10 +386,10 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
-        ///     The "Sorting" snippets (strings phase 2, P2.2; every value probed against NumPy 2.4.2): code-point order, the
+        ///     The "Sorting" snippets (strings phase 2, P2.2; every value probed against NumPy 2.5.4): code-point order, the
         ///     in-place sort, NumPy's introsort order of equal strings for the default kind and the input order for the
-        ///     stable kind (20 single letters, past the 16 elements NumPy insertion-sorts), the partitions as full sorts,
-        ///     and NumPy's two keyword errors with its texts.
+        ///     stable kind (20 single letters, past the 16 elements NumPy insertion-sorts), the same two orders of the
+        ///     descending sorts, the partitions as full sorts, and NumPy's two keyword errors with its texts.
         /// </summary>
         /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
         [TestMethod]
@@ -388,6 +409,15 @@ namespace NumSharp.Tests.Documentation
             np.argsort(grades, kind: "stable").ToArray<long>()
               .Should().Equal(1L, 3L, 5L, 8L, 10L, 13L, 16L, 18L, 0L, 2L, 6L, 9L, 12L, 15L, 17L, 4L, 7L, 11L, 14L, 19L);
             np.argsort(grades, stable: true).ToArray<long>().Should().Equal(np.argsort(grades, kind: "stable").ToArray<long>());
+
+            // NumPy 2.5's descending sorts (probed against 2.5.4): the reversed introsort's order of equal strings for the
+            // default kind, the input order for the stable kind.
+            var unsorted = np.array(new[] { "pear", "fig", "apple", "fig" });
+            NDArray.AsStringArray(np.sort(unsorted, descending: true)).Should().Equal("pear", "fig", "fig", "apple");
+            np.argsort(grades, descending: true).ToArray<long>()
+              .Should().Equal(19L, 14L, 4L, 11L, 7L, 17L, 15L, 12L, 0L, 6L, 2L, 9L, 18L, 10L, 5L, 13L, 3L, 16L, 1L, 8L);
+            np.argsort(grades, stable: true, descending: true).ToArray<long>()
+              .Should().Equal(4L, 7L, 11L, 14L, 19L, 0L, 2L, 6L, 9L, 12L, 15L, 17L, 1L, 3L, 5L, 8L, 10L, 13L, 16L, 18L);
 
             Action badKind = () => np.sort(words, kind: "timsort");
             badKind.Should().Throw<ValueError>().WithMessage("sort kind must be one of 'quick', 'heap', or 'stable' (got 'timsort')");
@@ -948,11 +978,11 @@ namespace NumSharp.Tests.Documentation
             noLoop.Should().Throw<TypeError>().WithMessage(
                 "ufunc 'maximum' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.StrDType'>) -> None");
 
-            // NumPy's NpyString_cmp: strncmp stops at the NUL both texts share, so the two texts are equal; array_equal is
-            // (a1 == a2).all() with these rules, and the NaN-like NA is equal only under equal_nan.
+            // NumPy's NpyString_cmp: memcmp since NumPy 2.5, so every byte counts and the two texts differ past their NUL;
+            // array_equal is (a1 == a2).all() with these rules, and the NaN-like NA is equal only under equal_nan.
             var t2 = np.dtypes.StringDType();
-            (np.array(new object[] { "a\0c" }, t2) == np.array(new object[] { "a\0b" }, t2)).ToArray<bool>().Should().Equal(true);
-            np.array_equal(np.array(new object[] { "a\0c", "x" }, t2), np.array(new object[] { "a\0b", "x" }, t2)).Should().BeTrue();
+            (np.array(new object[] { "a\0c" }, t2) == np.array(new object[] { "a\0b" }, t2)).ToArray<bool>().Should().Equal(false);
+            np.array_equal(np.array(new object[] { "a\0c", "x" }, t2), np.array(new object[] { "a\0b", "x" }, t2)).Should().BeFalse();
             np.array_equal(t, t).Should().BeFalse("the NA is not equal to itself");
             np.array_equal(t, t, equal_nan: true).Should().BeTrue();
 
@@ -963,8 +993,8 @@ namespace NumSharp.Tests.Documentation
         /// <summary>
         ///     The "Ordering StringDType text" examples (strings phase 2, P2.2 over <c>StringDType</c>): a NaN-like NA sorting
         ///     after every text in the sort, the stable argsort, the unique values, the search and <c>np.isin</c>; a None-like
-        ///     NA refused at the first comparison; the heapsort kind <c>StringDType</c> does not register; the order
-        ///     statistics picking an element or refusing. Every value and message probed from NumPy 2.4.2.
+        ///     NA refused at the first comparison; the descending sort <c>StringDType</c> does not register; the order
+        ///     statistics picking an element or refusing. Every value and message probed from NumPy 2.5.4.
         /// </summary>
         [TestMethod]
         public void StringDType_Ordering()
@@ -982,7 +1012,7 @@ namespace NumSharp.Tests.Documentation
             var none = np.dtypes.StringDType(na_object: null);
             ((Action)(() => np.sort(np.array(new object[] { "b", null }, none)))).Should().Throw<ValueError>()
                 .WithMessage("Cannot compare null that is not a nan-like value");
-            ((Action)(() => np.sort(t, kind: "heapsort"))).Should().Throw<RuntimeError>().WithMessage("unsupported sort kind");
+            ((Action)(() => np.sort(t, descending: true))).Should().Throw<RuntimeError>().WithMessage("unsupported sort kind");
 
             var s = np.array(new[] { "b", "a", "c" }, np.dtypes.StringDType());
             np.quantile(s, 0.5, method: "lower").item().Should().Be("b");
@@ -1050,8 +1080,9 @@ namespace NumSharp.Tests.Documentation
             ((Action)(() => np.unique(np.array(new object[,] { { "a", "b" }, { "a", "b" } }, np.dtypes.StringDType()), axis: 0)))
                 .Should().Throw<TypeError>().WithMessage("The axis argument to unique is not supported for dtype StringDType()");
 
-            // The NumPy-bug list: a 1-D accumulation into a 0-d out (NumPy crashes) is the wrong-size error, and maximum
-            // with a None-like NA into an S out of non-ASCII texts (NumPy's SystemError) is the loop's own ValueError.
+            // A 1-D accumulation into a 0-d out is NumPy 2.5's wrong-size error (NumPy 2.4.2 crashed there), and, from the
+            // NumPy-bug list, maximum with a None-like NA into an S out of non-ASCII texts (NumPy's SystemError) is the
+            // loop's own ValueError.
             using var one = np.array("", np.dtypes.StringDType());
             ((Action)(() => np.cumsum(np.array(new[] { "a", "b" }, np.dtypes.StringDType()), null, null, one)))
                 .Should().Throw<IncorrectShapeException>().WithMessage("provided out is the wrong size for the accumulation.");
@@ -1064,8 +1095,9 @@ namespace NumSharp.Tests.Documentation
             ((Action)(() => np.nanquantile(np.array(new object[,] { { null }, { null } }, none), 0.5, 1, method: "lower")))
                 .Should().Throw<NotSupportedException>();
 
-            // The new entries of the NumPy-bug list: a non-contiguous lexsort key (NumPy crashes), an arena haystack
-            // (NumPy's MemoryError) and the complex cast (NumPy copies the real part into the imaginary part).
+            // A non-contiguous lexsort key (still on the NumPy-bug list: NumPy 2.5.4 crashes), and two answers NumPy 2.5
+            // fixed and now shares: an arena haystack (NumPy 2.4.2 raised MemoryError) and the complex cast (NumPy 2.4.2
+            // copied the real part into the imaginary part).
             var keys = np.array(new object[,] { { "b", "a" }, { "a", "b" }, { "a", "a" } }, np.dtypes.StringDType());
             np.lexsort(keys.T, -1).ToArray<long>().Should().Equal(2L, 0L, 1L);
             var hay = np.array(new object[] { new string('a', 20), new string('b', 20), new string('c', 20) }, np.dtypes.StringDType());
@@ -1075,19 +1107,20 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
-        ///     The NumPy-bug list's <c>byteswap</c> line: NumPy 2.4.2 crashes; a cell has no byte order (the descriptor's
-        ///     <c>byteorder</c> is <c>'|'</c>), so NumSharp returns a copy with its own buffer and the same texts, and with
-        ///     <c>inplace: true</c> the array itself.
+        ///     The refusal table's <c>byteswap</c> row: a cell has no byte order (the descriptor's <c>byteorder</c> is
+        ///     <c>'|'</c>), so NumPy 2.5's <c>StringDType</c> has no copyswap and <c>byteswap()</c> raises its <c>TypeError</c>,
+        ///     in place too (NumPy 2.4.2 crashed the process here). The array is left as it was.
         /// </summary>
         [TestMethod]
-        public void StringDType_ByteswapIsACopy()
+        public void StringDType_ByteswapRaises()
         {
             var t = np.array(new[] { "a", "a long string over fifteen" }, np.dtypes.StringDType());
             t.dtype.byteorder.Should().Be('|');
-            var copy = t.byteswap();
-            copy.ToString(true).Should().Be(t.ToString(true));
-            np.shares_memory(copy, t).Should().BeFalse("a copy owns its cells and its arena");
-            ReferenceEquals(t.byteswap(inplace: true), t).Should().BeTrue();
+            ((Action)(() => t.byteswap())).Should().Throw<TypeError>()
+                .WithMessage("dtype StringDType() does not implement copyswap");
+            ((Action)(() => t.byteswap(inplace: true))).Should().Throw<TypeError>()
+                .WithMessage("dtype StringDType() does not implement copyswap");
+            t.ToString().Should().Be("['a' 'a long string over fifteen']");
         }
 
         // ── Byte streams via np.frombuffer ────────────────────────────────────────────────────────

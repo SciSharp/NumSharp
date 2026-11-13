@@ -43,11 +43,11 @@ namespace NumSharp
         ///     <c>scale == 0</c>, which the former shortcut answered without drawing. Bulk-filled and transformed in place;
         ///     byte-identical to <c>np.random.RandomState(seed).rayleigh</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray rayleigh(double scale = 1.0, Shape size = default)
+        public NDArray rayleigh(double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -55,11 +55,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyRayleigh(ref one, scale));
+                        return NDArray.WritableScalar(LegacyRayleigh(ref one, scale));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

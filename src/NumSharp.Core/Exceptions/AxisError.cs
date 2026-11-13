@@ -72,8 +72,27 @@ namespace NumSharp
         /// <param name="message">The whole text.</param>
         public AxisError(string message) : base("axis", message) { }
 
-        /// <summary>An AxisError with no text (the parameterless form .NET serialization and reflection expect).</summary>
-        public AxisError() : base() { }
+        /// <summary>
+        ///     NumPy's message-only <c>AxisError(msg)</c> with the exception that caused it (Python's <c>raise AxisError(msg)
+        ///     from innerException</c>): the text is <paramref name="message"/> verbatim and <see cref="Axis"/> /
+        ///     <see cref="NDim"/> are 0.
+        /// </summary>
+        /// <param name="message">The whole text.</param>
+        /// <param name="innerException">The exception that led to this one, or null for none.</param>
+        /// <remarks>Footgun: unlike <see cref="AxisError(string)"/>, <see cref="Exception.Message"/> carries no
+        ///     <c>" (Parameter 'axis')"</c> suffix and <see cref="ArgumentException.ParamName"/> is null, because the
+        ///     .NET base has no constructor that takes a parameter name together with an inner exception. The text is then
+        ///     NumPy's alone.</remarks>
+        public AxisError(string message, Exception innerException) : base(message, innerException) { }
+
+        /// <summary>
+        ///     An AxisError with no text: an empty <see cref="Exception.Message"/> (the parameterless form .NET
+        ///     serialization and reflection expect; Python's <c>AxisError</c> requires an axis, and its other errors'
+        ///     bare form reads <c>''</c>).
+        /// </summary>
+        /// <remarks>Not .NET's <see cref="ArgumentOutOfRangeException"/> default, "Specified argument was out of the range
+        ///     of valid values.", which no NumPy error prints.</remarks>
+        public AxisError() : base(null, string.Empty) { }
 
         /// <summary>NumPy's <c>AxisError.__str__</c> for an axis and a rank: the prefix (when given), then the bounds text.</summary>
         /// <param name="axis">The axis as the caller gave it.</param>

@@ -211,6 +211,34 @@ namespace NumSharp
             => value is null ? asanyarray(value, null, 'K') : FromPythonOperand(value);
 
         /// <summary>
+        ///     The ARRAY NumPy's <c>np.asanyarray(obj)</c> makes of the Python number a C# number literal stands for
+        ///     (<see cref="WasPythonLiteral"/>): the Python number's default dtype - int64 (uint64 for an integer past the
+        ///     int64 range), float64, complex128 - whatever the literal's C# width. Any other array is returned as it is.
+        /// </summary>
+        /// <param name="a">The operand (not null).</param>
+        /// <returns><paramref name="a"/> itself, unless it is a literal whose C# dtype differs from the Python number's
+        ///     default: then a new 0-d array of that dtype holding the same value, unmarked (the caller owns it; an
+        ///     <c>[NDScoped]</c> caller's scope reclaims it).</returns>
+        /// <remarks>
+        ///     For a function whose NumPy body converts an argument with <c>asanyarray</c> (or <c>ravel</c>) and then reads
+        ///     it as an ARRAY, its dtype taking part in the result: <c>np.append(int32_array, 5)</c> concatenates with the
+        ///     int64 array of 5, so NumPy's result is int64 where the int32 literal kept int32. Footgun: never for an
+        ///     operand NumPy reads as a WEAK scalar (the ufuncs, NEP 50 promotion), which must see the literal itself. A
+        ///     literal already in its default dtype (a C# long, double or Complex) comes back unchanged, mark included: a
+        ///     ravel, a copy or an operation result is unmarked anyway. A bool, a string, a <see cref="Half"/> /
+        ///     <c>char</c> and a <c>decimal</c> already hold the dtype NumPy's array of them has.
+        /// </remarks>
+        internal static NDArray PythonScalarAsArray(NDArray a)
+        {
+            if (!a.WasPythonLiteral)
+                return a;
+            // np.result_type of a lone Python scalar is the dtype of np.asarray(scalar), its discover_descr_from_pyobject:
+            // an integer's VALUE decides (a ulong past long.MaxValue is uint64, as 2**63 is in NumPy).
+            DType discovered = DTypePromotion.ResultType(a.Nep50Operand);
+            return discovered.typecode == a.typecode ? a : a.astype(discovered);
+        }
+
+        /// <summary>
         ///     Creates the 0-d bool array of a C# <c>bool</c> literal, marked <see cref="WasPythonBool"/>. The implicit
         ///     <c>bool → NDArray</c> conversion calls it.
         /// </summary>
@@ -218,7 +246,9 @@ namespace NumSharp
         /// <returns>A new 0-d bool array holding <paramref name="value"/>.</returns>
         internal static NDArray PythonBoolLiteral(bool value)
         {
-            var nd = Scalar(value);
+            // Writeable, as every literal's array always was: it stands for an immutable Python value, but it is no NumPy
+            // scalar (np.asarray keeps it and its mark, where it converts a read-only NumPy scalar into a new array).
+            var nd = WritableScalar(value);
             nd.WasPythonBool = true;
             return nd;
         }
@@ -246,7 +276,8 @@ namespace NumSharp
         /// <returns>A new 0-d <c>S</c> array holding <paramref name="value"/>.</returns>
         internal static NDArray PythonBytesLiteral(byte[] value)
         {
-            var nd = Scalar(value);
+            // Writeable like every literal's array (see PythonBoolLiteral).
+            var nd = WritableScalar(value);
             nd.WasPythonBytes = true;
             return nd;
         }
@@ -261,7 +292,8 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static NDArray NumPyScalarLiteral<T>(T value) where T : unmanaged
         {
-            var nd = Scalar(value);
+            // Writeable like every literal's array (see PythonBoolLiteral).
+            var nd = WritableScalar(value);
             nd.WasNumPyScalar = true;
             return nd;
         }
@@ -314,7 +346,8 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static NDArray PythonLiteral<T>(T value) where T : unmanaged
         {
-            var nd = Scalar(value);
+            // Writeable like every literal's array (see PythonBoolLiteral).
+            var nd = WritableScalar(value);
             nd.WasPythonLiteral = true;
             return nd;
         }
@@ -345,7 +378,7 @@ namespace NumSharp
         ///     otherwise a NEW 0-d array of <paramref name="destination"/> holding the packed element. The caller disposes
         ///     a new array (<c>!ReferenceEquals(result, value)</c>), or creates it inside an <c>[NDScoped]</c> member.
         /// </returns>
-        /// <exception cref="OverflowException">A Python int out of the destination's integer range ("Python integer 1000
+        /// <exception cref="OverflowError">A Python int out of the destination's integer range ("Python integer 1000
         ///     out of bounds for int8"; past the C <c>long</c> the LP64 text "Python int too large to convert to C long"), a
         ///     float infinity into an integer ("cannot convert float infinity to integer"), or an int past the double range
         ///     into a float ("int too large to convert to float").</exception>
@@ -420,7 +453,7 @@ namespace NumSharp
         ///     errors of the typecode overload.</exception>
         /// <exception cref="ValueError"><c>None</c> into a <c>StringDType(coerce=False)</c> destination, or the literal
         ///     packing errors of the typecode overload.</exception>
-        /// <exception cref="OverflowException">See <see cref="PackForStore(NDArray, NPTypeCode, bool)"/>.</exception>
+        /// <exception cref="OverflowError">See <see cref="PackForStore(NDArray, NPTypeCode, bool)"/>.</exception>
         internal static NDArray PackForStore(NDArray value, DType destination, bool pyArrayPackRoute)
             => value is null ? NoneForStore(destination) : PackForStore(value, destination.typecode, pyArrayPackRoute);
 
@@ -553,7 +586,7 @@ namespace NumSharp
         ///     string dtype: <c>None</c> into text needs the destination's full descriptor (its width, its NA object), so
         ///     such a caller converts it with <see cref="NoneForStore"/> instead.</exception>
         /// <exception cref="TypeError"><c>None</c> into an integer or <c>decimal</c> destination.</exception>
-        /// <exception cref="OverflowException">See <see cref="PackForStore"/>; also a NumPy scalar (<see cref="Half"/>,
+        /// <exception cref="OverflowError">See <see cref="PackForStore"/>; also a NumPy scalar (<see cref="Half"/>,
         ///     <c>char</c>) whose int() does not fit a SIGNED integer destination.</exception>
         /// <exception cref="ValueError">See <see cref="PackForStore"/>.</exception>
         /// <exception cref="TypeError">See <see cref="PackForStore"/>.</exception>

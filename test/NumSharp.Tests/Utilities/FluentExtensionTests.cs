@@ -615,7 +615,7 @@ namespace NumSharp.Tests.Utilities
             np.full(new Shape(2), 5.0).Should().AllValuesBe(5.0);
             np.full(new Shape(2), 5f).Should().AllValuesBe(5f);
             np.full(new Shape(2), 5m).Should().AllValuesBe(5m);
-            np.full([2], 5m).Should().AllValuesBe(5m);
+            np.full(2, 5m).Should().AllValuesBe(5m);
         }
 
         #endregion

@@ -182,8 +182,8 @@ namespace NumSharp.Tests.DTypes
         {
             var u = np.array(new[] { "f", "d" });
             np.mintypecode(new object[] { u[0] }).Should().Be('f', "u[0] is a numpy.str_");
-            // (An explicit np.array("d") is an ndarray in NumPy, 'U'; NumSharp's np.array(string) does not mark it:
-            // OpenBugs.cs, NpArrayOfString_IsAnExplicitZeroDimArray.)
+            // An explicit np.array("d") is an ndarray, read through asarray(t).dtype.char as 'U' (NumPy 2.4.2: "substring
+            // not found" for typeset "Ud"; the regression pin OpenBugs.cs NpArrayOfString_IsAnExplicitZeroDimArray).
 
             np.mintypecode(new object[] { new byte[] { (byte)'d' } }, "B").Should().Be('d', "bytes is 'S', never uint8's 'B'");
             new Action(() => np.mintypecode(new object[] { new byte[] { (byte)'d' } }, "SB")).Should().Throw<ValueError>()

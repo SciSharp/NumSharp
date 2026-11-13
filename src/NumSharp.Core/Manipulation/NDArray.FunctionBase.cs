@@ -294,33 +294,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>insert(arr, obj, values, axis)</c> with one position given as a number: the axis context, then the
-        ///     single-index branch with NumPy's scalar-obj <c>moveaxis</c> of the values.
-        /// </summary>
-        /// <param name="arr">Input array (not null).</param>
-        /// <param name="obj">The index before which the values are inserted; negative values count from the end.</param>
-        /// <param name="values">The values to insert, or null (Python's None, converted after the index check).</param>
-        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
-        /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException"><paramref name="obj"/> is outside <c>[-N, N]</c>.</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError,
-        ///     <c>Python integer 1000 out of bounds for int8</c>).</exception>
-        /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
-        /// <exception cref="ValueError">The values do not broadcast into the insertion slot (NumPy's view-assignment text,
-        ///     <c>could not broadcast input array from shape (3,1) into shape (2,1)</c>); text values that do not parse as a
-        ///     numeric array's number type.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only callers are the <c>[NDScoped]</c> np.insert overloads,
-        ///     whose scope releases the ravel work array, the converted values and the intermediates.</remarks>
-        [NDScopedCovered]
-        [ArrayWrap("arr")]
-        internal static NDArray insert(NDArray arr, long obj, NDArray values, int? axis)
-        {
-            var ctx = PrepareAxisContext(arr, axis);
-            return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj, values, ctx.axis, scalarObj: true, obj));
-        }
-
-        /// <summary>
         ///     <c>insert(arr, obj, values, axis)</c> with the positions as a slice: the axis context, the slice expanded with
         ///     Python's <c>slice.indices(N)</c>, then the single-index branch for one position (without the scalar-obj
         ///     <c>moveaxis</c>, so every value is inserted there) or the multi-index branch.
@@ -331,14 +304,14 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="ValueError">The values do not fit the insertion slots: for one position NumPy's view-assignment
         ///     text (<c>could not broadcast input array from shape ... into shape ...</c>), for several MapIter's (<c>shape
         ///     mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>); the array
         ///     does not fill the slots left when two positions name one slot (<see cref="InsertMultiIndex"/>); text values
         ///     that do not parse as a numeric array's number type.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, long, NDArray, int?)"/>.</remarks>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, NDArray, NDArray, int?)"/>.</remarks>
         [NDScopedCovered]
         [ArrayWrap("arr")]
         internal static NDArray insert(NDArray arr, Slice obj, NDArray values, int? axis)
@@ -353,74 +326,6 @@ namespace NumSharp
             if (indices.Length == 1)
                 return WithSourceOrder(arr, InsertSingleIndex(ctx.work, indices[0], values, ctx.axis, scalarObj: false, obj));
             return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, NPTypeCode.Int64, values, ctx.axis));
-        }
-
-        /// <summary>
-        ///     <c>insert(arr, obj, values, axis)</c> with the positions as an <c>int[]</c> (NumPy's sequence obj): widened to
-        ///     <c>long</c>, then the single-index branch for one position (without the scalar-obj <c>moveaxis</c>) or the
-        ///     multi-index branch.
-        /// </summary>
-        /// <param name="arr">Input array (not null).</param>
-        /// <param name="obj">The insertion positions (not null).</param>
-        /// <param name="values">The values to insert, or null (Python's None).</param>
-        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
-        /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">One position outside <c>[-N, N]</c> (NumPy's text prints the
-        ///     sequence, <c>index [13] is out of bounds ...</c>); of several, a SHIFTED position outside <c>[-M, M)</c>,
-        ///     <c>M = N + numnew</c> (<c>index 14 is out of bounds for axis 0 with size 14</c>).</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
-        /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
-        /// <exception cref="ValueError">The values do not fit the insertion slots: for one position NumPy's view-assignment
-        ///     text (<c>could not broadcast input array from shape ... into shape ...</c>), for several MapIter's (<c>shape
-        ///     mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>); the array
-        ///     does not fill the slots left when two positions name one slot (<see cref="InsertMultiIndex"/>); text values
-        ///     that do not parse as a numeric array's number type.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, long, NDArray, int?)"/>.</remarks>
-        [NDScopedCovered]
-        [ArrayWrap("arr")]
-        internal static NDArray insert(NDArray arr, int[] obj, NDArray values, int? axis)
-        {
-            var longs = new long[obj.Length];
-            for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
-
-            var ctx = PrepareAxisContext(arr, axis);
-            // One position: the single-index branch, whose IndexError prints the sequence as a Python list (index [13]).
-            if (longs.Length == 1)
-                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, longs[0], values, ctx.axis, scalarObj: false, longs));
-            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, longs, NPTypeCode.Int64, values, ctx.axis));
-        }
-
-        /// <summary>
-        ///     <c>insert(arr, obj, values, axis)</c> with the positions as a <c>long[]</c>: the single-index branch for one
-        ///     position (without the scalar-obj <c>moveaxis</c>) or the multi-index branch over a copy of the positions.
-        /// </summary>
-        /// <param name="arr">Input array (not null).</param>
-        /// <param name="obj">The insertion positions (not null; never written: the multi-index branch normalizes a copy).</param>
-        /// <param name="values">The values to insert, or null (Python's None).</param>
-        /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
-        /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">One position outside <c>[-N, N]</c> (NumPy's text prints the
-        ///     sequence, <c>index [13] is out of bounds ...</c>); of several, a SHIFTED position outside <c>[-M, M)</c>,
-        ///     <c>M = N + numnew</c> (<c>index 14 is out of bounds for axis 0 with size 14</c>).</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
-        /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
-        /// <exception cref="ValueError">The values do not fit the insertion slots: for one position NumPy's view-assignment
-        ///     text (<c>could not broadcast input array from shape ... into shape ...</c>), for several MapIter's (<c>shape
-        ///     mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>); the array
-        ///     does not fill the slots left when two positions name one slot (<see cref="InsertMultiIndex"/>); text values
-        ///     that do not parse as a numeric array's number type.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, long, NDArray, int?)"/>.</remarks>
-        [NDScopedCovered]
-        [ArrayWrap("arr")]
-        internal static NDArray insert(NDArray arr, long[] obj, NDArray values, int? axis)
-        {
-            var ctx = PrepareAxisContext(arr, axis);
-            // One position: the single-index branch, whose IndexError prints the sequence as a Python list (index [13]).
-            if (obj.Length == 1)
-                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj[0], values, ctx.axis, scalarObj: false, obj));
-            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, (long[])obj.Clone(), NPTypeCode.Int64, values, ctx.axis));
         }
 
         /// <summary>
@@ -450,13 +355,13 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException">One integer position outside <c>[-N, N]</c>, or a mask's one True
         ///     past <c>N</c> (NumPy's text prints the array or the mask, <c>index [13] ...</c>); of several, a SHIFTED
         ///     position outside <c>[-M, M)</c>, <c>M = N + numnew</c>.</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError),
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range (NumPy's OverflowError),
         ///     or, for several positions, an axis length the index dtype cannot hold (<c>Python integer 300 out of bounds
         ///     for uint8</c>).</exception>
         /// <exception cref="TypeError">Several positions in an UNSIGNED index array: NumPy's in-place shift cannot cast
         ///     its int64 result back (<c>Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting
         ///     rule 'same_kind'</c>, NumPy's UFuncTypeError); an empty one too.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, long, NDArray, int?)"/>; the
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="insert(NDArray, NDArray, NDArray, int?)"/>; the
         ///     boolean mask's flatnonzero temp is released by the same scope.</remarks>
         [NDScopedCovered]
         [ArrayWrap("arr")]
@@ -579,7 +484,7 @@ namespace NumSharp
         /// <param name="values">The values to insert; null is Python's None.</param>
         /// <param name="axis">The normalized axis.</param>
         /// <returns>A fresh array with the values at NumPy's positions and the array's slabs in the slots left over.</returns>
-        /// <exception cref="OverflowException">The axis length does not fit the index dtype: <c>indices &lt; 0</c> meets the
+        /// <exception cref="OverflowError">The axis length does not fit the index dtype: <c>indices &lt; 0</c> meets the
         ///     Python int <c>N</c>, which NEP 50 packs into that dtype (<c>Python integer 300 out of bounds for uint8</c>);
         ///     also a C# number literal outside the array dtype's range.</exception>
         /// <exception cref="TypeError">An unsigned index dtype: the in-place <c>indices[order] += np.arange(numnew)</c>
@@ -850,53 +755,8 @@ namespace NumSharp
 
             // `indices < 0`: text has no loop with a Python int (NumPy's weak int class), even for no element.
             if (text)
-                return new TypeError($"ufunc 'less' did not contain a loop with signature matching types ({obj.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
+                return new UFuncNoLoopError("less", 2, obj.dtype.Meta, DTypeRegistry.PyLong, null);
             return new IndexError("arrays used as indices must be of integer (or boolean) type");
-        }
-
-        /// <summary>
-        ///     The array an object value stands for, for the <c>insert(arr, obj, value, axis)</c> overloads, NOT yet converted
-        ///     to the target array's dtype: the NDArray overload converts it where NumPy converts its values
-        ///     (<c>array(values, dtype=arr.dtype)</c> after the single-index bounds check, the fancy setitem of the
-        ///     multi-index branch), so an axis or index error comes first, as in NumPy.
-        /// </summary>
-        /// <param name="value">The scalar, C# array or collection, or an <see cref="NDArray"/> passed as object; <c>null</c>
-        ///     is Python's <c>None</c>.</param>
-        /// <param name="dtype">The target array's dtype.</param>
-        /// <returns><paramref name="value"/> itself when it is an <see cref="NDArray"/>; <c>null</c> for <c>None</c>; a C#
-        ///     number, bool or string as the marked 0-d array its implicit conversion makes
-        ///     (<see cref="NDArray.FromPythonOperand"/>: a Python int / float / complex / bool / str, or a NumPy scalar for
-        ///     <see cref="Half"/> and <c>char</c>), which <c>CoerceValuesForSingleIndex</c> / <c>CoerceValuesForMultiIndex</c>
-        ///     pack with NumPy's <c>PyArray_Pack</c> rules; a C# array or collection as <c>np.asanyarray(value)</c>, cast
-        ///     there too. A <c>StringDType</c> target, and a <see cref="System.Numerics.BigInteger"/> (a Python int past the
-        ///     machine types, which has no marked 0-d form), are converted here, as before.</returns>
-        /// <exception cref="OverflowException">A <see cref="System.Numerics.BigInteger"/> outside the target dtype's range
-        ///     (NumPy's OverflowError: raised here, before the index checks, where NumPy raises it after them).</exception>
-        /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> target and a non-text value (its setitem refusal,
-        ///     raised here).</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> object-value
-        ///     <c>insert</c> overloads, so the array it builds is released by the caller's scope. An <see cref="NDArray"/>
-        ///     returned as-is is the caller's and is never disposed.</remarks>
-        [NDScopedCovered]
-        internal static NDArray ScalarValueAsArray(object value, DType dtype)
-        {
-            // None stays null: the array overload's value coercion converts it after the index checks.
-            if (value is null) return null;
-            if (value is NDArray nd) return nd; // the caller's array, built before the scope opened: never disposed
-            // A StringDType target: NumPy's array(values, dtype=arr.dtype) stores Python objects by setitem.
-            if (dtype.Meta is VStringDTypeMeta)
-                return Backends.Strings.NDVStringMove.StoreValue(value, dtype);
-            // A Python int past the machine types has no marked 0-d array, so it is packed now (PyArray_Pack's range check),
-            // the one value converted before NumPy's index checks.
-            if (value is System.Numerics.BigInteger && !Backends.Strings.NDStringStorage.IsString(dtype))
-                return NDArray.AsStoreValue(value, dtype.GetTypeCode());
-            // Every other value keeps its kind until the array overload converts it, after the axis and index checks:
-            // a C# number is a Python (or NumPy) scalar in the boundary map, which PyArray_Pack packs there (a Python int
-            // range-checked, a float truncated then range-checked, a complex refused by a real dtype); a C# string into a
-            // NUMERIC array is a Python str, which PyArray_Pack parses there with the dtype's setitem (its errors quote the
-            // str '1.5', not np.str_('1.5')); a C# array or collection is cast there. The 0-d or array belongs to the
-            // caller's scope.
-            return NDArray.FromPythonOperand(value);
         }
 
         /// <summary>
@@ -946,7 +806,7 @@ namespace NumSharp
         /// <param name="scalarObj">True when NumPy's scalar-obj quirk applies (moveaxis of the values' first axis).</param>
         /// <returns>The converted values with at least <c>arr.ndim</c> axes, the first one moved to <paramref name="axis"/>
         ///     for a scalar obj; <paramref name="values"/> itself when nothing changed.</returns>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range.</exception>
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range.</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError), or a complex literal into a
         ///     real one.</exception>
         /// <exception cref="ValueError">Text values that do not parse as the array's number type.</exception>
@@ -1071,7 +931,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="values"/> cannot broadcast to the indexing result: MapIter's text,
         ///     <c>shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (2,)</c> (see
         ///     <see cref="NDArray.PrepareAssignedValue"/>); text values that do not parse as the array's number type.</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range.</exception>
+        /// <exception cref="OverflowError">A C# number literal outside the array dtype's range.</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered <see cref="InsertMultiIndex"/>,
         ///     under the <c>[NDScoped]</c> <c>insert</c> overloads. The cast, the ndmin reshape, the broadcast view and
@@ -1242,27 +1102,6 @@ namespace NumSharp
         // ============================== delete ==============================
 
         /// <summary>
-        ///     <c>delete(arr, obj, axis)</c> with one position given as a number, after np.delete's class boundaries and null
-        ///     check: the axis context, then the scalar-index path in the source order.
-        /// </summary>
-        /// <param name="arr">Input array (not null).</param>
-        /// <param name="obj">The index to remove; negative values count from the end.</param>
-        /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
-        /// <returns>A fresh array without the sub-array at <paramref name="obj"/> (F-ordered when <paramref name="arr"/>
-        ///     is).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException"><paramref name="obj"/> is outside <c>[-N, N)</c>.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only callers are the <c>[NDScoped]</c> np.delete overloads,
-        ///     whose scope releases the ravel work array and the concatenated chunks.</remarks>
-        [NDScopedCovered]
-        [ArrayWrap("arr")]
-        internal static NDArray delete(NDArray arr, long obj, int? axis)
-        {
-            var ctx = PrepareAxisContext(arr, axis);
-            return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, obj, ctx.axis));
-        }
-
-        /// <summary>
         ///     <c>delete(arr, obj, axis)</c> with a slice of positions, after np.delete's class boundaries and null checks:
         ///     the axis context, then the slice path in the source order.
         /// </summary>
@@ -1272,97 +1111,14 @@ namespace NumSharp
         /// <returns>A fresh array without the sliced positions.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ArgumentException">A slice step of zero.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c> (see the number overload).</remarks>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the <c>[NDScoped]</c> np.delete slice form, whose
+        ///     scope releases the ravel work array and the concatenated chunks.</remarks>
         [NDScopedCovered]
         [ArrayWrap("arr")]
         internal static NDArray delete(NDArray arr, Slice obj, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
             return WithSourceOrder(arr, DeleteSlice(ctx.work, obj, ctx.axis));
-        }
-
-        /// <summary>
-        ///     <c>delete(arr, obj, axis)</c> with an <see cref="int"/> sequence of positions, after np.delete's class
-        ///     boundaries and null checks: the positions widened to <see cref="long"/>, the axis context, then the
-        ///     index-array path in the source order.
-        /// </summary>
-        /// <param name="arr">Input array (not null).</param>
-        /// <param name="obj">The positions to remove (not null; negative values count from the end).</param>
-        /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
-        /// <returns>A fresh array without the listed positions (duplicates remove once).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">A position outside <c>[-N, N)</c>: NumPy's IndexError, naming the
-        ///     deletion axis for a one-element list and the keep mask's axis 0 for a longer one.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c> (see the number overload).</remarks>
-        [NDScopedCovered]
-        [ArrayWrap("arr")]
-        internal static NDArray delete(NDArray arr, int[] obj, int? axis)
-        {
-            var ctx = PrepareAxisContext(arr, axis);
-            // NumPy's np.asarray(obj) of one integer is its single-value path (`obj.size == 1 and obj.dtype.kind in "ui"`):
-            // the scalar deletion, whose bounds error names the deletion axis.
-            if (obj.Length == 1)
-                return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, obj[0], ctx.axis));
-            var longs = new long[obj.Length];
-            for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
-            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, longs, ctx.axis));
-        }
-
-        /// <summary>
-        ///     <c>delete(arr, obj, axis)</c> with a <see cref="long"/> sequence of positions, after np.delete's class
-        ///     boundaries and null checks: the axis context, then the index-array path (over a copy of the caller's array,
-        ///     which the path sorts in place) in the source order.
-        /// </summary>
-        /// <param name="arr">Input array (not null).</param>
-        /// <param name="obj">The positions to remove (not null; negative values count from the end).</param>
-        /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
-        /// <returns>A fresh array without the listed positions (duplicates remove once).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">A position outside <c>[-N, N)</c>: NumPy's IndexError, naming the
-        ///     deletion axis for a one-element list and the keep mask's axis 0 for a longer one.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c> (see the number overload).</remarks>
-        [NDScopedCovered]
-        [ArrayWrap("arr")]
-        internal static NDArray delete(NDArray arr, long[] obj, int? axis)
-        {
-            var ctx = PrepareAxisContext(arr, axis);
-            // One integer is NumPy's single-value path (see the int[] overload).
-            if (obj.Length == 1)
-                return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, obj[0], ctx.axis));
-            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, (long[])obj.Clone(), ctx.axis));
-        }
-
-        /// <summary>
-        ///     <c>delete(arr, obj, axis)</c> with a boolean mask, after np.delete's class boundaries and null checks: the
-        ///     axis context, the mask's length check, then <c>np.compress</c> of the kept positions in the source order.
-        /// </summary>
-        /// <param name="arr">Input array (not null).</param>
-        /// <param name="obj">The mask of positions to remove (not null), as long as the axis.</param>
-        /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
-        /// <returns>A fresh array of the positions where <paramref name="obj"/> is false.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ArgumentException">The mask's length differs from the axis length (NumPy's ValueError
-        ///     text).</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: the keep mask is released by the caller's scope, exceptions
-        ///     included.</remarks>
-        [NDScopedCovered]
-        [ArrayWrap("arr")]
-        internal static NDArray delete(NDArray arr, bool[] obj, int? axis)
-        {
-            var ctx = PrepareAxisContext(arr, axis);
-            long N = ctx.work.Shape.dimensions[ctx.axis];
-            if (obj.Length != N)
-                throw new ArgumentException(
-                    "boolean array argument obj to delete must be one dimensional " +
-                    string.Create(CultureInfo.InvariantCulture, $"and match the axis length of {N}"),
-                    nameof(obj));
-
-            // keep = ~obj; route through np.compress which has the fused gather kernel.
-            var keep = new bool[obj.Length];
-            for (int i = 0; i < obj.Length; i++) keep[i] = !obj[i];
-            // keepArr is released by the caller's scope (exceptions included).
-            var keepArr = np.array(keep);
-            return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis));
         }
 
         /// <summary>
@@ -1377,7 +1133,7 @@ namespace NumSharp
         /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
         /// <returns>A fresh array without the given positions.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ArgumentException">A boolean mask that is not 1-D or not as long as the axis.</exception>
+        /// <exception cref="ValueError">A boolean mask that is not 1-D or not as long as the axis (NumPy's text).</exception>
         /// <exception cref="IndexError">An index array that is neither integer nor boolean (<c>arrays used as indices must
         ///     be of integer (or boolean) type</c>).</exception>
         /// <exception cref="IndexOutOfRangeException">A position outside <c>[-N, N)</c>.</exception>
@@ -1392,11 +1148,11 @@ namespace NumSharp
             if (obj.GetTypeCode == NPTypeCode.Boolean)
             {
                 long N = ctx.work.Shape.dimensions[ctx.axis];
+                // NumPy's ValueError, its text alone (an ArgumentException with the parameter name appended its own suffix).
                 if (obj.size != N || obj.ndim != 1)
-                    throw new ArgumentException(
+                    throw new ValueError(
                         "boolean array argument obj to delete must be one dimensional " +
-                        string.Create(CultureInfo.InvariantCulture, $"and match the axis length of {N}"),
-                        nameof(obj));
+                        string.Create(CultureInfo.InvariantCulture, $"and match the axis length of {N}"));
                 // keep = ~obj. Build a contig bool keep-mask without leaning on
                 // bitwise-not over a possibly-strided NDArray.
                 bool[] keep = new bool[N];
@@ -2471,7 +2227,7 @@ namespace NumSharp
         /// <param name="args">Extra arguments for the <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A new array of <paramref name="x"/>'s shape and dtype.</returns>
         /// <exception cref="ValueError">The function count is neither the condition count nor one more.</exception>
-        /// <exception cref="OverflowException">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
+        /// <exception cref="OverflowError">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
         ///     integer 1000 out of bounds for int8"), a float infinity into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
         ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
@@ -2500,7 +2256,7 @@ namespace NumSharp
         /// <param name="args">Extra arguments for the <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A new array of <paramref name="x"/>'s shape and dtype.</returns>
         /// <exception cref="ValueError">The function count is neither the condition count nor one more.</exception>
-        /// <exception cref="OverflowException">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
+        /// <exception cref="OverflowError">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
         ///     integer 1000 out of bounds for int8"), a float infinity into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
         ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
@@ -2540,7 +2296,7 @@ namespace NumSharp
         /// <param name="args">Extra arguments for the <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A new array of <paramref name="x"/>'s shape and dtype.</returns>
         /// <exception cref="ValueError">The function count is neither the condition count nor one more.</exception>
-        /// <exception cref="OverflowException">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
+        /// <exception cref="OverflowError">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
         ///     integer 1000 out of bounds for int8"), a float infinity into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
         ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
@@ -2600,7 +2356,7 @@ namespace NumSharp
         /// <returns>A fresh array of <paramref name="x"/>'s shape and dtype, owned by the caller.</returns>
         /// <exception cref="ValueError">The function count is neither <c>condlist.Length</c> nor one more; or a constant
         ///     NumPy's store refuses (a float NaN, a text that is not a number, into a number dtype).</exception>
-        /// <exception cref="OverflowException">A constant does not fit <paramref name="x"/>'s integer dtype.</exception>
+        /// <exception cref="OverflowError">A constant does not fit <paramref name="x"/>'s integer dtype.</exception>
         /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/>, a None constant into
         ///     an integer one.</exception>
         /// <exception cref="IndexError">A condition that does not fit <paramref name="x"/> (NumPy's boolean-index text),
@@ -2746,7 +2502,7 @@ namespace NumSharp
         ///     into int8 is 44), null Python's None (NaN, <c>nan+nanj</c>, False, <c>'None'</c>, or int()'s TypeError), a C#
         ///     array or collection a Python list (one value per selected slot, or one for all).</param>
         /// <exception cref="IndexError">The mask does not fit <paramref name="y"/>.</exception>
-        /// <exception cref="OverflowException">A Python int outside an integer dtype, or a float infinity into one.</exception>
+        /// <exception cref="OverflowError">A Python int outside an integer dtype, or a float infinity into one.</exception>
         /// <exception cref="TypeError">A complex value into an integer or float dtype, None into an integer one.</exception>
         /// <exception cref="ValueError">A float NaN or a non-number text into a number dtype, or a sequence whose length is
         ///     neither 1 nor the number of selected slots.</exception>
@@ -2867,7 +2623,7 @@ namespace NumSharp
         /// <param name="value">One C# number or a text (the fused path admits nothing else).</param>
         /// <param name="dtype">The target dtype (x's dtype, a number dtype).</param>
         /// <param name="elemSize">The byte width of <paramref name="dtype"/>.</param>
-        /// <exception cref="OverflowException">A Python int outside an integer dtype, or a float infinity into one.</exception>
+        /// <exception cref="OverflowError">A Python int outside an integer dtype, or a float infinity into one.</exception>
         /// <exception cref="TypeError">A complex value into an integer or float dtype.</exception>
         /// <exception cref="ValueError">A float NaN or a non-number text into a number dtype.</exception>
         private static unsafe void WriteCoercedScalar(byte* dst, object value, NPTypeCode dtype, int elemSize)
@@ -3038,14 +2794,20 @@ namespace NumSharp
         /// <exception cref="ValueError">A 0-d input with an axis (<c>zero-dimensional arrays cannot be concatenated</c>).</exception>
         /// <exception cref="IncorrectShapeException">The inputs' ranks or other axes differ.</exception>
         /// <exception cref="InvalidCastException">An input that does not cast to the result dtype.</exception>
-        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravels of a multi-dimensional input are released, exceptions included;
-        ///     the result is yielded. A 1-D input passes to concatenate as it is (built before the scope opened, so never
-        ///     disposed). It sees plain arrays only: the woven public function hands it the plain view of a subclass
-        ///     operand and answers for the class itself (NDSubclass).</remarks>
-        [NDScoped /* the ravels of multi-dimensional inputs are released; the concatenated result is yielded */]
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the Python scalars' arrays and the ravels of a multi-dimensional input are
+        ///     released, exceptions included; the result is yielded. A 1-D input passes to concatenate as it is (built
+        ///     before the scope opened, so never disposed). It sees plain arrays only: the woven public function hands it
+        ///     the plain view of a subclass operand and answers for the class itself (NDSubclass).</remarks>
+        [NDScoped /* the literals' arrays and the ravels of multi-dimensional inputs are released; the result is yielded */]
         [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Append))]
         internal static NDArray append(NDArray arr, NDArray values, int? axis)
         {
+            // NumPy's asanyarray(arr) and ravel(values) (asanyarray, then ravel) build the ARRAY of a Python scalar: a C#
+            // number literal takes the Python number's default dtype, not its C# width (np.append(int32_array, 5) is int64
+            // in NumPy, where the int32 literal kept int32 and the result with it).
+            arr = PythonScalarAsArray(arr);
+            values = PythonScalarAsArray(values);
+
             if (axis is null)
             {
                 // Both inputs ravel'd into 1-D, then concatenate along axis 0.

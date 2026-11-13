@@ -36,7 +36,7 @@ namespace NumSharp
         ///     NaN parameters pass the checks (every comparison is false) and sample NaN, as in NumPy. Holds the bit
         ///     generator's lock for the draws.
         /// </remarks>
-        public NDArray triangular(double left, double mode, double right, Shape size)
+        public NDArray triangular(double left, double mode, double right, Shape? size)
         {
             // Parameter validation (matches NumPy error messages and order exactly)
             if (left > mode)
@@ -46,7 +46,7 @@ namespace NumSharp
             if (left == right)
                 throw new ValueError("left == right");
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -54,11 +54,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(Distributions.RandomTriangular(ref one, left, mode, right));
+                        return NDArray.WritableScalar(Distributions.RandomTriangular(ref one, left, mode, right));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

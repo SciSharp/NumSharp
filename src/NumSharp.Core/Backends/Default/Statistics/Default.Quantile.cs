@@ -176,7 +176,7 @@ namespace NumSharp.Backends
         ///     NaN or infinite (INT64_MIN as intp), and an unsigned integer q's 0 makes inverted_cdf / closest_observation
         ///     take its dtype's maximum (<c>kth(=255) out of bounds (8)</c>) — for the nan forms per slice, at the first
         ///     slice in C order.</exception>
-        /// <exception cref="OverflowException">An integer q array: <c>n</c> or <c>n - 1</c> outside its dtype (<c>Python
+        /// <exception cref="OverflowError">An integer q array: <c>n</c> or <c>n - 1</c> outside its dtype (<c>Python
         ///     integer 200 out of bounds for int8</c>), or an unsigned q under weibull / averaged_inverted_cdf /
         ///     interpolated_inverted_cdf (<c>Python integer -1 out of bounds for uint8</c>) — before every other check of
         ///     the computation.</exception>
@@ -209,9 +209,6 @@ namespace NumSharp.Backends
         /// <exception cref="IndexError">keepdims with an out of too few dimensions (NumPy's <c>too many indices for
         ///     array</c>), or with a reduced axis of length 0 (<c>index 0 is out of bounds for axis 0 with size 0</c>) —
         ///     np.median's and np.nanmedian's out included (<see cref="UReduce"/> indexes it).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: <c>_ureduce</c>'s
-        ///     merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
-        ///     (0,newaxis)</c>), before q's rank and the method (the nan forms answer an empty input before it).</exception>
         /// <exception cref="TypeError">Bool data with an interpolating method (NumPy's boolean-subtract text, after the
         ///     partition's validation and the neighbour lookup), unless <paramref name="allowBooleanContinuous"/>.</exception>
         /// <exception cref="IndexOutOfRangeException">An array with no element whose lookup fails (NumPy's IndexError
@@ -269,9 +266,8 @@ namespace NumSharp.Backends
             // _ureduce runs BEFORE the reduction function, in NumPy's order (UReduce, the family's one prologue): the axes
             // normalized (an out-of-range or repeated axis is reported before the boolean subtract below:
             // np.quantile(bool, 0.5, axis=5) is NumPy's AxisError), keepdims' view of out, then the merge of several reduced
-            // axes into one, whose -1 NumPy cannot resolve beside a kept axis of length 0 — np.quantile(zeros((0, 3, 4)), 0.5,
-            // axis=(1, 2)) is NumPy's reshape ValueError here, before q's rank and the method are looked at (the merge used to
-            // come with the staging below, with an explicit length, and gave an empty result: plan Appendix B1).
+            // axes into one of their product's length — so np.quantile(zeros((0, 3, 4)), 0.5, axis=(1, 2)) merges to (0, 12)
+            // and gives an empty result (NumPy 2.5.4; NumPy 2.4's -1 raised a reshape ValueError there).
             UReduced prologue = UReduce(a, axisArr, @out, keepdims);
 
             // The out NumPy's reduction writes into: keepdims' `out[(Ellipsis,) + index_out]` from the prologue (each reduced
@@ -517,15 +513,34 @@ namespace NumSharp.Backends
                 long k = raw[i];
                 cellIndex[i] = (int)(k < 0 ? k + n : k);
             }
+            // Two partition lists. kSorted is the needed neighbours alone: the kernel's tie-blind select places them for a
+            // row whose result bits cannot show the arrangement (QuickSelect.PartitionAtManyTieBlind). kExact is NumPy's
+            // own list for float data (the 0 and -1 it adds, the median's own positions): a row holding both zero signs,
+            // or NaNs of different bits, is partitioned there with NumPy's statements, whose swaps decide which zero of a
+            // ±0 tie a neighbour reads and which NaN a NaN slice answers (QB43). Integer data never shows it.
             int[] kSortedManaged = nanAware || n <= 1 ? Array.Empty<int>() : SortedDistinct(cellIndex);
+            int[] kExactManaged = Array.Empty<int>();
+            if (!nanAware && n > 1 && inexact)
+            {
+                var list = new int[raw.Length + 3];
+                int count;
+                unsafe
+                {
+                    fixed (long* rawPtr = raw)
+                    fixed (int* listPtr = list)
+                        count = QuantileIndexes.FloatPartitionKth(rawPtr, raw.Length, n, discrete, medianMean, listPtr);
+                }
+                Array.Resize(ref list, count);
+                kExactManaged = list;
+            }
 
             int srcSize = TypeSize(a.typecode);
             byte[] scratchBytes = ArrayPool<byte>.Shared.Rent(checked(srcSize * n));
             double[] qCopy = q;   // q is already a flat array we own; no need to copy
             // Per-row plan scratch for the NaN path (2 entries per q, reused across rows so the per-row plan allocates
-            // nothing).
+            // nothing); the partition list holds up to 3 more (NumPy's 0 and -1, or the median's own positions).
             int rowScratch = Math.Max(1, 2 * qCopy.Length);
-            int[] rowKManaged = nanAware ? ArrayPool<int>.Shared.Rent(rowScratch) : null;
+            int[] rowKManaged = nanAware ? ArrayPool<int>.Shared.Rent(rowScratch + 3) : null;
             long[] rowRawManaged = nanAware ? ArrayPool<long>.Shared.Rent(rowScratch) : null;
             double[] rowWeightManaged = nanAware ? ArrayPool<double>.Shared.Rent(rowScratch) : null;
 
@@ -535,6 +550,7 @@ namespace NumSharp.Backends
                 {
                     fixed (byte* scratchPtr = scratchBytes)
                     fixed (int* kPtr = kSortedManaged)
+                    fixed (int* kExactPtr = kExactManaged)
                     fixed (int* cellIndexPtr = cellIndex)
                     fixed (double* cellWeightPtr = weight)
                     fixed (double* qPtr = qCopy)
@@ -565,7 +581,8 @@ namespace NumSharp.Backends
                                 q: qPtr, nQs: qCopy.Length,
                                 dstBase: (System.Numerics.Complex*)resultRaw.Address,
                                 dstOuterStride: dstOuterStride,
-                                medianNaNCheck: medianMean && !ignoreNaN);
+                                medianNaNCheck: medianMean && !ignoreNaN,
+                                medianMean: medianMean);
                         }
                         else
                         {
@@ -591,7 +608,9 @@ namespace NumSharp.Backends
                                 rowKScratch: rowKPtr,
                                 rowRaw: rowRawPtr,
                                 rowWeight: rowWeightPtr,
-                                medianMean: medianMean);
+                                medianMean: medianMean,
+                                kExact: kExactPtr,
+                                nKExact: kExactManaged.Length);
                         }
                     }
                 }
@@ -626,7 +645,40 @@ namespace NumSharp.Backends
             if (ignoreNaN && !legacyOut && axisArr != null && outerDims > 0 && (outRoute == 0 || (outRoute == 3 && movesQAxes)))
                 resultRaw = AlongAxisLayout(resultRaw, qNdim, prologue.NumPyAxis.Value);
 
+            // np.median along ONE axis returns np.mean(part[indexer], axis=axis) of `part = partition(a, kth, axis)`, whose
+            // copy is order='K', so the mean allocates in that copy's axis order (see MedianMeanLayout). A keepdims result
+            // is NumPy's newaxis view of this one (ApplyKeepdims); an out= has its own layout.
+            if (medianMean && !ignoreNaN && @out is null && qNdim == 0 && axisArr is { Length: 1 }
+                && resultRaw.ndim >= 2 && prologue.NumPyAxis is int medianAxis)
+                resultRaw = MedianMeanLayout(resultRaw, a, medianAxis);
+
             return FinishResult(resultRaw, a, axisArr, keepdims, qNdim, @out, target, outRoute, staged, outerDims);
+        }
+
+        /// <summary>
+        ///     The layout of np.median's result along one axis: NumPy's <c>_median</c> partitions an <c>order='K'</c> copy
+        ///     of the data (<c>partition</c>'s <c>a.copy(order="K")</c>, <see cref="Shape.NewLikeLayout"/>) and returns the
+        ///     mean of its middle slice along the axis, a reduction that allocates its result in the copy's axis order
+        ///     (<see cref="Shape.ReductionOutputShape(long[], Shape, int)"/>). So an F input's median is F, a transposed
+        ///     input's keeps its memory order, and a broadcast input's follows its K copy (probed 2.4.2:
+        ///     <c>np.median(np.broadcast_to(row, (2, 3, 4)), axis=1)</c> is F-contiguous).
+        /// </summary>
+        /// <param name="result">The computed medians: the kept axes in C order (the kernel writes one row per kept index).
+        ///     Consumed: returned, or left to the scope after its values are copied.</param>
+        /// <param name="a">The data.</param>
+        /// <param name="axis">The normalized reduced axis.</param>
+        /// <returns><paramref name="result"/> itself when NumPy's layout is C, else its values in a fresh array of that
+        ///     layout (one pass over the result, which is the axis length times smaller than the data).</returns>
+        private NDArray MedianMeanLayout(NDArray result, NDArray a, int axis)
+        {
+            var part = Shape.NewLikeLayout(a.Shape, 'K', (long[])a.Shape.dimensions.Clone());
+            var layout = Shape.ReductionOutputShape((long[])result.Shape.dimensions.Clone(), part, axis);
+            if (layout.IsContiguous)
+                return result;
+            var moved = NewArray(result.typecode, layout, false);
+            UnmanagedStorage.Copyto(moved, result, NPY_CASTING.NPY_NO_CASTING);
+            result.Dispose();
+            return moved;
         }
 
         /// <summary>
@@ -777,7 +829,7 @@ namespace NumSharp.Backends
             }
             // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
             // forms) is a numpy SCALAR at the boundary: read-only (PyArray_Return semantics).
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         /// <summary>
@@ -934,7 +986,7 @@ namespace NumSharp.Backends
             }
             // A fresh 0-d result (scalar q, axis=None — the np.median/percentile/quantile flat
             // forms) is a numpy SCALAR at the boundary: read-only (PyArray_Return semantics).
-            return result.MarkReductionScalar();
+            return result.PyArray_Return();
         }
 
         // ── helpers ─────────────────────────────────────────────────────────────────
@@ -1048,6 +1100,8 @@ namespace NumSharp.Backends
         /// <param name="medianNaNCheck">True for <c>np.median</c> (not the NaN-ignoring median): NumPy's
         ///     <c>_median_nancheck</c> - a row holding a NaN in either part gives the element NumPy's complex order puts last
         ///     (see <see cref="LastNaNInNumPyOrder"/>) instead of the mean of the middle values.</param>
+        /// <param name="medianMean">True for <c>np.median</c> / <c>np.nanmedian</c>: the result is NumPy's <c>np.mean</c> of
+        ///     the central value(s) (<see cref="ComplexMedianMean"/>), not the quantile lerp at 0.5.</param>
         /// <remarks>
         ///     NumPy's <c>_median</c> partitions with <c>kth</c> including -1 when the dtype supports NaN, so the largest element
         ///     of its complex order (<c>CDOUBLE_LT</c>: <c>[R + Rj, R + nanj, nan + Rj, nan + nanj]</c>, NaNs last) sits last, and
@@ -1058,7 +1112,7 @@ namespace NumSharp.Backends
         private static unsafe void ComputeComplexQuantile(
             System.Numerics.Complex* srcBase, long outer, int n,
             QuantileMethod method, double* q, int nQs,
-            System.Numerics.Complex* dstBase, long dstOuterStride, bool medianNaNCheck = false)
+            System.Numerics.Complex* dstBase, long dstOuterStride, bool medianNaNCheck = false, bool medianMean = false)
         {
             var scratch = new System.Numerics.Complex[n];
             for (long row = 0; row < outer; row++)
@@ -1081,10 +1135,36 @@ namespace NumSharp.Backends
                 for (int qi = 0; qi < nQs; qi++)
                 {
                     double qv = q[qi];
-                    System.Numerics.Complex result = ComplexQuantileAtMethod(scratch, n, qv, method);
+                    // np.median's `mean(part[indexer])`: the central element of an odd row, the central pair of an even one.
+                    System.Numerics.Complex result = medianMean && n > 0
+                        ? (n % 2 == 1 ? ComplexMedianMean(scratch[n / 2], default, 1)
+                                      : ComplexMedianMean(scratch[n / 2 - 1], scratch[n / 2], 2))
+                        : ComplexQuantileAtMethod(scratch, n, qv, method);
                     dstBase[qi * dstOuterStride + row] = result;
                 }
             }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.mean</c> of a complex128 median's central value(s), statement for statement: <c>add.reduce</c>
+        ///     starts its accumulator at the identity <c>0+0j</c> and adds the pairwise sum (<c>-0.0 + a [+ b]</c> per part),
+        ///     then <c>true_divide</c> by the count as the complex <c>count+0j</c> (Smith's branch: <c>rat = 0 / count</c>,
+        ///     <c>scl = 1 / (count + 0 * rat)</c>, <c>((s.re + s.im * rat) * scl, (s.im - s.re * rat) * scl)</c>).
+        /// </summary>
+        /// <param name="a">The first central value.</param>
+        /// <param name="b">The second central value (ignored when <paramref name="count"/> is 1).</param>
+        /// <param name="count">1 for an odd row, 2 for an even one.</param>
+        /// <returns>The mean as NumPy computes it: a zero part comes out +0.0 (the identity), and an infinite part turns
+        ///     the other into NaN through <c>inf * rat</c> (as NumPy's).</returns>
+        private static System.Numerics.Complex ComplexMedianMean(System.Numerics.Complex a, System.Numerics.Complex b, int count)
+        {
+            // The identity first: `0.0 + (pairwise sum)`; the pairwise sum's own -0.0 start is exact (-0.0 + x == x).
+            double sr = count == 2 ? 0.0 + (a.Real + b.Real) : 0.0 + a.Real;
+            double si = count == 2 ? 0.0 + (a.Imaginary + b.Imaginary) : 0.0 + a.Imaginary;
+            double divisorReal = count, divisorImag = 0.0;
+            double rat = divisorImag / divisorReal;
+            double scl = 1.0 / (divisorReal + divisorImag * rat);
+            return new System.Numerics.Complex((sr + si * rat) * scl, (si - sr * rat) * scl);
         }
 
         /// <summary>
@@ -1220,15 +1300,16 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     <c>_ureduce</c>'s keepdims: the result reshaped so every reduced axis of the data is back with length one,
-        ///     after q's leading axes.
+        ///     <c>_ureduce</c>'s keepdims: the result viewed so every reduced axis of the data is back with length one,
+        ///     after q's leading axes — NumPy's <c>r[(Ellipsis,) + index_r]</c> with <c>np.newaxis</c> at each reduced axis.
         /// </summary>
         /// <param name="result">The result: q's axes, then the kept axes.</param>
         /// <param name="source">The data.</param>
         /// <param name="axisArr">The reduced axes, or null for all of them.</param>
         /// <param name="keepdims">Whether to keep the reduced axes (false returns <paramref name="result"/>).</param>
         /// <param name="qNdim">How many leading axes of <paramref name="result"/> are q's.</param>
-        /// <returns>The reshaped view, or <paramref name="result"/> itself.</returns>
+        /// <returns>A view of <paramref name="result"/> (its new axes of stride 0, NumPy's newaxis; owndata False), or
+        ///     <paramref name="result"/> itself.</returns>
         internal static NDArray ApplyKeepdims(NDArray result, NDArray source, int[] axisArr, bool keepdims, int qNdim)
         {
             if (!keepdims) return result;
@@ -1259,7 +1340,22 @@ namespace NumSharp.Backends
                     else outShape[qDim + i] = result.Shape.dimensions[srcIdx++];
                 }
             }
-            return result.reshape(new Shape(outShape, copy: false));
+
+            // NumPy's `r[(Ellipsis,) + index_r]` with np.newaxis at every reduced axis: a VIEW of the result whose new axes
+            // have stride 0 and whose other axes keep the result's own strides (probed 2.4.2:
+            // np.median(F (2,3,4), axis=1, keepdims=True) has strides (8, 0, 16), owndata False; axis=None gives (0, 0, 0)).
+            // A reshape here gave the new axes C-style strides and, over a non-contiguous result, could copy.
+            var rs = result.Shape;
+            int[] reducedAxes = axisArr == null ? null : NormalizeAxes(axisArr, srcNd);
+            var strides = new long[outShape.Length];
+            int fromResult = 0;
+            for (int i = 0; i < outShape.Length; i++)
+            {
+                bool newAxis = i >= qDim && (reducedAxes == null || Array.IndexOf(reducedAxes, i - qDim) >= 0);
+                strides[i] = newAxis ? 0 : rs.strides[fromResult++];
+            }
+            var view = new Shape(outShape, strides, rs.offset, rs.bufferSize > 0 ? rs.bufferSize : rs.size);
+            return new NDArray(result.Storage.Alias(ref view)) { TensorEngine = result.TensorEngine };
         }
 
         /// <summary>
@@ -1282,26 +1378,21 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     <c>PyArray_TakeFrom</c>'s checks of out, in its order: the result's exact shape, a SAFE cast from out's dtype to
-        ///     the data's (<c>PyArray_FromArray(out, data dtype)</c>), and writeability (its WRITEBACKIFCOPY base).
+        ///     <c>PyArray_TakeFrom</c>'s checks of out (NumPy 2.5), shared with <c>np.take</c>
+        ///     (<see cref="UnmanagedStorage.ValidateTakeOut"/>): the result's exact shape, the FORCECAST copy's cast of a text
+        ///     out's contents into the data's dtype, and writeability (its WRITEBACKIFCOPY base). An out of any other dtype
+        ///     is accepted and receives the result through an unsafe cast (NumPy 2.4's SAFE check of out's dtype to the
+        ///     data's is gone; NumPy 2.5 only warns when the data's dtype does not reach out's under same_kind).
         /// </summary>
         /// <param name="target">The out the take writes (keepdims' view of the caller's).</param>
         /// <param name="resultShape">The result's shape.</param>
         /// <param name="data">The data (its dtype).</param>
-        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>), or a
-        ///     read-only out (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
-        /// <exception cref="TypeError">A dtype that does not cast safely to the data's: NumPy's <c>Cannot cast array data
-        ///     from dtype('float64') to dtype('float32') according to the rule 'safe'</c> ("scalar" for a 0-d out).</exception>
+        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>), a text out
+        ///     whose contents do not parse as the data's numbers (<c>invalid literal for int() with base 10:
+        ///     np.str_('')</c>), or a read-only out (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
+        /// <exception cref="UnicodeEncodeError">A text out holding non-ASCII text over fixed-width bytes data.</exception>
         private static void TakeOutChecks(NDArray target, long[] resultShape, NDArray data)
-        {
-            if (!target.Shape.dimensions.AsSpan().SequenceEqual(resultShape))
-                throw new ValueError("output array does not match result of ndarray.take");
-            if (!DTypeCasting.CanCastTypeTo(target.dtype, data.dtype, NPY_CASTING.NPY_SAFE_CASTING))
-                throw new TypeError($"Cannot cast {(target.ndim == 0 ? "scalar" : "array data")} from {target.dtype.ToString(true)} " +
-                                    $"to {data.dtype.ToString(true)} according to the rule 'safe'");
-            if (!target.Shape.IsWriteable)
-                throw new ValueError("WRITEBACKIFCOPY base is read-only");
-        }
+            => UnmanagedStorage.ValidateTakeOut(data, target, resultShape);
 
         /// <summary>
         ///     The checks of <c>_lerp</c>'s <c>add(a, diff_b_a * t, out=out)</c> before it writes, in the ufunc's order: out's
@@ -1325,8 +1416,7 @@ namespace NumSharp.Backends
             DType lerp = DType.From(lerpType);
             if (lerpType != target.typecode
                 && !DTypeCasting.CanCastTypeTo(lerp, target.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                throw new TypeError($"Cannot cast ufunc 'add' output from {lerp.ToString(true)} to " +
-                                            $"{target.dtype.ToString(true)} with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError("add", 1, "same_kind", lerp, target.dtype, 2);
 
             // NpyIter's broadcast of (a, diff_b_a * t, out): right-aligned, a dimension of 1 stretches; out may not stretch.
             long[] outDims = target.Shape.dimensions;
@@ -1508,7 +1598,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">A read-only out (<c>assignment destination is read-only</c>, checked first, as
         ///     NumPy's subscript assignment does), or a NaN into a signed integer out (<c>cannot convert float NaN to
         ///     integer</c>).</exception>
-        /// <exception cref="OverflowException">Into a signed integer out: an infinity (<c>cannot convert float infinity to
+        /// <exception cref="OverflowError">Into a signed integer out: an infinity (<c>cannot convert float infinity to
         ///     integer</c>), a value outside C long (<c>Python int too large to convert to C long</c>; C long is 64 bits here:
         ///     NumPy on Windows has a 32-bit long, and the LP64 (Linux / macOS) answer is the one pinned), or a value outside
         ///     the out's range (<c>Python integer 300 out of bounds for int8</c>).</exception>
@@ -1595,9 +1685,9 @@ namespace NumSharp.Backends
         ///     NumPy's out then holds the add's value at every position; NumSharp's holds the lerp, which differs from it only
         ///     in the last bits of the positions whose weight is at least 0.5 (where NumPy's subtract would have written).
         /// </remarks>
-        private static TypeError LerpTextOutError(NDArray a, NPTypeCode lerpType, NDArray target)
+        private static UFuncNoLoopError LerpTextOutError(NDArray a, NPTypeCode lerpType, NDArray target)
             => Backends.Strings.NDStringUfuncs.VStringNoLoop("subtract",
-                new[] { a.dtype.Meta.ToString(), DType.From(lerpType).Meta.ToString() }, target.dtype.Meta.ToString());
+                new[] { a.dtype.Meta, DType.From(lerpType).Meta }, target.dtype.Meta);
 
         /// <summary>NumPy's TypeError for <c>_lerp</c>'s <c>b - a</c> over bool data.</summary>
         /// <returns>The exception to throw.</returns>

@@ -110,7 +110,7 @@ namespace NumSharp
             ///     'i'", checked first); <paramref name="a"/> is not text (<c>str_len</c>'s no-loop text); or the output width
             ///     is not a valid descriptor (NumPy builds it from a string: a uint64 count makes the sizes float64, so
             ///     <c>'U6.0'</c> is "data type 'U6.0' not understood", as in NumPy 2.4.2).</exception>
-            /// <exception cref="OverflowException">A string's <c>len * i</c> exceeds <c>sys.maxsize</c> ("Overflow encountered in
+            /// <exception cref="OverflowError">A string's <c>len * i</c> exceeds <c>sys.maxsize</c> ("Overflow encountered in
             ///     string multiply").</exception>
             /// <exception cref="ValueError">The broadcast result is empty ("zero-size array to reduction operation maximum
             ///     which has no identity": NumPy takes the max of the sizes).</exception>
@@ -145,7 +145,7 @@ namespace NumSharp
                 using (var over = np.greater(aLen, limit))
                 {
                     if (np.any(over))
-                        throw new OverflowException("Overflow encountered in string multiply");
+                        throw new OverflowError("Overflow encountered in string multiply");
                 }
                 // buffersizes = a_len * i   (int64 times a uint64 count is float64, NumPy's promotion)
                 using var buffersizes = np.multiply(aLen, reps);
@@ -177,7 +177,7 @@ namespace NumSharp
             /// <returns>The repetitions (0-d for a scalar count).</returns>
             /// <exception cref="ArgumentNullException">An operand is null.</exception>
             /// <exception cref="TypeError"><paramref name="i"/> is not an integer array.</exception>
-            /// <exception cref="OverflowException">A repetition exceeds <c>sys.maxsize</c> characters.</exception>
+            /// <exception cref="OverflowError">A repetition exceeds <c>sys.maxsize</c> characters.</exception>
             public static NDArray multiply(string a, NDArray i)
             {
                 using var text = TextScalar(a, nameof(a));
@@ -197,7 +197,7 @@ namespace NumSharp
             internal static NDArray TextLengths(NDArray x)
             {
                 if (!NDStringUfuncs.IsString(x))
-                    throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {x.dtype.Meta} -> None");
+                    throw new UFuncNoLoopError("str_len", 1, x.dtype.Meta, null);
                 return NDStringArithmetic.Length(x);
             }
 

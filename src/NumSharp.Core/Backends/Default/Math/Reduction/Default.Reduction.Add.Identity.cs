@@ -149,7 +149,7 @@ namespace NumSharp.Backends
                 }
 
                 if (keepdims)
-                    result.Storage.ExpandDimension(axis);
+                    ExpandReducedAxis(result, arr.Shape, axis);
                 return DeliverReduction(result, @out);
             }
             finally
@@ -429,7 +429,7 @@ namespace NumSharp.Backends
         private static NDArray DeliverReduction(NDArray result, NDArray @out)
         {
             if (@out is null)
-                return result.MarkReductionScalar();
+                return result.PyArray_Return();
 
             try
             {

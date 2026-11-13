@@ -30,7 +30,7 @@ namespace NumSharp.Tests.Casting
         public void OrderIsCheckedBeforeCasting_Numeric()
         {
             var a = np.arange(3.0);
-            new Action(() => a.astype(np.float64, true, 'Z', "bogus"))
+            new Action(() => a.astype(np.float64, 'Z', "bogus"))
                 .Should().Throw<ValueError>().WithMessage(OrderError);
         }
 
@@ -42,7 +42,7 @@ namespace NumSharp.Tests.Casting
         public void OrderIsCheckedBeforeCasting_Text()
         {
             var a = np.array(new[] { "a" });
-            new Action(() => a.astype(np.dtype("U3"), true, 'Z', "bogus"))
+            new Action(() => a.astype(np.dtype("U3"), 'Z', "bogus"))
                 .Should().Throw<ValueError>().WithMessage(OrderError);
         }
 
@@ -55,9 +55,9 @@ namespace NumSharp.Tests.Casting
         public void CastingNameIsCheckedBeforeTheCopyFalseShortcut()
         {
             var a = np.arange(3.0);
-            new Action(() => a.astype(np.float64, false, 'K', "bogus"))
+            new Action(() => a.astype(np.float64, 'K', "bogus", copy: false))
                 .Should().Throw<ValueError>().WithMessage(CastingError);
-            new Action(() => a.astype(np.float64, true, 'K', "bogus"))
+            new Action(() => a.astype(np.float64, 'K', "bogus"))
                 .Should().Throw<ValueError>().WithMessage(CastingError);
         }
 
@@ -69,7 +69,7 @@ namespace NumSharp.Tests.Casting
         public void CastingNameErrorListsSameValue()
         {
             var a = np.arange(3L);
-            new Action(() => a.astype(np.float64, true, 'K', "bogus"))
+            new Action(() => a.astype(np.float64, 'K', "bogus"))
                 .Should().Throw<ValueError>().WithMessage(CastingError);
         }
 
@@ -82,11 +82,11 @@ namespace NumSharp.Tests.Casting
         public void CharArrayParsesItsArgumentsBeforeItsShortcut()
         {
             NDCharArray digits = np.@char.array(new[] { "1", "-5" }).astype(np.int8);
-            new Action(() => digits.astype(np.int8, false, 'K', "bogus"))
+            new Action(() => digits.astype(np.int8, 'K', "bogus", copy: false))
                 .Should().Throw<ValueError>().WithMessage(CastingError);
-            new Action(() => digits.astype(np.int8, false, 'Z', "bogus"))
+            new Action(() => digits.astype(np.int8, 'Z', "bogus", copy: false))
                 .Should().Throw<ValueError>().WithMessage(OrderError);
-            digits.astype(np.int8, false, 'K', "no").Should().BeSameAs(digits);
+            digits.astype(np.int8, 'K', "no", copy: false).Should().BeSameAs(digits);
         }
 
         /// <summary>
@@ -97,7 +97,7 @@ namespace NumSharp.Tests.Casting
         public void SameValueWithinOneStorageTypeRuns()
         {
             var a = np.arange(3.0);
-            var copy = a.astype(np.float64, true, 'K', "same_value");
+            var copy = a.astype(np.float64, 'K', "same_value");
             copy.Should().NotBeSameAs(a);
             copy.dtype.Should().Be(np.float64);
             copy.ToArray<double>().Should().Equal(0.0, 1.0, 2.0);
@@ -113,7 +113,7 @@ namespace NumSharp.Tests.Casting
         public void SameValueAcrossNumericStorageTypesIsNotSupported()
         {
             var a = np.array(new[] { 2.0, 3.0 });
-            new Action(() => a.astype(np.int32, true, 'K', "same_value"))
+            new Action(() => a.astype(np.int32, 'K', "same_value"))
                 .Should().Throw<NotSupportedException>().WithMessage("*same_value*float64*int32*");
         }
 
@@ -139,7 +139,7 @@ namespace NumSharp.Tests.Casting
             var doubles = np.arange(3.0);
             doubles.astype(null, copy: false).Should().BeSameAs(doubles);
             doubles.astype(null).Should().NotBeSameAs(doubles);
-            doubles.astype(null, true, 'C', "same_kind").dtype.Should().Be(np.float64);
+            doubles.astype(null, 'C', "same_kind").dtype.Should().Be(np.float64);
         }
     }
 }

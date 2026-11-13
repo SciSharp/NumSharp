@@ -641,9 +641,10 @@ namespace NumSharp.Backends.Strings
         // =============================================================================================================
 
         /// <summary>
-        ///     NumPy's <c>Buffer&lt;ENCODING::UTF8&gt;</c> predicate of a <c>StringDType</c> text: its code points without the
-        ///     trailing NUL bytes (<c>num_codepoints_for_utf8_bytes</c> ignores them; an embedded NUL counts), False when there
-        ///     are none, Python's Unicode rules per code point.
+        ///     NumPy's <c>Buffer&lt;ENCODING::UTF8&gt;</c> predicate of a <c>StringDType</c> text: every code point of it, a NUL
+        ///     anywhere included (NumPy 2.5.3's length-explicit <c>num_codepoints_for_utf8_bytes</c>, so <c>'ab\0'</c> is not
+        ///     alphabetic; NumPy 2.4 ignored the trailing NULs), False when there are none, Python's Unicode rules per code
+        ///     point.
         /// </summary>
         /// <param name="s">The text (valid UTF-8, as every <c>StringDType</c> text is).</param>
         /// <param name="size">Its byte size.</param>
@@ -666,8 +667,6 @@ namespace NumSharp.Backends.Strings
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool IsKindUtf8(byte* s, long size, int kind, uint* flags)
         {
-            while (size > 0 && s[size - 1] == 0)
-                size--;
             if (size == 0)
                 return false;
             if (!Avx2.IsSupported)
@@ -698,8 +697,8 @@ namespace NumSharp.Backends.Strings
         ///     text read into one): the byte class masks when every byte is below 0x80, else one UTF-8 window.
         /// </summary>
         /// <param name="v">The text's bytes, zero past them.</param>
-        /// <param name="end">One past its last nonzero byte (0 to 16): NumPy's code points end there, an embedded NUL
-        ///     before it counts.</param>
+        /// <param name="end">The text's byte size (0 to 16): every byte is one of NumPy's code points, a trailing NUL included
+        ///     (NumPy 2.5.3's length-explicit UTF-8; NumPy 2.4 stopped at the last nonzero byte).</param>
         /// <param name="kind">The predicate.</param>
         /// <param name="flags">The BMP flags table.</param>
         /// <returns>The predicate's value (False for <paramref name="end"/> 0).</returns>
@@ -970,7 +969,7 @@ namespace NumSharp.Backends.Strings
         ///     of <see cref="IsKindScalar{TUnit}"/> over <see cref="PyUnicodeData"/>.
         /// </summary>
         /// <param name="s">The text (valid UTF-8).</param>
-        /// <param name="size">Its byte size without the trailing NULs (at least 1).</param>
+        /// <param name="size">Its byte size, trailing NULs included (at least 1).</param>
         /// <param name="kind">The predicate.</param>
         /// <returns>The predicate's value.</returns>
         internal static bool IsKindUtf8Scalar(byte* s, long size, int kind)

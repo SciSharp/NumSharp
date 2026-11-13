@@ -196,7 +196,7 @@ namespace NumSharp
         ///     that is neither a string nor NaN-like) with another entry (the sorted path: <paramref name="sorted"/> or a return
         ///     flag; NumPy's values-only <c>sorted=False</c> hash pass compares nothing): NumPy's <c>Cannot compare null that is not a
         ///     nan-like value</c>.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
+        /// <exception cref="MemoryError">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         public static UniqueResult unique(NDArray ar,
             bool return_index = false,

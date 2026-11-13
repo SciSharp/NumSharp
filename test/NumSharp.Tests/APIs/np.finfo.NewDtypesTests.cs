@@ -90,14 +90,10 @@ namespace NumSharp.Tests.APIs
             => np.finfo(typeof(Half)).bits.Should().Be(16);
 
         [TestMethod]
-        public void FInfo_Half_From_Generic()
-            => np.finfo<Half>().bits.Should().Be(16);
-
-        [TestMethod]
         public void FInfo_Half_From_Array()
         {
             var arr = np.array(new Half[] { (Half)1.0, (Half)2.0 });
-            np.finfo(arr).bits.Should().Be(16);
+            np.finfo(arr.dtype).bits.Should().Be(16);
         }
 
         [TestMethod]
@@ -164,7 +160,7 @@ namespace NumSharp.Tests.APIs
 
         [TestMethod]
         public void FInfo_Complex_MinExp()
-            => np.finfo(NPTypeCode.Complex).minexp.Should().Be(-1021);
+            => np.finfo(NPTypeCode.Complex).minexp.Should().Be(-1022);   // NumPy 2.4.2: complex128's real part's
 
         [TestMethod]
         public void FInfo_Complex_SmallestNormal_MatchesFloat64()
@@ -190,14 +186,10 @@ namespace NumSharp.Tests.APIs
             => np.finfo(typeof(Complex)).bits.Should().Be(64);
 
         [TestMethod]
-        public void FInfo_Complex_From_Generic()
-            => np.finfo<Complex>().bits.Should().Be(64);
-
-        [TestMethod]
         public void FInfo_Complex_From_Array()
         {
             var arr = np.array(new Complex[] { new Complex(1, 2) });
-            np.finfo(arr).bits.Should().Be(64);
+            np.finfo(arr.dtype).bits.Should().Be(64);
         }
 
         [TestMethod]
@@ -232,21 +224,21 @@ namespace NumSharp.Tests.APIs
         }
 
         // ---------------------------------------------------------------------
-        // Integer types STILL throw "not inexact"
+        // Integer types throw NumPy 2.5's "data type dtype('...') not compatible with finfo" (ValueError)
         // ---------------------------------------------------------------------
 
         [TestMethod]
         public void FInfo_SByte_Throws()
         {
             Action act = () => np.finfo(NPTypeCode.SByte);
-            act.Should().Throw<ArgumentException>().WithMessage("*not inexact*");
+            act.Should().Throw<ValueError>().WithMessage("data type dtype('*') not compatible with finfo");
         }
 
         [TestMethod]
         public void FInfo_Int32_Throws()
         {
             Action act = () => np.finfo(NPTypeCode.Int32);
-            act.Should().Throw<ArgumentException>().WithMessage("*not inexact*");
+            act.Should().Throw<ValueError>().WithMessage("data type dtype('*') not compatible with finfo");
         }
 
         [TestMethod]

@@ -34,7 +34,7 @@ namespace NumSharp.Tests.Math
             var fails = new List<string>();
             var i32 = np.arange(12).astype(np.int32).reshape(3, 4) * 7 - 20;
             Check(fails, "nanmean i32 (3,4) keepdims", () => np.nanmean(i32, keepdims: true), "float64 (1,1) 4032800000000000");
-            Check(fails, "nanmean i32 (3,4) axis1 keepdims", () => np.nanmean(i32, 1, true),
+            Check(fails, "nanmean i32 (3,4) axis1 keepdims", () => np.nanmean(i32, 1, keepdims: true),
                   "float64 (3,1) c023000000000000 4032800000000000 4047400000000000");
             var b = np.array(new bool[,] { { true, false, true }, { true, true, false } });
             Check(fails, "nanmean bool (2,3) keepdims", () => np.nanmean(b, keepdims: true), "float64 (1,1) 3fe5555555555555");

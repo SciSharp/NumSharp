@@ -53,7 +53,7 @@ in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`
   is the Python literal); `char`, `Half`, `decimal` and every `NDArray` (0-d included) are strong
   (`np.r_[i8, NDArray.Scalar(1L)]` is int64, `np.r_[i8, 1L]` int8). A weak entry is stored by the adopted dtype's setitem
   (`NDArray.AsStoreValue`, NumPy's `PyArray_Pack` with the LP64 texts): an integer that does not fit raises
-  `OverflowException("Python integer 1000 out of bounds for int8")`, past the C long "Python int too large to convert to
+  `OverflowError("Python integer 1000 out of bounds for int8")`, past the C long "Python int too large to convert to
   C long" (`np.r_[i8, ulong.MaxValue]`); a weak float saturates to ±inf. An all-literal key whose integer does not fit
   int64 lifts the default to uint64. One complex width: `result_type(float32, 1j)` is complex128. The result dtype is
   one `result_type` over every array and scalar (`NDExprTypeRules.PromoteStrongSequence`, never a left fold:
@@ -92,7 +92,16 @@ in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`
   `"negative dimensions are not allowed"` where `ogrid[5:0, 0:3]` gives an empty axis. `MGridResult` converts to
   `NDArray`, deconstructs (`var (x, y) = np.mgrid["0:5", "0:3"];`) and indexes the per-axis grids. Gate:
   `Creation/np.mgrid.Test.cs`.
-- `np.indices(dimensions, dtype, sparse)` is `NDArray.indices` / `indices_sparse` (`Backends/NDArray.Numeric.cs`),
+- `np.indices(Shape dimensions, DType dtype = null, bool sparse = false)` is NumPy's one signature and returns
+  `np.IndicesResult` (`Indexing/np.indices.cs`): the dense grid (`values`, the members callers read on an array
+  forwarded to it, an implicit conversion to `NDArray`) or, with `sparse`, NumPy's tuple of broadcast-shaped arrays
+  (`values` null; converting it to `NDArray` raises `InvalidCastException`). Either form indexes and deconstructs per
+  axis (`var (i, j) = np.indices((2, 3));`, Python's unpacking of a grid's first axis) and converts to `NDArray[]`; the
+  struct is `IDisposable` and `INDArrayCarrier`, not enumerable. An int converts to a one-dimension Shape, so
+  `np.indices(3)` is the `(1, 3)` grid where NumPy raises `'int' object is not iterable` (`[Misaligned]`).
+  `np.ma.indices` adds `_convert2ma`'s `fill_value` / `hardmask` over a nomask result (no `sparse`: NumPy's own raises
+  `'tuple' object has no attribute 'view'`).
+- `np.indices(dimensions, dtype, sparse)` computes in `NDArray.indices` / `indices_sparse` (`Backends/NDArray.Numeric.cs`),
   NumPy's `res = empty((N,) + dimensions, dtype)` then one `arange(dim, dtype)` per axis assigned with broadcasting: the
   allocation's ValueError comes first (a negative dimension), an arange's TypeError next (a text dtype at any length,
   bool past two elements, even in an empty grid), a text dtype's empty tuple is an empty text array, and an int64-lane

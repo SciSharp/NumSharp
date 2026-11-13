@@ -132,7 +132,7 @@ namespace NumSharp.Tests.APIs
             var u8 = np.zeros(new Shape(1), NPTypeCode.Byte);
             var ex = Assert.ThrowsException<ValueError>(() => { u8.flatiter[0] = 300; });
             Assert.AreEqual("Error setting single item of array.", ex.Message);
-            Assert.IsInstanceOfType(ex.InnerException, typeof(OverflowException));
+            Assert.IsInstanceOfType(ex.InnerException, typeof(OverflowError));
             StringAssert.Contains(ex.InnerException.Message, "Python integer 300 out of bounds for uint8");
 
             // A float whose TRUNCATED value is out of range also raises (128.0 -> 128, OOB for int8),

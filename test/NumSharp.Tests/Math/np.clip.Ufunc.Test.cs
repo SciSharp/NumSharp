@@ -238,8 +238,8 @@ namespace NumSharp.Tests.Math
         public void Where_PositiveRoute_BoolHasNoLoop()
         {
             var b = np.array(new[] { true, false });
-            Assert.ThrowsExactly<TypeError>(() => np.clip(b, null, null, where: np.array(new[] { true, false })));
-            Assert.ThrowsExactly<TypeError>(() => np.clip(b, null, null, np.zeros(new Shape(2), np.@bool), where: np.array(new[] { true, false })));
+            Assert.ThrowsExactly<UFuncNoLoopError>(() => np.clip(b, null, null, where: np.array(new[] { true, false })));
+            Assert.ThrowsExactly<UFuncNoLoopError>(() => np.clip(b, null, null, np.zeros(new Shape(2), np.@bool), where: np.array(new[] { true, false })));
         }
 
         // =====================================================================================================

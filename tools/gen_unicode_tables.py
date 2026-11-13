@@ -3,7 +3,7 @@
 NumPy's string ufuncs (np.strings.isalpha ... isnumeric) read CPython's Unicode type records (Py_UNICODE_ISALPHA and its
 siblings) per code point, and its case maps, translate, mod and codecs call CPython's str methods, which read the same
 records (_PyUnicode_ToUpperFull, _PyUnicode_IsCased, ...). NumSharp reproduces them from tables pinned to the CPython the
-NumPy 2.4.2 oracle runs (3.12, Unicode 15.0.0), never from .NET's tables, which follow the running .NET's Unicode version
+NumPy oracle runs (3.12, Unicode 15.0.0), never from .NET's tables, which follow the running .NET's Unicode version
 (.NET 10 reads Unicode 16.0).
 
 What the script records, per code point 0 .. 0x10FFFF, read from the RUNNING interpreter's behavior (not from the UCD
@@ -28,7 +28,7 @@ mapped code point or an index into the extended mappings, flagged EXTENDED_CASE)
 splitbins at the shift that minimizes the total size. The generated file also carries a SHA-256 of the per-code-point
 data, which NumSharp's pin test recomputes from the runtime lookups.
 
-Run with the CPython the oracles run (3.12, the NumPy 2.4.2 oracle interpreter):  python tools/gen_unicode_tables.py
+Run with the CPython the oracles run (3.12, the pinned NumPy's interpreter):  python tools/gen_unicode_tables.py
 """
 import hashlib
 import os

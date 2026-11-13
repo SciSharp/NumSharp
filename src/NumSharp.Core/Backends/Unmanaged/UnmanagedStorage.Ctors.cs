@@ -41,11 +41,11 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">The dtype has no fill function (<c>S</c>, <c>U</c>, <c>StringDType</c>: <c>arange() not
         ///     supported for inputs with DType &lt;class 'numpy.dtypes.StrDType'&gt;.</c>), or it is bool and the result has
         ///     more than two elements (NumPy's <c>BOOL_fill</c>).</exception>
-        /// <exception cref="DivideByZeroException">A zero step (NumPy's <c>ZeroDivisionError: float division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">A zero step (NumPy's <c>ZeroDivisionError: float division by zero</c>).</exception>
         /// <exception cref="ValueError">A NaN length (<c>arange: cannot compute length</c>), a length past npy_intp
         ///     (<c>Maximum allowed size exceeded</c>), or an allocation past the byte limit (<see cref="AllocationGuard"/>'s
         ///     <c>array is too big</c>); a store's own ValueError (a NaN into an integer dtype).</exception>
-        /// <exception cref="OverflowException">The first or second element does not fit the dtype (NumPy's
+        /// <exception cref="OverflowError">The first or second element does not fit the dtype (NumPy's
         ///     <c>Python integer 130 out of bounds for int8</c>, an infinity into an integer dtype).</exception>
         internal static NDArray ArangeObj(double start, double stop, double step, DType dtype)
         {
@@ -69,16 +69,345 @@ namespace NumSharp.Backends
         /// <exception cref="NotSupportedException">The dtype's class has no NumSharp storage yet.</exception>
         /// <exception cref="TypeError">The dtype has no fill function, or it is bool and the result has more than two
         ///     elements.</exception>
-        /// <exception cref="DivideByZeroException">A zero step (NumPy's <c>ZeroDivisionError: division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">A zero step (NumPy's <c>ZeroDivisionError: division by zero</c>).</exception>
         /// <exception cref="ValueError">A length past npy_intp (<c>Maximum allowed size exceeded</c>), or an allocation past
         ///     the byte limit (<c>array is too big</c>).</exception>
-        /// <exception cref="OverflowException">The first or second element does not fit the dtype.</exception>
+        /// <exception cref="OverflowError">The first or second element does not fit the dtype.</exception>
         internal static NDArray ArangeObj(long start, long stop, long step, DType dtype)
         {
             var descr = ArangeDescr(dtype ?? NumSharp.DType.Int64);
             long length = ArangeLength((BigInteger)start, stop, step);
             // A Python int's sum is exact; with two elements or more it lies between start and stop, so it fits a long.
             return ArangeFill(descr, length, start, length > 1 ? (object)((BigInteger)start + step) : null);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_ArangeObj</c> (<c>ctors.c</c>) over Python OBJECTS - the body of np.arange's NDArray
+        ///     signature: the dtype discovered as int64 promoted with each argument's own descriptor, the length from the
+        ///     arguments' own arithmetic (<c>_calc_length</c>), then the array filled by its dtype's <c>setitem</c> and
+        ///     <c>fill</c> slots.
+        /// </summary>
+        /// <param name="start">The start, after <c>array_arange</c>'s reading (not null): a C# literal stands for the Python
+        ///     number it was written as (<see cref="NDArray.WasPythonLiteral"/>, <see cref="NDArray.WasPythonBool"/>), any
+        ///     other array for itself (a NumPy scalar, a 0-d array, an array with dimensions).</param>
+        /// <param name="stop">The stop (excluded), or null: then <paramref name="start"/> is the stop and the Python int 0 the
+        ///     start (<c>np.arange(5)</c>).</param>
+        /// <param name="step">The step, or null for the Python int 1.</param>
+        /// <param name="dtype">The requested dtype, or null for NumPy's discovery (<c>np.arange(5)</c> int64,
+        ///     <c>np.arange(np.float32(3.5))</c> float64, a uint64 value float64, a complex complex128).</param>
+        /// <returns>A fresh 1-D array of the dtype (its native form): <c>start</c>, <c>start + step</c>, then <c>start + i *
+        ///     delta</c> in the dtype's own arithmetic.</returns>
+        /// <exception cref="NotSupportedException">The dtype's class has no NumSharp storage yet (datetime64,
+        ///     timedelta64).</exception>
+        /// <exception cref="TypeError">The dtype has no fill function (a text dtype, which a string argument also discovers:
+        ///     <c>arange() not supported for inputs with DType ...</c>); bool with more than two elements; a Python complex
+        ///     length into a real dtype (<c>must be real number, not complex</c>); an argument with dimensions (<c>only
+        ///     0-dimensional arrays can be converted to Python scalars</c>); a NumPy operator's own refusal (<c>numpy
+        ///     boolean subtract ...</c>).</exception>
+        /// <exception cref="ZeroDivisionError">A zero Python step (<c>division by zero</c>, <c>float division by zero</c>,
+        ///     <c>complex division by zero</c>; a NumPy scalar's zero divides to an infinity instead, the next
+        ///     ValueError).</exception>
+        /// <exception cref="ValueError">A NaN length (<c>arange: cannot compute length</c>); a length past npy_intp or any
+        ///     OverflowError of the length's arithmetic (<c>Maximum allowed size exceeded</c>); an argument with more than one
+        ///     element or none (NumPy's truth-value texts); an allocation past the byte limit; a store's ValueError.</exception>
+        /// <exception cref="OverflowError">The first or second element does not fit the dtype (<c>Python integer 1000 out of
+        ///     bounds for int8</c>).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's <c>_calc_length</c> computes <c>next = stop - start</c>, <c>next != 0</c>, <c>val = next / step</c>,
+        ///     <c>val == 0</c> and <c>start + step</c> on the Python objects it was handed, so two arithmetics meet: Python
+        ///     numbers run CPython's (<see cref="PyScalar"/>: exact ints, so <c>np.arange(2**64 - 6, 2**64 - 1, 2)</c> has 3
+        ///     elements), and the moment a NumPy scalar or array takes part the operation is NumPy's own, NEP 50 included
+        ///     (NumSharp's operators): <c>np.arange(0, 1, np.float32(0.1))</c> divides in float32, and
+        ///     <c>np.arange(np.int8(-128), np.int8(127), np.int8(100))</c> wraps <c>stop - start</c> in int8 and is empty, as
+        ///     in NumPy. A complex dtype takes the smaller of the ceilings of the quotient's two parts
+        ///     (<c>np.arange(1+2j)</c> is <c>[0j]</c>, <c>np.arange(np.complex128(3))</c> is empty).
+        ///     </para>
+        ///     <para>
+        ///     The operation temporaries are this call's own (<c>[NDScoped]</c>); only the result escapes. One NumSharp limit:
+        ///     a Python int outside the int64 / uint64 ranges cannot become a NumPy operand, and raises the
+        ///     <c>Maximum allowed size exceeded</c> NumPy raises for an integer partner (a float partner would convert it).
+        ///     </para>
+        /// </remarks>
+        [NDScoped /* the operands of the length's arithmetic and its results are this call's own */]
+        internal static NDArray ArangeObj(NDArray start, NDArray stop, NDArray step, DType dtype)
+        {
+            if (dtype is null)
+            {
+                // "intentionally made to be at least NPY_LONG": int64 promoted with each argument's own descriptor, the
+                // stop's and the step's only when they were given.
+                dtype = NumSharp.DType.Int64;
+                dtype = ArangePromote(dtype, start);
+                if (stop is not null)
+                    dtype = ArangePromote(dtype, stop);
+                if (step is not null)
+                    dtype = ArangePromote(dtype, step);
+            }
+            var descr = ArangeDescr(dtype);
+            // PyTypeNum_ISCOMPLEX(dtype->type_num): the length then reads both parts of a complex quotient.
+            bool cmplx = descr.typecode == NPTypeCode.Complex;
+
+            // A missing step is the Python int 1; a missing stop makes the start the stop and the Python int 0 the start.
+            ArangeValue first = ArangeValue.Of(start);
+            ArangeValue delta = step is null ? ArangeValue.Python(PyScalar.Int(BigInteger.One)) : ArangeValue.Of(step);
+            ArangeValue last;
+            if (stop is null)
+            {
+                last = first;
+                first = ArangeValue.Python(PyScalar.Int(BigInteger.Zero));
+            }
+            else
+            {
+                last = ArangeValue.Of(stop);
+            }
+
+            long length;
+            ArangeValue next = default;
+            try
+            {
+                length = ArangeLength(first, last, delta, cmplx);
+                // _calc_length forms next = start + step only for a positive length (its own OverflowError included).
+                if (length > 0)
+                    next = ArangeValue.Apply(BinaryOp.Add, first, delta);
+            }
+            catch (OverflowError)
+            {
+                // PyArray_ArangeObj turns any OverflowError of _calc_length into this ValueError.
+                throw new ValueError(ArangeMaxSize);
+            }
+            return ArangeFill(descr, length, first.Element, length > 1 ? next.Element : null);
+        }
+
+        /// <summary>
+        ///     <c>PyArray_DescrFromObject(op, dtype)</c>: the descriptor <c>np.asarray(op)</c> would have, promoted with the
+        ///     running one (<see cref="DTypePromotion.PromoteTypes"/>, NumPy's <c>PyArray_PromoteTypes</c>).
+        /// </summary>
+        /// <param name="dtype">The running descriptor.</param>
+        /// <param name="argument">The argument.</param>
+        /// <returns>The promoted descriptor.</returns>
+        /// <exception cref="DTypePromotionError">The two descriptors have no common one.</exception>
+        private static DType ArangePromote(DType dtype, NDArray argument)
+        {
+            // A C# literal is the Python number it was written as: its array's dtype is the number's default (int64, uint64
+            // for an int past the int64 range, float64, complex128), whatever the literal's C# width.
+            DType discovered = argument.WasPythonLiteral ? DTypePromotion.ResultType(argument.Nep50Operand) : argument.dtype;
+            return DTypePromotion.PromoteTypes(dtype, discovered);
+        }
+
+        /// <summary>
+        ///     <c>_calc_length</c> over Python objects: <c>(stop - start) / step</c> in the objects' own arithmetic; a complex
+        ///     quotient (with a complex dtype) gives the smaller ceiling of its two parts, else the underflow test and the
+        ///     ceiling of the float the quotient converts to.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="stop">The stop.</param>
+        /// <param name="step">The step.</param>
+        /// <param name="cmplx">Whether the dtype is complex.</param>
+        /// <returns>The length; zero or negative means an empty array.</returns>
+        /// <exception cref="ZeroDivisionError">A zero Python step.</exception>
+        /// <exception cref="OverflowError">A Python int too large for a float, or for a NumPy operand (the caller re-raises
+        ///     it as <c>Maximum allowed size exceeded</c>).</exception>
+        /// <exception cref="ValueError">A NaN quotient or a ceiling outside npy_intp; an argument with more than one element
+        ///     or none (its truth value).</exception>
+        /// <exception cref="TypeError">A Python complex quotient with a real dtype, an argument with dimensions, a NumPy
+        ///     operator's refusal.</exception>
+        private static long ArangeLength(in ArangeValue start, in ArangeValue stop, in ArangeValue step, bool cmplx)
+        {
+            ArangeValue next = ArangeValue.Apply(BinaryOp.Subtract, stop, start);
+            bool nextIsNonzero = next.IsNonzero();
+            ArangeValue val = ArangeValue.Apply(BinaryOp.Divide, next, step);
+            bool valIsZero = val.IsZero();
+
+            // PyComplex_Check(val): a Python complex, or a complex128 scalar (np.complex128 subclasses Python's complex).
+            if (cmplx && val.IsComplexScalar)
+            {
+                Complex quotient = val.AsComplex();
+                long len = ArangeSafeCeilToIntp(quotient.Real);
+                long tmp = ArangeSafeCeilToIntp(quotient.Imaginary);
+                return Math.Min(len, tmp);
+            }
+
+            double value = val.AsPyFloat();
+            // NumPy's "underflow and divide-by-inf" check, as in the float form (no such check in the complex branch).
+            if (valIsZero && nextIsNonzero)
+                return double.IsNegative(value) ? 0 : 1;
+            return ArangeSafeCeilToIntp(value);
+        }
+
+        /// <summary>
+        ///     One argument of <see cref="ArangeObj(NDArray, NDArray, NDArray, DType)"/> as NumPy's <c>_calc_length</c> sees
+        ///     it: a Python number (a C# literal's value, or the result of Python arithmetic), or a NumPy object (a NumPy
+        ///     scalar, a 0-d array or an array with dimensions, or the result of an operation one took part in).
+        /// </summary>
+        private readonly struct ArangeValue
+        {
+            /// <summary>The NumPy object, or null for a Python number.</summary>
+            private readonly NDArray _array;
+
+            /// <summary>The Python number when <see cref="_array"/> is null.</summary>
+            private readonly PyScalar _py;
+
+            /// <summary>Records one value.</summary>
+            /// <param name="array">The NumPy object, or null.</param>
+            /// <param name="py">The Python number (read only when <paramref name="array"/> is null).</param>
+            private ArangeValue(NDArray array, PyScalar py)
+            {
+                _array = array;
+                _py = py;
+            }
+
+            /// <summary>A Python number.</summary>
+            /// <param name="py">The number.</param>
+            /// <returns>The value.</returns>
+            public static ArangeValue Python(PyScalar py) => new ArangeValue(null, py);
+
+            /// <summary>
+            ///     The value an argument stands for: a literal's Python number (a C# <c>float</c> is a Python float, a
+            ///     <c>ulong</c> a Python int by its value, a <c>bool</c> a Python bool), any other array itself.
+            /// </summary>
+            /// <param name="argument">The argument (not null).</param>
+            /// <returns>The value.</returns>
+            public static ArangeValue Of(NDArray argument)
+            {
+                if (argument.WasPythonBool)
+                    return Python(PyScalar.Bool((bool)argument.Storage.GetAtIndex(0)));
+                if (!argument.WasPythonLiteral)
+                    return new ArangeValue(argument, default);
+                // The literal's own C# value: the marks are set only on the 0-d array a number literal converted into.
+                return Python(argument.Storage.GetAtIndex(0) switch
+                {
+                    double d => PyScalar.Float(d),
+                    float f => PyScalar.Float(f),
+                    Complex z => PyScalar.Cplx(z),
+                    ulong u => PyScalar.Int(u),
+                    object v => PyScalar.Int(Convert.ToInt64(v, CultureInfo.InvariantCulture)),
+                });
+            }
+
+            /// <summary>
+            ///     <c>a op b</c> the way Python evaluates it on these objects: two Python numbers run CPython's arithmetic
+            ///     (<see cref="PyScalar.Apply"/>); a NumPy object on either side makes it NumPy's operation (NumSharp's
+            ///     operators, NEP 50 with the Python operand weak), whose result is a NumPy object.
+            /// </summary>
+            /// <param name="op">Add, Subtract or Divide (true division).</param>
+            /// <param name="a">The left operand.</param>
+            /// <param name="b">The right operand.</param>
+            /// <returns>The result.</returns>
+            /// <exception cref="ZeroDivisionError">Python division by zero.</exception>
+            /// <exception cref="OverflowError">CPython's int-to-float overflow; a Python int that fits no NumPy integer;
+            ///     a weak Python int out of a NumPy integer operand's bounds.</exception>
+            /// <exception cref="TypeError">A NumPy operator's refusal (bool subtraction).</exception>
+            /// <exception cref="NotSupportedException">Another operator.</exception>
+            public static ArangeValue Apply(BinaryOp op, in ArangeValue a, in ArangeValue b)
+            {
+                if (a._array is null && b._array is null)
+                    return Python(PyScalar.Apply(op, a._py, b._py));
+                NDArray x = a.AsOperand(), y = b.AsOperand();
+                NDArray result = op switch
+                {
+                    BinaryOp.Add => x + y,
+                    BinaryOp.Subtract => x - y,
+                    // NDArray's '/' is NumPy's true division (int / int is float64).
+                    BinaryOp.Divide => x / y,
+                    _ => throw new NotSupportedException(op.ToString()),
+                };
+                return new ArangeValue(result, default);
+            }
+
+            /// <summary>
+            ///     The operand a NumPy operation receives for this value: the NumPy object itself, or the WEAK literal array
+            ///     of the Python number (NEP 50 adopts the other operand's dtype).
+            /// </summary>
+            /// <returns>The operand array.</returns>
+            /// <exception cref="OverflowError">A Python int outside the int64 and uint64 ranges.</exception>
+            private NDArray AsOperand()
+            {
+                if (_array is not null)
+                    return _array;
+                if (_py.IsBool)
+                    return NDArray.PythonBoolLiteral(!_py.I.IsZero);
+                switch (_py.Kind)
+                {
+                    case PyKind.Float:
+                        return NDArray.PythonLiteral(_py.F);
+                    case PyKind.Complex:
+                        return NDArray.PythonLiteral(_py.C);
+                    default:
+                        if (_py.I >= long.MinValue && _py.I <= long.MaxValue)
+                            return NDArray.PythonLiteral((long)_py.I);
+                        if (_py.I.Sign > 0 && _py.I <= ulong.MaxValue)
+                            return NDArray.PythonLiteral((ulong)_py.I);
+                        // No NumSharp literal holds it (NumPy would convert it for a float partner): the caller's
+                        // "Maximum allowed size exceeded", NumPy's answer for an integer partner.
+                        throw new OverflowError("Python int too large to convert to C long");
+                }
+            }
+
+            /// <summary><c>PyObject_RichCompareBool(x, 0, Py_NE)</c>: Python's <c>x != 0</c>, or the truth of NumPy's
+            ///     elementwise comparison.</summary>
+            /// <returns>Whether the value is nonzero (a NaN is).</returns>
+            /// <exception cref="ValueError">An array of more than one element, or none (NumPy's truth-value texts).</exception>
+            public bool IsNonzero()
+                => _array is null ? _py.IsNonZero : (bool)(_array != NDArray.PythonLiteral(0L));
+
+            /// <summary><c>PyObject_RichCompareBool(x, 0, Py_EQ)</c>: Python's <c>x == 0</c>, or the truth of NumPy's
+            ///     elementwise comparison.</summary>
+            /// <returns>Whether the value is zero (a NaN is not).</returns>
+            /// <exception cref="ValueError">An array of more than one element, or none.</exception>
+            public bool IsZero()
+                => _array is null ? !_py.IsNonZero : (bool)(_array == NDArray.PythonLiteral(0L));
+
+            /// <summary><c>PyComplex_Check</c>: a Python complex, or a complex128 scalar (a 0-d result; an array with
+            ///     dimensions is no complex object).</summary>
+            public bool IsComplexScalar
+                => _array is null ? _py.Kind == PyKind.Complex : _array.ndim == 0 && _array.typecode == NPTypeCode.Complex;
+
+            /// <summary><c>PyComplex_RealAsDouble</c> / <c>ImagAsDouble</c>: the value as a complex (only when
+            ///     <see cref="IsComplexScalar"/>).</summary>
+            /// <returns>The complex value.</returns>
+            public Complex AsComplex()
+                => _array is null ? _py.C : (Complex)_array.Storage.GetAtIndex(0);
+
+            /// <summary>
+            ///     <c>PyFloat_AsDouble</c>: a Python float itself; a NumPy scalar's <c>float()</c> (a complex128 scalar's
+            ///     real part, as NumPy's complex <c>__float__</c>, whose ComplexWarning NumSharp does not raise).
+            /// </summary>
+            /// <returns>The double.</returns>
+            /// <exception cref="TypeError">A Python complex (<c>must be real number, not complex</c>), or an array with
+            ///     dimensions (<c>only 0-dimensional arrays can be converted to Python scalars</c>).</exception>
+            public double AsPyFloat()
+            {
+                if (_array is null)
+                {
+                    // A quotient is a float or a complex (true division never leaves an int).
+                    if (_py.Kind == PyKind.Complex)
+                        throw new TypeError("must be real number, not complex");
+                    return _py.AsDouble();
+                }
+                if (_array.ndim == 0 && _array.typecode == NPTypeCode.Complex)
+                    return ((Complex)_array.Storage.GetAtIndex(0)).Real;
+                // NumPy's float(arr): the 0-d test (NumPy 2.4's TypeError for an array with dimensions) and the element.
+                return (double)_array;
+            }
+
+            /// <summary>The element <c>setitem</c> stores: the NumPy object itself (a 0-d array casts, as NumPy's setitem
+            ///     of a 0-d array), or the Python number boxed as the store paths read it.</summary>
+            public object Element
+            {
+                get
+                {
+                    if (_array is not null)
+                        return _array;
+                    if (_py.IsBool)
+                        return !_py.I.IsZero;
+                    return _py.Kind switch
+                    {
+                        PyKind.Float => _py.F,
+                        PyKind.Complex => _py.C,
+                        _ => _py.I,
+                    };
+                }
+            }
         }
 
         /// <summary>
@@ -108,7 +437,7 @@ namespace NumSharp.Backends
         /// <param name="stop">The stop.</param>
         /// <param name="step">The step.</param>
         /// <returns>The length; zero or negative means an empty array.</returns>
-        /// <exception cref="DivideByZeroException">A zero step (Python's <c>float division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">A zero step (Python's <c>float division by zero</c>).</exception>
         /// <exception cref="ValueError">A NaN quotient, or a ceiling outside npy_intp.</exception>
         private static long ArangeLength(double start, double stop, double step)
         {
@@ -131,7 +460,7 @@ namespace NumSharp.Backends
         /// <param name="stop">The stop.</param>
         /// <param name="step">The step.</param>
         /// <returns>The length; zero or negative means an empty array.</returns>
-        /// <exception cref="DivideByZeroException">A zero step (Python's <c>division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">A zero step (Python's <c>division by zero</c>).</exception>
         /// <exception cref="ValueError">A quotient past the float range or a ceiling outside npy_intp (NumPy re-raises both
         ///     OverflowErrors as <c>Maximum allowed size exceeded</c>).</exception>
         private static long ArangeLength(BigInteger start, BigInteger stop, BigInteger step)
@@ -142,7 +471,7 @@ namespace NumSharp.Backends
             {
                 value = PyScalar.IntTrueDivide(next, step);
             }
-            catch (OverflowException)
+            catch (OverflowError)
             {
                 // PyArray_ArangeObj turns any OverflowError of _calc_length into this ValueError.
                 throw new ValueError(ArangeMaxSize);
@@ -187,7 +516,7 @@ namespace NumSharp.Backends
         /// <param name="next">The second element's value, <c>start + step</c> (read only when the length is 2 or more).</param>
         /// <returns>The array.</returns>
         /// <exception cref="ValueError">The allocation is past the byte limit, or a store's ValueError.</exception>
-        /// <exception cref="OverflowException">A store does not fit the dtype.</exception>
+        /// <exception cref="OverflowError">A store does not fit the dtype.</exception>
         /// <exception cref="TypeError">A store's TypeError, or bool's fill.</exception>
         /// <remarks>The allocation is released when a store or the fill fails: nothing else holds it yet, as NumPy's
         ///     <c>Py_DECREF(range)</c> on its failure path.</remarks>
@@ -233,7 +562,7 @@ namespace NumSharp.Backends
         // ---------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     The storage-lane core behind <see cref="NDArray.full"/> and so <see cref="np.full(Shape,object,DType,string)"/>:
+        ///     The storage-lane core behind <see cref="NDArray.full"/> and so <see cref="np.full(Shape, object, DType, char, string)"/>:
         ///     a new array of <paramref name="shape"/>'s dimensions in <paramref name="typeCode"/>'s lane, with the fill
         ///     value's element (<see cref="FullFillElement"/>) in every slot. For storage lanes only: the text classes take
         ///     their own fill routes, and a lane-sharing C-type class is the caller's to label afterwards.
@@ -246,7 +575,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentNullException"><paramref name="typeCode"/> is <see cref="NPTypeCode.Empty"/>.</exception>
         /// <exception cref="ValueError">A negative dimension, or a byte count past the limit
         ///     (<see cref="AllocationGuard"/>).</exception>
-        /// <exception cref="OverflowException">A Python int out of the lane's integer range.</exception>
+        /// <exception cref="OverflowError">A Python int out of the lane's integer range.</exception>
         /// <exception cref="TypeError"><c>None</c> into a non-empty integer (or <c>decimal</c>) array.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
         internal static NDArray FullCore(Shape shape, object fill_value, NPTypeCode typeCode)
@@ -280,7 +609,7 @@ namespace NumSharp.Backends
         ///     write.</param>
         /// <returns>The boxed element; for a value that is not a scalar (a list, an array with dimensions), the house
         ///     conversion <see cref="Converts.ChangeType(object, NPTypeCode)"/> of it.</returns>
-        /// <exception cref="OverflowException">A Python int out of the dtype's integer range (NumPy's OverflowError texts):
+        /// <exception cref="OverflowError">A Python int out of the dtype's integer range (NumPy's OverflowError texts):
         ///     the copy is unsafe, but the Python scalar is packed first.</exception>
         /// <exception cref="TypeError"><c>None</c> into a non-empty integer (or <c>decimal</c>) array.</exception>
         /// <remarks>
@@ -395,7 +724,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>array_new</c> (<c>numpy/_core/src/multiarray/arrayobject.c</c>), the body of
-        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/> once <c>None</c> was refused as the shape:
+        ///     <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/> once <c>None</c> was refused as the shape:
         ///     the default dtype, the unsized-string refusal, the buffer resolved (and pinned), the order, the strides'
         ///     length and their bounds, then an uninitialized allocation (<see cref="NdarrayAllocate"/>) or an array over
         ///     the buffer's bytes (<see cref="NdarrayOverBuffer"/>).
@@ -469,7 +798,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The no-buffer branch of <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/>: NumPy's
+        ///     The no-buffer branch of <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/>: NumPy's
         ///     <c>PyArray_NewFromDescr_int</c> with no data pointer.
         /// </summary>
         /// <param name="dims">The dimensions (not yet validated).</param>
@@ -528,7 +857,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The buffer branch of <see cref="np.ndarray(Shape, DType, object, long, long[], char)"/>: NumPy's shape
+        ///     The buffer branch of <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/>: NumPy's shape
         ///     <c>-1</c> and too-small checks, the dimensions, NumSharp's exact bounds check, then a view over the bytes.
         /// </summary>
         /// <param name="buf">The resolved buffer; its pin is handed to the result or released by the caller.</param>

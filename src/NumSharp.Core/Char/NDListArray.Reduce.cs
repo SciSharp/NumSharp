@@ -197,14 +197,14 @@ namespace NumSharp
         /// <exception cref="ObjectDisposedException">The array or <paramref name="out"/> was disposed.</exception>
         /// <remarks>
         ///     <para>One overload, NumPy's signature.</para>
-        ///     <para><c>PyUFunc_Accumulate</c> takes one of two routes, with different <paramref name="out"/> checks: a 1-D
-        ///     object accumulation into an <paramref name="out"/> that does not overlap the array runs without an iterator —
-        ///     an empty array or an empty <paramref name="out"/> returns <paramref name="out"/> untouched, any other shape
-        ///     than the array's is "the wrong size" —; everything else (two or more dimensions, a <paramref name="dtype"/>
-        ///     cast, an overlapping <paramref name="out"/>) builds NumPy's outer iterator, whose texts are reproduced, and
-        ///     whose <paramref name="out"/> may have MORE axes (the extra ones are read at index 0) or broadcast the array.
-        ///     NumPy 2.4.2 crashes the process for a 0-d <paramref name="out"/> on the first route; NumSharp reports it as
-        ///     the wrong size ([Misaligned]).</para>
+        ///     <para><c>PyUFunc_Accumulate</c> takes one of two routes: a 1-D object accumulation into an
+        ///     <paramref name="out"/> that does not overlap the array runs without an iterator; everything else (two or more
+        ///     dimensions, a <paramref name="dtype"/> cast, an overlapping <paramref name="out"/>) builds NumPy's outer
+        ///     iterator, whose texts are reproduced. On both, NumPy 2.5 then demands the array's exact dimensions ("the
+        ///     wrong size", gh-32709) before an empty array or an empty <paramref name="out"/> returns
+        ///     <paramref name="out"/> untouched — an <paramref name="out"/> with MORE axes or one the array broadcasts
+        ///     against, which NumPy 2.4's iterator accepted, is refused, and so is a 0-d <paramref name="out"/> (which
+        ///     crashed NumPy 2.4).</para>
         /// </remarks>
         public NDListArray cumsum(int? axis = null, DType dtype = null, NDListArray @out = null) => Accumulate(ListFold.Sum, axis, dtype, @out);
 
@@ -434,7 +434,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A mask in the object loop (add has no identity for it); a list stored into a float or
         ///     text <paramref name="out"/> or <paramref name="dtype"/> (<c>setting an array element with a sequence.</c>);
         ///     NumPy's out= checks (read-only, rank, shape).</exception>
-        /// <exception cref="DivideByZeroException">An empty slice along an axis (NumPy's ZeroDivisionError, <c>division by
+        /// <exception cref="ZeroDivisionError">An empty slice along an axis (NumPy's ZeroDivisionError, <c>division by
         ///     zero</c>).</exception>
         /// <exception cref="AxisError">An axis outside the array (a 0-d array has none).</exception>
         /// <exception cref="NotSupportedException">NumPy's result is an object array (an empty result along an
@@ -514,7 +514,7 @@ namespace NumSharp
         ///     <c>ufunc 'divide' not supported ...</c> (a 0-d array of a non-empty list); a list converted to an integer or
         ///     complex <paramref name="dtype"/>; a refused or loop-less <paramref name="dtype"/>; std's sqrt of an object
         ///     result.</exception>
-        /// <exception cref="DivideByZeroException">An empty slice (NumPy's ZeroDivisionError, <c>division by zero</c>).</exception>
+        /// <exception cref="ZeroDivisionError">An empty slice (NumPy's ZeroDivisionError, <c>division by zero</c>).</exception>
         /// <exception cref="ValueError">A mask (the object loop has no identity for it); a list converted to a float
         ///     <paramref name="dtype"/>; NumPy's out= checks.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="mean"/> does not broadcast with the array (<c>operands
@@ -555,7 +555,7 @@ namespace NumSharp
         /// <returns>NumPy's value for a list array whose deviations are empty, or <paramref name="out"/>.</returns>
         /// <exception cref="TypeError">See <see cref="var"/>; and <c>loop of ufunc does not support argument 0 of type float
         ///     which has no callable sqrt method</c> (the square root of an object array of floats).</exception>
-        /// <exception cref="DivideByZeroException">An empty slice (NumPy's ZeroDivisionError).</exception>
+        /// <exception cref="ZeroDivisionError">An empty slice (NumPy's ZeroDivisionError).</exception>
         /// <exception cref="ValueError">See <see cref="var"/>.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="mean"/> does not broadcast with the array.</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="out"/> or array result (NumPy's
@@ -622,7 +622,7 @@ namespace NumSharp
                         if (outputs > 0)
                         {
                             if (rcount == 0)
-                                throw new DivideByZeroException("division by zero");
+                                throw new ZeroDivisionError("division by zero");
                             throw new TypeError("unsupported operand type(s) for /: 'list' and 'int'");
                         }
                         deviations = (long[])Ids.Shape.dimensions.Clone();
@@ -675,7 +675,7 @@ namespace NumSharp
         /// <exception cref="ValueError">NumPy's out= checks.</exception>
         /// <exception cref="TypeError">A refused or loop-less <paramref name="dtype"/>; a text or StringDType
         ///     <paramref name="out"/>; std's sqrt of an object array of floats.</exception>
-        /// <exception cref="DivideByZeroException">An object array divided by 0.</exception>
+        /// <exception cref="ZeroDivisionError">An object array divided by 0.</exception>
         /// <exception cref="ArgumentException">std's sqrt into an integer or bool array.</exception>
         /// <exception cref="NotSupportedException">NumPy's result is an object array.</exception>
         private NDArray EmptyDeviations(long[] deviations, int? axis, DType dtype, NDArray @out, bool keepdims, NDArray mask,
@@ -729,7 +729,7 @@ namespace NumSharp
                 foreach (var d in outDims)
                     outputs *= d;
                 if (outputs > 0 && divisor == 0)
-                    throw new DivideByZeroException("division by zero");
+                    throw new ZeroDivisionError("division by zero");
                 if (sqrt && outputs > 0)
                     throw new TypeError("loop of ufunc does not support argument 0 of type float which has no callable sqrt method");
                 throw new NotSupportedException(
@@ -832,7 +832,7 @@ namespace NumSharp
             try
             {
                 DefaultEngine.DivideByCountLikeNumPy(ret, counts);
-                return ret.ndim == 0 ? ret.MarkReductionScalar() : ret;
+                return ret.ndim == 0 ? ret.PyArray_Return() : ret;
             }
             catch
             {
@@ -1237,7 +1237,7 @@ namespace NumSharp
         /// <param name="slices">The slices.</param>
         /// <param name="start">The fold's start.</param>
         /// <returns>The heap (one reference, the caller's).</returns>
-        /// <exception cref="OutOfMemoryException">The result's size passes what an array can address (MemoryError).</exception>
+        /// <exception cref="MemoryError">The result's size passes what an array can address (MemoryError).</exception>
         private NDListHeap ReservedSumHeap(SliceSet slices, Start start)
         {
             var lists = new ListPointers(Heap);
@@ -1597,20 +1597,20 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>PyUFunc_Accumulate</c>'s checks of an <c>out=</c> array, route by route, and the region of it the
-        ///     accumulation writes. The plain loop (a 1-D object accumulation into an out that does not overlap the input)
-        ///     returns early for an empty input or out and refuses any other shape than the input's; the outer iterator (two
-        ///     or more dimensions, a cast loop, an overlapping out) maps axis k of each operand to iterator axis k, out
-        ///     READWRITE and NO_BROADCAST, the input READONLY, with <c>npyiter_fill_axisdata</c>'s two passes and texts, and
-        ///     returns early for an empty input or out only after them.
+        ///     accumulation writes. The outer iterator (two or more dimensions, a cast loop, an overlapping out) maps axis k
+        ///     of each operand to iterator axis k, out READWRITE and NO_BROADCAST, the input READONLY, with
+        ///     <c>npyiter_fill_axisdata</c>'s two passes and texts; the plain loop (a 1-D object accumulation into an out
+        ///     that does not overlap the input) builds nothing. Then, on both, NumPy 2.5's dimension check (gh-32709) refuses
+        ///     any out whose dimensions are not the input's, and only after it does an empty input or out return early.
         /// </summary>
         /// <param name="outIds">The out's ids.</param>
         /// <param name="source">The ids accumulated (1-D for a flattened or 0-d array).</param>
         /// <param name="ax">The accumulation axis of <paramref name="source"/>.</param>
         /// <param name="castLoop">Whether the loop casts the input (a dtype= of another class: always the iterator).</param>
-        /// <returns>A view of <paramref name="outIds"/> to write (out's extra trailing axes read at index 0, the
-        ///     accumulation axis cut to the input's extent), or null when NumPy returns out untouched.</returns>
+        /// <returns>A view of the whole <paramref name="outIds"/> to write, or null when NumPy returns out
+        ///     untouched.</returns>
         /// <exception cref="ValueError">NumPy's texts: <c>provided out is the wrong size for the accumulation.</c> (also for a
-        ///     0-d out, where NumPy 2.4.2 crashes), <c>Iterator input op_axes[0][0] (==1) is not a valid axis of op[0], which
+        ///     0-d out, which crashed NumPy 2.4), <c>Iterator input op_axes[0][0] (==1) is not a valid axis of op[0], which
         ///     has 1 dimensions </c>, <c>operands could not be broadcast together with remapped shapes
         ///     [original-&gt;remapped]: (3,2)-&gt;(3,2) (2,3)-&gt;(2,3) </c>, <c>non-broadcastable output operand with shape
         ///     (1,3) [remapped to (3,1)] doesn't match the broadcast shape (2,3)</c>.</exception>
@@ -1622,11 +1622,11 @@ namespace NumSharp
             bool iterator = nd > 1 || castLoop || NDMemOverlap.SolveMayShareMemory(outIds, source, 0) != MemOverlap.No;
             if (!iterator)
             {
-                // The plain loop: its zero-size returns come before its size check.
-                if (s[ax] == 0 || outIds.size == 0)
-                    return null;
+                // The plain loop: NumPy 2.5's dimension check first, then its zero-size returns.
                 if (outIds.ndim != 1 || o[0] != s[0])
                     throw new ValueError("provided out is the wrong size for the accumulation.");
+                if (s[ax] == 0 || outIds.size == 0)
+                    return null;
                 return outIds.view();
             }
             // Pass 1 (op_axes 0 .. nd-1): an out with fewer axes has no axis k; the first nd extents broadcast, out first.
@@ -1659,15 +1659,17 @@ namespace NumSharp
                                          $"{new Shape(broadcast, copy: false).ToPythonTuple()}");
                 }
             }
-            // The zero-size returns, after the iterator was built.
+            // NumPy 2.5's dimension check (gh-32709) of the out the iterator accepted: more axes, or the array broadcast
+            // against it, is the wrong size — 2.4's iterator wrote such an out's leading cells.
+            bool same = outIds.ndim == nd;
+            for (int d = 0; same && d < nd; d++)
+                same = o[d] == s[d];
+            if (!same)
+                throw new ValueError("provided out is the wrong size for the accumulation.");
+            // The zero-size returns, after both checks.
             if (s[ax] == 0 || outIds.size == 0)
                 return null;
-            // The written region: the iterator walks out's first nd axes from its data pointer (extra axes at index 0), and
-            // each line runs the input's extent along the axis (an input of extent 1 writes one position).
-            var slices = new Slice[outIds.ndim];
-            for (int d = 0; d < outIds.ndim; d++)
-                slices[d] = d >= nd ? Slice.Index(0) : d == ax && o[d] != s[d] ? new Slice(0, s[d]) : Slice.All;
-            return outIds[slices];
+            return outIds.view();
         }
 
         /// <summary>
@@ -1938,8 +1940,7 @@ namespace NumSharp
         private static void CheckObjectOutLoop(NDArray @out, string ufunc)
         {
             if (@out.dtype.Meta is VStringDTypeMeta)
-                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types " +
-                                    "(<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.ObjectDType'>) -> None");
+                throw new UFuncNoLoopError(ufunc, 2, DTypeRegistry.VString, PyDescrPlaceholder.ObjectDTypeClass, null);
         }
 
         /// <summary>
@@ -1955,8 +1956,7 @@ namespace NumSharp
         {
             if (dtype.kind is 'U' or 'S' or 'V' || (dtype.kind == 'M' && ufunc == "positive"))
                 return new TypeError($"No loop matching the specified signature and casting was found for ufunc {ufunc}");
-            return new TypeError($"Cannot cast ufunc '{ufunc}' {(nin == 1 ? "input" : "input 0")} from dtype('O') to " +
-                                 $"{dtype.ToString(true)} with casting rule 'same_kind'");
+            return new UFuncInputCastingError(ufunc, nin, "same_kind", PyDescrPlaceholder.ObjectDescr, dtype, 0);
         }
 
         /// <summary>
@@ -2083,7 +2083,7 @@ namespace NumSharp
             if (outputs == 0)
                 return new NotSupportedException($"NumPy's {name} of this list array is an empty object array, which NumSharp has no type for");
             if (count == 0)
-                return new DivideByZeroException("division by zero");
+                return new ZeroDivisionError("division by zero");
             _ = keptDims;
             return new TypeError("unsupported operand type(s) for /: 'list' and 'int'");
         }

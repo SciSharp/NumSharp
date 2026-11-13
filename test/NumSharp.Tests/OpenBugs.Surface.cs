@@ -26,14 +26,14 @@ namespace NumSharp.Tests
     //     element ahead and a buffered readwrite loop loses its write into the last element of each buffer (SU42).
     //   * Crashes where NumPy computes: np.apply_along_axis over a stride-0 view at an offset (SU5), np.nditer.remove_axis
     //     under a non-C iteration order (SU30).
-    //   * Refusals NumPy makes and NumSharp does not (or the reverse), and error texts: SU1, SU2, SU4, SU10, SU11,
-    //     SU15, SU16, SU22, SU28, SU29, SU32-SU35, SU40.
+    //   * Refusals NumPy makes and NumSharp does not (or the reverse), and error texts: SU1, SU2, SU4, SU10, SU15,
+    //     SU16, SU22, SU28, SU29, SU32-SU35, SU40 (SU11 is closed: its repr is a regression pin).
     //   * Reporting: np.nditer.shape's axis order (SU26), index tracking blocking coalescing (SU27), get_printoptions'
     //     missing keys (SU21), edgeitems=0 summarization (SU23), the datetime
     //     dtype.type (SU24), complex histogram edges (SU3).
     //
-    // Not reproduced here: SU36 / SU37 (numpy.cumulative_sum / cumulative_prod do not exist in NumSharp; the inventory
-    // aliases them to np.cumsum / np.cumprod, whose own contract differs). Two pooled-buffer leaks the sweep found are
+    // SU36 / SU37 (numpy.cumulative_sum / cumulative_prod, once aliased to np.cumsum / np.cumprod) are fixed: NumSharp
+    // has both functions since API-parity batch 1 (2026-11-11), and the surface tier replays them. Two pooled-buffer leaks the sweep found are
     // pinned in the oracle's KnownEscapes (np.MemoryView.tobytes of a non-contiguous array; np.array_equiv with an empty
     // operand).
     //
@@ -81,17 +81,20 @@ namespace NumSharp.Tests
         // ----- np.linalg Array-API forms -----
 
         /// <summary>
-        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12): NumSharp gives NumPy's answer now, and this test pins it.
-        ///     Before the fix: <c>np.linalg.cross(a, b, axis=5)</c> on (2, 3) operands: NumPy raises IndexError <c>tuple index out of
-        ///     range</c> (its <c>a.shape[axis]</c> lookup); NumSharp raises AxisError with its own text (gap SU1).
+        ///     FIXED by branch strings (rebased onto journey4 on 2026-10-12), and NumPy 2.5 changed the answer since: this
+        ///     test pins NumPy 2.5.4's. <c>np.linalg.cross(a, b, axis=5)</c> on (2, 3) operands is now NumPy's one statement
+        ///     <c>_core_cross(x1, x2, axis=axis)</c>, whose axis check raises AxisError <c>axisa: axis 5 is out of bounds for
+        ///     array of dimension 2</c>; NumPy 2.4 looked the lengths up by tuple indexing first (IndexError <c>tuple index
+        ///     out of range</c>, gap SU1, which NumSharp's own AxisError text missed before the fix).
         /// </summary>
         [TestMethod]
-        public void Surface_LinalgCross_AxisOutOfRange_IsNumPysIndexError()
+        public void Surface_LinalgCross_AxisOutOfRange_IsNpCrossAxisError()
         {
             using var a = np.arange(6.0).reshape(2, 3);
             Action act = () => np.linalg.cross(a, a, 5);
 
-            act.Should().Throw<Exception>().Which.Message.Should().Be("tuple index out of range");
+            // AxisError derives from ArgumentOutOfRangeException, so .NET appends "(Parameter 'axis')" to its message.
+            act.Should().Throw<AxisError>().WithMessage("axisa: axis 5 is out of bounds for array of dimension 2*");
         }
 
         /// <summary>
@@ -192,28 +195,30 @@ namespace NumSharp.Tests
             using var a = np.arange(3).astype(np.int32);
             Action act = () => a.setfield(-1, np.uint8, 1);
 
-            act.Should().Throw<OverflowException>().Which.Message.Should().Be("Python integer -1 out of bounds for uint8");
+            act.Should().Throw<OverflowError>().Which.Message.Should().Be("Python integer -1 out of bounds for uint8");
         }
 
         // ----- finfo / iinfo -----
 
         /// <summary>
-        ///     <c>np.finfo(np.int32)</c>: NumPy's text names the scalar class, <c>data type &lt;class 'numpy.int32'&gt; not
-        ///     inexact</c>; NumSharp's says <c>data type 'int32' not inexact</c> (gap SU11).
+        ///     Regression pin for the closed gap SU11: <c>np.finfo</c> of a dtype that is not inexact raises NumPy 2.5's
+        ///     ValueError, which names the descriptor (<c>data type dtype('int32') not compatible with finfo</c>; NumPy 2.4
+        ///     named the scalar class, <c>data type &lt;class 'numpy.int32'&gt; not inexact</c>, and NumSharp's text differed
+        ///     from both).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU11")]
+        [TestMethod]
         public void Surface_Finfo_NonInexactDtype_IsNumPysText()
         {
             Action act = () => np.finfo(np.int32);
 
-            act.Should().Throw<Exception>().Which.Message.Should().StartWith("data type <class 'numpy.int32'> not inexact");
+            act.Should().Throw<ValueError>().WithMessage("data type dtype('int32') not compatible with finfo");
         }
 
         /// <summary>
         ///     <c>np.finfo(float32).minexp</c> is -126 and <c>np.finfo(float64).minexp</c> -1022 in NumPy; NumSharp's are one
-        ///     higher (gap SU12).
+        ///     higher (gap SU12). Matches NumPy since API-parity batch 7 (a regression test now).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU12")]
+        [TestMethod]
         public void Surface_Finfo_Minexp_IsTheSmallestNormalExponent()
         {
             np.finfo(np.float32).minexp.Should().Be(-126);
@@ -234,9 +239,9 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     <c>np.finfo(float32).tiny</c> (and smallest_normal) is exactly 2**-126 = 1.1754943508222875e-38 in NumPy;
-        ///     NumSharp's is the double literal 1.17549435e-38 (gap SU14).
+        ///     NumSharp's was the double literal 1.17549435e-38 (gap SU14). Matches NumPy since API-parity batch 7 (a regression test now).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU14")]
+        [TestMethod]
         public void Surface_Finfo_Float32Tiny_IsExactlyTwoToTheMinus126()
         {
             np.finfo(np.float32).tiny.Should().Be(System.Math.Pow(2, -126));
@@ -257,9 +262,9 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     <c>np.iinfo(np.float64)</c>: NumPy's text names the kind character and ends with a period, <c>Invalid integer
-        ///     data type 'f'.</c>; NumSharp's names the dtype (gap SU16).
+        ///     data type 'f'.</c>; NumSharp's named the dtype (gap SU16). Matches NumPy since API-parity batch 7 (a regression test now).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU16")]
+        [TestMethod]
         public void Surface_Iinfo_Float_IsNumPysText()
         {
             Action act = () => np.iinfo(np.float64);

@@ -6,14 +6,15 @@ namespace NumSharp.Backends
     {
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's <c>fromnumeric.sort</c> and <c>PyArray_Sort</c>: the kind / stable / order arguments in NumPy's order
-        ///     (<see cref="SortKindArguments.Resolve"/>, before the array is read), then the sorted copy
+        ///     NumPy's <c>fromnumeric.sort</c> and <c>PyArray_Sort</c>: the kind / stable / descending / order arguments in
+        ///     NumPy's order (<see cref="SortKindArguments.Resolve"/>, before the array is read), then the sorted copy
         ///     (<see cref="AxisSort.Sort(NDArray, int?, NPY_SORTKIND)"/>: <c>copy(order='K')</c> sorted in place, the
         ///     text and StringDType routes included). Moved from the public <c>np.sort</c> by the np-layer dtype plan's
         ///     phase PE (E5); AxisSort stays the kernel, and the public function keeps its class boundaries.
         /// </remarks>
-        public override NDArray Sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
-            => AxisSort.Sort(a, axis, SortKindArguments.Resolve(kind, order, stable));
+        public override NDArray Sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null,
+            bool? descending = null)
+            => AxisSort.Sort(a, axis, SortKindArguments.Resolve(kind, order, stable, descending));
 
         /// <inheritdoc/>
         /// <remarks>
@@ -21,18 +22,20 @@ namespace NumSharp.Backends
         ///     <see cref="AxisSort.SortInPlace(NDArray, int?, NPY_SORTKIND)"/> (the axis, then writeability, then the
         ///     sort). Moved from <c>NDArray.sort</c> by the np-layer dtype plan's phase PE (E5).
         /// </remarks>
-        public override void SortInPlace(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
-            => AxisSort.SortInPlace(a, axis, SortKindArguments.Resolve(kind, order, stable));
+        public override void SortInPlace(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null,
+            bool? descending = null)
+            => AxisSort.SortInPlace(a, axis, SortKindArguments.Resolve(kind, order, stable, descending));
 
         /// <inheritdoc/>
         /// <remarks>
         ///     NumPy's <c>PyArray_ArgSort</c> behind <c>np.argsort</c> and <c>ndarray.argsort</c>: the arguments resolved
-        ///     first, then <see cref="AxisSort.ArgSort(NDArray, int?, NPY_SORTKIND)"/> (StringDType's heapsort refusal before
+        ///     first, then <see cref="AxisSort.ArgSort(NDArray, int?, NPY_SORTKIND)"/> (StringDType's descending refusal before
         ///     <c>PyArray_CheckAxis</c>, which ravels a 0-d array). Moved from <c>NDArray.argsort</c> by the np-layer dtype
         ///     plan's phase PE (E5).
         /// </remarks>
-        public override NDArray ArgSort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
-            => AxisSort.ArgSort(a, axis, SortKindArguments.Resolve(kind, order, stable));
+        public override NDArray ArgSort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null,
+            bool? descending = null)
+            => AxisSort.ArgSort(a, axis, SortKindArguments.Resolve(kind, order, stable, descending));
 
         /// <inheritdoc/>
         /// <remarks>

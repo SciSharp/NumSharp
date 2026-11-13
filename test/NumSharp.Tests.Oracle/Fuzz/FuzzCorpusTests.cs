@@ -23,6 +23,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Astype_Full() => RunCorpus("astype_full.jsonl");
 
+        /// <summary>
+        ///     float32 / float64 → int8 / uint8 / int16 / uint16 / int32 at every integer width's edges (±1 ulp, ±0.5,
+        ///     2^31, 2^63, NaN payloads, a signalling NaN, ±inf, subnormals) in short, contiguous, strided and reversed
+        ///     layouts: the scalar converter (<c>Converts.ToInt32(double)</c>, the whole cast body off x86) and the x86
+        ///     vector body. Zero excuses (valueclass <c>castedge</c>); generator <c>gen_oracle.py cast_boundary</c>.
+        /// </summary>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Cast_Boundary() => RunCorpus("cast_boundary.jsonl");
+
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Binary_Arith() => RunCorpus("binary_arith.jsonl");
@@ -1310,6 +1320,7 @@ namespace NumSharp.Tests.Fuzz
         {
             ["aliasing.jsonl"] = 320,
             ["astype_full.jsonl"] = 4056,
+            ["cast_boundary.jsonl"] = 316,   // 395 at delivery (2026-11-09)
             ["astype_smoke.jsonl"] = 249,
             ["binary_arith.jsonl"] = 1782,   // +608 F-broadcast pairs (pp_fbcast_*, plan api-parameter-parity X3) - 2228
             ["binary_divmod_power.jsonl"] = 1896,   // +668 pp_fbcast_* (X3) - 2371
@@ -1412,7 +1423,7 @@ namespace NumSharp.Tests.Fuzz
             ["rounding.jsonl"] = 1372,
             ["scan.jsonl"] = 907,
             ["sinc.jsonl"] = 338,   // sin(pi*x)/(pi*x): 12 real dtypes + Char × 26 layouts (complex excluded)
-            ["sort.jsonl"] = 940,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty)
+            ["sort.jsonl"] = 1280,   // +102: searchsorted expansion (dup/mixed-promotion/sorter/nan/complex-lex/strided/empty); +340: NumPy 2.5 descending=True (ties, -0.0 / NaN, complex classes) — 1,290 at delivery
             ["specials.jsonl"] = 1920,
             ["stat.jsonl"] = 3412,
             ["clip_ufunc.jsonl"] = 2100,   // np.clip as a ufunc call: 2,302 at delivery (broadcast bounds, out=, where=, overlap, the float loop choice, errors)
@@ -1434,8 +1445,11 @@ namespace NumSharp.Tests.Fuzz
             // ndarray kind its (op, position, dtype class) cell lacked. Delivered counts (the carved gaps live in
             // corpus/gaps/relayout_gaps.jsonl: 179 at delivery, 75 after the strings rebase of 2026-10-12 returned
             // RL04-RL06's 104 cases, 35 since RL07's 40 returned on 2026-10-24):
-            ["relayout.jsonl"] = 14000,    // 15,108 variants of the portable tiers, 19 kinds (14,964 at delivery)
-            ["relayout_host.jsonl"] = 1600, // 1,728 variants of the host-libm tiers
+            // The NumPy 2.5.4 regeneration (2026-11-09) re-drew both from their current sources: 13,862 portable and
+            // 2,311 host variants (the same counts the generator gives under NumPy 2.4.2 - the source tiers changed, not
+            // NumPy; the committed files had predated those source changes).
+            ["relayout.jsonl"] = 13000,    // 13,862 variants of the portable tiers, 19 kinds (14,964 at delivery)
+            ["relayout_host.jsonl"] = 1600, // 2,311 variants of the host-libm tiers
             // The surface tier (gen_surface_oracle.py, 2026-10-08): the APIs the coverage inventory listed as available
             // but unproven. Delivered count (the 223 carved gaps live in corpus/gaps/surface_gaps.jsonl; 986 at delivery,
             // 602 after the strings rebase of 2026-10-12, SU17's 2 cases returned to the gate when it was fixed, 2026-10-14,

@@ -145,6 +145,9 @@ namespace NumSharp.Tests.DTypes
                 Overrides("fill").Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.fill");
                 // NumPy's funcs->fill != NULL, the test np.arange makes before it computes anything
                 m.HasFill.Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.HasFill");
+                // NumPy's funcs->copyswapn != NULL, the test ndarray.byteswap makes before it copies anything: every class
+                // but StringDType, whose cells hold references (the classes without storage never reach the test)
+                m.HasCopyswapn.Should().Be(m is not VStringDTypeMeta, $"{m.Name}.HasCopyswapn");
                 // NumPy's funcs->scanfunc / fromstr != NULL, the tests np.fromfile's and np.fromstring's text reads make:
                 // the numeric classes have both, the text classes and the classes without storage neither
                 m.HasScanFunc.Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.HasScanFunc");
@@ -257,11 +260,11 @@ namespace NumSharp.Tests.DTypes
                     .Which.Message.Should().Be(text);
             }
 
-            Throws<OverflowException>(np.int8, 1000, "Python integer 1000 out of bounds for int8");
-            Throws<OverflowException>(np.int8, -129, "Python integer -129 out of bounds for int8");
+            Throws<OverflowError>(np.int8, 1000, "Python integer 1000 out of bounds for int8");
+            Throws<OverflowError>(np.int8, -129, "Python integer -129 out of bounds for int8");
             Throws<TypeError>(np.int8, null, "int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
             Throws<ValueError>(np.int8, double.NaN, "cannot convert float NaN to integer");
-            Throws<OverflowException>(np.int8, double.PositiveInfinity, "cannot convert float infinity to integer");
+            Throws<OverflowError>(np.int8, double.PositiveInfinity, "cannot convert float infinity to integer");
             Throws<ValueError>(np.int8, "x", "invalid literal for int() with base 10: 'x'");
             Throws<TypeError>(np.int8, new Complex(1, 2), "int() argument must be a string, a bytes-like object or a real number, not 'complex'");
             Throws<TypeError>(np.float16, new Complex(1, 0), "float() argument must be a string or a real number, not 'complex'");
@@ -446,13 +449,16 @@ namespace NumSharp.Tests.DTypes
                 using var buf = new NativeBuffer(32);
                 Record(() => d.Meta.copyswapn(d, buf.P, 16, buf.P + 16, 16, 1, false)).Should().BeOfType<NotSupportedException>()
                     .Which.Message.Should().Contain("hold references");
-                // With no source the swap is the identity (the owner's decision D14: a cell has no byte order, and NumPy
-                // 2.4.2 crashes in ndarray.byteswap of a StringDType array): the cells are left exactly as they are.
+                // With no source it is NumPy 2.5's missing-slot TypeError (NumPy leaves StringDType's copyswapn NULL; NumPy
+                // 2.4 crashed in ndarray.byteswap, and NumSharp's identity swap was the owner's decision D14 then), and
+                // the cells are left exactly as they are.
                 for (int k = 0; k < 32; k++)
                     buf.P[k] = (byte)(k * 13 + 5);
                 var before = buf.Bytes(0, 32);
-                d.Meta.copyswapn(d, buf.P, 16, null, 16, 2, swap: true);
+                Record(() => d.Meta.copyswapn(d, buf.P, 16, null, 16, 2, swap: true)).Should().BeOfType<TypeError>()
+                    .Which.Message.Should().Be($"dtype {d} does not implement copyswap");
                 buf.Bytes(0, 32).Should().Equal(before, $"{d}: in-place copyswapn");
+                d.Meta.HasCopyswapn.Should().BeFalse($"{d}: NumPy's NULL copyswapn");
                 d.Meta.fill(d, buf.P, 3).Should().BeFalse();
             }
         }

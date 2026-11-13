@@ -123,7 +123,7 @@ np.prod(x.astype(np.float64), axis: 0);
 np.max(x, axis: 0, keepdims: true); // shape (1, 3)
 ```
 
-> **One divergence from NumPy:** the reductions take a **single** `int?` axis (or none - all axes). NumPy's multi-axis tuple form (`axis=(0, 1)`) is not supported; pass no axis to reduce everything, or reduce one axis at a time.
+> **Axis tuples.** Every reduction takes NumPy's axis as an `NDAxis`: one axis, a tuple - `np.sum(x, (0, 2))`, `np.max(x, new[] { 0, 1 })`, `x.mean((0, 2))` - or `null` for None. That covers `np.sum`, `np.prod`, `np.mean`, `np.std`, `np.var`, `np.max` / `np.min` (`amax` / `amin`), the nan reductions, `np.all`, `np.any`, `np.count_nonzero`, `np.ptp`, `np.average` and the median and quantile families (and `np.flip`, `np.squeeze`, `np.expand_dims`, `np.moveaxis`, `np.roll`, `np.trim_zeros`, `np.size`, `np.gradient`, `np.apply_over_axes`, `np.fft.fftshift` / `ifftshift`, `np.linalg.norm` / `vector_norm`). A tuple is ONE reduction over the whole axis set, as in NumPy - not one axis after another, which rounds floats differently. `np.argmax` / `np.argmin` / `np.nanargmax` / `np.nanargmin` take a single axis, and a tuple is NumPy's `TypeError`. Each of these functions also keeps an `int` and an `int[]` overload (an `int?` one for the single-axis functions) that forwards to the `NDAxis` form, so `np.sum(x, 1)`, `np.sum(x, new[] { 0, 2 })` and `np.sum(x, null)` bind them with the same answers; the one spelling that does not compile is `np.sum(x, default)` (ambiguous between `int` and `int[]`) - write `null`.
 
 ### The reduce upcast rule
 

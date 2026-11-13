@@ -45,8 +45,8 @@ namespace NumSharp.Backends
         ///     'None'</c>).</exception>
         /// <remarks>
         ///     Text and <c>StringDType</c> run these statements as they are: <c>==</c> compares two strings of one class and a
-        ///     <c>StringDType</c> operand with a <c>StringDType</c> or <c>U</c> one (<c>NpyString_cmp</c>: <c>'a\0c'</c>
-        ///     equals <c>'a\0b'</c>, the bytes after a NUL both share are not compared; a NaN-like NA equals nothing, itself
+        ///     <c>StringDType</c> operand with a <c>StringDType</c> or <c>U</c> one (<c>NpyString_cmp</c>, <c>memcmp</c> since
+        ///     NumPy 2.5: <c>'a\0c'</c> differs from <c>'a\0b'</c>, every byte counts; a NaN-like NA equals nothing, itself
         ///     included; a None-like NA reads as <c>''</c>), and answers all-False for any other pair with a string operand;
         ///     <c>isnan</c> refuses <c>S</c> / <c>U</c> text and is True at a <c>StringDType</c> NaN-like NA. The default
         ///     path is <c>all(a1 == a2)</c> deliberately WITHOUT a same-reference short-circuit: NaN ≠ NaN, so an array

@@ -2,24 +2,28 @@
 
 The coverage artifact answers "does NumSharp expose this NumPy API?" from the compiled surface alone.
 That is availability, not parity. Parity is what the committed oracle corpora prove: every contract is
-real NumPy 2.4.2 output that a CI test replays against NumSharp and requires to be bit-exact, or a
-documented, registry-excused divergence (never a silent one). This module turns those corpora into
-per-API evidence, so the dashboard can say "available AND oracle-verified" instead of stopping at
-"available".
+real output of the pinned NumPy (``numpy-version.txt``) that a CI test replays against NumSharp and
+requires to be bit-exact, or a documented, registry-excused divergence (never a silent one). This
+module turns those corpora into per-API evidence, so the dashboard can say "available AND
+oracle-verified" instead of stopping at "available".
 
 Five oracle sources are joined, each replayed by its own test:
 
 * ``fuzz``   -- ``test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl``, the differential-fuzz corpus
-  replayed by the ``FuzzMatrix`` gate (FuzzCorpusTests*, IndexOracleTests).
+  replayed by the ``FuzzMatrix`` gate (FuzzCorpusTests*, IndexOracleTests). The keys OpRegistry.cs replays through
+  a C# operator (``add`` is ``ops[0] + ops[1]``, ``equal`` is ``ops[0] == ops[1]``) also prove the ndarray protocol
+  that operator spells (``ndarray.__add__``, ``ndarray.__eq__``): their ``fuzz.keys`` entries name it under
+  ``operator_ids``, and only the cases that really reach the operator resolve to it (:func:`replays_operator`).
 * ``npy``    -- ``test/NumSharp.Tests/IO/corpus/npy_oracle.zip``, real ``np.save``/``np.savez`` output
   replayed by NpyOracleTests.
 * ``flags``  -- ``test/NumSharp.Tests/Backends/corpus/flags_oracle.jsonl`` (FlagsOracleTests).
 * ``layout`` -- ``test/NumSharp.Tests/Backends/corpus/layout_parity_oracle.jsonl`` (LayoutParityOracleTests).
-* ``strings`` -- the ``numpy.strings`` contracts of the string oracle,
+* ``strings`` -- the ``numpy.strings`` and ``numpy.char`` contracts of the string oracle,
   ``test/NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`` (StringOracleTests): the cases of every section
-  whose op is a ``numpy.strings`` call (:data:`STRINGS_OPS`). The string oracle gates far more (comparisons, sorting,
-  casts, numpy.char, the numeric functions over text), but those contracts credit APIs the other sources already verify
-  on numbers, so only the ``numpy.strings`` calls are joined.
+  whose op is a ``numpy.strings`` call, a ``numpy.char`` function or a ``numpy.char.chararray`` member, protocol or
+  constructor (:data:`STRINGS_OPS`). The string oracle gates far more (comparisons, sorting, casts, the numeric
+  functions over text, np.* functions with chararray operands), but those contracts credit APIs the other sources
+  already verify on numbers, so they are not joined.
 
 Contracts are grouped by (source, file, key, variant) while scanning, and each group resolves to one or
 more catalog row ids through ``oracle_map.json`` (the reviewed table) or the automatic namespace rules
@@ -53,16 +57,81 @@ LAYOUT_ORACLE = ROOT / "test" / "NumSharp.Tests" / "Backends" / "corpus" / "layo
 STRINGS_DIR = ROOT / "test" / "NumSharp.Tests.Oracle" / "Strings"
 MAP_SCHEMA_VERSION = 1
 
-# The string-oracle ops the ``strings`` source joins, and how each names its variant: ``str_fn`` carries the
-# numpy.strings function in params.name (``str_fn:find``); ``strings_add`` / ``strings_multiply`` (and the text-count
-# form ``strings_multiply_text``) are np.strings.add / np.strings.multiply. Any other op of the corpus is not a
-# numpy.strings call and is left to the sources that verify it on numbers.
+def _named(prefix: str, parameter: str) -> Callable[[Mapping[str, Any]], str | None]:
+    """Build a variant namer for an op that carries the API's name in one parameter.
+
+    :param prefix: the variant prefix (the op key, ``str_fn``, ``cha_call``, ...).
+    :param parameter: the params member that names the function, member or protocol.
+    :returns: ``params -> "<prefix>:<name>"``, or None when the case lacks the parameter (the scan reports it).
+    """
+    return lambda params: None if params.get(parameter) is None else f"{prefix}:{params[parameter]}"
+
+
+# NumPy's operator protocol for each symbol of the strcharops section, as (chararray on the left, chararray on the
+# right). A chararray on the right is reached through Python's reflection: `x + c` calls c.__radd__ (str.__add__ and
+# ndarray.__add__ give way to the subclass's reflected method), and a comparison swaps to its mirror (`x < c` is
+# c.__gt__(x)); == and != mirror to themselves.
+_CHARARRAY_OPERATOR_PROTOCOLS: dict[str, tuple[str, str]] = {
+    "+": ("__add__", "__radd__"), "*": ("__mul__", "__rmul__"), "%": ("__mod__", "__rmod__"),
+    "==": ("__eq__", "__eq__"), "!=": ("__ne__", "__ne__"),
+    "<": ("__lt__", "__gt__"), "<=": ("__le__", "__ge__"), ">": ("__gt__", "__lt__"), ">=": ("__ge__", "__le__"),
+}
+
+
+def _chararray_protocol(params: Mapping[str, Any]) -> str | None:
+    """Name the chararray protocol one strcharops case exercises (the ``cha_op`` op's variant).
+
+    The case gives the C# operator's symbol (``params.sym``) and its two operands (``params.args``); an operand spec
+    with ``cha: true`` is passed as an NDCharArray. A chararray left operand runs its own protocol, otherwise the
+    right operand's reflected one (see :data:`_CHARARRAY_OPERATOR_PROTOCOLS`).
+
+    :param params: the case's params.
+    :returns: ``cha_op:<protocol>`` (``cha_op:__radd__``), or None for an unknown symbol or a case without two
+        operands, which the scan reports as a problem.
+    """
+    protocols = _CHARARRAY_OPERATOR_PROTOCOLS.get(params.get("sym"))
+    args = params.get("args") or []
+    if protocols is None or len(args) != 2:
+        return None
+    left_is_chararray = isinstance(args[0], Mapping) and bool(args[0].get("cha"))
+    return "cha_op:" + (protocols[0] if left_is_chararray else protocols[1])
+
+
+# The string-oracle ops the ``strings`` source joins, and how each names its variant. numpy.strings: ``str_fn`` carries
+# the function in params.name (``str_fn:find``); ``strings_add`` / ``strings_multiply`` (and the text-count form
+# ``strings_multiply_text``) are np.strings.add / np.strings.multiply. numpy.char (sections strchar, strchararray,
+# strcharmeth, strcharops, strcharobj; StringOracleOps.Char*.cs replays them): ``char_cmp`` is one of np.char's six
+# comparison functions (params.name), ``char_compare`` np.char.compare_chararrays, ``char_add`` / ``char_multiply``
+# np.char.add / multiply, ``cobj_fn`` np.char.split / rsplit / splitlines / join (params.fn); ``cha_new`` is the
+# chararray constructor, ``cha_array`` / ``cha_asarray`` np.char.array / asarray, ``cha_item`` / ``cha_iter`` /
+# ``cha_repr`` / ``cha_str`` a chararray's indexing, iteration, repr() and str(), ``cha_member`` / ``cha_call`` a
+# chararray attribute or method (params.name), and ``cha_op`` a C# operator over a chararray (_chararray_protocol).
+# Any other op of the corpus (np.* functions over text or chararray operands, NDListArray members, casts, sorting) is
+# not a call of these modules and is left to the sources that verify it on numbers.
 STRINGS_OPS: dict[str, Callable[[Mapping[str, Any]], str | None]] = {
-    "str_fn": lambda params: None if params.get("name") is None else "str_fn:" + str(params["name"]),
+    "str_fn": _named("str_fn", "name"),
     "strings_add": lambda params: "strings_add",
     "strings_multiply": lambda params: "strings_multiply",
     "strings_multiply_text": lambda params: "strings_multiply",
+    "char_cmp": _named("char_cmp", "name"),
+    "char_compare": lambda params: "char_compare",
+    "char_add": lambda params: "char_add",
+    "char_multiply": lambda params: "char_multiply",
+    "cobj_fn": _named("cobj_fn", "fn"),
+    "cha_new": lambda params: "cha_new",
+    "cha_array": lambda params: "cha_array",
+    "cha_asarray": lambda params: "cha_asarray",
+    "cha_item": lambda params: "cha_item",
+    "cha_iter": lambda params: "cha_iter",
+    "cha_repr": lambda params: "cha_repr",
+    "cha_str": lambda params: "cha_str",
+    "cha_member": _named("cha_member", "name"),
+    "cha_call": _named("cha_call", "name"),
+    "cha_op": _chararray_protocol,
 }
+
+# The variant of a fuzz case that OpRegistry.cs replays through a C# operator (see replays_operator).
+OPERATOR_VARIANT = "operator"
 
 # Automatic rules never target these kinds: a corpus key names an operation, and landing on a
 # module (np.fft), a class (np.dtype) or a constant (np.r_) is only ever right when a reviewer says so
@@ -104,8 +173,8 @@ SOURCES: tuple[SourceSpec, ...] = (
                "FlagsOracleTests"),
     SourceSpec("layout", "Result-layout parity oracle",
                "test/NumSharp.Tests/Backends/corpus/layout_parity_oracle.jsonl", "LayoutParityOracleTests"),
-    SourceSpec("strings", "String oracle (numpy.strings calls)", "test/NumSharp.Tests.Oracle/Strings/corpus",
-               "StringOracleTests"),
+    SourceSpec("strings", "String oracle (numpy.strings and numpy.char calls)",
+               "test/NumSharp.Tests.Oracle/Strings/corpus", "StringOracleTests"),
 )
 
 
@@ -312,6 +381,39 @@ def _param_keys(oracle_map: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
     return tuple(sorted((key, entry["param"]) for key, entry in keys.items() if "param" in entry))
 
 
+def _operator_keys(oracle_map: Mapping[str, Any]) -> dict[str, tuple[str, ...]]:
+    """Collect the fuzz keys OpRegistry.cs replays through a C# operator, with the params that bypass it.
+
+    An entry with ``operator_ids`` names the ndarray protocol rows its operator spells; its optional
+    ``function_params`` lists the params whose presence makes the replay call the np.* function instead (the
+    nan_order tier's ``dtype=`` for add / multiply). The scan must know these BEFORE resolution, because the two
+    routes of one key resolve to different rows.
+
+    :param oracle_map: the parsed oracle map.
+    :returns: op key -> the params that select the function route (empty when none does).
+    """
+    keys = _entries(oracle_map["fuzz"]["keys"])
+    return {key: tuple(entry.get("function_params", ())) for key, entry in keys.items() if "operator_ids" in entry}
+
+
+def replays_operator(case: Mapping[str, Any], function_params: Iterable[str]) -> bool:
+    """Tell whether OpRegistry.Apply replays a case of an operator key through the C# operator itself.
+
+    OpRegistry.cs replays ``add`` as ``ops[0] + ops[1]`` (and the other operator keys likewise) with two
+    exceptions, both of which call the np.* function: a case with a numpy.matrix operand goes through
+    TryApplyFunctionForm (OpRegistry.MatrixOperand.cs: the function follows the operand's run-time class), and a
+    case carrying one of the key's ``function_params`` (params.dtype for add / multiply: np.add(a, b, dtype=)).
+
+    :param case: one corpus case.
+    :param function_params: the key's params that select the function route.
+    :returns: True when the case's replay runs the C# operator, so its contract also proves the operator's protocol.
+    """
+    params = case.get("params") or {}
+    if any(name in params for name in function_params):
+        return False
+    return not any(isinstance(operand, Mapping) and operand.get("matrix") for operand in case.get("operands") or [])
+
+
 def _host_libm_files(fuzz_dir: Path) -> set[str]:
     """Discover the tiers the replay runs through ``RunHostLibmCorpus`` (hard-gated only on win-amd64).
 
@@ -407,6 +509,7 @@ def _scan_fuzz(root: Path, oracle_map: Mapping[str, Any], groups: dict[tuple, Co
     fuzz_dir = root / "test" / "NumSharp.Tests.Oracle" / "Fuzz"
     corpus = fuzz_dir / "corpus"
     params = dict(_param_keys(oracle_map))
+    operator_keys = _operator_keys(oracle_map)
     without_op = _entries(oracle_map["fuzz"]["files_without_op"])
     declared_pins = _entries(oracle_map["host_pins"])
     host_libm = _host_libm_files(fuzz_dir)
@@ -457,6 +560,9 @@ def _scan_fuzz(root: Path, oracle_map: Mapping[str, Any], groups: dict[tuple, Co
                         problems.append(f"{name}:{line_no} op '{op}' lacks params.{params[op]}, which its "
                                         "oracle_map entry resolves by.")
                         continue
+                elif op in operator_keys and replays_operator(case, operator_keys[op]):
+                    # The case runs the C# operator: its own group, which also resolves to the operator's protocol.
+                    variant = OPERATOR_VARIANT
                 group = _group(groups, "fuzz", name, op, variant, pin)
                 group.cases += 1
                 error = _case_is_error(case)
@@ -546,7 +652,9 @@ def _layout_variant(case: Mapping[str, Any]) -> str:
 
     ``reduce`` keys are named by their leading reduction (``sum_flat`` -> ``reduce:sum``,
     ``percentile50`` -> ``reduce:percentile``); ``copyk`` keys by their trailing verb
-    (``t3d_astype`` -> ``copyk:astype``); every other family is its own key.
+    (``t3d_astype`` -> ``copyk:astype``); ``ufunc`` keys by the generator's call name before the source
+    layout (``add0d_c3`` -> ``ufunc:add0d``, ``mediank1_flipf3`` -> ``ufunc:mediank1``), because the family
+    gates some thirty functions, each through its own map entry; every other family is its own key.
 
     :param case: one parsed layout-oracle row.
     :returns: the variant string.
@@ -556,6 +664,10 @@ def _layout_variant(case: Mapping[str, Any]) -> str:
         return "reduce:" + re.match(r"[a-z]+", case["key"]).group(0)
     if family == "copyk":
         return "copyk:" + case["key"].rsplit("_", 1)[1]
+    if family == "ufunc":
+        # gen_layout_parity_oracle.py names a ufunc case f"{op}_{source}" (its UF / UF1 tables' keys, and
+        # around0 for the complex round); op names hold no underscore, source layouts may.
+        return "ufunc:" + case["key"].split("_", 1)[0]
     return family
 
 
@@ -578,9 +690,9 @@ def _replayed_sections(strings_dir: Path) -> set[str]:
 
 def _scan_strings(strings_dir: Path, groups: dict[tuple, ContractGroup], files: list[dict[str, Any]],
                   problems: list[str]) -> None:
-    """Scan the numpy.strings contracts of the string oracle into groups (see :data:`STRINGS_OPS`).
+    """Scan the numpy.strings and numpy.char contracts of the string oracle into groups (see :data:`STRINGS_OPS`).
 
-    Every section file is read; a case whose op is not a numpy.strings call is skipped. A section that holds such
+    Every section file is read; a case whose op is not one of those calls is skipped. A section that holds such
     calls but that no replay test names is a problem (its contracts prove nothing), as for the fuzz corpus.
 
     :param strings_dir: ``test/NumSharp.Tests.Oracle/Strings``.
@@ -604,15 +716,15 @@ def _scan_strings(strings_dir: Path, groups: dict[tuple, ContractGroup], files: 
                     continue
                 variant = variant_of(case.get("params") or {})
                 if variant is None:
-                    problems.append(f"{path.name}:{line_no} op '{case.get('op')}' lacks the parameter that names "
-                                    "its numpy.strings function.")
+                    problems.append(f"{path.name}:{line_no} op '{case.get('op')}' lacks the parameters that name "
+                                    "the API it calls (a function, a chararray member or an operator symbol).")
                     continue
                 pending.append((variant, case))
         if not pending:
             continue
         if section not in replayed:
-            problems.append(f"String oracle section {path.name} holds numpy.strings contracts but no replay test "
-                            "(StringOracleTests*.cs) names it; its contracts prove nothing.")
+            problems.append(f"String oracle section {path.name} holds numpy.strings / numpy.char contracts but no "
+                            "replay test (StringOracleTests*.cs) names it; its contracts prove nothing.")
             continue
         for variant, case in pending:
             group = _group(groups, "strings", path.name, variant, None, None)
@@ -763,8 +875,10 @@ def join(rows: Iterable[Mapping[str, Any]], sources: OracleSources, oracle_map: 
     """Resolve every contract group to catalog rows, then apply identity and reviewed aliases.
 
     Resolution order per group: an explicit ``fuzz.keys`` entry (param-driven entries format their id
-    templates with the group's variant, or take a per-value override), else the automatic rules; the
-    specialized sources resolve through their map section by variant.
+    templates with the group's variant, or take a per-value override; an operator entry adds its
+    ``operator_ids`` for the group of cases replayed through the C# operator), else the automatic rules; the
+    specialized sources resolve through their map section by variant, where a ``<prefix>:{name}`` template
+    (``str_fn:{name}``, ``cha_call:{name}``) covers every variant ``<prefix>:<name>`` without an entry of its own.
 
     Two alias passes then extend evidence to rows the corpus does not gate by name:
 
@@ -795,6 +909,7 @@ def join(rows: Iterable[Mapping[str, Any]], sources: OracleSources, oracle_map: 
     explicit = _entries(oracle_map["fuzz"]["keys"])
     used_explicit: set[str] = set()
     used_values: set[tuple[str, str]] = set()
+    used_operators: set[str] = set()
     used_sections: dict[str, set[str]] = {"npy": set(), "flags": set(), "layout": set(), "strings": set()}
 
     for group in sources.groups:
@@ -812,6 +927,10 @@ def join(rows: Iterable[Mapping[str, Any]], sources: OracleSources, oracle_map: 
                         ids = [template.format(value=group.variant) for template in entry["ids"]]
                 else:
                     ids = list(entry["ids"])
+                    if "operator_ids" in entry and group.variant == OPERATOR_VARIANT:
+                        # The C# operator ran: these contracts prove its ndarray protocol too (ndarray.__add__).
+                        used_operators.add(group.key)
+                        ids += [row_id for row_id in entry["operator_ids"] if row_id not in ids]
             else:
                 rule = "auto"
                 ids = auto_resolve(group.key, catalog, oracle_map)
@@ -827,10 +946,13 @@ def join(rows: Iterable[Mapping[str, Any]], sources: OracleSources, oracle_map: 
                 # One template covers every reduction head; record the template as used.
                 ids = [template.format(head=key.split(":", 1)[1]) for template in section.get("reduce:{head}", [])]
                 used_sections["layout"].add("reduce:{head}")
-            elif key not in section and group.source == "strings" and key.startswith("str_fn:"):
-                # One template covers every numpy.strings function the str_fn op calls by name.
-                ids = [template.format(name=key.split(":", 1)[1]) for template in section.get("str_fn:{name}", [])]
-                used_sections["strings"].add("str_fn:{name}")
+            elif (key not in section and group.source == "strings" and ":" in key
+                  and (template_key := key.split(":", 1)[0] + ":{name}") in section):
+                # One template covers every API an op names (str_fn:{name} -> numpy.strings.{name}, cha_call:{name}
+                # -> numpy.char.chararray.{name}); an explicit entry for the full variant (cha_member:flat_index)
+                # takes precedence, which is why the template is only consulted for a variant without one.
+                ids = [template.format(name=key.split(":", 1)[1]) for template in section[template_key]]
+                used_sections["strings"].add(template_key)
             else:
                 ids = list(section.get(key, []))
                 if key in section:
@@ -854,12 +976,22 @@ def join(rows: Iterable[Mapping[str, Any]], sources: OracleSources, oracle_map: 
     # Explicit entries must earn their keep: unused ones rot silently (the op was renamed or deleted),
     # and one that repeats what the automatic rules resolve hides future rule changes behind a copy.
     for key, entry in sorted(explicit.items()):
+        if "param" in entry and "operator_ids" in entry:
+            # A param-driven key splits its cases by a param's value; an operator key splits them by route. One
+            # entry cannot do both (the scan would have to choose), so the map must not ask for it.
+            problems.append(f"oracle_map fuzz.keys['{key}'] has both 'param' and 'operator_ids'; an entry resolves "
+                            "by one of them.")
         if key not in used_explicit:
             problems.append(f"oracle_map fuzz.keys['{key}'] matches no corpus contract (stale entry).")
             continue
-        if "param" not in entry and auto_resolve(key, catalog, oracle_map) == list(entry["ids"]):
+        # An operator entry exists for its operator_ids: its ids may well repeat the automatic resolution.
+        if ("param" not in entry and "operator_ids" not in entry
+                and auto_resolve(key, catalog, oracle_map) == list(entry["ids"])):
             problems.append(f"oracle_map fuzz.keys['{key}'] repeats the automatic resolution "
                             f"({entry['ids'][0]}); delete the entry.")
+        if "operator_ids" in entry and key not in used_operators:
+            problems.append(f"oracle_map fuzz.keys['{key}'].operator_ids matches no contract replayed through the "
+                            "C# operator (every case took the function route); delete operator_ids.")
         for value in sorted((entry.get("values") or {})):
             if (key, value) not in used_values:
                 problems.append(f"oracle_map fuzz.keys['{key}'].values['{value}'] matches no corpus contract.")

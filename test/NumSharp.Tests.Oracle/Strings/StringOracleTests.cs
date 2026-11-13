@@ -1154,20 +1154,15 @@ namespace NumSharp.Tests.Strings
             {
                 "IndexError", "IndexOutOfRangeException", "ArgumentOutOfRangeException", "ArgumentException",
             },
-            ["AxisError"] = new[] { "AxisError", "AxisOutOfRangeException" },
-            ["OverflowError"] = new[] { "OverflowException" },
+            ["AxisError"] = new[] { "AxisError" },
             ["DTypePromotionError"] = new[] { "DTypePromotionError" },
             ["UnicodeEncodeError"] = new[] { "UnicodeEncodeError" },
             ["UnicodeDecodeError"] = new[] { "UnicodeDecodeError" },
             ["SystemError"] = new[] { "SystemError" },
-            // numpy.ma's rank checks (compress_rowcols / mask_rowcols on a non-2-D array) raise NotImplementedError; the
-            // .NET class with that meaning is NotImplementedException (the message is matched verbatim).
-            ["NotImplementedError"] = new[] { "NotImplementedException" },
-            // np.char.array of an empty str / bytes, or with itemsize 0: NumPy's `len(obj) // itemsize` raises Python's
-            // ZeroDivisionError; .NET's class with that meaning is DivideByZeroException (the message is matched verbatim).
-            ["ZeroDivisionError"] = new[] { "DivideByZeroException" },
-            // StringDType's allocation failures (`Failed to allocate string in add`, a repetition whose byte count wraps)
-            // raise MemoryError; .NET's class with that meaning is OutOfMemoryException (the message is matched verbatim).
+            // NumPy's OverflowError, ZeroDivisionError (np.char.array of an empty str: `len(obj) // itemsize`) and MemoryError
+            // (StringDType's `Failed to allocate string in add`) are NumSharp classes of those names, matched through the class
+            // chain like NumPy's UFuncTypeError (recorded as TypeError, NumSharp's UFunc* classes' base). .NET's own allocation
+            // failure, where NumSharp did not translate it, still stands for MemoryError (the message is matched verbatim).
             ["MemoryError"] = new[] { "OutOfMemoryException" },
         };
 
@@ -1180,12 +1175,26 @@ namespace NumSharp.Tests.Strings
         {
             message = null;
             string gotType = got.GetType().Name;
-            bool typeOk = gotType == want.Type || (ErrorTypes.TryGetValue(want.Type, out var allowed) && allowed.Contains(gotType));
+            bool typeOk = gotType == want.Type || ClassChainHas(got, want.Type)
+                          || (ErrorTypes.TryGetValue(want.Type, out var allowed) && allowed.Contains(gotType));
             string gotText = Normalize(got.Message);
             bool textOk = gotText == want.Text.Trim();
             if (typeOk && textOk)
                 return true;
             message = $"error mismatch\n      numpy:    {want.Type}: {Shorten(want.Text)}\n      numsharp: {gotType}: {Shorten(gotText)}";
+            return false;
+        }
+
+        /// <summary>Whether some class of <paramref name="got"/>'s .NET base chain bears NumPy's class name (NumSharp's
+        ///     UFunc* classes are TypeErrors, its ArrayMemoryError a MemoryError).</summary>
+        /// <param name="got">NumSharp's exception.</param>
+        /// <param name="numpyType">NumPy's recorded class name.</param>
+        /// <returns>True when the chain holds the name.</returns>
+        private static bool ClassChainHas(Exception got, string numpyType)
+        {
+            for (Type t = got.GetType(); t != null; t = t.BaseType)
+                if (t.Name == numpyType)
+                    return true;
             return false;
         }
 
@@ -1350,7 +1359,7 @@ namespace NumSharp.Tests.Strings
         /// <summary>
         ///     The one identity divergence: <c>np.squeeze</c> of an array with no length-1 axis. NumPy's <c>PyArray_Squeeze</c>
         ///     returns the operand itself; NumSharp returns a fresh view object by design (documented on
-        ///     <see cref="np.squeeze(NDArray)"/>: disposing the result must never dispose the input) — the array-object
+        ///     <see cref="np.squeeze(NDArray, NDAxis?)"/>: disposing the result must never dispose the input) — the array-object
         ///     oracle's same gap for plain arrays.
         /// </summary>
         /// <param name="c">The case.</param>

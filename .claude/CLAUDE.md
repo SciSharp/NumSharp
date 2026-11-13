@@ -1,7 +1,7 @@
 # NumSharp Project Instructions
 
 NumSharp is a .NET port of Python's NumPy targeting 1-to-1 API and behavioral compatibility with NumPy 2.x; the oracle
-pins NumPy 2.4.2. `refs/numpy/` is a full clone of NumPy: the authority on API behavior, edge cases and implementation.
+pins NumPy 2.5.4. `refs/numpy/` is a full clone of NumPy: the authority on API behavior, edge cases and implementation.
 
 Area rules live in `.claude/rules/*.md` and load when Claude reads or edits a file in their area. The API index below
 names the rule for each area: read it before answering a question about that area without opening its files.
@@ -135,7 +135,7 @@ np                Static API class (like `import numpy as np`)
 
 ## API index
 
-Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that holds the area's details.
+Tested against NumPy 2.5.4. Each line: the `np.*` names, then the rule that holds the area's details.
 - Array creation: `arange`, `array`, `asanyarray`, `asarray`, `asarray_chkfinite`, `ascontiguousarray`, `asfortranarray`,
   `asmatrix`, `bmat`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `geomspace`, `identity`,
   `linspace`, `logspace`, `matrix`, `meshgrid`, `mgrid`, `ndarray`, `ogrid`, `ones`, `ones_like`, `require`, `tri`,
@@ -144,23 +144,25 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
 - Shape manipulation: `append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`,
   `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`,
   `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`,
-  `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`, `swapaxes`,
-  `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`,
-  `unique_values`, `unstack`, `vsplit`, `vstack` → `creation-manipulation.md` (`unique.md` for `unique` and `unique_*`;
-  every axis argument: `axis-arguments.md`).
+  `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `row_stack`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`,
+  `swapaxes`, `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`,
+  `unique_values`, `unstack`, `vsplit`, `vstack`; `lib.stride_tricks.as_strided` / `sliding_window_view` →
+  `creation-manipulation.md` (`unique.md` for `unique` and `unique_*`; every axis argument: `axis-arguments.md`).
 - Broadcasting: `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`.
-- Math, arithmetic: `abs`, `absolute`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`, `arctan2`,
-  `arctanh`, `asinh`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`, `cosh`, `deg2rad`, `degrees`,
-  `divide`, `divmod`, `exp`, `exp2`, `expm1`, `fabs`, `fix`, `float_power`, `floor`, `floor_divide`, `fmod`, `gcd`, `lcm`,
-  `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `rad2deg`, `radians`,
-  `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`, `spacing`, `sqrt`, `square`, `subtract`, `tan`, `tanh`,
-  `true_divide`, `trunc` → `ufuncs.md` and `float-math.md`.
-- Math, reductions: `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`,
-  `cov`, `cumprod`, `cumsum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`, `ptp`, `quantile`,
-  `std`, `sum`, `var` → `reductions.md` (median / percentile / quantile: `quantile.md`).
+- Math, arithmetic: `abs`, `absolute`, `acos`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`,
+  `arctan2`, `arctanh`, `asin`, `asinh`, `atan`, `atan2`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`,
+  `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `fabs`, `fix`, `float_power`, `floor`,
+  `floor_divide`, `fmod`, `gcd`, `interp`, `lcm`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`,
+  `positive`, `pow`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`,
+  `spacing`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc` → `ufuncs.md` and `float-math.md`
+  (`acos`, `asin`, `atan`, `atan2`, `pow`: NumPy 2.0's Array-API names, forwarding to the originals).
+- Math, reductions: `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `count_nonzero`, `cov`, `cumprod`,
+  `cumsum`, `cumulative_prod`, `cumulative_sum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`,
+  `ptp`, `quantile`, `std`, `sum`, `var` → `reductions.md` (median / percentile / quantile: `quantile.md`).
 - Math, NaN-aware: `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`,
   `nansum`, `nanvar` → `reductions.md` (the nan quantile forms: `quantile.md`).
-- Bitwise: `bitwise_and`, `bitwise_or`, `bitwise_xor`, `invert`, `left_shift`, `right_shift` → `ufuncs.md`.
+- Bitwise: `bitwise_and`, `bitwise_invert`, `bitwise_left_shift`, `bitwise_or`, `bitwise_right_shift`, `bitwise_xor`,
+  `invert`, `left_shift`, `right_shift` → `ufuncs.md`.
 - Comparison and logic: `all`, `allclose`, `any`, `array_equal`, `equal`, `fmax`, `fmin`, `greater`, `greater_equal`,
   `isclose`, `iscomplex`, `iscomplexobj`, `isfinite`, `isin`, `isinf`, `isnan`, `isreal`, `isrealobj`, `isscalar`,
   `iterable`, `less`, `less_equal`, `logical_and`, `logical_not`, `logical_or`, `logical_xor`, `maximum`, `minimum`,
@@ -204,17 +206,19 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`,
   `uniform`, `vonmises`, `wald`, `weibull`, `zipf`, plus `Generator`/`default_rng` → `random.md`.
 - File I/O: `fromfile`, `fromstring`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`,
-  `savez_compressed`, `tofile`; printing: `array2string`, `array_repr`, `array_str`, `format_float_positional`,
+  `savez_compressed`, `tofile`, the `np.lib.format` module; printing: `array2string`, `array_repr`, `array_str`, `format_float_positional`,
   `format_float_scientific`, `get_printoptions`, `printoptions`, `set_printoptions` → `io-printing.md` (the text
   functions: `text-io.md`).
-- Other: `around`, `asscalar`, `copyto` (`creation-manipulation.md`), `round_`, `size`, `multithreading`.
+- Other: `around`, `asscalar`, `copyto` (`creation-manipulation.md`), `ndim`, `round`, `shape`, `size`, `multithreading`,
+  the `np.lib.array_utils` module (`axis-arguments.md`).
 - Operators: arithmetic `+`, `-`, `*`, `/`, `%`, unary `-`; comparison `==`, `!=`, `<`, `>`, `<=`, `>=` (they return
   `NDArray<bool>`); logical `&`, `|`, `!`.
 - Indexing: integers and slice strings (`nd[0]`, `nd["1:3"]`, `nd["::-1"]`), boolean masks (`nd[mask]`, and
   `nd[mask] = v`), fancy indexing (`nd[indices]`). A raw `int[]`/`long[]` as the ONLY index is fancy (`nd[new int[]{0,2}]` selects rows 0 and 2); `nd[0,2]`
   is a coordinate, and coordinate access by array is `nd.GetData(int[]/long[])` → `selection-indexing.md`.
-- Interop packages (OpenBLAS, ONNX Runtime, ML.NET, System.Numerics.Tensors, pythonnet) → `openblas.md`,
-  `interop-packages.md`. ParquetNet is UNRELEASED: no package, no docs, no mention in release notes.
+- Interop packages (OpenBLAS, ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp, pythonnet) → `openblas.md`,
+  `interop-packages.md`. ParquetNet is UNRELEASED: no package, no docs, no mention in release notes (TorchSharp ships
+  from 0.81.0).
 
 ## Build and test
 
@@ -344,7 +348,7 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | Rule | Holds |
 |------|-------|
 | `openblas.md` | the `IBlasBackend` seam; `NumSharp.Interop.OpenBLAS`: why it exists, the bundled binary and discovery order, the macOS loader, the build-time override, what decides the result bits, API, gates, examples |
-| `interop-packages.md` | the unreleased-package policy; ONNX Runtime, ML.NET, System.Numerics.Tensors (sources, verbs, dtypes, lifetime, gates); the pythonnet examples |
+| `interop-packages.md` | the unreleased-package policy; ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp (sources, verbs, dtypes, lifetime, gates; TorchSharp's state-matrix oracle and coverage recipe); the pythonnet examples |
 | `kernels.md` | the two IL generators' contracts, shared infrastructure, coverage, kernel rules, float16 techniques, NaN operand order, the 2-D block kernel and its stationary-out mode, broadcast pattern stages, reversed runs |
 | `memory-views.md` | `Shape` (fields, flags, sharing), Slice / broadcasting / operator internals, views and aliases, allocation from a view's Shape, the buffer pool |
 | `creation-manipulation.md` | `np.arange`, `np.ndarray`, the `as*` family, object-list coercion, full / ones / eye, `np.frombuffer`, linspace / logspace / geomspace, set routines, flips / transposes, stacking, resize / tolist, allocation and reshape guards, `np.copyto` |
@@ -352,7 +356,7 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `axis-arguments.md` | `Shape.check_and_adjust_axis` / `normalize_axis_tuple`, the rules every axis argument follows, NumPy's errors around axes |
 | `matrix.md` | `NDMatrix`: static type versus object (woven mechanisms), scalars, indexing, operators and scaling, reductions, construction, divergences, gates |
 | `ufuncs.md` | the ufunc surface (`dtype=`, `out=`, `where=`), the result layout, fix, fabs, clip, divmod, float_power, power's float loops, gcd / lcm, bitwise |
-| `float-math.md` | correlate / convolve, inverse hyperbolic, sinc, the float32 kernels ported from NumPy, exp2, expm1 / log1p, complex128 NaN signs |
+| `float-math.md` | correlate / convolve, np.interp's fill values, inverse hyperbolic, sinc, the float32 kernels ported from NumPy, exp2, expm1 / log1p, complex128 NaN signs |
 | `reductions.md` | the reduce prologue, sum / mean, var / std, numpy.ma mean / var, max / min / ptp schedules and keywords, float16 HALF loops, the scans, cov, the NaN-aware family |
 | `quantile.md` | the quantile family: `q`'s dtype and the lerp, `out=`, the nan forms, `weights=`, the partition |
 | `masked-arrays.md` | numpy.ma: semantics by result kind, the fill value, the set routines, `ma.put`, text and `StringDType` |

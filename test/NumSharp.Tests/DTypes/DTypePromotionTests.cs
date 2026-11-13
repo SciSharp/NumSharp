@@ -124,7 +124,7 @@ namespace NumSharp.Tests.DTypes
         public void PromoteTypes_UnitOverflow_RaisesOverflow()
         {
             Action act = () => np.promote_types(np.dtype("M8[as]"), np.dtype("M8[Y]"));
-            act.Should().Throw<OverflowException>().WithMessage("Integer overflow getting a common metadata divisor for NumPy datetime metadata [as] and [Y].");
+            act.Should().Throw<OverflowError>().WithMessage("Integer overflow getting a common metadata divisor for NumPy datetime metadata [as] and [Y].");
         }
 
         [DataTestMethod]

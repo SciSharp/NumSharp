@@ -44,18 +44,19 @@ namespace NumSharp.Tests.Polynomial
             ["herme"] = (x, c) => np.polynomial.hermite_e.hermeval(x, c),
         };
 
-        // NumPy 2.4.2's bytes (scratchpad fit_pins.py, OPENBLAS_NUM_THREADS=1): x = np.linspace(0, 2), y = x(x - 1)(x - 2),
+        // NumPy 2.5.4's bytes (scratchpad fit_pins_254.py, OPENBLAS_NUM_THREADS=1; NumPy 2.5's OpenBLAS moved gelsd's last bits
+        // from 2.4.2's): x = np.linspace(0, 2), y = x(x - 1)(x - 2),
         // w = zeros with w[1::2] = 1; per basis f(x, y, 3), f(x, y, [0, 2, 3]), f(x, y, 3, w=w), and f(x, y, 3, full=True)'s
         // resids, rank, s and rcond — every array's tobytes().hex().
         /// <summary>NumPy's float64 bytes of each basis' fits and full statistics.</summary>
         private static readonly (string P, string C3, string CList, string CW, string Res, int Rank, string S, string Rcond)[] Pins =
         {
-            ("poly", "fab2a52f9c1dd63cfeffffffffffff3f02000000000008c0010000000000f03f", "6e767dedc9cfd83f000000000000000010a0f6c869bee7bfc344fb02212fd33f", "c522b4a8f42eeabc14000000000000400f000000000008c0080000000000f03f", "c58ab6e77f5ff139", 4, "033120599a42fe3f6f5a30938521e43fd84969794ff9c43f8d28d471a384973f", "000000000000093d"),
-            ("cheb", "f4fffffffffff7bff3ffffffffff0540f5fffffffffff7bff2ffffffffffcf3f", "48cb13de6161c33f00000000000000005ad5f1c35912d0bfaf4ebc82892aab3f", "eafffffffffff7bff6ffffffffff0540f9fffffffffff7bff9ffffffffffcf3f", "d650085604d9ed39", 4, "dfe539ca795efd3f93bfa97b5773e83f2d8bd48d9e8acb3fc9d0c50683c2983f", "000000000000093d"),
-            ("leg", "040000000000f0bfd3cccccccccc044004000000000000c09e9999999999d93f", "790936893349cc3f0000000000000000aeaa4a1ab502d7bfea1af15c2c25b73f", "63ffffffffffefbf93cccccccccc044010000000000000c0fd9999999999d93f", "6679eadb2220f139", 4, "4b21ade03db0fd3f17804c272bfee63f7725a84e9da6c93fcb3e9e1a6f9b983f", "000000000000093d"),
-            ("lag", "ecffffffffffff3fe7ffffffffff1fc0f2ffffffffff2740f5ffffffffff17c0", "9fe643d2c5cab43f0000000000000000223a2346f544e33f6a33a3c0df19d7bf", "0c0000000000004014000000000020c01b000000000028401f000000000018c0", "b2ebd928ecbe243a", 4, "b24d96d3f3d6fa3fda4065b8f22cf03f908dd2123ce6d93f38e5d93e84528f3f", "000000000000093d"),
-            ("herm", "030000000000f8bf000000000000fc3fffffffffffffe7bff8ffffffffffbf3f", "4967617d9f9ecc3f0000000000000000ff472704d876b7bfbae3002a8c92943f", "050000000000f8bf010000000000fc3ffaffffffffffe7bff5ffffffffffbf3f", "1c8e42293063f339", 4, "21705c9ab957fc3f5da51a4ced44ec3f2d7f32ffc43ad23f948aae6e698b973f", "000000000000093d"),
-            ("herme", "f1ffffffffff07c0f7ffffffffff1340f8ffffffffff07c0060000000000f03f", "13cf0a488fffc63f000000000000000071bd47adb80bcdbf345d65e227f1ba3f", "dbffffffffff07c0e7ffffffffff1340e5ffffffffff07c0e1ffffffffffef3f", "684d0ecefbac033a", 4, "b55853449564f93f794bbc0fba58f23f4f9986c15214da3f4b775f8a89b3933f", "000000000000093d"),
+            ("poly", "f166ccfd0a2cc3bc080000000000004009000000000008c0060000000000f03f", "58767dedc9cfd83f000000000000000000a0f6c869bee7bfb844fb02212fd33f", "a225ca3feeebf23cd6ffffffffffff3feeffffffffff07c0e8ffffffffffef3f", "d463399b80bbef39", 4, "093120599a42fe3f705a30938521e43fd84969794ff9c43f8128d471a384973f", "000000000000093d"),
+            ("cheb", "fbfffffffffff7bff9ffffffffff0540f8fffffffffff7bff0ffffffffffcf3f", "44cb13de6161c33f000000000000000059d5f1c35912d0bfb04ebc82892aab3f", "e9fffffffffff7bff3ffffffffff0540f6fffffffffff7bff5ffffffffffcf3f", "0433218f9efff539", 4, "dce539ca795efd3f97bfa97b5773e83f308bd48d9e8acb3fc4d0c50683c2983f", "000000000000093d"),
+            ("leg", "f1ffffffffffefbfc8cccccccccc0440feffffffffffffbf9b9999999999d93f", "7b0936893349cc3f0000000000000000b2aa4a1ab502d7bfeb1af15c2c25b73f", "2bffffffffffefbf7dcccccccccc044008000000000000c0f39999999999d93f", "567651991a0cf439", 4, "4921ade03db0fd3f17804c272bfee63f7025a84e9da6c93fd33e9e1a6f9b983f", "000000000000093d"),
+            ("lag", "010000000000004002000000000020c0040000000000284005000000000018c0", "9ce643d2c5cab43f0000000000000000203a2346f544e33f6f33a3c0df19d7bf", "f5ffffffffffff3ff5ffffffffff1fc0f8ffffffffff2740f2ffffffffff17c0", "94bf782952e60e3a", 4, "b24d96d3f3d6fa3fda4065b8f22cf03f908dd2123ce6d93f21e5d93e84528f3f", "000000000000093d"),
+            ("herm", "060000000000f8bf040000000000fc3f030000000000e8bffbffffffffffbf3f", "4967617d9f9ecc3f0000000000000000ff472704d876b7bfbce3002a8c92943f", "fcfffffffffff7bff8fffffffffffb3ff4ffffffffffe7bff1ffffffffffbf3f", "2fcb339e42c0f239", 4, "21705c9ab957fc3f5da51a4ced44ec3f2e7f32ffc43ad23f938aae6e698b973f", "000000000000093d"),
+            ("herme", "f8ffffffffff07c0fdffffffffff1340fdffffffffff07c0080000000000f03f", "12cf0a488fffc63f000000000000000071bd47adb80bcdbf355d65e227f1ba3f", "feffffffffff07c00000000000001440ffffffffffff07c0eaffffffffffef3f", "e8e31bc2582b013a", 4, "b55853449564f93f7c4bbc0fba58f23f519986c15214da3f45775f8a89b3933f", "000000000000093d"),
         };
 
         /// <summary>
@@ -171,8 +172,8 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     The kinds a ufunc-level slip would get wrong without changing any value check, as NumPy's bytes (scratchpad
-        ///     fit_pins2.py, OPENBLAS_NUM_THREADS=1): an integer and a bool x (x + 0.0 is float64, so the default rcond is
+        ///     The kinds a ufunc-level slip would get wrong without changing any value check, as NumPy 2.5.4's bytes
+        ///     (scratchpad fit_pins_254.py, OPENBLAS_NUM_THREADS=1): an integer and a bool x (x + 0.0 is float64, so the default rcond is
         ///     <c>len(x)*eps</c> of float64), complex points (the norm is <c>|z|**2</c>, not <c>z**2</c>), an all-zero column
         ///     (x = zeros: <c>scl[scl == 0] = 1</c> leaves it unscaled, gelsd sees rank 1 and the residuals are empty) and a
         ///     float32 fit (float32 coefficients and statistics, rcond the np.float32 <c>7*eps</c>).
@@ -183,16 +184,16 @@ namespace NumSharp.Tests.Polynomial
             RequireLapack();
             NDArray y6 = np.array(new[] { 1.0, 2.0, 0.5, 4.0, 3.0, -1.0 });
             var (c, (res, rank, s, rc)) = np.polynomial.polynomial.polyfit(np.arange(6), y6, 2, null, true);
-            Assert.AreEqual("81dbb66ddbb6dd3f1cd4411dd441ff3f8f2449922449dabf", Hex(c), "int x: c");
+            Assert.AreEqual("56dbb66ddbb6dd3f22d4411dd441ff3f942449922449dabf", Hex(c), "int x: c");
             Assert.AreEqual("8caff88aaf782340", Hex(res), "int x: resids");
             Assert.AreEqual(3, rank.GetAtIndex<int>(0), "int x: rank");
-            Assert.AreEqual("a0e32a4dfa30fa3fd13f2d7f43b0e13f2dbec6df062abf3f", Hex(s), "int x: s");
+            Assert.AreEqual("9ee32a4dfa30fa3fd33f2d7f43b0e13f28bec6df062abf3f", Hex(s), "int x: s");
             Assert.AreEqual("float64", rc.dtype.name, "int x: rcond dtype");
             Assert.AreEqual("000000000000d83c", Hex(rc), "int x: rcond = 6 * eps");
 
             (c, (res, rank, s, rc)) = np.polynomial.polynomial.polyfit(
                 np.array(new[] { true, false, true, true, false, false }), y6, 1, null, true);
-            Assert.AreEqual("575555555555f53f010000000000e03f", Hex(c), "bool x: c");
+            Assert.AreEqual("565555555555f53f020000000000e03f", Hex(c), "bool x: c");
             Assert.AreEqual("a9aaaaaaaaaa2f40", Hex(res), "bool x: resids");
             Assert.AreEqual(2, rank.GetAtIndex<int>(0), "bool x: rank");
             Assert.AreEqual("fdf04491aee7f43f9438db7b7a51e13f", Hex(s), "bool x: s");
@@ -205,9 +206,9 @@ namespace NumSharp.Tests.Polynomial
             NDArray ys = np.array(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
             (c, (_, _, s, _)) = np.polynomial.chebyshev.chebfit(xs, ys, 2, null, true);
             Assert.AreEqual("complex128", c.dtype.name, "complex x: dtype");
-            Assert.AreEqual("c46bbf9a9e5e0c405dfa606882cea7bf41a7cf4b3636ecbfc46637aa2418e63f418a0193ebd9d43f40369e96c350ccbf", Hex(c), "complex x chebfit: c");
-            Assert.AreEqual("42a2f053c062f43f99514620b5ddee3f199fb4867d60e53f", Hex(s), "complex x chebfit: s");
-            Assert.AreEqual("c46bbf9a9e5e0c405dfa606882cea7bf41a7cf4b3636dcbfc46637aa2418d63f418a0193ebd9c43f40369e96c350bcbf",
+            Assert.AreEqual("c66bbf9a9e5e0c4044fa606882cea7bf41a7cf4b3636ecbfc46637aa2418e63f478a0193ebd9d43f3f369e96c350ccbf", Hex(c), "complex x chebfit: c");
+            Assert.AreEqual("42a2f053c062f43f96514620b5ddee3f149fb4867d60e53f", Hex(s), "complex x chebfit: s");
+            Assert.AreEqual("c66bbf9a9e5e0c4044fa606882cea7bf41a7cf4b3636dcbfc46637aa2418d63f478a0193ebd9c43f3f369e96c350bcbf",
                 Hex(np.polynomial.hermite.hermfit(xs, ys, 2)), "complex x hermfit: c");
 
             (c, (res, rank, s, _)) = np.polynomial.polynomial.polyfit(np.zeros(new Shape(4)), np.array(new[] { 1.0, 2.0, 3.0, 4.0 }), 2, null, true);
@@ -221,7 +222,7 @@ namespace NumSharp.Tests.Polynomial
             NDArray y32 = np.cos(x32 * np.array(2.0f));
             (c, (res, rank, s, rc)) = np.polynomial.chebyshev.chebfit(x32, y32, 2, null, true);
             Assert.AreEqual("float32", c.dtype.name, "float32: c dtype");
-            Assert.AreEqual("41cc743e6b239125939830bf", Hex(c), "float32: c");
+            Assert.AreEqual("41cc743e6b2311a5939830bf", Hex(c), "float32: c");
             Assert.AreEqual("float32", res.dtype.name, "float32: resids dtype");
             Assert.AreEqual("e0e4a83c", Hex(res), "float32: resids");
             Assert.AreEqual(3, rank.GetAtIndex<int>(0), "float32: rank");

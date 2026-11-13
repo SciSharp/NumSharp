@@ -152,11 +152,12 @@ namespace NumSharp.Tests.Manipulation
         [TestMethod]
         public void ZeroDimensionalOperands()
         {
-            var d0 = NDArray.Scalar(5.0);
+            // The destinations are 0-d ARRAYS (np.array(5.0)); a NumPy scalar is read-only, no destination.
+            var d0 = np.array(5.0);
             np.copyto(d0, np.array(new[,] { { 7.0 } }));
             d0.GetDouble().Should().Be(7.0);
 
-            var kept = NDArray.Scalar(5.0);
+            var kept = np.array(5.0);
             np.copyto(kept, NDArray.Scalar(7.0), where: NDArray.Scalar(false));
             kept.GetDouble().Should().Be(5.0);
 
@@ -178,13 +179,13 @@ namespace NumSharp.Tests.Manipulation
         public void WeakInteger_IsRangeChecked_NeverWrapped()
         {
             Action int8 = () => np.copyto(np.zeros(3, np.int8), 1000);
-            int8.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            int8.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
             Action masked = () => np.copyto(np.zeros(3, np.int8), 1000, where: Mask(true, false, true));
-            masked.Should().Throw<OverflowException>().WithMessage("Python integer 1000 out of bounds for int8");
+            masked.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
             Action negative = () => np.copyto(np.zeros(3, np.uint8), -1);
-            negative.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            negative.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
 
             var u8 = np.array(new byte[] { 7, 7, 7 });
             np.copyto(u8, 0);

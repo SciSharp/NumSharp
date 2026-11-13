@@ -405,9 +405,9 @@ namespace NumSharp.Tests.Casting
             Action halfNaNToLong = () => { long _ = (long)halfNaN; };
             halfNaNToLong.Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
             Action infToInt = () => { int _ = (int)inf; };
-            infToInt.Should().Throw<OverflowException>().WithMessage("cannot convert float infinity to integer");
+            infToInt.Should().Throw<OverflowError>().WithMessage("cannot convert float infinity to integer");
             Action negInfToByte = () => { byte _ = (byte)negInf; };
-            negInfToByte.Should().Throw<OverflowException>().WithMessage("cannot convert float infinity to integer");
+            negInfToByte.Should().Throw<OverflowError>().WithMessage("cannot convert float infinity to integer");
         }
 
         /// <summary>
@@ -427,17 +427,17 @@ namespace NumSharp.Tests.Casting
             using var hugeForU64 = np.array(1e20);
 
             Action toInt = () => { int _ = (int)threeE9; };
-            toInt.Should().Throw<OverflowException>().WithMessage("Python integer 3000000000 out of bounds for int32");
+            toInt.Should().Throw<OverflowError>().WithMessage("Python integer 3000000000 out of bounds for int32");
             Action toLong = () => { long _ = (long)u64Max; };
-            toLong.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            toLong.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             Action hugeToLong = () => { long _ = (long)huge; };
-            hugeToLong.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            hugeToLong.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             Action negativeToByte = () => { byte _ = (byte)minusOne; };
-            negativeToByte.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint8");
+            negativeToByte.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
             Action negativeToULong = () => { ulong _ = (ulong)minusOne; };
-            negativeToULong.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint64");
+            negativeToULong.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint64");
             Action pastU64 = () => { ulong _ = (ulong)hugeForU64; };
-            pastU64.Should().Throw<OverflowException>().WithMessage("Python integer 100000000000000000000 out of bounds for uint64");
+            pastU64.Should().Throw<OverflowError>().WithMessage("Python integer 100000000000000000000 out of bounds for uint64");
         }
 
         /// <summary>

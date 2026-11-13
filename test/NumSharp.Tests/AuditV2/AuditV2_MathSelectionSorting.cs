@@ -263,12 +263,12 @@ public class AuditV2_MathSelectionSorting
         var arr = np.array(data).reshape(1000, 1000);
 
         // Warmup
-        _ = arr.argsort<double>(axis: -1);
+        _ = arr.argsort(axis: -1);
 
         var sw = Stopwatch.StartNew();
         const int iters = 3;
         for (int i = 0; i < iters; i++)
-            _ = arr.argsort<double>(axis: -1);
+            _ = arr.argsort(axis: -1);
         sw.Stop();
 
         double perIter = (double)sw.ElapsedMilliseconds / iters;

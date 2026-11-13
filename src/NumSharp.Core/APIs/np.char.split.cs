@@ -33,7 +33,7 @@ namespace NumSharp
         ///     (<c>'numpy.float64' object cannot be interpreted as an integer</c>; <c>np.bool</c> has none), a separator of
         ///     the wrong type (<c>must be str or None, not numpy.bytes_</c> for <c>U</c>; <c>a bytes-like object is required,
         ///     not 'str'</c> for <c>S</c> with a <c>StringDType</c> separator).</exception>
-        /// <exception cref="OverflowException">A <paramref name="maxsplit"/> past <c>Py_ssize_t</c> (<c>Python int too large
+        /// <exception cref="OverflowError">A <paramref name="maxsplit"/> past <c>Py_ssize_t</c> (<c>Python int too large
         ///     to convert to C ssize_t</c>).</exception>
         /// <exception cref="ValueError">An empty separator (<c>empty separator</c>); a ragged list argument (NumPy's
         ///     inhomogeneous-shape text).</exception>
@@ -67,7 +67,7 @@ namespace NumSharp
         /// <param name="maxsplit">The most splits per element, from the right (see <see cref="split"/>).</param>
         /// <returns>NumPy's object array of lists (<see cref="NDListArray"/>).</returns>
         /// <exception cref="TypeError">As <see cref="split"/> (the descriptor names <c>'rsplit'</c>).</exception>
-        /// <exception cref="OverflowException">A <paramref name="maxsplit"/> past <c>Py_ssize_t</c>.</exception>
+        /// <exception cref="OverflowError">A <paramref name="maxsplit"/> past <c>Py_ssize_t</c>.</exception>
         /// <exception cref="ValueError">An empty separator, or a ragged list argument.</exception>
         /// <exception cref="SystemError">A one-unit <c>U</c> element, separator or word above U+10FFFF.</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>

@@ -8,7 +8,7 @@ using NumSharp.Utilities;
 namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>
-    ///     <c>np.linalg.cholesky</c> — a route-for-route port of NumPy 2.4.2's <c>cholesky_lo</c> /
+    ///     <c>np.linalg.cholesky</c> — a route-for-route port of NumPy 2.5.4's <c>cholesky_lo</c> /
     ///     <c>cholesky_up</c> gufuncs (<c>umath_linalg.cpp</c>) calling the SAME LAPACK <c>potrf</c> the
     ///     bundled scipy-openblas ships.
     /// </summary>

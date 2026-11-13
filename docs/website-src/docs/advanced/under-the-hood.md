@@ -122,6 +122,7 @@ The confusion NumPy documents is real and worth restating: matrix convention (fi
 - The default is **C-order**, so `a[0]` (a row) is contiguous and cheap, while `a[:, 0]` (a column) is strided.
 - `Shape` also tracks **F-contiguity**, and APIs with an `order` parameter resolve NumPy's `C`/`F`/`A`/`K` modes through `OrderResolver`, so column-major layouts are first-class where you ask for them.
 - Kernels don't care about the *label* order - `NDIter` determines which axis is most rapidly varying in memory and makes that the inner loop, so a ufunc over a transposed view is as efficient as over a contiguous one.
+- A fresh ufunc result is laid out in the operands' memory order, as NumPy's iterator lays it out: `a.T + a.T` is F-ordered like `a.T`, and a permuted 3-D view's result keeps the permutation, so `np.ravel(result, order: 'K')` reads it in the same order as the operand.
 
 The practical consequence: iterate with the memory order in mind. `a.flat` / the typed iterators walk in **logical C-order**; a fast per-chunk kernel should follow the array's actual strides (which `NDIter` and `np.nditer_chunks<T>` do for you). See [Indexing](../fundamentals/indexing.md) and [Iterating & Enumerating](../iterating-and-enumerating.md).
 

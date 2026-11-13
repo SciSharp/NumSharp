@@ -138,8 +138,9 @@ mapped memory ends. Two tools make it fail:
   three `mapping.c` routes: an N-D index array that is not C-contiguous beside a slice / ellipsis / integer is read in
   memory order, and the result LAYOUT: NumPy's transposed MapIter view for an index behind a slice, the index arrays'
   order for a lone index or arrays on every axis, the source's order for the other axes of a non-C source, including
-  `Generator.permutation` of a non-C 3-D source), `OpenBugs.EmptyStrides.cs` (a zero-size array NumPy allocates has
-  all-zero strides, and a slice keeps its parent's strides on an extent-0 axis), `OpenBugs.PolynomialNaN.cs` (the
+  `Generator.permutation` of a non-C 3-D source), `OpenBugs.EmptyStrides.cs` (a slice keeps its parent's strides on an
+  extent-0 axis; the allocation half, all-zero strides for a zero-size array NumPy allocates, is fixed and pinned in
+  `View/Shape.ForFreshAllocation.Tests.cs`), `OpenBugs.PolynomialNaN.cs` (the
   polynomial step-table integral kernels keep the wrong NaN per statement: `lagint` float16 overflow, `hermeint` float16
   NaN in `k`, `lagint` float64 `scl=+inf`; raw-bit asserts, win-amd64), `OpenBugs.SortUniqueNaN.cs` (regression pins
   only: the unique family's value routes write NumPy's sort NaN, the positive quiet NaN, for float32 / float64, and
@@ -148,10 +149,39 @@ mapped memory ends. Two tools make it fail:
   of a transposed strided view, imag of a real F array — are regression tests), `OpenBugs.ErrorParity.cs`
   (regression pins only: the stacking family's empty-list texts, the moveaxis / rollaxis / swapaxes / squeeze AxisError
   texts, moveaxis' length mismatch as NumPy's ValueError), `OpenBugs.NaNOperandOrder.cs`, `OpenBugs.Surface.cs`,
-  `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs`, `OpenBugs.ViewFlags.cs`.
+  `OpenBugs.MaSurface.cs`, `OpenBugs.Relayout.cs` (regression pins only: RL01–RL07 are fixed), `OpenBugs.ViewFlags.cs`,
+  `OpenBugs.Consumers.cs` (found by upgrading consumers to 0.80.0, deferred: `np.array(string[])` discovers its dtype per
+  value, about 10x a sized `<U` request, a same-process wall-clock ratio; SharpCV's: `copy()` of a reversed view gathers element by element, `a[::-1]` 5.8x NumPy's and
+  `a[:, ::-1]` / `a[..., ::-1]` a target beyond NumPy, same-process ratios against a contiguous copy; its tuple-axis
+  reflection probe `Reductions_TakeATupleOfAxes` is a regression pin since API-parity batch 5). Their third finding, NDW003 on a `double[]` / `int[]` / `string[]` return, is
+  `GateAnalyzerTests.ManagedArrayReturns_AreNotGated` in `NumSharp.Tests.Build.Analyzer`.
+  `OpenBugs.Consumers.KokoroSharp.cs` holds KokoroSharp's round (desktops and two Android phones, 2026-11-09), deferred:
+  `np`'s class constructor takes about 120 ms in a fresh load context (a 30 ms limit on the fastest of three collectible
+  contexts, `[DoNotParallelize]`); `np.load_npy` of a file stages it through a fresh 256 KB managed buffer where NumPy
+  reads straight into the array (a per-thread allocation count); no workflow runs the suite on Mono
+  (`UseMonoRuntime=true`, a scan of `.github/workflows`). Its fourth finding, a memory map of a Fortran-ordered `.npy`
+  that `Dispose` never releases, is `OpenBugs.Mmap_FortranOrder_DisposeReleasesTheFile` in `OpenBugs.cs`.
+  `OpenBugs.Consumers.OptunaSharp.cs` holds OptunaSharp's (moving its hand-ported NumPy math onto NumSharp,
+  2026-11-11), its first pin a regression test since QB43's fix (2026-11-12, as are `ParityQb_QB43_*` and
+  `OpenBugsReductionTests.Median_OfNegativeZeros_IsPositiveZero`): `np.percentile` / `np.nanpercentile` /
+  `np.quantile` / `np.nanquantile` at q = 0.5 of `[0.0, -0.0, -0.0, -1.0]` returned `+0.0` where NumPy returns `-0.0`,
+  QB43's root cause (the short-window insertion sort
+  in `Utilities/QuickSelect.cs` instead of `introselect_`'s dumb_select) seen through the default 'linear' method.
+  Disabling the value path's two window sorts turns it green (QB43's argpartition half also needs the index path's).
+  Also two costs of `np.sum(axis=-1)` from its TPE sampler (2026-11-12), same-process ratios whose batches alternate
+  (`BestOfAlternatingBatches`: timed one route after the other, a slow stretch of the hybrid CPU passed the first
+  version with the bug present): 2,400 rows of 10 cost 6.1-7.4 times the same values as 24 rows of 1,000 (NumPy
+  3.3-3.5; about 18 ns per row through `ForEach`'s per-row inner-loop calls against NumPy's 8), and `out=` costs
+  1.84-2.19 times the fresh call (NumPy 1.02-1.04) because `ReduceIntoOut` computes a fresh result and copies it; that
+  one is calibrated for Release only (a Debug build measured 1.05-1.90).
 - The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, because the bug exists only in optimized code and
   needs the lifetime child process (`oracle.md`): none is open; a new open gap gets a `Lifetime_LT<nn>_*` test beside the
   aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
+- The GitHub-answer pins live in `Issues/<issue>.cs`, beside the passing tests that back the same posted answer (the
+  2026-11-08 triage after 0.80.0: each `Issue<n>` class turns one answer into assertions). An answer's "still missing"
+  list is an `[OpenBugs(IssueUrl = …)]` pin: #547 and #560 (`np.asscalar` still present, complex64; their missing-name
+  lists are regression pins since `np.astype` arrived), #550 (`item(1)` of a 0-d array raises `IndexOutOfRangeException`, not `IndexError`), #592 (`np.genfromtxt`,
+  `np.memmap`, `np.rec`).
 - Auditing the category: run `TestCategory=OpenBugs&TestCategory!=HighMemory` (`[LargeMemoryTest]` adds the OpenBugs
   category to memory-heavy NON-bug tests) in Release AND Debug on both TFMs; a test that passes in all four has its tag
   removed, its comments rewritten as a regression pin, and a `<summary>` of what it guards. Kept on purpose:

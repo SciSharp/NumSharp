@@ -413,7 +413,7 @@ Console.WriteLine("--- serialization of the new layers ---");
     ModelWeights.Save(model, ck);
     using (var npz = np.load_npz(ck))
     {
-        var files = npz.Files.ToArray();
+        var files = npz.files.ToArray();
         Check("embedding weights archived", files.Contains("layer0/param/w"));
         Check("batchnorm gamma archived", files.Contains("layer2/param/gamma"));
         Check("batchnorm running stats archived",

@@ -102,7 +102,7 @@ namespace NumSharp.Tests.Fuzz
                     return np.require(a, null, p["requirements"].EnumerateArray().Select(e => e.GetString()).ToArray());
                 case "asarray_chkfinite": return np.asarray_chkfinite(a);
                 case "ndarray.astype":
-                    return a.astype(VfDType(p), p["copy"].GetBoolean(), p.ContainsKey("order") ? VfChar(p, "order") : 'K');
+                    return a.astype(VfDType(p), p.ContainsKey("order") ? VfChar(p, "order") : 'K', copy: p["copy"].GetBoolean());
                 case "ndarray.view": return p.ContainsKey("dtype") ? a.view(VfDType(p)) : a.view();
                 case "ndarray.getfield": return a.getfield(VfDType(p), p["offset"].GetInt32());
                 case "ndarray.byteswap": return a.byteswap();
@@ -155,7 +155,7 @@ namespace NumSharp.Tests.Fuzz
                 case "vstack": return np.vstack(ops[0], ops[1]);
                 case "where3": return np.where(ops[0], ops[1], ops[2]);
                 case "clip": return np.clip(ops[0], ops[1], ops[2]);
-                case "round": return np.round_(a, p["decimals"].GetInt32());
+                case "round": return np.round(a, p["decimals"].GetInt32());
                 case "matmul": return np.matmul(ops[0], ops[1]);
                 case "dot": return np.dot(ops[0], ops[1]);
                 case "outer": return np.outer(ops[0], ops[1]);
@@ -169,7 +169,7 @@ namespace NumSharp.Tests.Fuzz
                 case "empty_like":
                 {
                     // Uninitialized: the generator fills NumPy's result with 0 the same way.
-                    var r = p.ContainsKey("order") ? np.empty_like(a, null, default, VfChar(p, "order")) : np.empty_like(a);
+                    var r = p.ContainsKey("order") ? np.empty_like(a, null, VfChar(p, "order")) : np.empty_like(a);
                     r.fill(0);
                     return r;
                 }
@@ -201,7 +201,7 @@ namespace NumSharp.Tests.Fuzz
                 // ---- reductions ----
                 case "ptp": return np.ptp(a, VfOptInt(p, "axis"), null, VfKeepdims(p));
                 case "median": return np.median(a, VfOptInt(p, "axis"), keepdims: VfKeepdims(p));
-                case "average": return np.average(a, VfOptInt(p, "axis"), null, VfKeepdims(p));
+                case "average": return (NDArray)np.average(a, VfOptInt(p, "axis"), null, keepdims: VfKeepdims(p));
                 case "sum": case "prod": case "mean": case "std": case "var": case "max": case "min":
                 case "all": case "any": case "nansum": case "nanmax": case "argmax": case "argmin":
                     return ApplyReduce(fn, VfOptInt(p, "axis"), VfKeepdims(p), a);
@@ -248,8 +248,8 @@ namespace NumSharp.Tests.Fuzz
                 case "ndarray.var":
                     return VfOptInt(p, "axis") is int vAx ? a.var(vAx, keepdims: VfKeepdims(p)) : a.var(keepdims: VfKeepdims(p));
                 case "ndarray.prod": return a.prod(VfOptInt(p, "axis"), null, keepdims: VfKeepdims(p));
-                case "ndarray.argmax": return a.argmax(p["axis"].GetInt32(), VfKeepdims(p));
-                case "ndarray.argmin": return a.argmin(p["axis"].GetInt32(), VfKeepdims(p));
+                case "ndarray.argmax": return a.argmax(p["axis"].GetInt32(), keepdims: VfKeepdims(p));
+                case "ndarray.argmin": return a.argmin(p["axis"].GetInt32(), keepdims: VfKeepdims(p));
                 case "ndarray.argsort": return a.argsort(VfOptInt(p, "axis"));
                 case "ndarray.argpartition": return a.argpartition(p["kth"].GetInt32(), VfOptInt(p, "axis"));
                 case "ndarray.repeat": return a.repeat(p["repeats"].GetInt32(), VfOptInt(p, "axis"));
@@ -353,7 +353,7 @@ namespace NumSharp.Tests.Fuzz
                 "min" => np.min(a, axis: axis, @out: o),
                 "trace" => np.trace(a, @out: o),
                 "clip" => np.clip(ops[0], ops[1], ops[2], o),
-                "round" => np.round_(a, p["decimals"].GetInt32(), o),
+                "round" => np.round(a, p["decimals"].GetInt32(), o),
                 "take" => np.take(ops[0], ops[1], axis, o),
                 "compress" => np.compress(ops[0], ops[1], axis, o),
                 "choose" => np.choose(ops[0], new[] { ops[1], ops[2] }, o),
@@ -547,12 +547,12 @@ namespace NumSharp.Tests.Fuzz
                 case "tile":
                     return form == "long[]" ? np.tile(a, dims) : np.tile(a, I());
                 case "indices":
-                    return isShape ? np.indices(S(), dt)
+                    return (NDArray)(isShape ? np.indices(S(), dt)
                          : form == "long[]" ? np.indices(dims, dt)
-                         : np.indices(I(), dt);
+                         : np.indices(I(), dt));
                 case "empty_like":
                 {
-                    var r = np.empty_like(a, null, S());
+                    var r = np.empty_like(a, null, shape: S());
                     r.fill(0);
                     return r;
                 }
@@ -574,13 +574,15 @@ namespace NumSharp.Tests.Fuzz
             DType dt = VfDType(p);
             if (fn != "indices_sparse")
                 throw new NotSupportedException($"shapearg: unknown tuple fn '{fn}' (generator / registry drift)");
+            // NumPy's np.indices(..., sparse=True): the fn keeps the corpus name of the NumSharp-only indices_sparse it
+            // replayed before API-parity batch 11; every form still binds np.indices' one Shape parameter.
             if (form.StartsWith("view:", StringComparison.Ordinal))
-                return np.indices_sparse(ViewSizeLayouts.Build(dims, form.Substring("view:".Length)), dt);
+                return np.indices(ViewSizeLayouts.Build(dims, form.Substring("view:".Length)), dt, sparse: true).ToArray();
             return form switch
             {
-                "Shape" => np.indices_sparse(new Shape(dims), dt),
-                "long[]" => np.indices_sparse(dims, dt),
-                "int[]" => np.indices_sparse(dims.Select(d => checked((int)d)).ToArray(), dt),
+                "Shape" => np.indices(new Shape(dims), dt, sparse: true).ToArray(),
+                "long[]" => np.indices(dims, dt, sparse: true).ToArray(),
+                "int[]" => np.indices(dims.Select(d => checked((int)d)).ToArray(), dt, sparse: true).ToArray(),
                 _ => throw new NotSupportedException($"shapearg: form '{form}' of indices_sparse"),
             };
         }

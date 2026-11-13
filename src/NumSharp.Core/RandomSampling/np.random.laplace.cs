@@ -45,11 +45,11 @@ namespace NumSharp
         ///     <c>U &gt;= 0.5</c>, <c>loc + scale*log(2U)</c> for <c>0 &lt; U &lt; 0.5</c>, redrawing <c>U == 0</c>.
         ///     Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray laplace(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray laplace(double loc = 0.0, double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -57,11 +57,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(Distributions.RandomLaplace(ref one, loc, scale));
+                        return NDArray.WritableScalar(Distributions.RandomLaplace(ref one, loc, scale));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

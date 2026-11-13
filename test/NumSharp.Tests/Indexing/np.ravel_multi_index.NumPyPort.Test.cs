@@ -71,7 +71,7 @@ namespace NumSharp.Tests.Indexing
         {
             var engine = BackendFactory.GetEngine();
             NDArray[] mi = { np.array(new long[] { 0, 3, 5 }), np.array(new long[] { 1, -1, 4 }) };
-            var dims = new[] { 4, 4 };
+            var dims = new long[] { 4, 4 };
             // np.ravel_multi_index(mi, (4, 4), mode=['wrap', 'clip']) -> array([ 1, 12,  7])
             engine.RavelMultiIndex(mi, dims, new List<string> { "wrap", "clip" }).Should().BeOfValues(1L, 12L, 7L);
             // mode=['wrap', None] -> ValueError: invalid entry in coordinates array (None raises on axis 1: the -1)
@@ -89,7 +89,7 @@ namespace NumSharp.Tests.Indexing
                 .Should().Throw<ValueError>().WithMessage("list of clipmodes has wrong length (1 instead of 2)");
             // np.ravel_multi_index((), (), mode=3.5) -> TypeError: clipmode not understood (a single mode is checked
             // even when there is no axis)
-            new Action(() => engine.RavelMultiIndex(Array.Empty<NDArray>(), Array.Empty<int>(), 3.5))
+            new Action(() => engine.RavelMultiIndex(Array.Empty<NDArray>(), Array.Empty<long>(), 3.5))
                 .Should().Throw<TypeError>().WithMessage("clipmode not understood");
         }
     }

@@ -572,7 +572,7 @@ namespace NumSharp.IO
         private static string PyJoin(string delimiter, string[] items)
         {
             if (delimiter is null)
-                throw new AttributeError("'NoneType' object has no attribute 'join'");
+                throw new AttributeError("'NoneType' object has no attribute 'join'", "join", null);
             for (int i = 0; i < items.Length; i++)
             {
                 if (items[i] is null)

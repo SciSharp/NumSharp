@@ -306,7 +306,8 @@ namespace NumSharp.Tests.DTypes
 
         /// <summary>
         ///     <c>np.sctypeDict</c>'s keys are NumPy's, in NumPy's order for the host's model (the C integer names differ
-        ///     between Windows and Linux), less the dtype-less classes' names and Linux's extended-precision names.
+        ///     between Windows and Linux), less the dtype-less classes' names and Linux's extended-precision names. NumPy 2.5
+        ///     removed the <c>'a'</c> key (the bytes alias deprecated in 2.0) from between <c>'bytes'</c> and <c>'int'</c>.
         /// </summary>
         [TestMethod]
         public void SctypeDict_KeysAreNumPysPerModel()
@@ -316,12 +317,12 @@ namespace NumSharp.Tests.DTypes
                           "str_", "void", "object_", "datetime64", "timedelta64", "int8", "byte", "uint8", "ubyte", "int16", "short",
                           "uint16", "ushort", "intc", "uintc", "int32", "long", "uint32", "ulong", "int64", "longlong", "uint64",
                           "ulonglong", "intp", "uintp", "double", "cdouble", "single", "csingle", "half", "bool_", "int_", "uint",
-                          "float", "complex", "object", "bytes", "a", "int", "str", "unicode" }
+                          "float", "complex", "object", "bytes", "int", "str", "unicode" }
                 : new[] { "bool", "float16", "float32", "float64", "longdouble", "complex64", "complex128", "clongdouble", "bytes_",
                           "str_", "void", "object_", "datetime64", "timedelta64", "int8", "byte", "uint8", "ubyte", "int16", "short",
                           "uint16", "ushort", "int32", "intc", "uint32", "uintc", "int64", "long", "uint64", "ulong", "longlong",
                           "ulonglong", "intp", "uintp", "double", "cdouble", "single", "csingle", "half", "bool_", "int_", "uint",
-                          "float", "complex", "object", "bytes", "a", "int", "str", "unicode", "float128", "complex256" };
+                          "float", "complex", "object", "bytes", "int", "str", "unicode", "float128", "complex256" };
             var absent = new HashSet<string> { "complex64", "csingle", "void", "object_", "object", "float128", "complex256" };
             np.sctypeDict.Keys.Should().Equal(numpy.Where(k => !absent.Contains(k)));
         }

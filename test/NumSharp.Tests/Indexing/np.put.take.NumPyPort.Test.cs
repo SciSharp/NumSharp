@@ -134,7 +134,7 @@ namespace NumSharp.Tests.Indexing
             act = () => np.put(np.zeros(0, np.int8), np.array(new[] { 0 }), 300);
             act.Should().Throw<IndexError>().WithMessage("cannot replace elements of an empty array");
             act = () => np.put(np.arange(4).astype(np.int8), np.array(new long[0]), 300);
-            act.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            act.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
 
             var a = np.arange(4);
             np.put(a, np.array(new[] { 0 }), np.array(new long[] { 7 }), null);   // None is raise
@@ -215,12 +215,12 @@ namespace NumSharp.Tests.Indexing
             Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: "bogus"), generic);
             Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: "Wrap"), misspelled);
             Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: ""), empty);
-            Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, modes: new[] { "raise" }),
+            Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: new[] { "raise" }),
                 "list of clipmodes has wrong length (1 instead of 2)");
-            Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, modes: new[] { "raise", "bogus" }), generic);
+            Refuses(() => np.ravel_multi_index(mi, new[] { 2, 2 }, mode: new[] { "raise", "bogus" }), generic);
             // The modes are converted before the coordinates are counted (arr_ravel_multi_index's order).
             Refuses(() => np.ravel_multi_index(new[] { np.array(new[] { 0 }) }, new[] { 2, 2 }, mode: "bogus"), generic);
-            np.ravel_multi_index(mi, new[] { 2, 2 }, modes: null).ToArray<long>().Should().Equal(1L);
+            np.ravel_multi_index(mi, new[] { 2, 2 }, mode: (string[])null).ToArray<long>().Should().Equal(1L);
         }
     }
 }

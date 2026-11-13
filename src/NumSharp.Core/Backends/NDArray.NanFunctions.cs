@@ -67,19 +67,20 @@ namespace NumSharp
         ///     other class (<see cref="NDMatrix"/>: <c>_replace_nan</c>, its own <c>max</c>, <c>np.nan</c> written back;
         ///     <see cref="NDCharArray"/>: <c>np.amax</c> of itself).
         /// </summary>
-        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), a tuple of axes reduced together, or
+        ///     <c>null</c> for every axis.</param>
         /// <param name="out">NumPy's <c>out=</c>: the array that receives the result, or <c>null</c>.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="initial">NumPy's <c>initial=</c>, or <c>null</c>; required with <paramref name="where"/>.</param>
         /// <param name="where">NumPy's <c>where=</c> bool mask, or <c>null</c>.</param>
         /// <returns><paramref name="out"/> itself when given (the caller's object, a matrix one included); otherwise a fresh
         ///     array, a read-only 0-d one for a flat reduction without keepdims.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of range.</exception>
         /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/> (<c>zero-size array to
         ///     reduction operation fmax which has no identity</c>); a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
         ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks>
@@ -93,7 +94,7 @@ namespace NumSharp
         ///     too (written there as <c>protected override</c>).
         /// </remarks>
         [SubclassAware]
-        protected internal virtual NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal virtual NDArray NanMax(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => FmaxFminReduce(axis, @out, keepdims, initial, @where, isMax: true);
 
         /// <summary>
@@ -101,46 +102,47 @@ namespace NumSharp
         ///     engine's <see cref="TensorEngine.NanMin"/>); a subclass overrides it with NumPy's branch for every other class,
         ///     as for <see cref="NanMax"/>.
         /// </summary>
-        /// <param name="axis">The axis to reduce (negative counts from the end), or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), a tuple of axes reduced together, or
+        ///     <c>null</c> for every axis.</param>
         /// <param name="out">NumPy's <c>out=</c>: the array that receives the result, or <c>null</c>.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="initial">NumPy's <c>initial=</c>, or <c>null</c>; required with <paramref name="where"/>.</param>
         /// <param name="where">NumPy's <c>where=</c> bool mask, or <c>null</c>.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d one for a flat reduction
         ///     without keepdims.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of range.</exception>
         /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/> (<c>zero-size array to
         ///     reduction operation fmin which has no identity</c>); a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
         ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer <paramref name="initial"/> past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
         /// <remarks><c>[SubclassAware]</c> for the reason of <see cref="NanMax"/>; like it, np.nanmin reaches the override of
         ///     any subclass, one declared outside NumSharp.dll included (written there as <c>protected override</c>).</remarks>
         [SubclassAware]
-        protected internal virtual NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal virtual NDArray NanMin(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => FmaxFminReduce(axis, @out, keepdims, initial, @where, isMax: false);
 
         /// <summary>
         ///     The base ndarray's branch of <see cref="NanMax"/> / <see cref="NanMin"/>: <c>np.fmax.reduce</c> /
         ///     <c>np.fmin.reduce</c> of this array, the engine's whole call, over plain views of a subclass out= / where=.
         /// </summary>
-        /// <param name="axis">The axis to reduce, or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes, or <c>null</c> for every axis.</param>
         /// <param name="out">The caller's <c>out=</c>, or <c>null</c>.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="initial">The caller's <c>initial=</c>, or <c>null</c>.</param>
         /// <param name="where">The caller's <c>where=</c>, or <c>null</c>.</param>
         /// <param name="isMax"><c>true</c> for fmax (np.nanmax), <c>false</c> for fmin (np.nanmin).</param>
         /// <returns>The caller's <paramref name="out"/> when the reduction wrote into it, else the engine's result.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of range.</exception>
         /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/>; a non-bool mask.</exception>
         /// <exception cref="ValueError">A read-only or misshapen out, a mask without an initial value, an initial value the
         ///     loop cannot hold.</exception>
-        /// <exception cref="OverflowException">An integer initial value past the loop's range.</exception>
+        /// <exception cref="OverflowError">An integer initial value past the loop's range.</exception>
         /// <exception cref="TypeError">Text, or a complex initial value for a real loop.</exception>
         /// <exception cref="IncorrectShapeException">The mask or the out does not broadcast.</exception>
-        private NDArray FmaxFminReduce(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where, bool isMax)
+        private NDArray FmaxFminReduce(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where, bool isMax)
         {
             // The engine computes on plain arrays: a matrix or chararray out= / where= goes in as its plain view, which the
             // lease releases after the call (a plain operand is handed through and never disposed).

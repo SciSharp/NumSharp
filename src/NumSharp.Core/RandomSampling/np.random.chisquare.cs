@@ -28,14 +28,14 @@ namespace NumSharp
         ///     NumPy's <c>legacy_chisquare</c> — <c>2 * legacy_standard_gamma(df / 2)</c> — byte-identical to
         ///     <c>np.random.RandomState(seed).chisquare</c>. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray chisquare(double df, Shape size)
+        public NDArray chisquare(double df, Shape? size)
         {
             RandomConstraints.Check(df, "df", ConstraintType.CONS_POSITIVE);
 
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new GammaSetup(df / 2.0);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -43,11 +43,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyChisquare(ref one, in setup));
+                        return NDArray.WritableScalar(LegacyChisquare(ref one, in setup));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

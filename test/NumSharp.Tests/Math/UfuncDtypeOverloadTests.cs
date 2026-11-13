@@ -160,7 +160,7 @@ namespace NumSharp.Tests.Math
             // NumPy: power(i32,i32,out=i32,dtype=f32) raises against the
             // dtype-overridden loop: "Cannot cast ufunc 'power' output from
             // dtype('float32') to dtype('int32') with casting rule 'same_kind'"
-            var ex = Assert.ThrowsException<TypeError>(() =>
+            var ex = Assert.ThrowsException<UFuncOutputCastingError>(() =>
                 np.power(np.array(new int[] { 10 }), np.array(new int[] { 8 }),
                          np.zeros(new Shape(1), np.int32), dtype: NPTypeCode.Single));
             Assert.AreEqual(
@@ -226,7 +226,7 @@ namespace NumSharp.Tests.Math
         {
             // NumPy: "Cannot cast ufunc 'floor_divide' input 0 from
             // dtype('float64') to dtype('int32') with casting rule 'same_kind'"
-            var ex = Assert.ThrowsException<TypeError>(() =>
+            var ex = Assert.ThrowsException<UFuncInputCastingError>(() =>
                 np.floor_divide(np.array(new double[] { 7.0 }), np.array(new double[] { 2.0 }),
                                 dtype: NPTypeCode.Int32));
             Assert.AreEqual(
@@ -241,17 +241,17 @@ namespace NumSharp.Tests.Math
             //   negative(f64, dtype=i32), square(f64, dtype=i32), abs(f64, dtype=i32)
             var f = np.array(new double[] { 1.5 });
 
-            var exNeg = Assert.ThrowsException<TypeError>(() => np.negative(f, dtype: NPTypeCode.Int32));
+            var exNeg = Assert.ThrowsException<UFuncInputCastingError>(() => np.negative(f, dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'negative' input from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 exNeg.Message);
 
-            var exSq = Assert.ThrowsException<TypeError>(() => np.square(f, dtype: NPTypeCode.Int32));
+            var exSq = Assert.ThrowsException<UFuncInputCastingError>(() => np.square(f, dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'square' input from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 exSq.Message);
 
-            var exAbs = Assert.ThrowsException<TypeError>(() => np.abs(f, dtype: NPTypeCode.Int32));
+            var exAbs = Assert.ThrowsException<UFuncInputCastingError>(() => np.abs(f, dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'absolute' input from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 exAbs.Message);
@@ -446,13 +446,13 @@ namespace NumSharp.Tests.Math
             Assert.ThrowsException<IncorrectTypeException>(() => np.divide(x, x, dtype: NPTypeCode.Boolean));
 
             // same_kind input casts, NumPy names ('remainder' for np.mod) + index.
-            var exMod = Assert.ThrowsException<TypeError>(() =>
+            var exMod = Assert.ThrowsException<UFuncInputCastingError>(() =>
                 np.mod(np.array(new double[] { 7.5 }), np.array(new double[] { 2.0 }), dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'remainder' input 0 from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 exMod.Message);
 
-            var exAdd = Assert.ThrowsException<TypeError>(() =>
+            var exAdd = Assert.ThrowsException<UFuncInputCastingError>(() =>
                 np.add(a, a, dtype: NPTypeCode.Boolean));
             Assert.AreEqual(
                 "Cannot cast ufunc 'add' input 0 from dtype('int32') to dtype('bool') with casting rule 'same_kind'",
@@ -592,13 +592,13 @@ namespace NumSharp.Tests.Math
             var x = np.array(new double[] { 1.5 });
 
             // positive has no bool loop — plain bool raises naming "-> None"
-            var ex1 = Assert.ThrowsException<TypeError>(() => np.positive(np.array(new[] { true })));
+            var ex1 = Assert.ThrowsException<UFuncNoLoopError>(() => np.positive(np.array(new[] { true })));
             Assert.AreEqual(
                 "ufunc 'positive' did not contain a loop with signature matching types <class 'numpy.dtypes.BoolDType'> -> None",
                 ex1.Message);
 
             // dtype=bool names both sides
-            var ex2 = Assert.ThrowsException<TypeError>(() => np.positive(x, dtype: NPTypeCode.Boolean));
+            var ex2 = Assert.ThrowsException<UFuncNoLoopError>(() => np.positive(x, dtype: NPTypeCode.Boolean));
             Assert.AreEqual(
                 "ufunc 'positive' did not contain a loop with signature matching types <class 'numpy.dtypes.Float64DType'> -> <class 'numpy.dtypes.BoolDType'>",
                 ex2.Message);
@@ -609,7 +609,7 @@ namespace NumSharp.Tests.Math
             Assert.AreEqual(0.0, ok.GetDouble(1));
 
             // non-bool dtype follows the same_kind input rule
-            var ex3 = Assert.ThrowsException<TypeError>(() => np.positive(x, dtype: NPTypeCode.Int32));
+            var ex3 = Assert.ThrowsException<UFuncInputCastingError>(() => np.positive(x, dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'positive' input from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 ex3.Message);
@@ -619,6 +619,7 @@ namespace NumSharp.Tests.Math
         // round family — NumPy's round(a, decimals=0, out=None) single shape
         // =====================================================================
 
+        /// <summary>np.around / np.round answer NumPy's one shape round(a, decimals=0, out=None) by position and by name, out returned itself.</summary>
         [TestMethod]
         public void RoundFamily_SingleNumPyShape()
         {
@@ -635,7 +636,7 @@ namespace NumSharp.Tests.Math
 
             // out reachable by name without decimals (decimals defaults to 0)
             var o2 = np.zeros(new Shape(2));
-            Assert.IsTrue(ReferenceEquals(np.round_(x, @out: o2), o2));
+            Assert.IsTrue(ReferenceEquals(np.round(x, @out: o2), o2));
             Assert.AreEqual(6.0, o2.GetDouble(1));
         }
     }

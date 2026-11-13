@@ -82,6 +82,10 @@ namespace NumSharp.Backends.Kernels
         /// <param name="rowKScratch">The nan path's partition indexes (2 per quantile).</param>
         /// <param name="rowRaw">The nan path's neighbours (2 per quantile).</param>
         /// <param name="rowWeight">The nan path's weights (2 per quantile).</param>
+        /// <param name="kExact">NumPy's own partition list for float data (<see cref="QuantileIndexes.FloatPartitionKth"/>):
+        ///     the plain path partitions a row at it with NumPy's statements when the arrangement shows (the row holds both
+        ///     zero signs, or NaNs of different bits); empty for other data.</param>
+        /// <param name="nKExact">How many positions <paramref name="kExact"/> holds.</param>
         public unsafe delegate void QuantileKernel(
             void* srcBase, void* scratchBase,
             long outer, int n,
@@ -89,7 +93,8 @@ namespace NumSharp.Backends.Kernels
             int* cellIndex, double* cellWeight,
             double* q, int nQs,
             void* dstBase, long dstOuterStride,
-            int ignoreNaN, int* rowKScratch, long* rowRaw, double* rowWeight);
+            int ignoreNaN, int* rowKScratch, long* rowRaw, double* rowWeight,
+            int* kExact, int nKExact);
 
         /// <summary>
         ///     The index plan of a quantile call (NumPy's <c>get_virtual_index</c> / <c>_get_indexes</c> / <c>_get_gamma</c>
@@ -158,7 +163,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="scratchBase">A scratch line.</param>
         /// <param name="outer">The number of lines.</param>
         /// <param name="n">The line's length (at least 1).</param>
-        /// <param name="kSorted">The plain path's ascending partition indexes.</param>
+        /// <param name="kSorted">The plain path's ascending needed partition indexes (the tie-blind select's list).</param>
         /// <param name="nKs">How many.</param>
         /// <param name="cellIndex">The plain path's per-quantile neighbours (partition-ready).</param>
         /// <param name="cellWeight">The plain path's per-quantile weights.</param>
@@ -176,6 +181,9 @@ namespace NumSharp.Backends.Kernels
         ///     by up to 1 ULP. Set only by <c>np.median</c>/<c>np.nanmedian</c>; baked into the
         ///     cached kernel via <see cref="QuantileKey.MedianMean"/>.
         /// </param>
+        /// <param name="kExact">NumPy's own partition list for float data (see <see cref="QuantileKernel"/>); null with
+        ///     <paramref name="nKExact"/> 0 for other data.</param>
+        /// <param name="nKExact">How many positions <paramref name="kExact"/> holds.</param>
         /// <exception cref="ValueError">The nan path: a line whose plan holds an index the partition refuses (NumPy's
         ///     <c>kth(=k) out of bounds (m)</c>, m the line's NaN-free length) — only with a float16 / float32 q.</exception>
         public static unsafe void Quantile(
@@ -185,12 +193,12 @@ namespace NumSharp.Backends.Kernels
             double* q, int nQs,
             void* dstBase, long dstOuterStride,
             bool ignoreNaN = false, int* rowKScratch = null, long* rowRaw = null, double* rowWeight = null,
-            bool medianMean = false)
+            bool medianMean = false, int* kExact = null, int nKExact = 0)
         {
             var key = new QuantileKey(srcType, outType, lerpType, qType, method, ignoreNaN, medianMean);
             var kernel = _quantileKernelCache.GetOrAdd(key, k => EmitQuantileKernel(k));
             kernel(srcBase, scratchBase, outer, n, kSorted, nKs, cellIndex, cellWeight, q, nQs, dstBase, dstOuterStride,
-                ignoreNaN ? 1 : 0, rowKScratch, rowRaw, rowWeight);
+                ignoreNaN ? 1 : 0, rowKScratch, rowRaw, rowWeight, kExact, nKExact);
         }
 
         /// <summary>
@@ -207,7 +215,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="inexact">Whether the data is a float array.</param>
         /// <param name="raw">Receives the raw indexes (2 per quantile).</param>
         /// <param name="weight">Receives the weights (2 per quantile).</param>
-        /// <exception cref="OverflowException">An integer q: NumPy's conversion of <c>n</c> / <c>n - 1</c> into its dtype, or
+        /// <exception cref="OverflowError">An integer q: NumPy's conversion of <c>n</c> / <c>n - 1</c> into its dtype, or
         ///     the setitem of -1 into an unsigned index array (see <see cref="QuantileIndexes.IntegerPlan{TQ}"/>).</exception>
         internal static unsafe void QuantilePlan(NPTypeCode qType, QuantileMethod method, long n, double* q, int nQs,
             bool inexact, long* raw, double* weight)
@@ -238,7 +246,7 @@ namespace NumSharp.Backends.Kernels
             //           (byte*)dstBase + i * sizeof(TOut),
             //           dstOuterStride,
             //           (int)method, ignoreNaN, medianMean,
-            //           rowKScratch, rowRaw, rowWeight, &planLength, &planCount);
+            //           rowKScratch, rowRaw, rowWeight, &planLength, &planCount, kExact, nKExact);
             //   }
             //
             // planLength / planCount are locals of the kernel (-1 / 0 at entry): the nan path keeps in them the NaN-free
@@ -277,6 +285,8 @@ namespace NumSharp.Backends.Kernels
                     typeof(int*),    // 13 rowKScratch
                     typeof(long*),   // 14 rowRaw
                     typeof(double*), // 15 rowWeight
+                    typeof(int*),    // 16 kExact
+                    typeof(int),     // 17 nKExact
                 },
                 owner: typeof(DirectILKernelGenerator),
                 skipVisibility: true);
@@ -351,6 +361,8 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Conv_U);
             il.Emit(OpCodes.Ldloca, locPlanCount);
             il.Emit(OpCodes.Conv_U);
+            il.Emit(OpCodes.Ldarg_S, (byte)16);              // kExact
+            il.Emit(OpCodes.Ldarg_S, (byte)17);              // nKExact
 
             il.Emit(OpCodes.Call, helperSpecialized);
 
@@ -448,7 +460,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="srcRow">The row.</param>
         /// <param name="scratchBase">The scratch line.</param>
         /// <param name="n">The row's length.</param>
-        /// <param name="kSorted">The plain path's partition indexes.</param>
+        /// <param name="kSorted">The plain path's needed partition indexes (the tie-blind select's list).</param>
         /// <param name="nKs">How many.</param>
         /// <param name="cellIndex">The plain path's per-quantile neighbours.</param>
         /// <param name="cellWeight">The plain path's per-quantile weights.</param>
@@ -465,9 +477,12 @@ namespace NumSharp.Backends.Kernels
         /// <param name="planLength">The kernel's record of the NaN-free length whose plan the nan path's scratch holds (-1
         ///     before the first plan of the call).</param>
         /// <param name="planCount">The kernel's record of that plan's partition-index count.</param>
+        /// <param name="kExact">The plain path's NumPy partition list for float data: a row whose bits show the
+        ///     arrangement (both zero signs, or NaNs of different bits) is partitioned there with NumPy's statements.</param>
+        /// <param name="nKExact">How many positions <paramref name="kExact"/> holds (0 for non-float data).</param>
         /// <exception cref="ValueError">The nan path's partition refuses an index of this row's plan (see
         ///     <see cref="Quantile"/>).</exception>
-        /// <exception cref="OverflowException">The nan path with an integer q: NumPy refuses the index arithmetic for this
+        /// <exception cref="OverflowError">The nan path with an integer q: NumPy refuses the index arithmetic for this
         ///     row's NaN-free length (see <see cref="QuantileIndexes.IntegerPlan{TQ}"/>).</exception>
         internal static unsafe void ProcessQuantileRow<T, TOut, TM, TQ>(
             void* srcRow, void* scratchBase, int n,
@@ -475,7 +490,7 @@ namespace NumSharp.Backends.Kernels
             double* q, int nQs,
             void* dstCell, long dstOuterStride,
             int methodInt, int ignoreNaN, int medianMean, int* rowKScratch, long* rowRaw, double* rowWeight,
-            long* planLength, int* planCount)
+            long* planLength, int* planCount, int* kExact, int nKExact)
             where T : unmanaged, IComparable<T>
             where TOut : unmanaged
             where TM : unmanaged
@@ -509,23 +524,45 @@ namespace NumSharp.Backends.Kernels
             //    scan (a NaN lane fails v==v); Half has no Vector arithmetic so stays scalar.
             //    The first NaN's position is kept: NumPy fills a NaN row with `arr[-1, ...]`, the data's own NaN (its sign
             //    and payload, e.g. np.nan's positive quiet NaN), which an out= receives bit for bit.
+            //    The same read notes whether the row holds BOTH zero signs: equal values have equal bits except +0.0 and
+            //    -0.0, so only such a row shows the partition's arrangement (see step 3).
             int nanAt = -1;
-            if (typeof(T) == typeof(double))     nanAt = FirstNaN((double*)scratch, n);
-            else if (typeof(T) == typeof(float)) nanAt = FirstNaN((float*)scratch, n);
-            else if (typeof(T) == typeof(Half))
-            {
-                var p = (Half*)scratch;
-                for (int i = 0; i < n; i++) { if (Half.IsNaN(p[i])) { nanAt = i; break; } }
-            }
+            bool mixedZeros = false;
+            if (typeof(T) == typeof(double))     nanAt = FirstNaN((double*)scratch, n, out mixedZeros);
+            else if (typeof(T) == typeof(float)) nanAt = FirstNaN((float*)scratch, n, out mixedZeros);
+            else if (typeof(T) == typeof(Half))  nanAt = FirstNaN((Half*)scratch, n, out mixedZeros);
             bool hasNaN = nanAt >= 0;
             // The row's NaN as a double (a float32 / float16 NaN widens with its sign and payload), read before the
-            // partition moves it.
-            double rowNaN = hasNaN ? ToDouble(scratch[nanAt]) : 0;
+            // partition moves it. NumPy answers `arr[-1, ...]` AFTER its partition: when the row's NaNs differ in sign or
+            // payload, which one ends the line is decided by the partition's swaps, so the row is partitioned as NumPy
+            // does (its NaN-aware introselect_ over the call's kth list) and the last element read; NaNs that all share
+            // their bits need no partition (any of them is the answer).
+            double rowNaN = 0;
+            if (hasNaN)
+            {
+                if (NaNBitsDiffer(scratch, nanAt, n))
+                {
+                    QuickSelect.PartitionAtManyNaN(scratch, n, kExact, nKExact);
+                    rowNaN = ToDouble(scratch[n - 1]);
+                }
+                else
+                    rowNaN = ToDouble(scratch[nanAt]);
+            }
 
             // 3. Partition unless NaN-tainted (saves work — the answer will be NaN).
             //    n==1 is a no-op (already sorted).
+            //    The cells read only kth positions, whose VALUES every correct partition agrees on; their BITS can differ
+            //    only between +0.0 and -0.0. A row holding both zero signs (outside np.median, whose mean from +0.0 erases
+            //    the sign) is partitioned as NumPy does it: its introselect_ at its own kth list (kExact), which decides
+            //    which zero each neighbour reads (QB43). Every other row takes the tie-blind select at the needed
+            //    positions alone (a short row insertion-sorted whole): the same bits, at the speed the family had before.
             if (!hasNaN && n > 1)
-                QuickSelect.PartitionAtMany(scratch, n, kSorted, nKs);
+            {
+                if (mixedZeros && !medianMeanB)
+                    QuickSelect.PartitionAtMany(scratch, n, kExact, nKExact);
+                else
+                    QuickSelect.PartitionAtManyTieBlind(scratch, n, kSorted, nKs);
+            }
 
             // 4. Emit one cell per q, from the call's plan (the same for every row: n is the same).
             for (int j = 0; j < nQs; j++)
@@ -538,48 +575,189 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        ///     Whether a row's NaNs differ in their bits (sign or payload) from its first NaN, so that WHICH NaN NumPy's
+        ///     partition leaves at the row's end (the value a NaN row answers) depends on the partition's swaps.
+        /// </summary>
+        /// <typeparam name="T">The data's element type (only the float types hold NaN; any other type answers false).</typeparam>
+        /// <param name="p">The row.</param>
+        /// <param name="first">The position of the row's first NaN.</param>
+        /// <param name="n">The row's length.</param>
+        /// <returns>True when some later NaN has other bits than the first one.</returns>
+        private static unsafe bool NaNBitsDiffer<T>(T* p, int first, int n) where T : unmanaged
+        {
+            // The typeof tests fold per instantiation; x != x is true exactly for NaN.
+            if (typeof(T) == typeof(double))
+            {
+                var d = (long*)p;
+                long bits = d[first];
+                for (int i = first + 1; i < n; i++)
+                {
+                    double v = ((double*)p)[i];
+                    if (v != v && d[i] != bits) return true;
+                }
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                var f = (int*)p;
+                int bits = f[first];
+                for (int i = first + 1; i < n; i++)
+                {
+                    float v = ((float*)p)[i];
+                    if (v != v && f[i] != bits) return true;
+                }
+            }
+            else if (typeof(T) == typeof(Half))
+            {
+                var h = (ushort*)p;
+                ushort bits = h[first];
+                for (int i = first + 1; i < n; i++)
+                    if ((h[i] & 0x7FFF) > 0x7C00 && h[i] != bits) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         ///     SIMD "where is this row's first NaN?" via <c>Vector&lt;T&gt;</c> self-equality —
         ///     a NaN lane fails <c>v == v</c>, so <see cref="System.Numerics.Vector.EqualsAll{T}"/>
         ///     turning false flags the vector, whose lanes are then scanned. Early-exits on the first NaN vector, scalar tail
         ///     for the remainder. This is the plain-path (non-<c>nan*</c>) prescan that gates
         ///     whether the row partitions at all; now that the partition itself is ~3× faster it
-        ///     is a meaningful share of a float median, so it is vectorized to match.
+        ///     is a meaningful share of a float median, so it is vectorized to match. The same read notes whether the row
+        ///     holds a zero, and a row that does has its zero signs read by a second scan: a row holding both <c>+0.0</c>
+        ///     and <c>-0.0</c> is the one row whose partition arrangement shows in its result bits.
         /// </summary>
         /// <param name="p">The row.</param>
         /// <param name="n">Its length.</param>
+        /// <param name="mixedZeros">True when the NaN-free row holds both a <c>+0.0</c> and a <c>-0.0</c>; false otherwise,
+        ///     and always false for a row holding a NaN (its scan stops at the NaN).</param>
         /// <returns>The index of the first NaN, or -1 when there is none.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe int FirstNaN(float* p, int n)
+        private static unsafe int FirstNaN(float* p, int n, out bool mixedZeros)
         {
             int i = 0;
             int w = System.Numerics.Vector<float>.Count;
+            // Only "was there a zero" is accumulated in the hot loop (one compare and one or per vector); the signs are
+            // read by a second scan of a row that held one (MixedZeroSigns), which random data never pays.
+            var zeros = System.Numerics.Vector<int>.Zero;
             if (System.Numerics.Vector.IsHardwareAccelerated && n >= w)
             {
                 for (; i <= n - w; i += w)
                 {
                     var v = Unsafe.ReadUnaligned<System.Numerics.Vector<float>>(p + i);
                     if (!System.Numerics.Vector.EqualsAll(v, v)) break;   // the scalar loop below finds the lane
+                    zeros |= System.Numerics.Vector.Equals(v, System.Numerics.Vector<float>.Zero);
                 }
             }
-            for (; i < n; i++) if (float.IsNaN(p[i])) return i;
+            bool anyZero = zeros != System.Numerics.Vector<int>.Zero;
+            for (; i < n; i++)
+            {
+                float x = p[i];
+                if (float.IsNaN(x))
+                {
+                    mixedZeros = false;
+                    return i;
+                }
+                anyZero |= x == 0;
+            }
+            mixedZeros = anyZero && MixedZeroSigns((int*)p, n);
             return -1;
         }
 
-        /// <inheritdoc cref="FirstNaN(float*, int)"/>
+        /// <inheritdoc cref="FirstNaN(float*, int, out bool)"/>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe int FirstNaN(double* p, int n)
+        private static unsafe int FirstNaN(double* p, int n, out bool mixedZeros)
         {
             int i = 0;
             int w = System.Numerics.Vector<double>.Count;
+            // As the float32 form: one compare and one or per vector, the signs only for a row that held a zero.
+            var zeros = System.Numerics.Vector<long>.Zero;
             if (System.Numerics.Vector.IsHardwareAccelerated && n >= w)
             {
                 for (; i <= n - w; i += w)
                 {
                     var v = Unsafe.ReadUnaligned<System.Numerics.Vector<double>>(p + i);
                     if (!System.Numerics.Vector.EqualsAll(v, v)) break;   // the scalar loop below finds the lane
+                    zeros |= System.Numerics.Vector.Equals(v, System.Numerics.Vector<double>.Zero);
                 }
             }
-            for (; i < n; i++) if (double.IsNaN(p[i])) return i;
+            bool anyZero = zeros != System.Numerics.Vector<long>.Zero;
+            for (; i < n; i++)
+            {
+                double x = p[i];
+                if (double.IsNaN(x))
+                {
+                    mixedZeros = false;
+                    return i;
+                }
+                anyZero |= x == 0;
+            }
+            mixedZeros = anyZero && MixedZeroSigns((long*)p, n);
+            return -1;
+        }
+
+        /// <summary>
+        ///     Whether a NaN-free float32 row (read as its bits) holds both <c>+0.0</c> (0x00000000) and <c>-0.0</c>
+        ///     (0x80000000): the second scan of <see cref="FirstNaN(float*, int, out bool)"/>, run only for a row that held
+        ///     a zero, stopping as soon as it has seen both.
+        /// </summary>
+        /// <param name="bits">The row's bits.</param>
+        /// <param name="n">The row's length.</param>
+        /// <returns>True when both zero signs occur.</returns>
+        private static unsafe bool MixedZeroSigns(int* bits, int n)
+        {
+            bool neg = false, pos = false;
+            for (int i = 0; i < n; i++)
+            {
+                int b = bits[i];
+                if (b == 0) pos = true;
+                else if (b == int.MinValue) neg = true;
+                else continue;
+                if (neg && pos) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        ///     Whether a NaN-free float64 row (read as its bits) holds both <c>+0.0</c> and <c>-0.0</c> (see
+        ///     <see cref="MixedZeroSigns(int*, int)"/>).
+        /// </summary>
+        /// <param name="bits">The row's bits.</param>
+        /// <param name="n">The row's length.</param>
+        /// <returns>True when both zero signs occur.</returns>
+        private static unsafe bool MixedZeroSigns(long* bits, int n)
+        {
+            bool neg = false, pos = false;
+            for (int i = 0; i < n; i++)
+            {
+                long b = bits[i];
+                if (b == 0) pos = true;
+                else if (b == long.MinValue) neg = true;
+                else continue;
+                if (neg && pos) return true;
+            }
+            return false;
+        }
+
+        /// <inheritdoc cref="FirstNaN(float*, int, out bool)"/>
+        /// <remarks>float16 has no <c>Vector&lt;T&gt;</c> arithmetic: one scalar pass over the bits (a NaN has an all-ones
+        ///     exponent and a nonzero mantissa; the zeros are 0x0000 and 0x8000).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe int FirstNaN(Half* p, int n, out bool mixedZeros)
+        {
+            var h = (ushort*)p;
+            bool neg = false, pos = false;
+            for (int i = 0; i < n; i++)
+            {
+                ushort x = h[i];
+                if ((x & 0x7FFF) > 0x7C00)
+                {
+                    mixedZeros = false;
+                    return i;
+                }
+                if (x == 0) pos = true;
+                else if (x == 0x8000) neg = true;
+            }
+            mixedZeros = neg && pos;
             return -1;
         }
 
@@ -608,7 +786,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="planCount">The number of partition indexes of that plan in <paramref name="rowKScratch"/>.</param>
         /// <exception cref="ValueError">The slice's partition refuses an index (NumPy's <c>kth(=k) out of bounds (m)</c>):
         ///     only a float16 / float32 q over a slice long enough for q's rounding to reach m (or NaN).</exception>
-        /// <exception cref="OverflowException">An integer q whose index arithmetic NumPy refuses for this slice's length
+        /// <exception cref="OverflowError">An integer q whose index arithmetic NumPy refuses for this slice's length
         ///     (see <see cref="QuantileIndexes.IntegerPlan{TQ}"/>).</exception>
         /// <remarks>
         ///     A slice's plan depends on nothing but its NaN-free length m, so the slices of one call that share m share
@@ -625,26 +803,18 @@ namespace NumSharp.Backends.Kernels
             where TM : unmanaged
             where TQ : unmanaged
         {
-            // Compact NaNs out (floats only — JIT folds the guard for int specializations).
+            // NumPy's _remove_nan_1d (floats only — JIT folds the guard for int specializations): the m = n - k values
+            // that remain are the first m elements, each NaN among them replaced, in order, by the non-NaN values of the
+            // last k elements (`arr1d[s[:enonan.size]] = enonan`). Not a stable compaction: the partition below starts from
+            // this order, and its swaps decide which zero of a ±0 tie the neighbours read.
             int m = n;
+            bool mixedZeros = false;
             if (typeof(T) == typeof(double))
-            {
-                var p = (double*)scratch; int w = 0;
-                for (int i = 0; i < n; i++) { double v = p[i]; if (!double.IsNaN(v)) p[w++] = v; }
-                m = w;
-            }
+                m = RemoveNaN1d((double*)scratch, n, out mixedZeros);
             else if (typeof(T) == typeof(float))
-            {
-                var p = (float*)scratch; int w = 0;
-                for (int i = 0; i < n; i++) { float v = p[i]; if (!float.IsNaN(v)) p[w++] = v; }
-                m = w;
-            }
+                m = RemoveNaN1d((float*)scratch, n, out mixedZeros);
             else if (typeof(T) == typeof(Half))
-            {
-                var p = (Half*)scratch; int w = 0;
-                for (int i = 0; i < n; i++) { Half v = p[i]; if (!Half.IsNaN(v)) p[w++] = v; }
-                m = w;
-            }
+                m = RemoveNaN1d((Half*)scratch, n, out mixedZeros);
 
             if (m == 0)
             {
@@ -671,32 +841,149 @@ namespace NumSharp.Backends.Kernels
                 else
                     QuantileIndexes.CheckInterpolationKth(rowRaw, 2 * nQs, m);
 
-                // Partition-ready indexes (NumPy's -1 is the last element), kept per quantile in rowRaw for the cells and
-                // sorted + deduplicated into rowKScratch so PartitionAtMany places every needed index in one pass.
-                int cnt = 0;
+                // Partition-ready indexes (NumPy's -1 is the last element), kept per quantile in rowRaw for the cells, and
+                // NumPy's own partition list for an m-element float line in rowKScratch (its 0 and -1, or the median's
+                // positions: QuantileIndexes.FloatPartitionKth), sorted without repeats.
                 for (int i = 0; i < 2 * nQs; i++)
                 {
                     long k = rowRaw[i];
                     if (k < 0) k += m;
                     rowRaw[i] = k;
-                    rowKScratch[cnt++] = (int)k;
                 }
-                new Span<int>(rowKScratch, cnt).Sort();
-                u = 0;
-                for (int i = 0; i < cnt; i++)
-                    if (u == 0 || rowKScratch[u - 1] != rowKScratch[i]) rowKScratch[u++] = rowKScratch[i];
+                u = QuantileIndexes.FloatPartitionKth(rowRaw, 2 * nQs, m, DefaultEngine.IsDiscrete(method), medianMean,
+                    rowKScratch);
 
                 // Recorded only now: a plan whose validation threw never reaches here.
                 *planLength = m;
                 *planCount = u;
             }
 
+            // As the plain path: NumPy's statements at its list when the slice holds both zero signs (and is not a
+            // median, whose mean erases the sign), the tie-blind select otherwise (the same bits).
             if (m > 1)
-                QuickSelect.PartitionAtMany(scratch, m, rowKScratch, u);
+            {
+                if (mixedZeros && !medianMean)
+                    QuickSelect.PartitionAtMany(scratch, m, rowKScratch, u);
+                else
+                    QuickSelect.PartitionAtManyTieBlind(scratch, m, rowKScratch, u);
+            }
 
             for (int j = 0; j < nQs; j++)
                 WriteCell<T, TOut, TM>(scratch, (int)rowRaw[2 * j], (int)rowRaw[2 * j + 1], rowWeight[2 * j],
                     rowWeight[2 * j + 1], method, medianMean, dst + (long)j * dstOuterStride);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_remove_nan_1d</c> in place over a float64 row: with k NaNs, the row's first <c>n - k</c>
+        ///     elements remain, and each NaN among them (in order) takes the next non-NaN value of the last k elements (in
+        ///     order). An all-NaN row keeps nothing; a NaN-free row keeps everything as it is.
+        /// </summary>
+        /// <param name="p">The row (the kernel's scratch copy).</param>
+        /// <param name="n">The row's length.</param>
+        /// <param name="mixedZeros">True when the row's values include both a <c>+0.0</c> and a <c>-0.0</c> (the one case
+        ///     where the partition's arrangement shows in the result bits).</param>
+        /// <returns>The number of values that remain, <c>n - k</c>.</returns>
+        /// <remarks>
+        ///     The head's NaNs number exactly as many as the tail's non-NaN values (both are <c>k</c> minus the tail's
+        ///     NaNs), so NumPy's <c>arr1d[s[:enonan.size]] = enonan</c> fills every head NaN; the tail scan below never
+        ///     runs past the row.
+        /// </remarks>
+        private static unsafe int RemoveNaN1d(double* p, int n, out bool mixedZeros)
+        {
+            int k = 0;
+            bool neg = false, pos = false;
+            for (int i = 0; i < n; i++)
+            {
+                double x = p[i];
+                if (x != x) k++;
+                else if (x == 0)
+                {
+                    if (BitConverter.DoubleToInt64Bits(x) < 0) neg = true;
+                    else pos = true;
+                }
+            }
+            mixedZeros = neg && pos;
+            int m = n - k;
+            if (k == 0 || m == 0)
+                return m;
+            int j = m;
+            for (int i = 0; i < m; i++)
+            {
+                if (p[i] != p[i])
+                {
+                    while (p[j] != p[j]) j++;
+                    p[i] = p[j++];
+                }
+            }
+            return m;
+        }
+
+        /// <summary>NumPy's <c>_remove_nan_1d</c> in place over a float32 row (see <see cref="RemoveNaN1d(double*, int, out bool)"/>).</summary>
+        /// <param name="p">The row.</param>
+        /// <param name="n">The row's length.</param>
+        /// <param name="mixedZeros">True when the row's values include both zero signs.</param>
+        /// <returns>The number of values that remain.</returns>
+        private static unsafe int RemoveNaN1d(float* p, int n, out bool mixedZeros)
+        {
+            int k = 0;
+            bool neg = false, pos = false;
+            for (int i = 0; i < n; i++)
+            {
+                float x = p[i];
+                if (x != x) k++;
+                else if (x == 0)
+                {
+                    if (BitConverter.SingleToInt32Bits(x) < 0) neg = true;
+                    else pos = true;
+                }
+            }
+            mixedZeros = neg && pos;
+            int m = n - k;
+            if (k == 0 || m == 0)
+                return m;
+            int j = m;
+            for (int i = 0; i < m; i++)
+            {
+                if (p[i] != p[i])
+                {
+                    while (p[j] != p[j]) j++;
+                    p[i] = p[j++];
+                }
+            }
+            return m;
+        }
+
+        /// <summary>NumPy's <c>_remove_nan_1d</c> in place over a float16 row (see <see cref="RemoveNaN1d(double*, int, out bool)"/>).</summary>
+        /// <param name="p">The row.</param>
+        /// <param name="n">The row's length.</param>
+        /// <param name="mixedZeros">True when the row's values include both zero signs (0x0000 and 0x8000).</param>
+        /// <returns>The number of values that remain.</returns>
+        private static unsafe int RemoveNaN1d(Half* p, int n, out bool mixedZeros)
+        {
+            var h = (ushort*)p;
+            int k = 0;
+            bool neg = false, pos = false;
+            for (int i = 0; i < n; i++)
+            {
+                ushort x = h[i];
+                if ((x & 0x7FFF) > 0x7C00) k++;
+                else if (x == 0) pos = true;
+                else if (x == 0x8000) neg = true;
+            }
+            mixedZeros = neg && pos;
+            int m = n - k;
+            if (k == 0 || m == 0)
+                return m;
+            int j = m;
+            for (int i = 0; i < m; i++)
+            {
+                if ((h[i] & 0x7FFF) > 0x7C00)
+                {
+                    while ((h[j] & 0x7FFF) > 0x7C00) j++;
+                    h[i] = h[j++];
+                }
+            }
+            return m;
         }
 
         // ── per-cell write (JIT-specialized) ────────────────────────────────────
@@ -744,10 +1031,10 @@ namespace NumSharp.Backends.Kernels
         ///     <b>mean</b> <c>(a+b)/2</c> at the output precision — NumPy's <c>np.median</c> rule,
         ///     which differs from the quantile <c>_lerp</c> at q=0.5 by up to 1 ULP. γ = 0 (odd, a
         ///     single central sample) yields that sample, equal to NumPy's value. Set only by
-        ///     <c>np.median</c>/<c>np.nanmedian</c>; the discrete methods never see it. Open gap: NumPy's
-        ///     median is <c>np.mean</c> of the central sample(s), i.e. <c>(+0.0 + a [+ b]) / n</c>, so a
-        ///     <c>-0.0</c> result there is <c>+0.0</c>; both branches here keep the <c>-0.0</c>
-        ///     (pinned by <c>OpenBugsReductionTests.Median_OfNegativeZeros_IsPositiveZero</c>).
+        ///     <c>np.median</c>/<c>np.nanmedian</c>; the discrete methods never see it. Both branches start
+        ///     from NumPy's add identity: its median is <c>np.mean</c> of the central sample(s), i.e.
+        ///     <c>(+0.0 + a [+ b]) / n</c>, so a <c>-0.0</c> result there is <c>+0.0</c>
+        ///     (<c>OpenBugsReductionTests.Median_OfNegativeZeros_IsPositiveZero</c>).
         /// </param>
         /// <param name="dst">The cell.</param>
         private static unsafe void WriteCell<T, TOut, TM>(
@@ -844,12 +1131,16 @@ namespace NumSharp.Backends.Kernels
 
             if (medianMean)
             {
+                // np.median is np.mean of the central sample(s): add.reduce starts its accumulator at the add identity
+                // +0.0 (`acc = 0.0; acc += pairwise_sum(...)`), so a sum that is -0.0 (every central sample a -0.0) becomes
+                // +0.0 before the division: `(0 + (a + b)) / 2`, and `0 + a` for an odd count (whose / 1 is exact). The
+                // `0 +` changes nothing else (a NaN keeps its bits); it is written out, never folded, so the JIT keeps it.
                 if (typeof(T) == typeof(float) && typeof(TOut) == typeof(float))
                 {
                     // np.median: mean of the two central f32, in float32 (an overflowing sum stays inf, as NumPy's).
                     float prev = ((float*)scratch)[prevIdx];
                     float next = ((float*)scratch)[nextIdx];
-                    *(float*)dst = hi ? (prev + next) / 2f : prev;
+                    *(float*)dst = hi ? (0f + (prev + next)) / 2f : 0f + prev;
                     return;
                 }
                 if (typeof(T) == typeof(Half) && typeof(TOut) == typeof(Half))
@@ -858,13 +1149,13 @@ namespace NumSharp.Backends.Kernels
                     // sum-then-halve rounding to f16 twice — sum16 = (Half)(a+b), then /2 in f16.
                     float prev = (float)((Half*)scratch)[prevIdx];
                     float next = (float)((Half*)scratch)[nextIdx];
-                    if (hi) { Half sum = (Half)(prev + next); *(Half*)dst = (Half)((float)sum / 2f); }
-                    else    { *(Half*)dst = (Half)prev; }   // odd: the single central f16 sample
+                    if (hi) { Half sum = (Half)(0f + (prev + next)); *(Half*)dst = (Half)((float)sum / 2f); }
+                    else    { *(Half*)dst = (Half)(0f + prev); }   // odd: the single central f16 sample, from +0.0
                     return;
                 }
                 LoadLerpOperands(scratch, prevIdx, nextIdx, out double mprev, out double mnext, out _);
                 // np.median: mean of the two central values in float64
-                WriteAsTOut(hi ? (mprev + mnext) / 2.0 : mprev, dst);
+                WriteAsTOut(hi ? (0.0 + (mprev + mnext)) / 2.0 : 0.0 + mprev, dst);
                 return;
             }
 

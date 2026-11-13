@@ -155,7 +155,7 @@ public class PiecewiseTests
     {
         var x = np.array(new sbyte[] { 1, 2 });                 // int8
         Action act = () => np.piecewise(x, new[] { np.array(new[] { true, false }) }, new object[] { 300 });
-        act.Should().Throw<OverflowException>()
+        act.Should().Throw<OverflowError>()
             .WithMessage("Python integer 300 out of bounds for int8");
     }
 

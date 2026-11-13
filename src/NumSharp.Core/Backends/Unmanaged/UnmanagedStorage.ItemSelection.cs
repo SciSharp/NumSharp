@@ -190,19 +190,32 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     <c>PyArray_TakeFrom</c>'s three checks of a caller's <paramref name="out"/>, in NumPy's order: the shape (dims
-        ///     only, any layout), the safe cast of <paramref name="out"/>'s dtype to <paramref name="a"/>'s
-        ///     (<c>PyArray_FromArray(out, a.dtype, CARRAY | WRITEBACKIFCOPY)</c> casts the result back into it), and the
-        ///     writeability of the write-back base.
+        ///     <c>PyArray_TakeFrom</c>'s checks of a caller's <paramref name="out"/> (NumPy 2.5), in NumPy's order: the shape
+        ///     (dims only, any layout); the FORCECAST copy <c>PyArray_FromArray(out, a.dtype, CARRAY | WRITEBACKIFCOPY |
+        ///     FORCECAST)</c> makes of a <paramref name="out"/> of another dtype, whose cast of out's CURRENT contents into
+        ///     <paramref name="a"/>'s dtype can fail for text; and the writeability of the write-back base. The gather then
+        ///     writes the result back through an unsafe cast. Shared by <c>np.take</c> / <c>np.compress</c> and the quantile
+        ///     family's selecting methods (<c>take(arr, idx, axis=0, out=out)</c>).
         /// </summary>
         /// <param name="a">The source, whose dtype the gather writes.</param>
         /// <param name="out">The caller's destination.</param>
         /// <param name="outDims">The natural result's dimensions.</param>
-        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>), or a
-        ///     read-only <paramref name="out"/> (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
-        /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast to <paramref name="a"/>'s under
-        ///     <c>safe</c>.</exception>
-        private static void ValidateTakeOut(NDArray a, NDArray @out, long[] outDims)
+        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>); a text
+        ///     <paramref name="out"/> whose contents do not parse as <paramref name="a"/>'s numbers (<c>invalid literal for
+        ///     int() with base 10: np.str_('')</c>, <c>could not convert string to float: ...</c>: the copy casts them, even
+        ///     though the gather overwrites every element); or a read-only <paramref name="out"/> (<c>WRITEBACKIFCOPY base is
+        ///     read-only</c>, after that copy).</exception>
+        /// <exception cref="UnicodeEncodeError">A <c>U</c> / <c>StringDType</c> out holding non-ASCII text when
+        ///     <paramref name="a"/> is fixed-width bytes (the copy's encode).</exception>
+        /// <remarks>
+        ///     NumPy 2.4 checked the WRONG direction instead — a SAFE cast of out's dtype to the source's, a TypeError
+        ///     (<c>Cannot cast array data from dtype('float64') to dtype('float32') according to the rule 'safe'</c>) for
+        ///     every narrower source. NumPy 2.5 dropped it (gh-30615) and checks the right direction, the source's dtype to
+        ///     out's under same_kind, only for a DeprecationWarning (<c>Implicit casting of output to a different kind is
+        ///     deprecated</c>), which NumSharp has no channel for: a float source taken into an int out is written through
+        ///     the unsafe cast, as NumPy writes it.
+        /// </remarks>
+        internal static void ValidateTakeOut(NDArray a, NDArray @out, long[] outDims)
         {
             // PyArray_CompareLists(PyArray_DIMS(out), shape, nd): the dimensions alone, NumPy's text verbatim.
             var dims = @out.Shape.dimensions ?? Array.Empty<long>();
@@ -212,24 +225,17 @@ namespace NumSharp.Backends
             if (!sameShape)
                 throw new ValueError("output array does not match result of ndarray.take");
 
-            if (a.typecode == NPTypeCode.String || @out.typecode == NPTypeCode.String)
+            // The FORCECAST copy of an out of another descriptor: NumPy casts out's contents into the source's dtype
+            // before the gather overwrites them. Only a text out can fail that cast (a parse into a number, an encode into
+            // bytes), so only a text out of another descriptor is cast here — for its errors; the copy itself is dropped.
+            if (@out.typecode == NPTypeCode.String && !@out.HasSameElementType(a))
             {
-                // A string's width is part of its dtype: the rule is checked between DESCRIPTORS (a <U2 out of a <U4
-                // take is fine — <U2 → <U4 is safe — and the unsafe write-back truncates, as NumPy's does).
-                if (!@out.HasSameElementType(a) && !DTypeCasting.CanCastTypeTo(@out.dtype, a.dtype, NumSharp.Backends.Iteration.NPY_CASTING.NPY_SAFE_CASTING))
-                    throw new TypeError(
-                        $"Cannot cast array data from {@out.dtype.ToString(true)} to {a.dtype.ToString(true)} according to the rule 'safe'");
-            }
-            else if (@out.GetTypeCode != a.GetTypeCode &&
-                !CanCastTypeCodes(@out.GetTypeCode, a.GetTypeCode, "safe"))
-            {
-                throw new TypeError(
-                    $"Cannot cast array data from dtype('{@out.GetTypeCode.AsNumpyDtypeName()}') to dtype('{a.GetTypeCode.AsNumpyDtypeName()}') according to the rule 'safe'");
+                using var forceCast = @out.astype(a.dtype, copy: true);
             }
 
-            // A read-only out refuses LAST of the three (probed 2.4.2: shape, then castability, then this) — with take's
-            // own text: the writeability check of PyArray_FromArray(..., WRITEBACKIFCOPY) names the writeback base, not
-            // the "output array" the elementwise ufuncs name.
+            // A read-only out refuses after the copy (PyArray_FromArray's SetWritebackIfCopyBase runs once the copy is
+            // made) — with take's own text: the writeability check names the writeback base, not the "output array" the
+            // elementwise ufuncs name.
             NumSharpException.ThrowIfNotWriteable(@out.Shape, "WRITEBACKIFCOPY base");
         }
 
@@ -426,7 +432,7 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">An index dtype that does not cast to int64 under <c>safe</c>.</exception>
         /// <exception cref="IndexError">A non-empty <paramref name="indices"/> into an empty <paramref name="a"/>, or an
         ///     out-of-bounds index under raise.</exception>
-        /// <exception cref="OverflowException">A C# literal out of <paramref name="a"/>'s range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of <paramref name="a"/>'s range.</exception>
         /// <exception cref="NotSupportedException">No IL put kernel exists for the element width.</exception>
         /// <remarks>
         ///     <para>
@@ -515,7 +521,7 @@ namespace NumSharp.Backends
         /// <param name="a">The target, whose dtype the values take.</param>
         /// <returns>The caller's array when it already is C-contiguous of <paramref name="a"/>'s element type, else a new
         ///     array (released by the caller's scope).</returns>
-        /// <exception cref="OverflowException">A C# literal out of <paramref name="a"/>'s range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of <paramref name="a"/>'s range.</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer array.</exception>
         /// <exception cref="TypeError">A complex literal into a real array.</exception>
         /// <remarks>
@@ -618,7 +624,7 @@ namespace NumSharp.Backends
         ///     <paramref name="a"/> is an integer (or <c>decimal</c>) array.</exception>
         /// <exception cref="ValueError">See <see cref="np.putmask(NDArray, NDArray, NDArray)"/>; a list that is ragged, a
         ///     NaN of a list into an integer array, a text of a list that does not parse.</exception>
-        /// <exception cref="OverflowException">A Python int of a list outside an integer array's range (NumPy's
+        /// <exception cref="OverflowError">A Python int of a list outside an integer array's range (NumPy's
         ///     OverflowError).</exception>
         /// <exception cref="InvalidCastException">An ndarray of values that does not cast 'safely'.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
@@ -762,7 +768,7 @@ namespace NumSharp.Backends
         ///     <paramref name="arr"/> is an integer (or <c>decimal</c>) array.</exception>
         /// <exception cref="ValueError">See <see cref="np.place(NDArray, NDArray, NDArray)"/>; a list that is ragged, a NaN
         ///     of a list into an integer array, a text of a list that does not parse.</exception>
-        /// <exception cref="OverflowException">A Python int of a list outside an integer array's range (NumPy's
+        /// <exception cref="OverflowError">A Python int of a list outside an integer array's range (NumPy's
         ///     OverflowError).</exception>
         /// <exception cref="InvalidCastException">An ndarray of values that does not cast 'safely'.</exception>
         /// <exception cref="UnicodeEncodeError">Text values that are not ASCII into an <c>S</c> array.</exception>
@@ -871,7 +877,7 @@ namespace NumSharp.Backends
         ///     error).</exception>
         /// <exception cref="TypeError">None (or a None item of a list) into an integer or decimal array (<c>int()</c>'s
         ///     text), an item the descriptor cannot convert.</exception>
-        /// <exception cref="OverflowException">A Python int of a list outside an integer array's range.</exception>
+        /// <exception cref="OverflowError">A Python int of a list outside an integer array's range.</exception>
         /// <exception cref="ValueError">A ragged list, a NaN item into an integer array, a text item that does not
         ///     parse.</exception>
         private static NDArray ValuesLikeNumPy(object values, NDArray target)
@@ -910,7 +916,7 @@ namespace NumSharp.Backends
         ///     exactly; owned by the calling scope.</returns>
         /// <exception cref="TypeError">An item the descriptor cannot convert (None into an integer array, a complex number
         ///     into a real one).</exception>
-        /// <exception cref="OverflowException">A Python int outside an integer array's range.</exception>
+        /// <exception cref="OverflowError">A Python int outside an integer array's range.</exception>
         /// <exception cref="ValueError">A ragged list, a NaN into an integer array, a text that does not parse.</exception>
         /// <exception cref="UnicodeEncodeError">A text item that is not ASCII into an <c>S</c> array.</exception>
         /// <remarks>
@@ -1108,7 +1114,7 @@ namespace NumSharp.Backends
         /// <returns>The converted values (C-contiguous, the target's dtype), or null when <paramref name="values"/> already
         ///     holds the target's element type.</returns>
         /// <exception cref="InvalidCastException">An array of values does not cast 'safely' (NumPy's TypeError text).</exception>
-        /// <exception cref="OverflowException">A C# literal out of the target's integer range (NumPy's OverflowError).</exception>
+        /// <exception cref="OverflowError">A C# literal out of the target's integer range (NumPy's OverflowError).</exception>
         /// <exception cref="ValueError">A float NaN literal into an integer target.</exception>
         /// <exception cref="TypeError">A complex literal into a real target.</exception>
         /// <exception cref="ValueError">A text value that does not parse into a numeric target (NumPy's <c>int()</c> /
@@ -1199,8 +1205,9 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>PyArray_Repeat</c> (<c>item_selection.c</c>) for a scalar count: the count's sign, the
-        ///     <c>StringDType</c> route, then the flat or the along-axis tiling. The body of
-        ///     <see cref="np.repeat(NDArray, long, int?)"/> once its class boundaries and its null check have run.
+        ///     <c>StringDType</c> route, then the flat or the along-axis tiling. It was the body of the former
+        ///     <c>np.repeat(NDArray, long, int?)</c>; since API-parity batch 3 every np.repeat call takes the per-element
+        ///     route (<see cref="Repeat(NDArray, NDArray, int?)"/>), whose 0-d count runs the same tiling kernel.
         /// </summary>
         /// <param name="a">The source array, not null; any layout (the tiling reads a C-contiguous copy or view).</param>
         /// <param name="repeats">How many times each element repeats.</param>
@@ -1492,8 +1499,20 @@ namespace NumSharp.Backends
             for (int i = axis + 1; i < dims.Length; i++) nel *= dims[i];
         }
 
-        // Materializes the per-j repeat counts as a long[] and validates non-negative.
-        // Returns the total output size along the axis.
+        /// <summary>
+        ///     Materializes the per-element repeat counts of <c>PyArray_Repeat</c> as a <c>long[]</c> (or the one broadcast
+        ///     count) and checks their signs; the flat and the along-axis routes share it.
+        /// </summary>
+        /// <param name="repFlat">The counts, raveled (int64-castable, checked by the caller).</param>
+        /// <param name="broadcast">Whether one count serves every element.</param>
+        /// <param name="n">The number of elements along the repeated axis (of the flattened array for no axis).</param>
+        /// <param name="counts">Receives one count per element, or null when <paramref name="broadcast"/>.</param>
+        /// <param name="broadcastVal">Receives the broadcast count, or 0.</param>
+        /// <returns>The total output length along the axis.</returns>
+        /// <exception cref="ArgumentException">A negative broadcast count (NumPy's ValueError reads <c>negative dimensions
+        ///     are not allowed</c>: a pinned wording difference).</exception>
+        /// <exception cref="ValueError">A negative entry of a per-element count array: NumPy's <c>repeats may not contain
+        ///     negative values.</c>, period included (parity QA-03).</exception>
         private static long ComputeCounts(NDArray repFlat, bool broadcast, long n, out long[] counts, out long broadcastVal)
         {
             if (broadcast)
@@ -1511,8 +1530,10 @@ namespace NumSharp.Backends
             for (long j = 0; j < n; j++)
             {
                 long c = Converts.ToInt64(repFlat.GetAtIndex(j));
+                // PyArray_Repeat's per-element loop: `if (counts[j] < 0) PyErr_SetString(PyExc_ValueError, "repeats may not
+                // contain negative values.")`.
                 if (c < 0)
-                    throw new ArgumentException("repeats may not contain negative values");
+                    throw new ValueError("repeats may not contain negative values.");
                 counts[j] = c;
                 total += c;
             }
@@ -1523,7 +1544,11 @@ namespace NumSharp.Backends
         ///     NumPy "safe" casting check for the repeats dtype (target int64).
         ///     Integers that fit in int64 + boolean pass; uint64/float/complex/decimal reject.
         /// </summary>
-        private static bool IsSafeToInt64(NPTypeCode code)
+        /// <param name="code">The repeats' dtype.</param>
+        /// <returns>True when the dtype casts 'safely' to int64 (bool, char and the integers up to int64 / uint32).</returns>
+        /// <remarks>Internal since API-parity batch 3: np.repeat's generic scalar form reads a 0-d count by the same rule
+        ///     before its direct fill.</remarks>
+        internal static bool IsSafeToInt64(NPTypeCode code)
         {
             switch (code)
             {

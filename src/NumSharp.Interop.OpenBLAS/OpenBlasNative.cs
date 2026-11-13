@@ -958,7 +958,7 @@ namespace NumSharp.Interop.OpenBLAS
         ///     (a deliberate caller opt-in, not ambient, so setting it trades parity-by-default for
         ///     the named build). It is the
         ///     prebuilt scipy-openblas artifact NumPy itself pins (verified byte-identical to the
-        ///     library in numpy 2.4.2's wheels), so referencing the package keeps giving
+        ///     library in numpy 2.5.4's wheels), so referencing the package keeps giving
         ///     NumPy-identical bits by default — the answer stays a property of the PACKAGE VERSION
         ///     rather than of whatever OpenBLAS an OS package manager happened to install. A
         ///     library's numeric output should not change because an unrelated <c>apt install</c> or

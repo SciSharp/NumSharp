@@ -207,16 +207,18 @@ public class NpTypingTests
         np.can_cast(NPTypeCode.Int32, NPTypeCode.Int16, "unsafe").Should().BeTrue();
     }
 
+    /// <summary>
+    ///     NumPy 2 refuses a Python number whatever its value (NEP 50): <c>np.can_cast(100, np.uint8)</c> and
+    ///     <c>np.can_cast(1000, np.uint8)</c> both raise <c>TypeError: can_cast() does not support Python ints, floats, and
+    ///     complex because the result used to depend on the value.</c> (NumSharp answered by value until API-parity batch 9).
+    /// </summary>
     [TestMethod]
-    public void CanCast_ScalarFits()
+    public void CanCast_PythonInt_IsNumPysTypeError()
     {
-        np.can_cast(100, NPTypeCode.Byte).Should().BeTrue();
-    }
-
-    [TestMethod]
-    public void CanCast_ScalarOverflow()
-    {
-        np.can_cast(1000, NPTypeCode.Byte).Should().BeFalse();
+        new Action(() => np.can_cast(100, NPTypeCode.Byte)).Should().Throw<TypeError>()
+            .WithMessage("can_cast() does not support Python ints, floats, and complex because the result used to depend on the value.*");
+        new Action(() => np.can_cast(1000, NPTypeCode.Byte)).Should().Throw<TypeError>()
+            .WithMessage("can_cast() does not support Python ints, floats, and complex because the result used to depend on the value.*");
     }
 
     [TestMethod]

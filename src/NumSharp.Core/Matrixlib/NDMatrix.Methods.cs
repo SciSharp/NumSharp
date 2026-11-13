@@ -102,14 +102,17 @@ namespace NumSharp
         ///     NumPy's <c>matrix.squeeze(axis=None)</c>. A matrix cannot lose an axis, so a squeezed row stays a row
         ///     and a squeezed COLUMN becomes a row <c>(1, N)</c>.
         /// </summary>
-        /// <param name="axis">The axis to remove, or <c>null</c> for every axis of length 1.</param>
+        /// <param name="axis">The axis to remove, a tuple of axes (each of length 1; checked in order, NumPy's
+        ///     <c>PyArray_ConvertMultiAxis</c>), or <c>null</c> for every axis of length 1.</param>
         /// <returns>This matrix ITSELF when it has no axis of length 1 and <paramref name="axis"/> is
         ///     <c>null</c> (as NumPy); otherwise a view.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ValueError"><paramref name="axis"/> names an axis longer than 1 (<c>cannot select an
-        ///     axis to squeeze out which has size not equal to one</c>).</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <exception cref="ValueError">An axis longer than 1 is named (<c>cannot select an axis to squeeze out which
+        ///     has size not equal to one</c>), or a tuple names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
+        /// <remarks>The axis is an <see cref="NDAxis"/> since API-parity batch 4 (2026-11-12), as
+        ///     <see cref="NDArray.squeeze(NDAxis?)"/>'s; an <c>int?</c> argument converts.</remarks>
         [NDScoped]
-        public new NDMatrix squeeze(int? axis = null)
+        public new NDMatrix squeeze(NDAxis? axis = null)
         {
             long[] dims = Storage.Shape.dimensions;
             if (axis is null)
@@ -121,13 +124,15 @@ namespace NumSharp
                 if (!unit)
                     return this;
             }
-            else
+            else if (!axis.Value.IsTuple)
             {
                 // PyArray_SqueezeSelected: the axis is normalized first (AxisError), then it must have length 1.
-                int selected = Backends.DefaultEngine.NormalizeAxis(axis.Value, dims.Length);
+                int selected = Backends.DefaultEngine.NormalizeAxis(axis.Value[0], dims.Length);
                 if (dims[selected] != 1)
                     throw new ValueError("cannot select an axis to squeeze out which has size not equal to one");
             }
+            // A tuple: the plain squeeze below checks it in NumPy's order (each item's range and repeat, then the lengths)
+            // before anything is built.
 
             return From(base.squeeze(axis), this);
         }
@@ -142,41 +147,37 @@ namespace NumSharp
         public new NDMatrix flatten(char order = 'C') => From(base.flatten(order), this);
 
         /// <summary>NumPy's <c>matrix.ravel(order='C')</c>: the elements as one row <c>(1, size)</c>, a VIEW
-        ///     when the memory layout allows it and a copy otherwise.</summary>
-        /// <returns>A <c>(1, size)</c> matrix; writes reach this matrix when it is a view.</returns>
-        [NDScoped]
-        public new NDMatrix ravel() => From(base.ravel(), this);
-
-        /// <inheritdoc cref="ravel()"/>
+        ///     when the memory layout allows it and a copy otherwise. One signature: <c>m.ravel()</c> binds here with the
+        ///     default 'C'.</summary>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <returns>A <c>(1, size)</c> matrix; writes reach this matrix when it is a view.</returns>
         /// <exception cref="ArgumentException"><paramref name="order"/> is not one of the four codes.</exception>
         [NDScoped]
-        public new NDMatrix ravel(char order) => From(base.ravel(order), this);
+        public new NDMatrix ravel(char order = 'C') => From(base.ravel(order), this);
 
         #endregion
 
         #region Conversion and copies
 
-        /// <summary>Copy of the matrix cast to <paramref name="dtype"/>, as a matrix.</summary>
-        /// <param name="dtype">The target dtype.</param>
-        /// <param name="copy"><c>false</c> returns this matrix ITSELF when it already has the dtype.</param>
-        /// <returns>A new matrix that owns its data, or this matrix.</returns>
-        [NDScoped]
-        public new NDMatrix astype(DType dtype, bool copy = true) => From(base.astype(dtype, copy), this);
-
         /// <summary>Copy of the matrix cast to <paramref name="dtype"/> with a memory order and a casting
-        ///     rule, as a matrix.</summary>
+        ///     rule, as a matrix (NumPy's <c>m.astype(dtype, order='K', casting='unsafe', copy=True)</c>).</summary>
         /// <param name="dtype">The target dtype.</param>
-        /// <param name="copy"><c>false</c> returns this matrix itself when nothing has to change.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
         /// <param name="casting">NumPy's casting rule name (<c>"unsafe"</c>, <c>"same_kind"</c>, <c>"safe"</c>,
         ///     <c>"equiv"</c>, <c>"no"</c>).</param>
+        /// <param name="copy"><c>false</c> returns this matrix itself when nothing has to change.</param>
         /// <returns>A new matrix that owns its data, or this matrix.</returns>
         /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/>.</exception>
-        /// <exception cref="ArgumentException">An unknown order or casting name.</exception>
+        /// <exception cref="ValueError">An unknown order or casting name.</exception>
+        /// <remarks>
+        ///     <para>One signature in NumPy's keyword order (API-parity batch 3, 2026-11-11): it replaces the former
+        ///     <c>astype(dtype, copy)</c> / <c>astype(dtype, copy, order, casting)</c> pair, so <c>a.astype(t, 'F')</c> reads as
+        ///     in NumPy and a <c>copy</c> is written <c>copy: false</c> (a bool in the order slot does not compile).
+        ///     <c>subok</c> stays out (the parity plan's exclusion).</para>
+        /// </remarks>
         [NDScoped]
-        public new NDMatrix astype(DType dtype, bool copy, char order, string casting = "unsafe")
-            => From(base.astype(dtype, copy, order, casting), this);
+        public new NDMatrix astype(DType dtype, char order = 'K', string casting = "unsafe", bool copy = true)
+            => From(base.astype(dtype, order, casting, copy), this);
 
         /// <summary>A copy of the matrix, as a matrix (NumPy's <c>m.copy(order)</c>).</summary>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
@@ -244,15 +245,20 @@ namespace NumSharp
 
         #region Axes
 
-        /// <summary>The matrix with its axes permuted (NumPy's <c>m.transpose(axes)</c>); without an argument the
+        /// <summary>The matrix with its axes permuted (NumPy's <c>m.transpose(*axes)</c>); without an argument the
         ///     transpose.</summary>
-        /// <param name="premute">The permutation (<c>{1, 0}</c> or <c>{0, 1}</c>), or <c>null</c> to reverse the
+        /// <param name="axes">NumPy's <c>*axes</c>: the permutation as separate integers (<c>m.transpose(1, 0)</c>) or
+        ///     one array (<c>{1, 0}</c> or <c>{0, 1}</c>); no argument, an empty array or <c>null</c> reverses the
         ///     axes.</param>
         /// <returns>A view.</returns>
-        /// <exception cref="ArgumentException">The permutation does not match the matrix's axes.</exception>
+        /// <exception cref="ValueError">The permutation does not have one entry per axis (<c>axes don't match
+        ///     array</c>) or repeats an axis.</exception>
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <remarks>One member, NumPy's call shapes: <c>params</c> makes <c>m.transpose(1, 0)</c> compile (the former
+        ///     <c>transpose(int[] premute = null)</c> refused it). It hides <see cref="NDArray.transpose(int[])"/>, whose
+        ///     parameter is the same array; the empty array reads as the no-argument call, as there.</remarks>
         [NDScoped]
-        public new NDMatrix transpose(int[] premute = null) => From(base.transpose(premute), this);
+        public new NDMatrix transpose(params int[] axes) => From(base.transpose(axes), this);
 
         /// <summary>The matrix with two axes exchanged (NumPy's <c>m.swapaxes(a, b)</c>).</summary>
         /// <param name="axis1">The first axis.</param>
@@ -272,32 +278,44 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The elements under another shape, folded back onto two axes (NumPy's <c>m.reshape(shape)</c>):
-        ///     <c>m.reshape(6)</c> is the row <c>(1, 6)</c>, <c>m.reshape(1, 2, 3)</c> is <c>(2, 3)</c>.
+        ///     The elements under another shape, folded back onto two axes — NumPy's <c>m.reshape(shape, /, *, order='C',
+        ///     copy=None)</c>: <c>m.reshape(6)</c> is the row <c>(1, 6)</c>, <c>m.reshape(1, 2, 3)</c> is <c>(2, 3)</c>.
         /// </summary>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
+        /// <param name="shape">The requested dimensions; one may be -1 (inferred). An int, a tuple, an <c>int[]</c> /
+        ///     <c>long[]</c>, a C# collection expression or a <see cref="Shape"/>. NumPy's name (it was <c>newShape</c> until
+        ///     API-parity batch 9).</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c>: the index order the elements are read and
+        ///     placed in.</param>
+        /// <param name="copy">NumPy's <c>copy</c> keyword (API-parity batch 7): null copies only when needed, true always
+        ///     copies, false raises <c>Unable to avoid creating a copy while reshaping.</c> when no view can express the
+        ///     reshape — <see cref="NDArray.reshape(Shape, char, bool?)"/>'s modes, the result wrapped as a matrix.</param>
         /// <returns>A view when the layout allows it, otherwise a copy.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the matrix's size.</exception>
+        /// <exception cref="ValueError">More than two requested dimensions are longer than 1, 'K', or the refusal of
+        ///     <paramref name="copy"/> false.</exception>
+        /// <remarks>Since API-parity batch 9 this and the loose integers (<see cref="reshape(long[])"/>,
+        ///     <see cref="reshape(ReadOnlySpan{long})"/>) are the matrix method's spellings, as on NDArray: the
+        ///     <c>(Shape)</c> and <c>(int[])</c> forms went (an <c>int[]</c> converts to <see cref="Shape"/>).</remarks>
+        [NDScoped]
+        public new NDMatrix reshape(Shape shape, char order = 'C', bool? copy = null) => From(base.reshape(shape, order, copy), this);
+
+        /// <summary>The matrix under NumPy's loose integers (<c>m.reshape(2, 3)</c>) when they arrive as a C#
+        ///     <c>long[]</c>; see <see cref="reshape(Shape, char, bool?)"/>.</summary>
+        /// <param name="shape">The requested dimensions; one may be -1.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy, wrapped as a matrix.</returns>
         /// <exception cref="IncorrectShapeException">The requested size differs from the matrix's size.</exception>
         /// <exception cref="ValueError">More than two requested dimensions are longer than 1.</exception>
         [NDScoped]
-        public new NDMatrix reshape(Shape newShape) => From(base.reshape(newShape), this);
-
-        /// <inheritdoc cref="reshape(Shape)" path="/*[not(self::param[@name='newShape'])]"/>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
-        /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c>: the index order the elements are read and
-        ///     placed in.</param>
-        [NDScoped]
-        public new NDMatrix reshape(Shape newShape, char order) => From(base.reshape(newShape, order), this);
-
-        /// <inheritdoc cref="reshape(Shape)"/>
-        /// <param name="shape">The requested dimensions; one may be -1.</param>
-        [NDScoped]
-        public new NDMatrix reshape(int[] shape) => From(base.reshape(shape), this);
-
-        /// <inheritdoc cref="reshape(Shape)"/>
-        /// <param name="shape">The requested dimensions; one may be -1.</param>
-        [NDScoped]
         public new NDMatrix reshape(params long[] shape) => From(base.reshape(shape), this);
+
+        /// <summary>The matrix under NumPy's loose integers (<c>m.reshape(2, 3)</c>) as C# 13 passes them (a span on the
+        ///     caller's stack); added in API-parity batch 9 so the matrix has NDArray's spellings.</summary>
+        /// <param name="shape">The requested dimensions; one may be -1.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy, wrapped as a matrix.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the matrix's size.</exception>
+        /// <exception cref="ValueError">More than two requested dimensions are longer than 1.</exception>
+        [NDScoped]
+        public new NDMatrix reshape(params ReadOnlySpan<long> shape) => From(base.reshape(shape), this);
 
         #endregion
 
@@ -381,16 +399,9 @@ namespace NumSharp
         /// <returns>A new matrix that owns its data.</returns>
         /// <exception cref="ValueError">A negative count, or counts that do not match the axis.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <remarks>One signature (API-parity batch 3): <c>m.repeat(2)</c> binds here, 2 converting to a 0-d array.</remarks>
         [NDScoped]
         public new NDMatrix repeat(NDArray repeats, int? axis = null) => From(base.repeat(repeats, axis), this);
-
-        /// <inheritdoc cref="repeat(NDArray, int?)"/>
-        [NDScoped]
-        public new NDMatrix repeat(int repeats, int? axis = null) => From(base.repeat(repeats, axis), this);
-
-        /// <inheritdoc cref="repeat(NDArray, int?)"/>
-        [NDScoped]
-        public new NDMatrix repeat(long repeats, int? axis = null) => From(base.repeat(repeats, axis), this);
 
         #endregion
 

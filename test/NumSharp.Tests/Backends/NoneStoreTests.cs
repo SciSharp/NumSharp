@@ -210,7 +210,7 @@ namespace NumSharp.Tests.Backends
             Action putRo = () => np.put(ro, np.array(new long[] { 0 }), (NDArray)null);
             putRo.Should().Throw<ValueError>().WithMessage("put: output array is read-only");
             var s = F(4);
-            np.put(s, 1, (object)null);
+            np.put(s, 1, null);
             Bits(s, 1).Should().Be(NpyNan64);
 
             Action badSize = () => np.putmask(I(4), np.array(new[] { true, false }), (NDArray)null);
@@ -234,16 +234,16 @@ namespace NumSharp.Tests.Backends
         [TestMethod]
         public void Insert_ConvertsNone_AfterTheIndexCheck()
         {
-            Action oob = () => np.insert(I(4), 10, (object)null);
+            Action oob = () => np.insert(I(4), 10, (NDArray)null);
             oob.Should().Throw<Exception>().WithMessage("index 10 is out of bounds for axis 0 with size 4");
-            Action emptyInt = () => np.insert(I(4), new int[0], (object)null);
+            Action emptyInt = () => np.insert(I(4), new int[0], (NDArray)null);
             emptyInt.Should().Throw<TypeError>().WithMessage(IntNone);
-            np.insert(F(4), new int[0], (object)null).ToArray<double>().Should().Equal(1.0, 2.0, 3.0, 4.0);
-            var r = np.insert(F(4), new[] { 1, 3 }, (object)null);
+            np.insert(F(4), new int[0], (NDArray)null).ToArray<double>().Should().Equal(1.0, 2.0, 3.0, 4.0);
+            var r = np.insert(F(4), new[] { 1, 3 }, (NDArray)null);
             r.size.Should().Be(6);
             Bits(r, 1).Should().Be(NpyNan64);
             Bits(r, 4).Should().Be(NpyNan64);
-            var u = np.insert(np.array(new[] { "ab", "cd" }, np.dtype("<U2")), 1, (object)null);
+            var u = np.insert(np.array(new[] { "ab", "cd" }, np.dtype("<U2")), 1, (NDArray)null);
             u.Storage.GetAtIndex(1).Should().Be("No");
         }
 
@@ -296,7 +296,7 @@ namespace NumSharp.Tests.Backends
             var f = F(3);
             f.SetValue(null, 0);
             f.SetAtIndex(null, 1);
-            f.SetData((object)null, new[] { 2 });
+            f.SetData((NDArray)null, new[] { 2 });
             Bits(f, 0).Should().Be(NpyNan64);
             Bits(f, 1).Should().Be(NpyNan64);
             Bits(f, 2).Should().Be(NpyNan64);
@@ -317,7 +317,7 @@ namespace NumSharp.Tests.Backends
             Action intList = () => np.array(new object[] { 1, null }, np.int8);
             intList.Should().Throw<TypeError>().WithMessage(IntNone);
             Action firstWins = () => np.array(new object[] { 1e300, null }, np.int8);
-            firstWins.Should().Throw<OverflowException>();
+            firstWins.Should().Throw<OverflowError>();
 
             var c = np.asarray((NDArray)null, np.complex128);
             BitConverter.DoubleToInt64Bits(((Complex)c.GetAtIndex(0)).Imaginary).Should().Be(NpyNan64);

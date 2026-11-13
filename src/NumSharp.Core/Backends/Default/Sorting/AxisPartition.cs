@@ -21,11 +21,15 @@ namespace NumSharp.Backends.Sorting
     /// SKIPPED for a size-0 array, negative kth wraps once and the error reports the post-wrap
     /// value, and the kth list is sorted so successive partitions cannot trample each other).
     ///
-    /// Float lines NaN-compact first (NumPy's LT sorts any NaN last; original NaN bit patterns are
-    /// preserved in the tail, in encounter order — the same policy as <see cref="AxisSort"/>'s
-    /// argsort NaN tail); Complex lines use the exact NumPy CDOUBLE_LT comparator
-    /// (<see cref="AxisSort.ComplexCmp"/>), whose NaN ordering is NOT a compactable
-    /// "any-NaN-part last" — (1, NaN) orders before (NaN, 1).
+    /// Several kth run NumPy's introselect_ over each whole line in place, as NumPy does on every host
+    /// (<see cref="QuickSelect"/>'s exact port): a float line holding NaN under NumPy's NaN-aware order (the NaNs take
+    /// part in the swaps and end the line with their own bits), a complex line under CDOUBLE_LT, so ties and NaNs land
+    /// where NumPy puts them. A single kth (x86-simd-sort's in NumPy for the 32- and 64-bit types, an arrangement no
+    /// select reproduces) keeps the select it always ran: the edge selection, the single-kth select
+    /// (<see cref="QuickSelect.SelectSingleKth{T}(T*, long, long)"/>), and for the floats the NaN compaction (original
+    /// NaN bit patterns preserved in the tail, in encounter order — the same policy as <see cref="AxisSort"/>'s argsort
+    /// NaN tail); complex keeps its CDOUBLE_LT comparator select, whose NaN ordering is NOT a compactable "any-NaN-part
+    /// last" — (1, NaN) orders before (NaN, 1).
     /// </summary>
     internal static unsafe class AxisPartition
     {
@@ -538,14 +542,20 @@ namespace NumSharp.Backends.Sorting
             public long n;
         }
 
-        // NumPy CDOUBLE_LT as a Comparison<Complex> for the QuickSelect comparator path.
+        /// <summary>NumPy's CDOUBLE_LT as a <see cref="Comparison{T}"/>, for the single-kth complex select (the comparator
+        /// path of <see cref="QuickSelect"/>); several kth use <see cref="QuickSelect.PartitionAtManyComplex(Complex*, long,
+        /// long*, int)"/>, whose comparison is the same order inlined.</summary>
         private static readonly Comparison<Complex> ComplexLess =
             static (a, b) => default(AxisSort.ComplexCmp).Compare(a, b);
 
         // ============================ partition line kernels ============================
 
         /// <summary>Raw-compare dtypes (ints/bool/char/decimal — no NaN representation): partition the
-        /// line in place when it is contiguous, else gather → introselect → scatter.</summary>
+        /// line in place when it is contiguous, else gather → introselect → scatter. Several kth run NumPy's
+        /// introselect_ (<see cref="QuickSelect.PartitionAtMany{T}(T*, long, long*, int)"/>); a single kth keeps the edge
+        /// selection and the single-kth select (<see cref="QuickSelect.SelectSingleKth{T}(T*, long, long)"/>).</summary>
+        /// <param name="line">The line's first element.</param>
+        /// <param name="c">The call's context.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void PartLine<T>(byte* line, PartCtx* c) where T : unmanaged, IComparable<T>
         {
@@ -553,66 +563,190 @@ namespace NumSharp.Backends.Sorting
             long s = c->inStride;
             if (s == sizeof(T))
             {
-                QuickSelect.PartitionAtMany((T*)line, n, c->kth, c->nKth);
+                // A single kth near an end of a long line: one read finds that side's elements and O(m) writes place them
+                // (QuickSelect.TryEdgePartition); every other line, or one it declines, takes the quickselect.
+                if (c->nKth == 1 && QuickSelect.TryEdgePartition((T*)line, n, c->kth[0]))
+                    return;
+                SelectLine((T*)line, c);
                 return;
             }
             T* buf = (T*)c->scratch;
             for (long i = 0; i < n; i++) buf[i] = *(T*)(line + i * s);
-            QuickSelect.PartitionAtMany(buf, n, c->kth, c->nKth);
+            SelectLine(buf, c);
             for (long i = 0; i < n; i++) *(T*)(line + i * s) = buf[i];
         }
 
-        /// <summary>Float dtypes: stable NaN-compact (non-NaN prefix keeps encounter order, NaN bit
+        /// <summary>
+        ///     The select of one contiguous NaN-free line: NumPy's introselect_ for several kth (its arrangement on every
+        ///     host), the single-kth select for one (NumPy's x86-simd-sort arrangement is not reproducible; see
+        ///     <c>QuickSelect.SingleKth.cs</c>).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="p">The line, partitioned in place.</param>
+        /// <param name="c">The call's context (the kth list and the line's length).</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void SelectLine<T>(T* p, PartCtx* c) where T : unmanaged, IComparable<T>
+        {
+            if (c->nKth == 1)
+                QuickSelect.SelectSingleKth(p, c->n, c->kth[0]);
+            else
+                QuickSelect.PartitionAtMany(p, c->n, c->kth, c->nKth);
+        }
+
+        /// <summary>Float dtypes around a SINGLE kth: stable NaN-compact (non-NaN prefix keeps encounter order, NaN bit
         /// patterns stashed verbatim), introselect the prefix with raw compares, NaN tail written back.
         /// kth entries pointing into the NaN tail are correct by construction (every slot there is NaN,
-        /// which is where a full NaN-last sort would put them).</summary>
+        /// which is where a full NaN-last sort would put them). Several kth take <see cref="PartLineFloatMany{T}"/>:
+        /// NumPy's introselect_ in place, as NumPy runs it for several kth on every host (a single kth of a 32- or
+        /// 64-bit type is x86-simd-sort's on AVX2 / AVX-512 hosts, an arrangement no select reproduces).</summary>
+        /// <param name="line">The line's first element.</param>
+        /// <param name="c">The call's context (length, stride, kth list, scratch).</param>
         private static void PartLineF32(byte* line, PartCtx* c)
         {
             long n = c->n; long s = c->inStride;
+            if (c->nKth > 1)
+            {
+                PartLineFloatMany<float>(line, c);
+                return;
+            }
+            // A contiguous line around a single kth near an end skips the compaction and the quickselect; the edge
+            // selection declines a line holding a NaN before it moves anything, and the compaction below handles it.
+            if (s == sizeof(float) && c->nKth == 1 && QuickSelect.TryEdgePartition((float*)line, n, c->kth[0]))
+                return;
             float* buf = (float*)c->scratch; float* nans = (float*)c->nanTail;
             long m = 0, q = 0;
             for (long i = 0; i < n; i++) { float v = *(float*)(line + i * s); if (float.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
-            QuickSelect.PartitionAtMany(buf, m, c->kth, c->nKth);
+            QuickSelect.SelectSingleKth(buf, m, c->kth[0]);
             for (long i = 0; i < m; i++) *(float*)(line + i * s) = buf[i];
             for (long i = 0; i < q; i++) *(float*)(line + (m + i) * s) = nans[i];
         }
 
+        /// <summary>float64 lines: <see cref="PartLineF32"/>'s routes (several kth in place, a single kth compacted).</summary>
+        /// <param name="line">The line's first element.</param>
+        /// <param name="c">The call's context.</param>
         private static void PartLineF64(byte* line, PartCtx* c)
         {
             long n = c->n; long s = c->inStride;
+            if (c->nKth > 1)
+            {
+                PartLineFloatMany<double>(line, c);
+                return;
+            }
+            // The edge selection first, as in PartLineF32 (a NaN line falls through to the compaction).
+            if (s == sizeof(double) && c->nKth == 1 && QuickSelect.TryEdgePartition((double*)line, n, c->kth[0]))
+                return;
             double* buf = (double*)c->scratch; double* nans = (double*)c->nanTail;
             long m = 0, q = 0;
             for (long i = 0; i < n; i++) { double v = *(double*)(line + i * s); if (double.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
-            QuickSelect.PartitionAtMany(buf, m, c->kth, c->nKth);
+            QuickSelect.SelectSingleKth(buf, m, c->kth[0]);
             for (long i = 0; i < m; i++) *(double*)(line + i * s) = buf[i];
             for (long i = 0; i < q; i++) *(double*)(line + (m + i) * s) = nans[i];
         }
 
+        /// <summary>float16 lines: <see cref="PartLineF32"/>'s routes (several kth in place, a single kth compacted; no
+        /// edge selection, float16 has no vector lanes).</summary>
+        /// <param name="line">The line's first element.</param>
+        /// <param name="c">The call's context.</param>
         private static void PartLineF16(byte* line, PartCtx* c)
         {
             long n = c->n; long s = c->inStride;
+            if (c->nKth > 1)
+            {
+                PartLineFloatMany<Half>(line, c);
+                return;
+            }
             Half* buf = (Half*)c->scratch; Half* nans = (Half*)c->nanTail;
             long m = 0, q = 0;
             for (long i = 0; i < n; i++) { Half v = *(Half*)(line + i * s); if (Half.IsNaN(v)) nans[q++] = v; else buf[m++] = v; }
-            QuickSelect.PartitionAtMany(buf, m, c->kth, c->nKth);
+            QuickSelect.SelectSingleKth(buf, m, c->kth[0]);
             for (long i = 0; i < m; i++) *(Half*)(line + i * s) = buf[i];
             for (long i = 0; i < q; i++) *(Half*)(line + (m + i) * s) = nans[i];
         }
 
-        /// <summary>Complex: NumPy's CDOUBLE_LT comparator drives the introselect directly — its NaN
-        /// ordering ((1,NaN) before (NaN,1)) is positional, not a compactable any-NaN-last.</summary>
+        /// <summary>
+        ///     A float line around SEVERAL kth: NumPy's introselect_ over the whole line in place, under its raw order when
+        ///     the line holds no NaN and its NaN-aware order (DOUBLE_LT / FLOAT_LT / HALF_LT) when it does, so equal values
+        ///     (±0) and the NaNs (each with its own bits) land where NumPy's partition puts them.
+        /// </summary>
+        /// <typeparam name="T"><see cref="float"/>, <see cref="double"/> or <see cref="Half"/>.</typeparam>
+        /// <param name="line">The line's first element.</param>
+        /// <param name="c">The call's context (a strided line is gathered into its scratch and scattered back).</param>
+        /// <remarks>
+        ///     The NaN test is one read of the line; the NaN-aware order costs more per comparison, so only a line that
+        ///     holds a NaN pays it (under the raw order a NaN would break the unguarded scans' sentinels).
+        /// </remarks>
+        private static void PartLineFloatMany<T>(byte* line, PartCtx* c) where T : unmanaged, IComparable<T>
+        {
+            long n = c->n; long s = c->inStride;
+            bool contiguous = s == sizeof(T);
+            T* p = contiguous ? (T*)line : (T*)c->scratch;
+            if (!contiguous)
+                for (long i = 0; i < n; i++) p[i] = *(T*)(line + i * s);
+            if (HasNaN(p, n))
+                QuickSelect.PartitionAtManyNaN(p, n, c->kth, c->nKth);
+            else
+                QuickSelect.PartitionAtMany(p, n, c->kth, c->nKth);
+            if (!contiguous)
+                for (long i = 0; i < n; i++) *(T*)(line + i * s) = p[i];
+        }
+
+        /// <summary>Whether a float line holds a NaN (any sign or payload).</summary>
+        /// <typeparam name="T"><see cref="float"/>, <see cref="double"/> or <see cref="Half"/>.</typeparam>
+        /// <param name="p">The line's first element (contiguous).</param>
+        /// <param name="n">The line's length.</param>
+        /// <returns>True when some element is NaN.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool HasNaN<T>(T* p, long n) where T : unmanaged
+        {
+            // x != x is true exactly for NaN; the typeof tests fold per instantiation.
+            if (typeof(T) == typeof(double))
+            {
+                var d = (double*)p;
+                for (long i = 0; i < n; i++) if (d[i] != d[i]) return true;
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                var f = (float*)p;
+                for (long i = 0; i < n; i++) if (f[i] != f[i]) return true;
+            }
+            else if (typeof(T) == typeof(Half))
+            {
+                var h = (ushort*)p;
+                for (long i = 0; i < n; i++) if ((h[i] & 0x7FFF) > 0x7C00) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Complex: several kth run NumPy's introselect_ under CDOUBLE_LT
+        /// (<see cref="QuickSelect.PartitionAtManyComplex(Complex*, long, long*, int)"/>) in place; a single kth keeps the
+        /// comparator select it always ran. Its NaN ordering ((1,NaN) before (NaN,1)) is positional, not a compactable
+        /// any-NaN-last.</summary>
+        /// <param name="line">The line's first element.</param>
+        /// <param name="c">The call's context.</param>
         private static void PartLineComplex(byte* line, PartCtx* c)
         {
             long n = c->n; long s = c->inStride;
             if (s == sizeof(Complex))
             {
-                QuickSelect.PartitionAtMany((Complex*)line, n, c->kth, c->nKth, ComplexLess);
+                SelectComplexLine((Complex*)line, c);
                 return;
             }
             Complex* buf = (Complex*)c->scratch;
             for (long i = 0; i < n; i++) buf[i] = *(Complex*)(line + i * s);
-            QuickSelect.PartitionAtMany(buf, n, c->kth, c->nKth, ComplexLess);
+            SelectComplexLine(buf, c);
             for (long i = 0; i < n; i++) *(Complex*)(line + i * s) = buf[i];
+        }
+
+        /// <summary>The select of one contiguous complex line: NumPy's introselect_ for several kth, the comparator select
+        /// for one (left as it was, with the other dtypes' single kth).</summary>
+        /// <param name="p">The line, partitioned in place.</param>
+        /// <param name="c">The call's context.</param>
+        private static void SelectComplexLine(Complex* p, PartCtx* c)
+        {
+            if (c->nKth == 1)
+                QuickSelect.PartitionAtMany(p, c->n, c->kth, c->nKth, ComplexLess);
+            else
+                QuickSelect.PartitionAtManyComplex(p, c->n, c->kth, c->nKth);
         }
 
         // ============================ argpartition line kernels ============================
@@ -621,56 +755,131 @@ namespace NumSharp.Backends.Sorting
         private static void ArgPartLine<T>(byte* inLine, byte* outLine, PartCtx* c) where T : unmanaged, IComparable<T>
         {
             long n = c->n; long si = c->inStride, so = c->outStride;
+            // A single kth near an end of a long contiguous line: one read selects that side and the permutation is written
+            // straight to the output (QuickSelect.TryEdgeArgPartition), with no gather, index column or scatter; every
+            // other line, or one it declines, takes the quickselect.
+            if (si == sizeof(T) && c->nKth == 1 && QuickSelect.TryEdgeArgPartition((T*)inLine, n, c->kth[0], outLine, so))
+                return;
             T* buf = (T*)c->scratch; long* idx = c->idx;
             for (long i = 0; i < n; i++) { buf[i] = *(T*)(inLine + i * si); idx[i] = i; }
-            QuickSelect.PartitionAtMany(buf, idx, n, c->kth, c->nKth);
+            // Several kth: NumPy's introselect_; one kth: the single-kth select (see SelectLine).
+            if (c->nKth == 1)
+                QuickSelect.SelectSingleKth(buf, idx, n, c->kth[0]);
+            else
+                QuickSelect.PartitionAtMany(buf, idx, n, c->kth, c->nKth);
             for (long i = 0; i < n; i++) *(long*)(outLine + i * so) = idx[i];
         }
 
-        /// <summary>Float argpartition: NaN indices go to the tail in encounter order — the exact
-        /// policy of <see cref="AxisSort"/>'s ArgLineF32/F64 argsort kernels.</summary>
+        /// <summary>Float argpartition around a SINGLE kth: NaN indices go to the tail in encounter order — the exact
+        /// policy of <see cref="AxisSort"/>'s ArgLineF32/F64 argsort kernels. Several kth take
+        /// <see cref="ArgPartLineFloatMany{T}"/> (NumPy's introselect_ over the whole line, NaNs in place).</summary>
+        /// <param name="inLine">The source line's first element (only read).</param>
+        /// <param name="outLine">The int64 output line's first element.</param>
+        /// <param name="c">The call's context.</param>
         private static void ArgPartLineF32(byte* inLine, byte* outLine, PartCtx* c)
         {
             long n = c->n; long si = c->inStride, so = c->outStride;
+            if (c->nKth > 1)
+            {
+                ArgPartLineFloatMany<float>(inLine, outLine, c);
+                return;
+            }
+            // The edge selection first (see ArgPartLine); it declines a line holding a NaN before writing anything, so the
+            // NaN tail below keeps its encounter order.
+            if (si == sizeof(float) && c->nKth == 1 && QuickSelect.TryEdgeArgPartition((float*)inLine, n, c->kth[0], outLine, so))
+                return;
             float* buf = (float*)c->scratch; long* idx = c->idx;
             long m = 0;
             for (long i = 0; i < n; i++) { float v = *(float*)(inLine + i * si); if (!float.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
-            QuickSelect.PartitionAtMany(buf, idx, m, c->kth, c->nKth);
+            QuickSelect.SelectSingleKth(buf, idx, m, c->kth[0]);
             for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = idx[i];
             long q = m;
             for (long i = 0; i < n; i++) if (float.IsNaN(*(float*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
 
+        /// <summary>float64 argpartition: <see cref="ArgPartLineF32"/>'s routes (several kth in place, a single kth with
+        /// the encounter-order NaN tail).</summary>
+        /// <param name="inLine">The source line's first element (only read).</param>
+        /// <param name="outLine">The int64 output line's first element.</param>
+        /// <param name="c">The call's context.</param>
         private static void ArgPartLineF64(byte* inLine, byte* outLine, PartCtx* c)
         {
             long n = c->n; long si = c->inStride, so = c->outStride;
+            if (c->nKth > 1)
+            {
+                ArgPartLineFloatMany<double>(inLine, outLine, c);
+                return;
+            }
+            // The edge selection first, as in ArgPartLineF32.
+            if (si == sizeof(double) && c->nKth == 1 && QuickSelect.TryEdgeArgPartition((double*)inLine, n, c->kth[0], outLine, so))
+                return;
             double* buf = (double*)c->scratch; long* idx = c->idx;
             long m = 0;
             for (long i = 0; i < n; i++) { double v = *(double*)(inLine + i * si); if (!double.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
-            QuickSelect.PartitionAtMany(buf, idx, m, c->kth, c->nKth);
+            QuickSelect.SelectSingleKth(buf, idx, m, c->kth[0]);
             for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = idx[i];
             long q = m;
             for (long i = 0; i < n; i++) if (double.IsNaN(*(double*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
 
+        /// <summary>float16 argpartition: <see cref="ArgPartLineF32"/>'s routes (several kth in place, a single kth with
+        /// the encounter-order NaN tail; no edge selection).</summary>
+        /// <param name="inLine">The source line's first element (only read).</param>
+        /// <param name="outLine">The int64 output line's first element.</param>
+        /// <param name="c">The call's context.</param>
         private static void ArgPartLineF16(byte* inLine, byte* outLine, PartCtx* c)
         {
             long n = c->n; long si = c->inStride, so = c->outStride;
+            if (c->nKth > 1)
+            {
+                ArgPartLineFloatMany<Half>(inLine, outLine, c);
+                return;
+            }
             Half* buf = (Half*)c->scratch; long* idx = c->idx;
             long m = 0;
             for (long i = 0; i < n; i++) { Half v = *(Half*)(inLine + i * si); if (!Half.IsNaN(v)) { buf[m] = v; idx[m] = i; m++; } }
-            QuickSelect.PartitionAtMany(buf, idx, m, c->kth, c->nKth);
+            QuickSelect.SelectSingleKth(buf, idx, m, c->kth[0]);
             for (long i = 0; i < m; i++) *(long*)(outLine + i * so) = idx[i];
             long q = m;
             for (long i = 0; i < n; i++) if (Half.IsNaN(*(Half*)(inLine + i * si))) *(long*)(outLine + (q++) * so) = i;
         }
 
+        /// <summary>
+        ///     A float argpartition around SEVERAL kth: the values and their indices gathered, then NumPy's introselect_ over
+        ///     the whole line (raw order without NaN, NumPy's NaN-aware order with), so a tie and every NaN index land where
+        ///     NumPy's <c>introselect_&lt;arg = true&gt;</c> puts them.
+        /// </summary>
+        /// <typeparam name="T"><see cref="float"/>, <see cref="double"/> or <see cref="Half"/>.</typeparam>
+        /// <param name="inLine">The source line's first element (only read).</param>
+        /// <param name="outLine">The int64 output line's first element.</param>
+        /// <param name="c">The call's context.</param>
+        private static void ArgPartLineFloatMany<T>(byte* inLine, byte* outLine, PartCtx* c) where T : unmanaged, IComparable<T>
+        {
+            long n = c->n; long si = c->inStride, so = c->outStride;
+            T* buf = (T*)c->scratch; long* idx = c->idx;
+            for (long i = 0; i < n; i++) { buf[i] = *(T*)(inLine + i * si); idx[i] = i; }
+            if (HasNaN(buf, n))
+                QuickSelect.PartitionAtManyNaN(buf, idx, n, c->kth, c->nKth);
+            else
+                QuickSelect.PartitionAtMany(buf, idx, n, c->kth, c->nKth);
+            for (long i = 0; i < n; i++) *(long*)(outLine + i * so) = idx[i];
+        }
+
+        /// <summary>Complex argpartition: NumPy's introselect_ under CDOUBLE_LT with the index column for several kth; a
+        /// single kth keeps the comparator select it always ran.</summary>
+        /// <param name="inLine">The source line's first element (only read).</param>
+        /// <param name="outLine">The int64 output line's first element.</param>
+        /// <param name="c">The call's context.</param>
         private static void ArgPartLineComplex(byte* inLine, byte* outLine, PartCtx* c)
         {
             long n = c->n; long si = c->inStride, so = c->outStride;
             Complex* buf = (Complex*)c->scratch; long* idx = c->idx;
             for (long i = 0; i < n; i++) { buf[i] = *(Complex*)(inLine + i * si); idx[i] = i; }
-            QuickSelect.PartitionAtMany(buf, idx, n, c->kth, c->nKth, ComplexLess);
+            // Several kth: NumPy's introselect_; one kth: the comparator select it always ran.
+            if (c->nKth == 1)
+                QuickSelect.PartitionAtMany(buf, idx, n, c->kth, c->nKth, ComplexLess);
+            else
+                QuickSelect.PartitionAtManyComplex(buf, idx, n, c->kth, c->nKth);
             for (long i = 0; i < n; i++) *(long*)(outLine + i * so) = idx[i];
         }
 

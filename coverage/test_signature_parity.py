@@ -1,6 +1,6 @@
 """Regression gate for signature parity (signature_parity.py): NumPy's signature against the C# overloads.
 
-Every rule is pinned against NumPy 2.4.2's REAL signatures (``inspect.signature``, the documented first docstring
+Every rule is pinned against the pinned NumPy's (numpy-version.txt) REAL signatures (``inspect.signature``, the documented first docstring
 line of an ndarray method, the callable a numpy.ma wrapper forwards to) and synthetic C# overloads in the inventory's
 schema-7 shape, so a rule change fails with the case it broke. The headline cases are the APIs a standalone
 comparison found on 2026-10-17 while the artifact rated every one of them "available / exact": np.transpose's
@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 
 import signature_gap as gap_module
+from generate_coverage import PINNED_NUMPY_VERSION
 import signature_parity as sp
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,12 +86,12 @@ class SignatureRuleTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Refuse another NumPy: the expectations below are NumPy 2.4.2's signatures.
+        """Refuse another NumPy: the expectations below are the pinned NumPy's signatures.
 
-        :raises RuntimeError: when the installed NumPy is not 2.4.2.
+        :raises RuntimeError: when the installed NumPy is not the release in numpy-version.txt.
         """
-        if np.__version__ != "2.4.2":
-            raise RuntimeError("Signature parity tests require NumPy 2.4.2.")
+        if np.__version__ != PINNED_NUMPY_VERSION:
+            raise RuntimeError(f"Signature parity tests require NumPy {PINNED_NUMPY_VERSION} (numpy-version.txt).")
 
     def test_a_renamed_parameter_is_missing_and_foreign(self):
         """np.transpose(a, axes=None) as C#'s transpose(a, premute): ``np.transpose(x, axes=p)`` does not compile."""

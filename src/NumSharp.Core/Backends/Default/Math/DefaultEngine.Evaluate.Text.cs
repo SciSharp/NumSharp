@@ -50,7 +50,7 @@ namespace NumSharp.Backends
         ///     a search's <c>start</c> / <c>end</c> cannot reach int64.</exception>
         /// <exception cref="ArgumentException">The result does not broadcast into <paramref name="out"/>; a non-bool
         ///     <c>where=</c>.</exception>
-        /// <exception cref="OverflowException">A StringDType repeat by a negative count or past 2^63 - 1 characters, or a parse
+        /// <exception cref="OverflowError">A StringDType repeat by a negative count or past 2^63 - 1 characters, or a parse
         ///     out of the target's range.</exception>
         /// <remarks>
         ///     <para>
@@ -241,7 +241,7 @@ namespace NumSharp.Backends
                 // descriptor formats numbers or recasts text; it keeps the result's layout (K order).
                 if (options.HasDtype)
                 {
-                    var cast = current.astype(options.DtypeDescr, true, 'K', "unsafe");
+                    var cast = current.astype(options.DtypeDescr);
                     if (currentOwned)
                         current.Dispose();
                     current = cast;
@@ -253,9 +253,8 @@ namespace NumSharp.Backends
                     // np.evaluate's out= rule: the result's dtype must reach out's under the casting rule (by descriptor, so a
                     // text width or class decides as in NumPy: U5 → U3 is same_kind, U → S is not), checked before any write.
                     if (!DTypeCasting.CanCastTypeTo(current.dtype, @out.dtype, options.Casting))
-                        throw new TypeError(
-                            $"Cannot cast ufunc 'evaluate' output from {current.dtype.ToString(true)} to " +
-                            $"{@out.dtype.ToString(true)} with casting rule '{DTypeCasting.CastingToString(options.Casting)}'");
+                        throw new UFuncOutputCastingError("evaluate", 1, DTypeCasting.CastingToString(options.Casting),
+                            current.dtype, @out.dtype, 2);
                     if (reduction.Ufunc is not null)
                     {
                         // A flat reduction's out has the result's exact rank (0, or the input's under keepdims, one element:
@@ -373,7 +372,10 @@ namespace NumSharp.Backends
             {
                 for (int i = 0; i < operands.Length; i++)
                     args[i] = ResolveStageOperand(plan, operands[i], inputs, results, out made[2 * i], out made[2 * i + 1]);
-                return result = intoKeywords ? stage.ExecuteInto(this, args, @out, where) : stage.Execute(this, args);
+                // A stage's fresh result is an ARRAY in np.evaluate's model, 0-d included (NumPy's reference reads a 0-d text
+                // answer as its array result): the engine's ufuncs made a 0-d one NumSharp's scalar, so it is made an array
+                // again (NumPy's out=...; the result is this call's own). out= comes back as given.
+                return result = intoKeywords ? stage.ExecuteInto(this, args, @out, where) : stage.Execute(this, args).AsArrayResult();
             }
             finally
             {

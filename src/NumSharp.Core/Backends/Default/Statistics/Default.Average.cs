@@ -49,7 +49,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">An axis that appears twice (<c>repeated axis in `axis` argument</c>); weights not
         ///     of the reduced axes' shape (<c>Shape of weights must be consistent with shape of a along specified
         ///     axis.</c>).</exception>
-        /// <exception cref="DivideByZeroException">Weights that sum to zero (<c>Weights sum to zero, can't be
+        /// <exception cref="ZeroDivisionError">Weights that sum to zero (<c>Weights sum to zero, can't be
         ///     normalized</c>), or a mean without weights whose result is empty (<c>division by zero</c>: NumPy's
         ///     <c>a.size / avg.size</c>).</exception>
         /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
@@ -86,7 +86,7 @@ namespace NumSharp.Backends
                 // scl = avg_as_array.dtype.type(a.size / avg_as_array.size): only a NaN-like NA mean (np.float64) returns,
                 // always 0-d (an axis or keepdims meets the divide's refusal first), so the count is NumPy's float64 SCALAR
                 // (NumSharp's stand-in: a read-only 0-d owner) and needs no broadcast.
-                var sclValue = NewScalar((double)a.size / avg.size).MarkReductionScalar();
+                var sclValue = NewScalar((double)a.size / avg.size).PyArray_Return();
                 return (scope.Returns(avg), scope.Returns(sclValue));
             }
             if (Backends.Strings.NDStringUfuncs.IsString(a))
@@ -109,7 +109,7 @@ namespace NumSharp.Backends
                 // (before the returned check), so 0/0 raises ZeroDivisionError even when
                 // returned=False — see lib/_function_base_impl.average lines 576-578.
                 if (avg.size == 0)
-                    throw new DivideByZeroException("division by zero");
+                    throw new ZeroDivisionError("division by zero");
 
                 if (!returned) return (scope.Returns(avg), null);
 
@@ -117,7 +117,7 @@ namespace NumSharp.Backends
                 // stand-in: a read-only 0-d owner); `np.broadcast_to(scl, avg_as_array.shape).copy()` then makes it a fresh
                 // array wherever the mean has dimensions.
                 double count = (double)a.size / avg.size;
-                NDArray scl = NewScalar(count).astype(avg.typecode).MarkReductionScalar();
+                NDArray scl = NewScalar(count).astype(avg.typecode).PyArray_Return();
                 if (!scl.Shape.dimensions.SequenceEqual(avg.Shape.dimensions))
                     scl = NDArray.broadcast_to(scl, avg.Shape).copy();
                 return (scope.Returns(avg), scope.Returns(scl));
@@ -146,7 +146,7 @@ namespace NumSharp.Backends
             NDArray weightSum = SumWithAxes(wgt, normalizedAxis, resultDtype, keepdims);
             // if np.any(scl == 0.0): raise ZeroDivisionError - before the product is formed.
             if (HasZero(weightSum))
-                throw new DivideByZeroException("Weights sum to zero, can't be normalized");
+                throw new ZeroDivisionError("Weights sum to zero, can't be normalized");
 
             // avg = avg_as_array = np.multiply(a, wgt, dtype=result_dtype).sum(axis, **keepdims_kw) / scl
             NDArray weightedSum = SumOfProducts(a, wgt, resultDtype, normalizedAxis, keepdims);
@@ -244,7 +244,7 @@ namespace NumSharp.Backends
         private NDArray Quotient(NDArray num, NDArray scl)
         {
             if (num.ndim == 0 && scl.ndim == 0)
-                return num.TensorEngine.Divide(num, scl, null, null, null).MarkReductionScalar();
+                return num.TensorEngine.Divide(num, scl, null, null, null).PyArray_Return();
             var r = UfuncResultBuffer(num.GetTypeCode, num, scl);
             num.TensorEngine.Divide(num, scl, null, r, null);
             return r;

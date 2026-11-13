@@ -24,7 +24,7 @@ below.)
 - Kernels `Backends/Kernels/ILKernelGenerator.Polynomial{,.Typing,.Emitter,.Lanes,.ConstPool,.Eval}.cs`: per-chunk IL over
   `NDIterRef.ForEach`, emitted by one typed emitter from per-basis STEP TABLES (NumPy's source-order expression trees,
   never re-associated, each node typed by NEP 50), so there is no per-basis or per-dtype C#.
-- Bit-exact with NumPy 2.4.2 on every dtype pair and layout, the result LAYOUT included: the tier `polyeval.jsonl` (zero
+- Bit-exact with NumPy 2.5.4 on every dtype pair and layout, the result LAYOUT included: the tier `polyeval.jsonl` (zero
   excused; section L is a "strides" facet over every x × series layout; section J a Python-sequence x (tuples, nested
   lists, empty, ragged, NumPy-scalar items, coerced by `UnmanagedStorage.FromSequence`) and a Python int x past int64 (a
   C# `BigInteger`,
@@ -124,7 +124,7 @@ below.)
 (the functions) + the facade `Polynomial/Package/np.polynomial.polyutils.cs` (`[ModuleName("np.polynomial.polyutils")]`);
 every element loop is an IL kernel in `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (the trim scan, the
 in-place combine, the tolerance scan, casts, and one-element scalarmath kernels behind flat slot arrays). Bit-exact with
-NumPy 2.4.2: `polyseries.jsonl` (zero excused: long series, block boundaries, getdomain window crossings, complex64
+NumPy 2.5.4: `polyseries.jsonl` (zero excused: long series, block boundaries, getdomain window crossings, complex64
 results value-compared, tuple / nested-sequence cases (section O), `trimseq` over Python sequences (P), the deferred
 object/str refusal (Q), `mapdomain` result layouts with a "strides" facet (R)), `Polynomial/PolynomialSeriesTests.cs`,
 `PolynomialResultLayoutTests.cs`.
@@ -140,7 +140,10 @@ object/str refusal (Q), `mapdomain` result layouts with a "strides" facet (R)), 
   and for a Python sequence the same KIND (`trimseq(object[])` is the list itself or a new list of the kept items, an
   `NDArray[]` staying one; a tuple itself or a new ValueTuple; any other enumerable itself or an `object[]`; zero-ness is
   Python's `item != 0`, an array item by its truth value with NumPy's ValueError past one element; None or a number is
-  `len()`'s TypeError). `trimcoef` checks `tol < 0` before converting. `{p}line` is `np.array` DISCOVERY
+  `len()`'s TypeError). `trimcoef(object c, double tol = 0)` and `{p}trim` are one typed signature (a Python float
+  tolerance; NumPy compares a weak int one alike) over `NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(object))`,
+  which keeps NumPy's `tol < 0` over any value for the series class's `trim` and the corpus (`OpRegistry.PolySeries.cs`
+  `PolyTrim`); `trimcoef` checks `tol < 0` before converting. `{p}line` is `np.array` DISCOVERY
   (`polyline(1, 2)` is int64). `mapdomain` converts x only when it is not an int/float/complex/`np.generic` (a bool x
   becomes a 0-d array). The constants are ONE shared, writeable, scope-detached instance each (NumPy's module attributes:
   a write persists), holding an extra ARC reference so a caller's `Dispose()` cannot free them; their corpus cases vary
@@ -241,7 +244,7 @@ For the six bases, with every parameter (`m`, `k`, `lbnd`, `scl`, `axis`). Drive
 NumPy's Python prologue in NumPy's statement order, which is also its error order. Kernel
 `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs`: the six recurrences are DATA (`PolyCalcRoutines`:
 head steps, a j loop, tail steps; each statement is NumPy's source expression token for token), and ONE whole-array
-kernel is emitted per (basis, der/int, dtype, source dtype, 1-D, fused scale). Bit-exact with NumPy 2.4.2:
+kernel is emitted per (basis, der/int, dtype, source dtype, 1-D, fused scale). Bit-exact with NumPy 2.5.4:
 `polycalc.jsonl` (zero excused; argument kinds (M), zero-size / 5-D / extreme-int series (N), widened scale (O)),
 `Polynomial/PolynomialCalculusTests.cs` (NumPy's `TestIntegral`/`TestDerivative` ported, bitwise where NumPy's statement
 sequence makes them exact; byte dumps per dtype family; kernel structure), `Polynomial/PolynomialArgumentKindsTests.cs`.
@@ -316,7 +319,7 @@ sequence makes them exact; byte dumps per dtype family; kernel structure), `Poly
     `{p}val(lbnd, tmp)` (Python's left-to-right `k[i] - {p}val(…)`), so a bad lbnd wins over a bad later constant; a str
     lbnd is refused only where NumPy evaluates at it (never for m == 0, the one-coefficient zero branch, or before a later
     argument's own error); a `BigInteger` past float64 raises CPython's `int too large to convert to float`
-    (`OverflowException`), one within float64 but past float32/float16 is inf.
+    (`OverflowError`), one within float64 but past float32/float16 is inf.
   - A conversion is the call's intermediate, released however the call ends: `{p}val` disposes an x it converted,
     `_valnd`/`_gridnd` dispose a partial result when a later pass fails, `mapdomain(object x)` its converted points; the
     additive and calculus facades are `[NDScoped]`, the evaluation facades dispose by hand. A pool-balance probe

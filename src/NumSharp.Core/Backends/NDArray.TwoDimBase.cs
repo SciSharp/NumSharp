@@ -434,6 +434,17 @@ namespace NumSharp
 
             var shape = m.Shape;
 
+            // The blit writes a C-ordered result, NumPy's layout only when where(tri(...), m, zeros(1)) allocates C: its
+            // iterator orders the result by the mask's C votes (the last two axes) and m's own memory order (every other
+            // axis pair), so a transposed m keeps a non-C order (probed 2.4.2: np.tril(a.transpose(1, 0, 2)) has the
+            // transpose's strides). Such an m takes the composition, which gets NumPy's layout from np.where.
+            // TryKOrderPlan answers "is NpyIter's layout of (mask, m) not C" - the mask a C (rows, cols) operand (np.where's
+            // iterator is never the trivial loop here: three operands of different ranks).
+            if (!shape.IsContiguous
+                && Backends.DefaultEngine.TryKOrderPlan(shape.dimensions,
+                    new[] { new Shape(new[] { shape.dimensions[ndim - 2], cols }, copy: false), shape }, out _, out _))
+                return null;
+
             // A unit-strided last axis is what makes the kept run contiguous in the SOURCE;
             // the destination is contiguous by construction. Broadcast (stride 0) and
             // column-stepped views fail this and fall back.

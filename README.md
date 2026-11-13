@@ -78,6 +78,17 @@ NumSharp focuses on:
   raw reports, and subsystem matrices. See the
   [benchmark dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html).
 
+## Integrations
+
+NumSharp arrays cross into the Python, .NET and native libraries around them, without a copy
+wherever the other side can share memory. Each color names the package that brings the
+integration, and the [Interoperability](https://scisharp.github.io/NumSharp/docs/interop/index.html)
+pages document every bridge: what crosses as a view, what crosses as a copy, and who frees the memory.
+
+<p align="center">
+  <a href="https://scisharp.github.io/NumSharp/docs/interop/index.html"><img alt="NumSharp at the center of its integrations: NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow and polars through NumSharp.Interop.pythonnet; ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp, System.Drawing and Numpy.NET in .NET; OpenBLAS; .npy and .npz files" src="docs/website-src/images/integrations.svg"></a>
+</p>
+
 ## Features Support and Implementation Map
 
 [NumSharp's Coverage & Support Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html) is presenting the full implementation

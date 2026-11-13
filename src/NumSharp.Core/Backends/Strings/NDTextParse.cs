@@ -253,7 +253,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="canon">Receives the canonical value (16 bytes).</param>
         /// <exception cref="ValueError">The text is not a number of the target's kind (NumPy's text, quoting
         ///     <c>'…'</c>).</exception>
-        /// <exception cref="OverflowException">An integer outside the target (NumPy's OverflowError texts).</exception>
+        /// <exception cref="OverflowError">An integer outside the target (NumPy's OverflowError texts).</exception>
         internal static void ParseObject(string s, NPTypeCode target, byte* canon)
         {
             uint[] cps = ToCodePoints(s);
@@ -275,7 +275,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="target">The numeric target dtype.</param>
         /// <param name="canon">Receives the canonical value (16 bytes).</param>
         /// <exception cref="ValueError">Not a number of the target's kind (quoting <c>b'…'</c>).</exception>
-        /// <exception cref="OverflowException">An integer outside the target.</exception>
+        /// <exception cref="OverflowError">An integer outside the target.</exception>
         /// <exception cref="UnicodeDecodeError">A complex target meets bytes that are not UTF-8.</exception>
         internal static void ParseObject(byte[] b, NPTypeCode target, byte* canon)
         {
@@ -1178,7 +1178,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">The text is not a number of the target's kind (<c>invalid literal for int() with base
         ///     10: 'x'</c>, <c>could not convert string to float: 'x'</c>, <c>complex() arg is a malformed string</c>, quoting the
         ///     Python <c>str</c>), or an integer literal has more than 4300 digits.</exception>
-        /// <exception cref="OverflowException">An integer that does not fit: <c>int too big to convert</c>, <c>can't convert
+        /// <exception cref="OverflowError">An integer that does not fit: <c>int too big to convert</c>, <c>can't convert
         ///     negative int to unsigned</c>, <c>Integer 300 is out of bounds for byte</c>.</exception>
         /// <remarks>
         ///     <para>
@@ -1273,7 +1273,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="beyond64">Whether the magnitude is past 64 bits.</param>
         /// <param name="target">The integer target.</param>
         /// <param name="canon">Receives the <see cref="long"/> / <see cref="ulong"/> value.</param>
-        /// <exception cref="OverflowException">CPython's <c>int too big to convert</c> (past 64 bits) or <c>can't convert
+        /// <exception cref="OverflowError">CPython's <c>int too big to convert</c> (past 64 bits) or <c>can't convert
         ///     negative int to unsigned</c>; NumPy's <c>Integer {v} is out of bounds for {type}</c> with the C type names of a
         ///     Linux / macOS build (<c>byte</c>, <c>short</c>, <c>int</c>, <c>unsigned byte</c>, <c>unsigned short</c>,
         ///     <c>unsigned int</c>; Windows NumPy says <c>long</c> / <c>unsigned long</c> for the 32-bit types).</exception>
@@ -1283,7 +1283,7 @@ namespace NumSharp.Backends.Strings
             {
                 // PyLong_AsLongLong: anything outside int64 is the same OverflowError.
                 if (beyond64 || (negative ? m > 1UL << 63 : m > long.MaxValue))
-                    throw new OverflowException("int too big to convert");
+                    throw new OverflowError("int too big to convert");
                 long v = negative ? (long)(0UL - m) : (long)m;
                 (long min, long max, string name) = target switch
                 {
@@ -1293,16 +1293,16 @@ namespace NumSharp.Backends.Strings
                     _ => (long.MinValue, long.MaxValue, "long"),
                 };
                 if (v < min || v > max)
-                    throw new OverflowException($"Integer {v.ToString(CultureInfo.InvariantCulture)} is out of bounds for {name}");
+                    throw new OverflowError($"Integer {v.ToString(CultureInfo.InvariantCulture)} is out of bounds for {name}");
                 *(long*)canon = v;
                 return;
             }
 
             // PyLong_AsUnsignedLongLong: the sign is tested first ("-0" is zero, not negative), then the 64-bit range.
             if (negative && (m != 0 || beyond64))
-                throw new OverflowException("can't convert negative int to unsigned");
+                throw new OverflowError("can't convert negative int to unsigned");
             if (beyond64)
-                throw new OverflowException("int too big to convert");
+                throw new OverflowError("int too big to convert");
             (ulong umax, string uname) = target switch
             {
                 NPTypeCode.Byte => (byte.MaxValue, "unsigned byte"),
@@ -1311,7 +1311,7 @@ namespace NumSharp.Backends.Strings
                 _ => (ulong.MaxValue, "unsigned long"),
             };
             if (m > umax)
-                throw new OverflowException($"Integer {m.ToString(CultureInfo.InvariantCulture)} is out of bounds for {uname}");
+                throw new OverflowError($"Integer {m.ToString(CultureInfo.InvariantCulture)} is out of bounds for {uname}");
             *(ulong*)canon = m;
         }
 
@@ -1367,10 +1367,10 @@ namespace NumSharp.Backends.Strings
                 case TextParseStatus.OutOfBounds:
                 {
                     string v = (d.Negative && d.Magnitude != 0 ? "-" : "") + d.Magnitude.ToString(CultureInfo.InvariantCulture);
-                    return new OverflowException($"Python integer {v} out of bounds for {target.AsNumpyDtypeName()}");
+                    return new OverflowError($"Python integer {v} out of bounds for {target.AsNumpyDtypeName()}");
                 }
                 case TextParseStatus.TooLargeForCLong:
-                    return new OverflowException("Python int too large to convert to C long");
+                    return new OverflowError("Python int too large to convert to C long");
                 case TextParseStatus.InvalidFloat:
                 {
                     // float() quotes the object it got: np.bytes_(b'...') for an array element, b'...' for a bytes object.
@@ -1391,10 +1391,7 @@ namespace NumSharp.Backends.Strings
                     return new SystemError(NDStringCodec.InvalidMaxCharMessage);
                 case TextParseStatus.DecodeError:
                 {
-                    string text = d.DecodeEnd - d.DecodeStart == 1
-                        ? string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode byte 0x{bytes[d.DecodeStart]:x2} in position {d.DecodeStart}: {d.DecodeReason}")
-                        : string.Create(CultureInfo.InvariantCulture, $"'utf-8' codec can't decode bytes in position {d.DecodeStart}-{d.DecodeEnd - 1}: {d.DecodeReason}");
-                    return new UnicodeDecodeError(text);
+                    return new UnicodeDecodeError("utf-8", bytes, d.DecodeStart, d.DecodeEnd, d.DecodeReason);
                 }
                 default:
                     throw new InvalidOperationException($"No error for parse status {status}.");

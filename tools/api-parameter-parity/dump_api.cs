@@ -4,7 +4,7 @@
 
 // Dumps every public overload of np.* (static) and NDArray (instance) as JSON:
 // { "np": { name: [ [ {name, type, optional, default}... ], ... ] }, "ndarray": { ... } }
-// The parameter-parity inventory compares these against NumPy 2.4.2's inspect.signature.
+// The parameter-parity inventory compares these against the pinned NumPy's inspect.signature (numpy-version.txt).
 using System;
 using System.Collections.Generic;
 using System.IO;

@@ -30,8 +30,9 @@ namespace NumSharp.Backends
         //      emit's min-perm-within-run scan also recovers: the outputs are those of the BCL path this
         //      replaced;
         //    - float32 / float64 values alone and counts alone sort the non-NaN prefix here
-        //      (RadixSortValues) after the NaN partition, and WriteSortNaNs then writes NumPy's sort NaN
-        //      into the tail (NumPy sorts in place there). The -0.0-below-+0.0 key makes -0.0 the value
+        //      (RadixSortValues) after the NaN partition, which leaves the tail in the order NumPy's in-place
+        //      sort leaves it (x86-simd-sort's swap pass, every NaN's bits kept since NumPy 2.5). The
+        //      -0.0-below-+0.0 key makes -0.0 the value
         //      of a run of zeros whenever the line holds one; NumPy's x86-simd-sort orders equal keys its
         //      own way and may keep +0.0, a divergence left as it is;
         //    - the integer hash path's high-cardinality bail-out sorts and dedups here (RadixSortValues +

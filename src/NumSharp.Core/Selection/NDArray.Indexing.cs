@@ -37,8 +37,13 @@ namespace NumSharp
         ///     Python reads <c>a[(1, 2)]</c> as <c>a[1, 2]</c>. A lone string holds the whole index in slice notation
         ///     (comma-separated); a string among other entries is one slice.</param>
         /// <value>
-        ///     GET: a VIEW for an index of integers, slices, the ellipsis and new axes (one integer per axis gives a 0-d view,
-        ///     NumSharp's scalar); a new array for an index array, a mask or a C# bool (NumPy's advanced indexing).
+        ///     GET: for one integer per axis (and <c>()</c> of a 0-d array) NumPy's SCALAR, the element as NumPy's
+        ///     <c>array_item</c> returns it: a new read-only 0-d array holding a COPY of the element, which does not change
+        ///     when this array does (write an element through the setter, <c>a[i] = v</c>); a VIEW for any other index of
+        ///     integers, slices, the ellipsis and new axes (a 0-d view, <c>a[0, ...]</c> or <c>z[...]</c>, is an explicit
+        ///     0-d array that writes through); for a NumPy scalar itself, a non-item index (<c>s[...]</c>, <c>s[None]</c>)
+        ///     views a writeable copy of its value (NumPy's <c>gentype_subscript</c>); a new array for an index array, a mask
+        ///     or a C# bool (NumPy's advanced indexing).
         ///     SET: stores the value into the selection by NumPy's rules: a value broadcasts to the selection, a C# number is
         ///     NumPy's Python scalar (range-checked, never wrapped), one integer per axis stores one element (a
         ///     <c>StringDType</c> element takes a Python object by setitem).
@@ -50,7 +55,7 @@ namespace NumSharp
         ///     <c>prepare_index</c> texts).</exception>
         /// <exception cref="ValueError">SET: the array is read-only (checked first, as NumPy's setitem does), the value does
         ///     not broadcast to the selection, or a sequence is stored into one element.</exception>
-        /// <exception cref="OverflowException">SET: a C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
+        /// <exception cref="OverflowError">SET: a C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">SET: a complex number into a real array, or a value of two or more dimensions through a
         ///     mask of this array's own shape.</exception>
         /// <remarks>
@@ -79,9 +84,27 @@ namespace NumSharp
             {
                 if (key is null)
                     throw new ArgumentNullException(nameof(key));
+                // gentype_subscript: a NumPy scalar is indexed as the 0-d ARRAY of its value (PyArray_FromScalar), for
+                // every key, basic or advanced: a view of it (s[...], s[None]) is a writeable ndarray over a copy, never a
+                // view of the immutable scalar, and a key the 0-d array rejects raises NumPy's scalar text. Read-only is
+                // the scalar's sign here: a 0-d array NumSharp allocated another way (np.zeros(())) keeps being indexed
+                // as the array it is, and a C# literal (WasScalarArgument) is NumPy's Python scalar. Tested first: for
+                // an array with dimensions it is one false Shape.IsScalar read.
+                if (IsScalarSubscript)
+                    return ScalarSubscript(key);
                 // The old this[string] / this[params Slice[]] body: one view of the storage, no index normalization.
                 if (TryBasicIndex(key, out Slice[] slices))
-                    return new NDArray(Storage.GetView(slices));
+                {
+                    // NumPy's array_subscript: an integer for every dimension (and () of a 0-d array) is an ITEM -
+                    // array_item / PyArray_Scalar, NumPy's scalar: a read-only copy of the element, never a view that
+                    // changes with this array. Any other basic index is a view.
+                    if (IsItemIndex(slices))
+                        return ItemScalar(slices);
+                    var view = new NDArray(Storage.GetView(slices));
+                    // Only an item index gives NumPy's scalar: a 0-d result of any other basic index (a[...] of a 0-d array,
+                    // a[0, ...] of a 1-D one) is a 0-d ndarray VIEW, an explicit array.
+                    return view.ndim == 0 ? view.MarkExplicitZeroDimArray() : view;
+                }
                 // The old this[NDArray<bool>] body: a mask from a comparison (statically NDArray<bool>) is the common
                 // advanced index, and the general path would only route it here after its normalization pass.
                 if (key.Length == 1 && key[0] is NDArray<bool> mask)
@@ -209,13 +232,48 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     The VIEW a basic index (integers, slices, the ellipsis, new axes) selects, for library code that needs one:
+        ///     unlike the indexer, an integer for every axis gives a 0-d VIEW of the element, whose writes reach this array,
+        ///     never NumPy's item copy.
+        /// </summary>
+        /// <param name="slices">The index entries.</param>
+        /// <returns>A new array object over this array's memory (its own storage object, never this array's).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="slices"/> is <c>null</c>.</exception>
+        /// <exception cref="IndexError">An integer is out of bounds, or more entries than axes.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     The indexer is NumPy's <c>ndarray.__getitem__</c>, so a full integer index is an ITEM (a read-only copy that
+        ///     owns a pooled buffer). Internal code that builds an index to get an O(1) view (the unique slice of a broadcast
+        ///     operand, the region an <c>out=</c> is written through) calls this instead: through the indexer it would write
+        ///     into a copy, or leave a pooled buffer to the finalizer, whenever its index happens to name every axis.
+        ///     </para>
+        ///     <para>
+        ///     Anchored: the view storage holds no counted reference until the new array takes one, so the weaver keeps
+        ///     <c>this</c> rooted until then. A trivial index may hand the storage itself back; it is aliased so a reshape of
+        ///     the view cannot relabel this array.
+        ///     </para>
+        /// </remarks>
+        [NDAnchored]
+        internal NDArray BasicIndexView(params Slice[] slices)
+        {
+            if (slices is null)
+                throw new ArgumentNullException(nameof(slices));
+            UnmanagedStorage view = Storage.GetView(slices);
+            if (ReferenceEquals(view, Storage))
+                view = Storage.Alias();
+            return new NDArray(view);
+        }
+
+        /// <summary>
         ///     Whether a basic index names ONE element by integers alone (one integer per axis, no slice, ellipsis or new
-        ///     axis) — NumPy's "full integer index", which its assignment routes to the dtype's setitem
-        ///     (<c>array_assign_item</c>) instead of the copy of a view.
+        ///     axis) — NumPy's "full integer index": its read is an ITEM (<c>array_item</c>, NumPy's scalar copy) and its
+        ///     assignment goes to the dtype's setitem (<c>array_assign_item</c>) instead of the copy of a view.
         /// </summary>
         /// <param name="slices">The parsed index.</param>
         /// <returns>True for a full integer index of this array.</returns>
-        private bool IsItemIndex(Slice[] slices)
+        /// <remarks>Private-protected: <see cref="NDArray{TDType}"/>'s typed getter and <see cref="NDMatrix"/>'s indexers
+        ///     apply the same item rule.</remarks>
+        private protected bool IsItemIndex(Slice[] slices)
         {
             if (slices.Length != ndim)
                 return false;
@@ -238,9 +296,9 @@ namespace NumSharp
         ///     <c>StringDType</c> element then takes a Python object by setitem, as NumPy's <c>array_assign_item</c> does.</param>
         /// <exception cref="ValueError">The value does not broadcast to the selection (NumPy's AssignArray text, quoting the
         ///     value's shape after its leading unit dimensions were stripped), or a sequence into one element.</exception>
-        /// <exception cref="OverflowException">A C# literal out of this dtype's range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of this dtype's range.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
-        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> store's <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">A <c>StringDType</c> store's <c>MemoryError</c> texts.</exception>
         /// <remarks>
         ///     <para>
         ///     The view is wrapped in an <see cref="NDArray"/> for the assignment and disposed after it, exceptions included:
@@ -444,7 +502,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The array is read-only, or the value does not fit the selection (NumPy's
         ///     <c>shape mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>).</exception>
         /// <exception cref="IndexError">The index is invalid (NumPy's <c>prepare_index</c> texts).</exception>
-        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype.</exception>
+        /// <exception cref="OverflowError">A C# integer outside this array's integer dtype.</exception>
         /// <exception cref="TypeError">A value of two or more dimensions through a lone Python bool on a 0-d array (NumPy's
         ///     boolean assignment, <see cref="ThrowIfBooleanSubscriptAssignMismatch"/>).</exception>
         /// <remarks>A lone Python bool is the 0-d mask's store (<see cref="SetMasked"/>), for every dtype, as a lone 0-d bool

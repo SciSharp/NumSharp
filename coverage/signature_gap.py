@@ -2,8 +2,9 @@
 
 Why this module exists
 ----------------------
-``docs/plans/API_DIFF_GAP.md`` is the complete map of how NumSharp's C# signatures differ from NumPy 2.4.2's. Its
-tools find more than the inventory's own comparison (``signature_parity.assess``, generator 1.15.0) could:
+``docs/plans/API_DIFF_GAP.md`` is the complete map of how NumSharp's C# signatures differ from NumPy's (the document
+was written against 2.4.2; this module reruns its tools under the generator's own, pinned NumPy on every generation).
+Its tools find more than the inventory's own comparison (``signature_parity.assess``, generator 1.15.0) could:
 
 * NumPy's side completed from NumPy's ``.pyi`` stubs and numpydoc ``Parameters`` sections where the runtime signature
   forwards ``(*args, **kwargs)`` (``np.printoptions``' ``formatter`` / ``legacy``, ``np.frompyfunc``'s ``identity``),
@@ -321,7 +322,7 @@ def run(root: Path, workdir: Path, object_surfaces: Sequence[Any], python: str =
         root: The repository root.
         workdir: An empty scratch directory for the dumps, the probe project and the outputs.
         object_surfaces: ``object_surfaces.OBJECT_SURFACES`` (the object groups' CLR types).
-        python: The interpreter for the two Python tools (the generator's own: NumPy 2.4.2 importable).
+        python: The interpreter for the two Python tools (the generator's own: the pinned NumPy importable).
 
     Returns:
         The gap map.

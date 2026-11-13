@@ -20,11 +20,15 @@ paths:
   exactly; `add(True, True, dtype: i32)` is 2 (the bool→logical-OR remap keys off the final loop dtype);
   `negative(bool, dtype: f64)` is legal. Inputs must reach the loop through same_kind casts (`Cannot cast ufunc
   '<name>' input [N] from ...`; binary errors are indexed, unary errors are not).
-- Every ufunc cast refusal raises `TypeError` with NumPy's `UFuncTypeError` text (parity QA-04): an input that cannot
-  reach a `dtype=` loop, a loop result that cannot reach `out=` (`Cannot cast ufunc '<name>' output from ...`), a gufunc's
-  text operand, `round_`/`around`'s float64 composition cast back into a bool or integer array, on every route (the
-  validators in `DefaultEngine.UfuncOut.cs`, `GufuncGuard.cs`, the string loops, np.evaluate, fft, linalg, polynomial
-  calculus). It is not an `ArgumentException`; the `where=` mask's 'safe'-cast refusal still is.
+- Every ufunc cast refusal raises NumPy's `UFuncInputCastingError` / `UFuncOutputCastingError` (both `UFuncCastingError`
+  : `UFuncTypeError` : `TypeError`) with NumPy's text and attributes (parity QA-04): an input that cannot reach a `dtype=`
+  loop, a loop result that cannot reach `out=` (`Cannot cast ufunc '<name>' output from ...`), a gufunc's text operand,
+  `round`/`around`'s float64 composition cast back into a bool or integer array, on every route (the validators in
+  `DefaultEngine.UfuncOut.cs`, `GufuncGuard.cs`, the string loops, np.evaluate, fft, linalg, polynomial calculus); a
+  missing loop for the operands' dtypes raises `UFuncNoLoopError` (its `dtypes` the classes or descriptors NumPy's
+  resolver named), two text classes `UFuncBinaryResolutionError`. A Char / Decimal operand is named by the NumPy dtype it
+  stands in for (`NPTypeCode.AsNumpyDescr`: uint16 / float64), as the texts always were. It is not an
+  `ArgumentException`; the `where=` mask's 'safe'-cast refusal still is.
 - Loop-existence gates raise `No loop matching ... ufunc <name>`: the float-only ufuncs (sqrt, exp, log, trig, `divide`,
   `true_divide`) reject an int or bool dtype; the bitwise ufuncs reject float, complex and decimal dtypes; floor_divide,
   remainder (`np.mod` quotes that name) and fmod reject a bool or complex dtype (integer and float loops only; parity
@@ -32,15 +36,16 @@ paths:
 - `positive` is a full ufunc with identity loops at every dtype except bool: `positive(bool)` and `dtype: bool` raise the
   `did not contain a loop with signature matching types <class 'numpy.dtypes.XDType'> -> ...` texts;
   `positive(bool, dtype: f64)` works.
-- `round_`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)`: `out=` only, the
-  second positional is `decimals`, and a cast error at `decimals != 0` names ufunc 'multiply' (NumPy's composition).
+- `round`/`around` follow NumPy's non-ufunc shape `round(a, int decimals = 0, NDArray out = null)`, one overload each
+  (NumPy 2.0's removed `round_` and the NumSharp-only `dtype` are gone): `out=` only, the second positional is `decimals`,
+  and a cast error at `decimals != 0` names ufunc 'multiply' (NumPy's composition).
   Their `out=` follows `PyArray_Round` (parity QA-31): another SIZE is `invalid output shape` before anything else;
   integer data at `decimals >= 0` is `PyArray_AssignArray` (np.copyto's read-only, cast and broadcast texts); complex data
   assigns its parts (the assignment's broadcast text); float data is the rint ufunc at 0 decimals and
   `multiply(a, 10**d, out)` otherwise, whose refusal lists three operands (`(3,4) () (4,3) `).
 - `rint` is the true ufunc form of round-half-to-even: float-tier (bool/i8/u8 → f16, i16/u16 → f32, i32+ → f64; floats
   and complex keep their dtype), reusing `UnaryOp.Round`'s kernel (complex rounds both parts; `dtype=<int>` has no loop).
-  `round_`/`around` keep integer dtypes (np.round's integer path is an identity copy).
+  `round`/`around` keep integer dtypes (np.round's integer path is an identity copy).
 - floor/ceil/trunc have identity loops on every bool and integer dtype. The loop dtype comes from the input tier
   (`sinh(i1, out=f8)` stores float16-precision values). `reciprocal` of an integer 0 is the signed MinValue.
   `sign`/`positive` reject bool with the no-loop text. Bitwise and invert raise the no-loop TypeError for float inputs.
@@ -51,37 +56,63 @@ paths:
   uint16's bits.
 - Tests: `Math/UfuncDtypeOverloadTests.cs`.
 
-## The result layout: NumPy's K order
+## The result layout: NumPy's trivial loop, else K order
 
-A fresh ufunc result is laid out as NumPy's NpyIter allocates it (parity QA-36): `npyiter_find_best_axis_ordering` over
-the operands (|strides| compared pairwise, a stride-0 axis abstaining, C kept on a tie or a conflict) and
-`npyiter_new_temp_array`, so a permuted operand keeps its memory order, an F set stays F, a flipped F operand comes out
-F with positive strides, and a C, stepped, reversed or broadcast-row set gives C. `DefaultEngine.KOrder.cs`:
-- `TryKOrderPlan(dims, operands)` answers whether that layout differs from C and how to produce it: up to 64 dimensions
-  it is `Shape.NpyIterOutputShape` (NumPy's sort, ported); above, only the axes longer than 1 are sorted (the extent-1
-  axes take strides that keep the sequence non-increasing), so a plan stays linear at any rank (200,000 dimensions are
-  tested). `IsKOrderCVoter` (a C-contiguous, 0-d / one-element, or C-ordered stepped / reversed / broadcast operand) and
-  `MayNeedKOrder` decide the common case without a broadcast or an allocation.
+A fresh ufunc result is laid out as NumPy allocates it. A call `try_trivial_single_output_loop` takes (no `where=` mask,
+one output, every non-0-d input of one shape, every input of two or more dimensions aligned, read in its own dtype and C-
+or F-contiguous with the same (C, F) flag pair as the first) gets a plain C array, or plain F when that pair is F-only;
+0-d and 1-D inputs never fix the order. Every other call is NpyIter's allocation (parity QA-36):
+`npyiter_find_best_axis_ordering` over the operands (|strides| compared pairwise, a stride-0 axis abstaining, C kept on a
+tie or a conflict) and `npyiter_new_temp_array`, so a permuted operand keeps its memory order, an F set stays F, a
+flipped F operand comes out F with positive strides, and a C, stepped, reversed or broadcast-row set gives C. The two
+allocations differ only in the strides of extent-1 axes (np.negative of an F (2, 1, 3) int32 array: (4, 8, 8) through
+the trivial loop; np.sqrt of it, a cast input: (8, 48, 16) through NpyIter). `DefaultEngine.KOrder.cs`:
+- `TrivialLoopLaysOut(a, b, aCasts, bCasts, out fortran)` and its one-input form are the trivial-loop test (a cast or
+  unaligned input of two or more dimensions refuses it, as `check_for_trivial_loop` does; then
+  `Shape.TrivialLoopIsFortran` over the input shapes). Each caller says which inputs the loop casts: the int32 operand of
+  `int32 + float64`; a comparison's operands against `ComparisonKernelKey.GetComparisonType`, where an int64 / uint64
+  pair is an exact loop; a unary input whose dtype is not the output's (np.sqrt of int32), except where NumPy keeps a loop
+  per input dtype (the float predicates, `logical_not`, `abs` of complex128, `bitwise_count` but for bool), while
+  `signbit` casts every non-float input (`UnaryLoopCastsInput`).
+- `TryKOrderPlan(dims, operands)` answers whether NpyIter's layout differs from C and how to produce it: up to 64
+  dimensions it is `Shape.NpyIterOutputShape` (NumPy's sort, ported); above, only the axes longer than 1 are sorted (the
+  extent-1 axes take strides that keep the sequence non-increasing), so a plan stays linear at any rank (200,000
+  dimensions are tested). `IsKOrderCVoter` (a C-contiguous, 0-d / one-element, or C-ordered stepped / reversed /
+  broadcast operand) and `MayNeedKOrder` decide the common case without a broadcast or an allocation.
+  `TryUfuncLayoutPlan` joins the two: the trivial loop's C needs no plan, its F is plain F over the dense axis order,
+  anything else is the K plan. `Shape.UfuncOutputShape(dims, inputs, trivialLoopEligible)` is the same decision as one
+  allocation shape (np.clip's `ClipResultLayout`).
 - The kernels write C, so the routes transpose every operand into the layout's memory order (`IntoKOrder`: views; a dense
   permuted operand becomes C-contiguous, so the SIMD kernels still take it), compute, and relabel the C result in place
   (`NDArray.AdoptLayout`). `KOrderBinary` / `KOrderBinaryPair` / `KOrderUnaryPair` wrap a route for that; the binary
-  operator, comparison and unary routes carry it inline (a `kOrderResolved` flag stops the recursion), and skip it for
-  an all-F pair they already lay out F (`IsAllStrictF`).
-- Covered: arithmetic, comparison and logical ufuncs, the float-tier family, the unary ufuncs, `positive`, `ldexp`, the
-  shifts, the two-output ufuncs (`frexp` / `modf` / `divmod`, both outputs), `np.where` (a KEEPORDER iterator over
-  condition, x and y), `np.diff` (its subtract), `np.isclose`, the scans (`reductions.md`) and `np.nan_to_num`
+  operator, comparison and unary routes carry it inline (a `kOrderResolved` flag stops the recursion), and skip it when the
+  trivial loop lays the call out (a C answer needs nothing; an all-F set they already lay out plain F).
+- Covered: arithmetic, comparison and logical ufuncs, the float-tier family, the unary ufuncs, `positive` (and np.clip
+  with no bound left, `IdentityLoopResult`: a fresh array in the ufunc layout, never a clone, so the result of a
+  read-only or broadcast operand is writeable), `ldexp`, the shifts, `np.clip`, np.power's fast path
+  (`PowerPlainResultShape`), the two-output ufuncs (`frexp` / `modf` / `divmod`, both outputs, always the iterator's
+  layout), `np.where` (a KEEPORDER iterator over condition, x and y), `np.diff` (its subtract), `np.isclose`, the scans
+  (`reductions.md`; a length-1 axis is copied into the accumulate layout, `LengthOneAxisScan`) and `np.nan_to_num`
   (np.array's K copy). A cast an operand needs up front is laid out as the ufunc would lay out the operand
   (`CastInUfuncLayout`: NumPy's buffered cast never votes, so a broadcast operand does not become an F copy).
+- A zero-size result has all-zero strides (`memory-views.md`: NumPy's `PyArray_NewFromDescr_int` zeroes every stride of
+  an empty allocation).
 - The other direction: `np.round` with decimals != 0 allocates `PyArray_Empty(..., ISFORTRAN(a))` (C, or F for an
   F-only input) and a complex input at any decimals is `PyArray_Round`'s `NewCopy(KEEPORDER)`; `np.asarray` /
   `np.asanyarray` with a dtype change under `order='A'` cast in K order (PyArray_FromArray without a contiguity flag),
   while the same dtype copies under `'A'` (C, F for an F-only array).
 - A fresh result under `where=` (no `out=`) takes the iterator route's allocation, where the mask votes, as NumPy's.
-- Not ported: the stride of a length-1 axis of a keepdims reduction (flags agree), np.median / np.nanmedian over an F
-  input (np.partition's C copy), np.tril / np.triu of a permuted input whose last axis is unit-stride (the direct row
-  fill writes C).
+- Reductions follow the same allocator: a keepdims result re-inserts each reduced axis at its place in NumPy's sorted
+  order with the running stride (`ExpandReducedAxis` / `RelabelKeptAxes`, the keepdims form of
+  `Shape.ReductionOutputShape`), np.median along one axis takes its mean's layout over the partitioned K-order copy
+  (`quantile.md`), and np.tril / np.triu of a non-contiguous input whose NpyIter layout is not C take np.where's
+  composition instead of the C row fill.
+- Not ported: np.nanmedian over an F or permuted input (numpy.ma's median of the K copy, then `MaskedArray.filled`'s
+  view: the array-object oracle's VF08).
 - Gates: `Math/UfuncResultLayout.Test.cs` (NumPy's flags and strides for every route above, a 70- and a 200,000-dimension
-  operand), the array-object tiers' layout facets (`view_flags`, `matrix`), the matrix-operand tier.
+  operand), `Backends/UfuncResultLayoutTests.cs` (the trivial loop against NpyIter per route, cast and unaligned
+  inputs), the `ufunc` family of the layout-parity corpus (`Backends/LayoutParityOracleTests.cs`), the array-object
+  tiers' layout facets (`view_flags`, `matrix`), the matrix-operand tier.
 
 ## `out=` and `where=`
 
@@ -211,9 +242,10 @@ NumPy's Python int (`type(min) is int`); every other bound is strong — an elem
   (`CGE` / `CLE`: a tie keeps x, any NaN propagates), which a ONE-bound complex clip runs, as NumPy routes it. Two-bound
   callers pass `clipSelection: true` to `EmitScalarClamp` (`ComplexClipMax` / `ComplexClipMin`): the flat kernel's
   scalar loop, the iterator body and `NDExpr.Clip`'s two clip-half nodes.
-- Result layout: a fresh result takes NumPy's ufunc output layout (`Shape.NpyIterOutputShape`: the operands' memory
-  order, the mask votes, C wins ties); a dense F or permuted input is clipped as a C run and relabelled
-  (`NDArray.AdoptLayout`).
+- Result layout: a fresh result takes NumPy's ufunc output layout (`Shape.UfuncOutputShape`, `ClipResultLayout`): the
+  trivial loop's plain C or F when there is no mask and no input of two or more dimensions is cast or unaligned, else
+  NpyIter's order (the operands' memory order, the mask votes, C wins ties); a dense F or permuted input is clipped as a
+  C run and relabelled (`NDArray.AdoptLayout`). The no-bound route is positive's own result (`IdentityLoopResult`).
 - Two execution routes (`Backends/Default/Math/Default.ClipNDArray{,.Iter,.ConstLoop}.cs`): the FLAT route (no `where=`,
   every operand one dense run after the layout permutation, no harmful overlap) runs the whole-array kernel
   (`DirectILKernelGenerator.Clip.cs`: an output-alignment peel, then aligned stores; past 16 MiB out of place,
@@ -283,7 +315,7 @@ NumPy's float_power loop has none, so `float_power(757.7617475757002, 2.0)` is p
 
 ## `np.power`'s float loops
 
-NumPy 2.4.2's DOUBLE_power / FLOAT_power test the exponent's STEP in each inner-loop call: with `steps[1] == 0` they read
+NumPy 2.5.4's DOUBLE_power / FLOAT_power test the exponent's STEP in each inner-loop call: with `steps[1] == 0` they read
 the exponent once and write `1.0/x`, `1.0`, `sqrt(x)`, `x` (raw bits; a signalling NaN kept) or `x*x` for -1, 0, 0.5,
 1, 2 (compared in the loop dtype: -0.0 takes the 0 branch, NaN none); any other exponent or a nonzero step is pow. The
 answers differ (`757.7617475757002 ** 2`: `x*x` `...03c1`, pow `...03c2`; `-0.0 ** 0.5`: sqrt -0.0, pow +0.0;

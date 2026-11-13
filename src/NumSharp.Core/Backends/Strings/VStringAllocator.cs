@@ -1363,14 +1363,14 @@ namespace NumSharp.Backends.Strings
         /// <param name="input">The source cell.</param>
         /// <param name="output">The destination cell (its old text is freed first).</param>
         /// <param name="location">The operation named in the error (<c>"string to string cast"</c>).</param>
-        /// <exception cref="OutOfMemoryException"><c>Failed to deallocate string in {location}</c> (a corrupt destination
+        /// <exception cref="MemoryError"><c>Failed to deallocate string in {location}</c> (a corrupt destination
         ///     cell) or <c>Failed to allocate string in {location}</c> (the memory is exhausted).</exception>
         internal static void FreeAndCopy(VStringAllocator inAllocator, VStringAllocator outAllocator, byte* input, byte* output, string location)
         {
             if (outAllocator.free(output) < 0)
-                throw new OutOfMemoryException($"Failed to deallocate string in {location}");
+                throw new MemoryError($"Failed to deallocate string in {location}");
             if (dup(input, output, inAllocator, outAllocator) < 0)
-                throw new OutOfMemoryException($"Failed to allocate string in {location}");
+                throw new MemoryError($"Failed to allocate string in {location}");
         }
 
         /// <summary>

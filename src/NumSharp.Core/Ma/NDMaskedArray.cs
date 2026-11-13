@@ -169,12 +169,20 @@ namespace NumSharp
         ///     it for every derived array (its <see cref="real"/>/<see cref="imag"/>/<see cref="mT"/>/take/reductions come
         ///     back soft with the default fill value), and a new array or view OF a masked array runs
         ///     <see cref="FinalizeFrom"/> instead (a converted copy of the fill).
+        ///     <para>
+        ///     <b>A dtype change (NumPy 2.5.3 / 2.5.4).</b> The fill is shared only between arrays of ONE dtype. When this
+        ///     array's dtype differs from <paramref name="source"/>'s (<c>ma.sqrt</c> of int8 data is float16, a comparison is
+        ///     bool, <c>ma.cumsum</c> of int8 is int64), it stores the fill CONVERTED to its own dtype, or nothing when the
+        ///     conversion fails (<see cref="MaskedArrayModule.CheckFillValueOrDefault"/>: the default is then materialized
+        ///     on read) — NumPy 2.4 shared the stale fill of the old dtype (<c>fill_value=np.int8(7)</c> on a float16
+        ///     result).
+        ///     </para>
         /// </remarks>
         internal NDMaskedArray UpdateFrom(NDMaskedArray source)
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
-            _fill_value = source._fill_value;
+            _fill_value = MaskedArrayModule.InheritFill(source._fill_value, source._data.dtype, _data.dtype);
             _hardmask = source._hardmask;
             return this;
         }
@@ -192,15 +200,17 @@ namespace NumSharp
         /// <param name="source">The masked array this one derives from.</param>
         /// <returns>This array, so the call chains onto its <c>new</c> expression.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        /// <exception cref="TypeError">The inherited fill cannot be converted to this array's dtype: a text fill this
-        ///     array's string class cannot encode / decode, or one a numeric array cannot parse (numpy.ma's <c>Cannot convert
-        ///     fill_value … to dtype …</c>, see <see cref="MaskedArrayModule.CheckFillValue"/>; a number formats into a text
-        ///     array, which cannot fail).</exception>
+        /// <exception cref="TypeError">The inherited fill of the SAME dtype cannot be stored (numpy.ma's <c>Cannot convert
+        ///     fill_value … to dtype …</c>, see <see cref="MaskedArrayModule.CheckFillValue"/>); a fill of another dtype never
+        ///     raises: one that does not convert is dropped instead (NumPy 2.5).</exception>
         /// <remarks>
-        ///     The conversion is an ARRAY cast (unsafe), so a numeric fill never raises: the default 1e20 a float64 source
-        ///     materialized becomes <c>long.MinValue</c> in an int64 result and 0 in an int8 one (MSVC's out-of-range casts,
-        ///     as in NumPy), 7.5 becomes 7. A text fill follows a width change: the default NumPy materializes at its own
-        ///     width (<c>'N/A'</c>) is truncated (<c>'N'</c> for <c>&lt;U1</c>), so <c>ma.masked_inside</c> of a
+        ///     Since NumPy 2.5.3 / 2.5.4 a fill of ANOTHER dtype is converted with the conversion's errors caught
+        ///     (<see cref="MaskedArrayModule.CheckFillValueOrDefault"/>): 7.5 becomes 7 in an int64 result, but the default
+        ///     1e20 a float64 source materialized is DROPPED in an int64 / int8 result (the cast raises FE_INVALID, which
+        ///     NumPy runs under <c>errstate(invalid='raise')</c>), so the result reads its own default (999999) where NumPy
+        ///     2.4 kept MSVC's out-of-range cast (<c>long.MinValue</c>, 0); a text fill a numeric result cannot parse is
+        ///     dropped the same way instead of raising. A text fill follows a width change: the default NumPy materializes at
+        ///     its own width (<c>'N/A'</c>) is truncated (<c>'N'</c> for <c>&lt;U1</c>), so <c>ma.masked_inside</c> of a
         ///     <c>&lt;U1</c> array (whose <c>filled()</c> read the source's fill and so materialized it) comes back with the
         ///     fill <c>'N'</c>, as NumPy's does.
         /// </remarks>
@@ -208,8 +218,13 @@ namespace NumSharp
         {
             if (source is null)
                 throw new ArgumentNullException(nameof(source));
-            // `_update_from(obj)`, then `if self._fill_value is not None: self._fill_value = _check_fill_value(...)`.
-            _fill_value = source._fill_value is null ? null : MaskedArrayModule.StoreFill(source._fill_value, _data.dtype);
+            // `_update_from(obj)` — the fill shared within a dtype, converted (or dropped) across one — then
+            // `if self._fill_value is not None: self._fill_value = _check_fill_value(self._fill_value, self.dtype)`: a COPY.
+            // A converted fill already is a fresh array of this dtype, so only a shared one is copied.
+            var inherited = MaskedArrayModule.InheritFill(source._fill_value, source._data.dtype, _data.dtype);
+            _fill_value = inherited is null || !ReferenceEquals(inherited, source._fill_value)
+                ? inherited
+                : MaskedArrayModule.StoreFill(inherited, _data.dtype);
             _hardmask = source._hardmask;
             return this;
         }
@@ -283,10 +298,12 @@ namespace NumSharp
         ///     singleton: its getter cannot materialize a default (NumPy's <c>attributes of masked are not
         ///     writeable</c>).</exception>
         /// <exception cref="NotSupportedException">The stored fill cannot reach the data under NumPy's <c>same_kind</c>
-        ///     rule — a fill of another kind SHARED with a derived array (an int64 fill on the bool result of
-        ///     <c>ma.logical_not</c> / <c>ma.equal</c>, a complex fill on the float result of <c>ma.absolute</c>): NumPy's
-        ///     <c>np.copyto</c> raises and NumPy then returns an OBJECT array (<c>np.choose</c> over the data as objects),
-        ///     a dtype NumSharp lacks.</exception>
+        ///     rule: NumPy's <c>np.copyto</c> raises and NumPy then returns an OBJECT array (<c>np.choose</c> over the data
+        ///     as objects), a dtype NumSharp lacks. Since NumPy 2.5.4 a derived array never inherits such a fill
+        ///     (<c>_update_from</c> converts a fill across a dtype change, or drops it: <c>ma.absolute</c> of a complex
+        ///     array stores the float 1.0 where NumPy 2.4 shared the complex fill), and a given fill is converted first, so
+        ///     only a stale stored fill reaches this — in NumPy through the deprecated <c>dtype</c> setter, which NumSharp
+        ///     does not have.</exception>
         /// <remarks>
         ///     NumPy's order: <c>if m is nomask: return self._data</c>; resolve the fill (<c>self.fill_value</c> or
         ///     <c>_check_fill_value(fill_value, self.dtype)</c>); <c>elif not m.any(): return self._data</c>; else
@@ -595,7 +612,20 @@ namespace NumSharp
         ///     masked), so every <c>np.ma.*</c> function accepts a bare array argument exactly as NumPy does.
         /// </summary>
         /// <param name="a">The array to wrap; null yields null.</param>
-        public static implicit operator NDMaskedArray(NDArray a) => a is null ? null : new NDMaskedArray(a, null);
+        /// <returns>A mask-less view of <paramref name="a"/>'s own data (writes reach <paramref name="a"/>), marked
+        ///     <see cref="IsPlainArrayWrapper"/>.</returns>
+        public static implicit operator NDMaskedArray(NDArray a) => a is null ? null : new NDMaskedArray(a, null) { IsPlainArrayWrapper = true };
+
+        /// <summary>
+        ///     True when this masked array is the wrapper the implicit conversion from <see cref="NDArray"/> built: a plain
+        ///     array handed where numpy.ma expects a masked one. numpy.ma's reductions read an <c>out=</c> argument's class
+        ///     (NumPy's <c>isinstance(out, MaskedArray)</c>): a plain out receives the data only (min / max write NaN at the
+        ///     masked cells and refuse an integer or bool out with MaskError), a masked out receives the mask as well.
+        /// </summary>
+        /// <remarks>Footgun: an <see cref="NDMaskedArray"/> variable assigned from a plain array (<c>NDMaskedArray o =
+        ///     np.zeros(3)</c>) carries the mark too, so it behaves as NumPy's plain out; build a real masked out with
+        ///     <c>np.ma.zeros</c> / <c>np.ma.array</c>.</remarks>
+        internal bool IsPlainArrayWrapper { get; private init; }
 
         // ── Mixed NDMaskedArray/NDArray operators. These EXPLICIT (NDMaskedArray, NDArray) / (NDArray, NDMaskedArray)
         //    overloads are REQUIRED: without them `ma + nd` and `nd + ma` are CS0034-ambiguous, because the
@@ -652,55 +682,84 @@ namespace NumSharp
         public static NDMaskedArray operator >=(NDArray a, NDMaskedArray b) => np.ma.ComparisonOperator(b, a, (x, y) => np.less_equal(x, y));
 
         /// <summary>
-        ///     Casts the DATA to <paramref name="dtype"/>, PRESERVING the mask (NumPy's <c>MaskedArray.astype</c>
-        ///     — the mask is boolean and dtype-independent, so it rides through unchanged). Returns a
-        ///     <see cref="NDMaskedArray"/>, unlike the underlying <see cref="NDArray.astype(DType,bool)"/>.
+        ///     Casts the DATA to <paramref name="dtype"/>, PRESERVING the mask (NumPy's <c>MaskedArray.astype</c>, which is
+        ///     ndarray's <c>astype(dtype, order='K', casting='unsafe', copy=True)</c> plus the subclass's
+        ///     <c>__array_finalize__</c>). Returns a <see cref="NDMaskedArray"/>, unlike the underlying
+        ///     <see cref="NDArray.astype(DType, char, string, bool)"/>.
         /// </summary>
         /// <param name="dtype">Target element dtype.</param>
-        /// <param name="copy">Copy the data even when the dtype already matches (NumPy default true).</param>
-        /// <returns>A masked array of the new dtype with the same mask.</returns>
-        /// <exception cref="TypeError">The stored fill does not convert to the new dtype (<c>Cannot convert fill_value zz to
-        ///     dtype float64</c>; checked BEFORE the data is cast, see the remarks).</exception>
+        /// <param name="order">The data's layout: <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> (ndarray.astype's). The
+        ///     new mask is laid out like the new data (C when it is C-contiguous, F when F-contiguous, else K), as
+        ///     <c>__array_finalize__</c> casts it.</param>
+        /// <param name="casting">ndarray.astype's casting rule name, checked before anything is allocated.</param>
+        /// <param name="copy">Copy the data even when the dtype and the layout already match (NumPy default true); false
+        ///     returns this array itself when nothing has to change.</param>
+        /// <returns>A masked array of the new dtype with the same mask, or this array.</returns>
+        /// <exception cref="ValueError">An unknown <paramref name="order"/> or <paramref name="casting"/> name (NumPy's
+        ///     argument parse, before anything else).</exception>
+        /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/> (checked before
+        ///     the fill conversion, as array_astype checks it before it allocates the result; NumPy's TypeError).</exception>
         /// <exception cref="ValueError">A text element of the data that does not parse into a numeric <paramref name="dtype"/>
         ///     (<c>could not convert string to float: np.str_('ab')</c>).</exception>
-        /// <exception cref="OverflowException">An integer text of the data outside an integer <paramref name="dtype"/>.</exception>
+        /// <exception cref="OverflowError">An integer text of the data outside an integer <paramref name="dtype"/>.</exception>
         /// <exception cref="UnicodeError">A text cast between the string classes that cannot encode or decode a character.</exception>
         /// <remarks>
-        ///     NumPy's <c>__array_finalize__</c> re-checks a stored fill against the new dtype
-        ///     (<c>_check_fill_value(self._fill_value, self.dtype)</c>): the result stores a converted COPY (an array cast,
-        ///     unsafe, never raising for numbers). A fill of 7.5 reads back <see cref="long"/> 7 after <c>astype(int64)</c>;
-        ///     a text fill follows a width change (<c>'qrs'</c> becomes <c>'q'</c> after <c>astype('U1')</c>, <c>b'qr'</c>
-        ///     after <c>astype('S2')</c>) and a number fill becomes its <c>str()</c> after a text cast. A fill that was never
-        ///     set or read is not stored, so the result reads ITS OWN default — but a default that was READ is stored and
-        ///     converted: the float64 default 1e20 becomes <c>long.MinValue</c> after <c>astype(int64)</c> (MSVC's
-        ///     out-of-range float-to-int cast) and 0 after <c>astype(int8)</c>, and a text array's read default <c>'N/A'</c>
-        ///     raises <c>Cannot convert fill_value N/A to dtype float64</c>, exactly as in NumPy.
+        ///     NumPy's <c>__array_finalize__</c> runs <c>_update_from</c>, which since NumPy 2.5.3 / 2.5.4 converts a stored fill
+        ///     of another dtype with the conversion's errors caught (<see cref="MaskedArrayModule.CheckFillValueOrDefault"/>):
+        ///     the result stores a converted COPY, or NOTHING when the conversion fails, and then reads its own default. A fill
+        ///     of 7.5 reads back <see cref="long"/> 7 after <c>astype(int64)</c>; a text fill follows a width change
+        ///     (<c>'qrs'</c> becomes <c>'q'</c> after <c>astype('U1')</c>, <c>b'qr'</c> after <c>astype('S2')</c>) and a number
+        ///     fill becomes its <c>str()</c> after a text cast. A fill that was never set or read is not stored, so the result
+        ///     reads ITS OWN default — and a default that was READ but does not convert is dropped the same way: the float64
+        ///     default 1e20 into int64 / int8 (an FE_INVALID cast, which NumPy runs under <c>errstate(invalid='raise')</c>)
+        ///     and a text array's read default <c>'N/A'</c> into float64 both leave the result reading its own default, where
+        ///     NumPy 2.4 stored <c>long.MinValue</c> / 0 and raised <c>Cannot convert fill_value N/A to dtype float64</c>.
         ///     <para>
         ///     <b>Order.</b> <c>ndarray.astype</c> allocates the result (<c>PyArray_NewLikeArray</c>, whose
-        ///     <c>__array_finalize__</c> converts the fill) BEFORE it copies the data into it, so a fill that does not convert
-        ///     is reported even when the data would not convert either (probed: <c>['ab', '1']</c> with fill <c>'zz'</c> raises
-        ///     the fill's TypeError; with fill <c>'3'</c> the data's ValueError). The result's mask is a COPY of this array's
-        ///     and its hard-mask flag is this array's; with <paramref name="copy"/> false and an equivalent dtype the array
-        ///     itself is returned (no new array, so no fill conversion).
+        ///     <c>__array_finalize__</c> converts the fill) BEFORE it copies the data into it; since the conversion no longer
+        ///     raises, a text array whose data does not parse reports the data's ValueError (probed: <c>['ab', '1']</c> with
+        ///     fill <c>'zz'</c> into float64 is <c>could not convert string to float</c>). The result's mask is a COPY of this
+        ///     array's and its hard-mask flag is this array's; with <paramref name="copy"/> false, a layout the order accepts
+        ///     and an equivalent dtype the array itself is returned (no new array, so no fill conversion).
         ///     </para>
+        ///     <para>One signature in NumPy's keyword order (API-parity batch 3, 2026-11-11; was <c>astype(dtype, copy)</c>):
+        ///     a positional <c>copy</c> is written <c>copy: false</c>.</para>
         /// </remarks>
-        public NDMaskedArray astype(DType dtype, bool copy = true)
+        public NDMaskedArray astype(DType dtype, char order = 'K', string casting = "unsafe", bool copy = true)
         {
+            // array_astype's npy_parse_arguments: the order's letter, then the casting name, before anything else - an
+            // unknown one raises even for a call that would change nothing.
+            OrderResolver.Resolve(order, _data.Shape);
+            var rule = DTypeCasting.ParseCastingSameValue(casting, out _);
             // The descriptor the new array is allocated with (an unsized string request takes the data's width, NumPy's
             // PyArray_AdaptDescriptorToArray), which is the dtype `__array_finalize__` converts the fill to.
             var to = DTypePromotion.AdaptDescriptorToArray(_data.dtype, dtype);
-            // ndarray.astype(copy=False) of an equivalent dtype returns the array ITSELF: no new array, no `__array_finalize__`.
-            bool sameArray = !copy && DTypeCasting.GetCastInfo(to, _data.dtype, null, out long viewOffset) == NPY_CASTING.NPY_NO_CASTING
+            // array_astype's view shortcut: copy=False, a layout the order accepts (K always; A a C- or F-contiguous array;
+            // C / F that contiguity) and an equivalent dtype return the array ITSELF - no new array, no `__array_finalize__`.
+            bool layoutKept = order is 'K' or 'k'
+                              || (order is 'A' or 'a' && (_data.Shape.IsContiguous || _data.Shape.IsFContiguous))
+                              || (order is 'C' or 'c' && _data.Shape.IsContiguous)
+                              || (order is 'F' or 'f' && _data.Shape.IsFContiguous);
+            bool sameArray = !copy && layoutKept
+                             && DTypeCasting.GetCastInfo(to, _data.dtype, null, out long viewOffset) == NPY_CASTING.NPY_NO_CASTING
                              && viewOffset != ArrayMethod.NoView;
-            // `__array_finalize__`: `_check_fill_value(self._fill_value, self.dtype)` converts a stored fill to the new dtype
-            // (a copy: 7.5 becomes int64 7, the read default 1e20 becomes long.MinValue, 'qrs' becomes 'q' in <U1); an
-            // array with nothing stored passes None on, so the result materializes ITS default when read. It runs before
-            // the data is cast, so its refusal wins over the data's.
-            var fill = sameArray || _fill_value is null ? null : MaskedArrayModule.StoreFill(_fill_value, to);
+            // array_astype checks the casting rule BEFORE PyArray_NewLikeArray allocates the result, so a refusal wins over
+            // the fill conversion that allocation's `__array_finalize__` makes ('unsafe', astype's default, allows all).
+            if (!sameArray && !DTypeCasting.CanCastTypeTo(_data.dtype, to, rule))
+                throw DTypeCasting.InvalidCastError(_data.dtype, to, rule, _data.ndim == 0);
+            // `__array_finalize__`: `_update_from` converts a stored fill to the new dtype, catching the conversion's errors
+            // (a copy: 7.5 becomes int64 7, 'qrs' becomes 'q' in <U1; the read default 1e20 into int64 is dropped), then
+            // `_check_fill_value` copies it; an array with nothing stored passes None on, so the result materializes ITS
+            // default when read. Same dtype (a copy=True astype): the shared fill, re-checked into a copy.
+            var fill = sameArray || _fill_value is null
+                ? null
+                : to != _data.dtype
+                    ? MaskedArrayModule.CheckFillValueOrDefault(_fill_value, to)
+                    : MaskedArrayModule.StoreFill(_fill_value, to);
             NDArray data;
             try
             {
-                data = _data.astype(dtype, copy);
+                data = _data.astype(dtype, order, casting, copy);
             }
             catch
             {
@@ -714,9 +773,11 @@ namespace NumSharp
                 fill?.Dispose();
                 return this;
             }
-            // `__array_finalize__` over a NEW buffer: the mask is copied (`_mask.astype(...)`, so a masked write through
-            // the result never reaches this array) and the hard-mask flag carries over (`_update_from(obj)`).
-            return new NDMaskedArray(data, _mask?.copy(), fill) { _hardmask = _hardmask };
+            // `__array_finalize__` over a NEW buffer: the mask is copied (`_mask.astype(_mask_dtype, order)`, so a masked write
+            // through the result never reaches this array) in the new data's layout - 'C' when it is C-contiguous, 'F' when
+            // F-contiguous, else 'K' - and the hard-mask flag carries over (`_update_from(obj)`).
+            char maskOrder = data.Shape.IsContiguous ? 'C' : data.Shape.IsFContiguous ? 'F' : 'K';
+            return new NDMaskedArray(data, _mask?.astype(_mask.dtype, maskOrder), fill) { _hardmask = _hardmask };
         }
 
         // ── Arithmetic operators — compose the np.ma.* binary ufuncs; masks propagate (OR). ──
@@ -807,59 +868,414 @@ namespace NumSharp
         public static NDMaskedArray operator >=(object a, NDMaskedArray b) => np.ma.ComparisonOperator(b, a, (x, y) => np.less_equal(x, y));
 
         // ── Instance reduction methods (NumPy's a.sum()/a.mean()/… — delegate to the np.ma.* funcs). ──
-        /// <summary>Sum over unmasked elements. See <see cref="MaskedArrayModule.sum"/>.</summary>
-        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked sum.</returns>
-        public NDMaskedArray sum(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.sum(this, axis, dtype, keepdims);
-        /// <summary>Product over unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked product.</returns>
-        public NDMaskedArray prod(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.prod(this, axis, dtype, keepdims);
+        /// <summary>Sum over the unmasked elements — NumPy's <c>MaskedArray.sum(axis=None, dtype=None, out=None, keepdims)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked sum (the masked singleton for a fully masked 0-d result), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray sum(NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.sum(this, axis, dtype, @out, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="sum(NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked sum (the masked singleton for a fully masked 0-d result), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray sum(int axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.sum(this, NDAxis.FromNullable(axis), dtype, @out, keepdims);
 
-        /// <summary>Alias of <see cref="prod(int?,DType,bool)"/> (NumPy's <c>MaskedArray.product</c>) — the product
-        /// of the UNMASKED elements; a fully-masked slice yields <c>masked</c>.</summary>
-        /// <param name="axis">Reduction axis, or null to reduce the whole array.</param>
-        /// <param name="dtype">Accumulator/result dtype; null follows NumPy's product-widening rule.</param>
-        /// <param name="keepdims">Keep the reduced axis as size 1.</param>
-        /// <returns>The masked product.</returns>
-        public NDMaskedArray product(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.product(this, axis, dtype, keepdims);
-        /// <summary>Mean over unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked mean.</returns>
-        public NDMaskedArray mean(int? axis = null, DType dtype = null, bool keepdims = false) => np.ma.mean(this, axis, dtype, keepdims);
-        /// <summary>Minimum over unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked minimum.</returns>
-        public NDMaskedArray min(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.min(this, axis, fill_value, keepdims);
-        /// <summary>Maximum over unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked maximum.</returns>
-        public NDMaskedArray max(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.max(this, axis, fill_value, keepdims);
-        /// <summary>Peak-to-peak (max−min) over unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked range.</returns>
-        public NDMaskedArray ptp(int? axis = null, object fill_value = null, bool keepdims = false) => np.ma.ptp(this, axis, fill_value, keepdims);
-        /// <summary>Standard deviation over unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="ddof">Delta DOF.</param><param name="keepdims">Keep reduced axes.</param><param name="mean">Precomputed centering mean (NumPy 2.0), or null.</param><returns>Masked std.</returns>
-        public NDMaskedArray std(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.std(this, axis, dtype, ddof, keepdims, mean);
-        /// <summary>Variance over unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><param name="ddof">Delta DOF.</param><param name="keepdims">Keep reduced axes.</param><param name="mean">Precomputed centering mean (NumPy 2.0), or null.</param><returns>Masked variance.</returns>
-        public NDMaskedArray var(int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.var(this, axis, dtype, ddof, keepdims, mean);
-        /// <summary>Count of unmasked elements.</summary>
-        /// <param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param><returns>int64 count array.</returns>
-        public NDArray count(int? axis = null, bool keepdims = false) => np.ma.count(this, axis, keepdims);
-        /// <summary>Cumulative sum (masked positions preserved).</summary>
-        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><returns>Masked cumulative sum.</returns>
-        public NDMaskedArray cumsum(int? axis = null, DType dtype = null) => np.ma.cumsum(this, axis, dtype);
-        /// <summary>Cumulative product (masked positions preserved).</summary>
-        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param><returns>Masked cumulative product.</returns>
-        public NDMaskedArray cumprod(int? axis = null, DType dtype = null) => np.ma.cumprod(this, axis, dtype);
-        /// <summary>Indices of the minimum (masked slots ignored).</summary>
-        /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><returns>int64 index array.</returns>
-        public NDArray argmin(int? axis = null, object fill_value = null) => np.ma.argmin(this, axis, fill_value);
-        /// <summary>Indices of the maximum (masked slots ignored).</summary>
-        /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><returns>int64 index array.</returns>
-        public NDArray argmax(int? axis = null, object fill_value = null) => np.ma.argmax(this, axis, fill_value);
-        /// <summary>Logical-AND reduction (masked slots treated as True).</summary>
-        /// <param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked bool.</returns>
-        public NDMaskedArray all(int? axis = null, bool keepdims = false) => np.ma.all(this, axis, keepdims);
-        /// <summary>Logical-OR reduction (masked slots treated as False).</summary>
-        /// <param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param><returns>Masked bool.</returns>
-        public NDMaskedArray any(int? axis = null, bool keepdims = false) => np.ma.any(this, axis, keepdims);
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="sum(NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked sum (the masked singleton for a fully masked 0-d result), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray sum(int[] axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.sum(this, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, keepdims);
+        /// <summary>Product over the unmasked elements — NumPy's <c>MaskedArray.prod(axis=None, dtype=None, out=None, keepdims)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray prod(NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.prod(this, axis, dtype, @out, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="prod(NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray prod(int axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.prod(this, NDAxis.FromNullable(axis), dtype, @out, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="prod(NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray prod(int[] axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.prod(this, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, keepdims);
+
+        /// <summary>Alias of prod (NumPy's <c>MaskedArray.product</c>): the product of the unmasked elements.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray product(NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.product(this, axis, dtype, @out, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="product(NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray product(int axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.product(this, NDAxis.FromNullable(axis), dtype, @out, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="product(NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray product(int[] axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.product(this, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, keepdims);
+        /// <summary>Mean over the unmasked elements — NumPy's <c>MaskedArray.mean(axis=None, dtype=None, out=None, keepdims)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked mean, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray mean(NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.mean(this, axis, dtype, @out, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="mean(NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked mean, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray mean(int axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.mean(this, NDAxis.FromNullable(axis), dtype, @out, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="mean(NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked mean, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray mean(int[] axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.mean(this, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, keepdims);
+        /// <summary>Minimum over the unmasked elements — NumPy's <c>MaskedArray.min(axis=None, out=None, fill_value=None, keepdims)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="minimum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked minimum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray min(NDAxis? axis = null, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => np.ma.min(this, axis, @out, fill_value, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="min(NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="minimum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked minimum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray min(int axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => np.ma.min(this, NDAxis.FromNullable(axis), @out, fill_value, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="min(NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="minimum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked minimum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray min(int[] axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => np.ma.min(this, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, fill_value, keepdims);
+        /// <summary>Maximum over the unmasked elements — NumPy's <c>MaskedArray.max(axis=None, out=None, fill_value=None, keepdims)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="maximum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked maximum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray max(NDAxis? axis = null, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => np.ma.max(this, axis, @out, fill_value, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="max(NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="maximum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked maximum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray max(int axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => np.ma.max(this, NDAxis.FromNullable(axis), @out, fill_value, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="max(NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="maximum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked maximum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray max(int[] axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => np.ma.max(this, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, fill_value, keepdims);
+        /// <summary>Peak-to-peak (max − min) over the unmasked elements — NumPy's <c>MaskedArray.ptp(axis=None, out=None, fill_value=None, keepdims=False)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The fill passed to both max and min, or null for their defaults.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked range (max − min), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray ptp(NDAxis? axis = null, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => np.ma.ptp(this, axis, @out, fill_value, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="ptp(NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The fill passed to both max and min, or null for their defaults.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked range (max − min), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray ptp(int axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => np.ma.ptp(this, NDAxis.FromNullable(axis), @out, fill_value, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="ptp(NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The fill passed to both max and min, or null for their defaults.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked range (max − min), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray ptp(int[] axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => np.ma.ptp(this, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, fill_value, keepdims);
+        /// <summary>Standard deviation over the unmasked elements — NumPy's <c>MaskedArray.std(axis=None, dtype=None, out=None, ddof=0, keepdims, mean)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">Accepted for NumPy's signature and IGNORED: NumPy's ma.std does not forward it to var.</param>
+        /// <returns>The masked standard deviation, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray std(NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.std(this, axis, dtype, @out, ddof, keepdims, mean);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="std(NDAxis?, DType, NDMaskedArray, int, bool, object)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">Accepted for NumPy's signature and IGNORED: NumPy's ma.std does not forward it to var.</param>
+        /// <returns>The masked standard deviation, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray std(int axis, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.std(this, NDAxis.FromNullable(axis), dtype, @out, ddof, keepdims, mean);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="std(NDAxis?, DType, NDMaskedArray, int, bool, object)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">Accepted for NumPy's signature and IGNORED: NumPy's ma.std does not forward it to var.</param>
+        /// <returns>The masked standard deviation, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray std(int[] axis, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.std(this, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, ddof, keepdims, mean);
+        /// <summary>Variance over the unmasked elements — NumPy's <c>MaskedArray.var(axis=None, dtype=None, out=None, ddof=0, keepdims, mean)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">NumPy 2's precomputed mean, or null to compute it.</param>
+        /// <returns>The masked variance, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray var(NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.var(this, axis, dtype, @out, ddof, keepdims, mean);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="var(NDAxis?, DType, NDMaskedArray, int, bool, object)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">NumPy 2's precomputed mean, or null to compute it.</param>
+        /// <returns>The masked variance, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray var(int axis, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.var(this, NDAxis.FromNullable(axis), dtype, @out, ddof, keepdims, mean);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="var(NDAxis?, DType, NDMaskedArray, int, bool, object)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">NumPy 2's precomputed mean, or null to compute it.</param>
+        /// <returns>The masked variance, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray var(int[] axis, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => np.ma.var(this, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, ddof, keepdims, mean);
+        /// <summary>Count of the unmasked elements — NumPy's <c>MaskedArray.count(axis=None, keepdims)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The int64 count of the unmasked elements (a plain array, never masked).</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis.</exception>
+        public NDArray count(NDAxis? axis = null, bool keepdims = false) => np.ma.count(this, axis, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="count(NDAxis?, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The int64 count of the unmasked elements (a plain array, never masked).</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis.</exception>
+        public NDArray count(int axis, bool keepdims = false) => np.ma.count(this, NDAxis.FromNullable(axis), keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="count(NDAxis?, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The int64 count of the unmasked elements (a plain array, never masked).</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis.</exception>
+        public NDArray count(int[] axis, bool keepdims = false) => np.ma.count(this, axis is null ? (NDAxis?)null : (NDAxis)axis, keepdims);
+        /// <summary>Cumulative sum (masked positions preserved) — NumPy's <c>MaskedArray.cumsum(axis=None, dtype=None,
+        ///     out=None)</c>.</summary>
+        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param>
+        /// <param name="out">Where to write the scan (returned); a masked out takes this array's mask through
+        ///     <c>__setmask__</c>, a plain one the data only (see <see cref="MaskedArrayModule.cumsum"/>).</param>
+        /// <returns>Masked cumulative sum, or <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> has the wrong shape, or a hard masked out this
+        ///     array's mask does not broadcast to.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">Text data: the scan has no string loop.</exception>
+        public NDMaskedArray cumsum(int? axis = null, DType dtype = null, NDMaskedArray @out = null) => np.ma.cumsum(this, axis, dtype, @out);
+        /// <summary>Cumulative product (masked positions preserved) — NumPy's <c>MaskedArray.cumprod(axis=None, dtype=None,
+        ///     out=None)</c>.</summary>
+        /// <param name="axis">Axis or null.</param><param name="dtype">Accumulator dtype.</param>
+        /// <param name="out">Where to write the scan (returned); see <see cref="MaskedArrayModule.cumprod"/>.</param>
+        /// <returns>Masked cumulative product, or <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> has the wrong shape, or a hard masked out this
+        ///     array's mask does not broadcast to.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">Text data: the scan has no string loop.</exception>
+        public NDMaskedArray cumprod(int? axis = null, DType dtype = null, NDMaskedArray @out = null) => np.ma.cumprod(this, axis, dtype, @out);
+        /// <summary>Indices of the minimum (masked slots ignored) — NumPy's <c>MaskedArray.argmin(axis=None, fill_value=None,
+        ///     out=None, *, keepdims=False)</c>.</summary>
+        /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param>
+        /// <param name="out">Where to write the indices (returned); np.argmin's checks.</param>
+        /// <param name="keepdims">Keep the reduced axis with length 1.</param>
+        /// <returns>int64 index array, or <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype cannot hold int64 indices safely.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has the wrong shape.</exception>
+        public NDArray argmin(int? axis = null, object fill_value = null, NDArray @out = null, bool keepdims = false)
+            => np.ma.argmin(this, axis, fill_value, @out, keepdims);
+        /// <summary>Indices of the maximum (masked slots ignored) — NumPy's <c>MaskedArray.argmax(axis=None, fill_value=None,
+        ///     out=None, *, keepdims=False)</c>.</summary>
+        /// <param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param>
+        /// <param name="out">Where to write the indices (returned); np.argmax's checks.</param>
+        /// <param name="keepdims">Keep the reduced axis with length 1.</param>
+        /// <returns>int64 index array, or <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype cannot hold int64 indices safely.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has the wrong shape.</exception>
+        public NDArray argmax(int? axis = null, object fill_value = null, NDArray @out = null, bool keepdims = false)
+            => np.ma.argmax(this, axis, fill_value, @out, keepdims);
+        /// <summary>Logical-AND over the unmasked elements (masked slots read True) — NumPy's <c>MaskedArray.all(axis=None, out=None, keepdims)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-AND, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray all(NDAxis? axis = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.all(this, axis, @out, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="all(NDAxis?, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-AND, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray all(int axis, NDMaskedArray @out = null, bool keepdims = false) => np.ma.all(this, NDAxis.FromNullable(axis), @out, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="all(NDAxis?, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-AND, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray all(int[] axis, NDMaskedArray @out = null, bool keepdims = false) => np.ma.all(this, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, keepdims);
+        /// <summary>Logical-OR over the unmasked elements (masked slots read False) — NumPy's <c>MaskedArray.any(axis=None, out=None, keepdims)</c>.</summary>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-OR, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray any(NDAxis? axis = null, NDMaskedArray @out = null, bool keepdims = false) => np.ma.any(this, axis, @out, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="any(NDAxis?, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-OR, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray any(int axis, NDMaskedArray @out = null, bool keepdims = false) => np.ma.any(this, NDAxis.FromNullable(axis), @out, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="any(NDAxis?, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-OR, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray any(int[] axis, NDMaskedArray @out = null, bool keepdims = false) => np.ma.any(this, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, keepdims);
         /// <summary>Anomalies (deviations from the mean along the axis).</summary>
         /// <param name="axis">Axis or null.</param><param name="dtype">Mean accumulator dtype.</param><returns>Masked anomalies.</returns>
         public NDMaskedArray anom(int? axis = null, DType dtype = null) => np.ma.anom(this, axis, dtype);
@@ -1022,95 +1438,247 @@ namespace NumSharp
         /// <param name="order">'C' (default) or 'F'.</param><returns>The flattened masked copy.</returns>
         public NDMaskedArray flatten(char order = 'C') => np.ma.flatten(this, order);
 
-        /// <summary>Reshape to <paramref name="shape"/> (mask reshaped alike).</summary>
-        /// <param name="shape">New dimensions (one may be -1).</param><returns>The reshaped masked array.</returns>
+        /// <summary>Reshape to loose dimensions, the mask reshaped alike — NumPy's <c>MaskedArray.reshape(*s)</c> form,
+        ///     <c>m.reshape(2, 3)</c>.</summary>
+        /// <param name="shape">New dimensions (one may be -1).</param>
+        /// <returns>The reshaped masked array (a view when the layout allows it), with this array's fill value and hard-mask
+        ///     flag.</returns>
+        /// <exception cref="IncorrectShapeException">The size does not match.</exception>
+        /// <exception cref="ValueError">More than one unknown dimension.</exception>
+        /// <remarks>Kept beside <see cref="reshape(Shape, char, bool?)"/>, NumPy's keyword form: a C# integer list binds
+        ///     here (an identity conversion beats the user-defined one to <see cref="Shape"/>).</remarks>
         public NDMaskedArray reshape(params int[] shape) => np.ma.reshape(this, shape);
 
-        /// <summary>Permute axes (mask transposed alike); reverses all axes when <paramref name="axes"/> is null.</summary>
-        /// <param name="axes">Permutation, or null to reverse.</param><returns>The transposed masked array.</returns>
-        public NDMaskedArray transpose(int[] axes = null) => np.ma.transpose(this, axes);
+        /// <summary>Reshape, the mask reshaped alike — NumPy's <c>MaskedArray.reshape(shape, /, *, order='C',
+        ///     copy=None)</c>: the data's and the mask's reshape with the same keywords, then
+        ///     <c>result._update_from(self)</c>.</summary>
+        /// <param name="shape">The new dimensions: a tuple, an int, an <c>int[]</c> / <c>long[]</c> or a <see cref="Shape"/>
+        ///     (one entry may be -1).</param>
+        /// <param name="order">The index order: <c>'C'</c> (the default), <c>'F'</c> or <c>'A'</c>; <c>'K'</c> is
+        ///     refused.</param>
+        /// <param name="copy">Null copies only when needed (NumPy's None); true always copies the data and the mask; false
+        ///     refuses a copy.</param>
+        /// <returns>The reshaped masked array, with this array's fill value and hard-mask flag.</returns>
+        /// <exception cref="IncorrectShapeException">The size does not match.</exception>
+        /// <exception cref="ValueError">A bad <paramref name="order"/>, more than one unknown dimension, or
+        ///     <paramref name="copy"/> false when a copy is needed (<c>Unable to avoid creating a copy while
+        ///     reshaping.</c>).</exception>
+        /// <remarks>Added in API-parity batch 8 (batch 7's ndarray reshape, over the data and the mask).</remarks>
+        public NDMaskedArray reshape(Shape shape, char order = 'C', bool? copy = null) => np.ma.ReshapeMethod(this, shape, order, copy);
+
+        /// <summary>Permute axes (mask transposed alike), NumPy's <c>MaskedArray.transpose(*axes)</c>; reverses all axes
+        ///     without an argument.</summary>
+        /// <param name="axes">NumPy's <c>*axes</c>: the permutation as separate integers (<c>m.transpose(1, 0)</c>) or
+        ///     one array; no argument, an empty array or <c>null</c> reverses the axes (C# passes an empty array for the
+        ///     no-argument call, so the two read alike).</param>
+        /// <returns>The transposed masked array.</returns>
+        /// <exception cref="ValueError">The permutation does not have one entry per axis (<c>axes don't match
+        ///     array</c>) or repeats an axis.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        public NDMaskedArray transpose(params int[] axes) => np.ma.transpose(this, axes is { Length: > 0 } ? axes : null);
 
         /// <summary>Swap two axes (mask swapped alike).</summary>
         /// <param name="axis1">First axis.</param><param name="axis2">Second axis.</param><returns>The masked array with swapped axes.</returns>
         public NDMaskedArray swapaxes(int axis1, int axis2) => np.ma.swapaxes(this, axis1, axis2);
 
-        /// <summary>Remove size-1 axes (mask squeezed alike).</summary>
+        /// <summary>Remove size-1 axes, the mask squeezed alike — NumPy's <c>MaskedArray.squeeze(axis=None)</c>.</summary>
+        /// <param name="axis">The size-1 axis or axes to drop (an int, a tuple, an <c>int[]</c>), or null for every size-1
+        ///     axis.</param>
+        /// <returns>The squeezed masked array (a view), with this array's fill value and hard-mask flag.</returns>
+        /// <exception cref="ValueError">An axis whose length is not 1, or a repeated axis.</exception>
+        /// <exception cref="AxisError">An axis out of range.</exception>
+        /// <remarks>NumPy's tuple axis arrived in API-parity batch 8 (it was one <c>int?</c>).</remarks>
+        public NDMaskedArray squeeze(NDAxis? axis = null) => np.ma.squeeze(this, axis);
+
+        /// <summary>Remove ONE size-1 axis — the owner's kept int form beside <see cref="squeeze(NDAxis?)"/>.</summary>
+        /// <param name="axis">The size-1 axis to drop.</param>
         /// <returns>The squeezed masked array.</returns>
-        public NDMaskedArray squeeze(int? axis = null) => np.ma.squeeze(this, axis);
+        /// <exception cref="ValueError">The axis' length is not 1.</exception>
+        /// <exception cref="AxisError">The axis is out of range.</exception>
+        public NDMaskedArray squeeze(int axis) => np.ma.squeeze(this, axis);
+
+        /// <summary>Remove the listed size-1 axes — the owner's kept int[] form beside <see cref="squeeze(NDAxis?)"/>; a
+        ///     null array is NumPy's None.</summary>
+        /// <param name="axis">The size-1 axes to drop, or null for all.</param>
+        /// <returns>The squeezed masked array.</returns>
+        /// <exception cref="ValueError">An axis' length is not 1, or an axis repeats.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        public NDMaskedArray squeeze(int[] axis) => np.ma.squeeze(this, axis);
 
         /// <summary>Repeat elements (mask repeated alike, so repeated masked entries stay masked).</summary>
         /// <param name="repeats">Repeat count.</param><param name="axis">Axis or null (flatten).</param><returns>The masked array.</returns>
         public NDMaskedArray repeat(int repeats, int? axis = null) => np.ma.repeat(this, repeats, axis);
 
-        /// <summary>Gather elements by index (mask gathered alike, so a taken element keeps its masked-ness).</summary>
+        /// <summary>Gather elements by index (mask gathered alike, so a taken element keeps its masked-ness) — NumPy's
+        ///     <c>MaskedArray.take(indices, axis=None, out=None, mode='raise')</c>.</summary>
         /// <param name="indices">Integer index array.</param><param name="axis">Axis or null.</param>
-        /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
-        /// <returns>The masked array.</returns>
-        public NDMaskedArray take(NDArray indices, int? axis = null, string mode = "raise") => np.ma.take(this, indices, axis, mode);
+        /// <param name="out">Where to write the gathered data (a masked out also takes the gathered mask through
+        ///     <c>__setmask__</c>); see <see cref="MaskedArrayModule.take"/>.</param>
+        /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip"; it follows <paramref name="out"/>, as in
+        ///     NumPy.</param>
+        /// <returns>The masked array, <paramref name="out"/>, or for a 0-d result <see cref="MaskedArrayModule.NDMasked"/> /
+        ///     an unmasked 0-d array.</returns>
+        /// <exception cref="IndexError">An index is out of bounds under <c>mode="raise"</c>.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/>'s shape is not the result's.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        public NDMaskedArray take(NDArray indices, int? axis = null, NDMaskedArray @out = null, string mode = "raise") => np.ma.take(this, indices, axis, @out, mode);
 
         /// <summary>The 1-D array of the UNMASKED values in C-order (NumPy's <c>MaskedArray.compressed</c>) —
         /// a plain <see cref="NDArray"/>, since a compressed result has no mask.</summary>
         /// <returns>A 1-D <see cref="NDArray"/> of the unmasked data.</returns>
         public NDArray compressed() => np.ma.compressed(this);
 
-        /// <summary>Keep only elements where the flattened <paramref name="condition"/> is True (NumPy's
-        /// <c>MaskedArray.compress</c>); mask carried alike.</summary>
+        /// <summary>Keep only elements where the flattened <paramref name="condition"/> is True — NumPy's
+        /// <c>MaskedArray.compress(condition, axis=None, out=None)</c>; mask carried alike.</summary>
         /// <param name="condition">Boolean array-like selector over the (flattened) elements.</param>
         /// <param name="axis">Axis to compress along, or null to flatten first.</param>
+        /// <param name="out">Where to write the compressed DATA; its mask is never touched, and the result is a new masked
+        ///     array over it (see <see cref="MaskedArrayModule.compress"/>).</param>
         /// <returns>The compressed masked array.</returns>
-        public NDMaskedArray compress(object condition, int? axis = null) => np.ma.compress(condition, this, axis);
+        /// <exception cref="ArgumentException">The condition is not 1-D.</exception>
+        /// <exception cref="IndexError">A truthy condition entry past the axis length.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/>'s shape is not the result's.</exception>
+        public NDMaskedArray compress(object condition, int? axis = null, NDMaskedArray @out = null) => np.ma.compress(condition, this, axis, @out);
 
         /// <summary>A DEEP copy of this masked array — data AND mask duplicated, sharing no memory with the source
         /// (NumPy's <c>MaskedArray.copy</c>). Reach for it before mutating a view/slice you must not disturb.</summary>
+        /// <param name="order">The copy's layout, NumPy's <c>MaskedArray.copy(order='C')</c>: <c>'C'</c> (the default),
+        ///     <c>'F'</c>, <c>'A'</c> or <c>'K'</c> — data and mask alike (API-parity batch 7).</param>
         /// <returns>An independent <see cref="NDMaskedArray"/> with the same values, mask and fill value.</returns>
-        public NDMaskedArray copy() => np.ma.copy(this);
+        /// <exception cref="ValueError">An order letter NumPy does not have.</exception>
+        public NDMaskedArray copy(char order = 'C') => np.ma.copy(this, order);
 
-        /// <summary>Uses THIS array's elements as indices to select from <paramref name="choices"/> (NumPy's
-        /// <c>MaskedArray.choose</c>); the result is masked wherever this index was masked (and where a chosen
-        /// element is). Reproduces the module <see cref="MaskedArrayModule.choose"/> — a masked INDEX slot's hidden
-        /// data may differ from NumPy's instance form (the module fills a masked index with 0 before selecting,
-        /// NumPy's instance keeps the raw index), but the slot is masked either way, so the observable
-        /// values+mask match.</summary>
+        /// <summary>Uses THIS array's elements as indices to select from <paramref name="choices"/> — NumPy's
+        /// <c>MaskedArray.choose(choices, out=None, mode='raise')</c>, which is <c>ndarray.choose</c>: the STORED index
+        /// values (a masked slot's too) select from the choices' raw data, and the result carries a copy of this array's
+        /// mask (the choices' masks are not read), its fill value and its hard-mask flag. Use the module
+        /// <see cref="MaskedArrayModule.choose"/> for the mask-aware merge.</summary>
         /// <param name="choices">The choice arrays (an <see cref="NDArray"/>[] binds via covariance; scalars need
         /// <c>new object[]{…}</c>).</param>
-        /// <param name="mode">Out-of-bounds index policy: "raise" (default)/"wrap"/"clip".</param>
-        /// <returns>The selected, masked array.</returns>
-        public NDMaskedArray choose(object[] choices, string mode = "raise") => np.ma.choose(this, choices, mode);
+        /// <param name="out">Where to write the chosen data (returned); its mask is left as it is, as in NumPy.</param>
+        /// <param name="mode">Out-of-bounds index policy: "raise" (default)/"wrap"/"clip"; it follows
+        ///     <paramref name="out"/>, as in NumPy.</param>
+        /// <returns>The selected, masked array, or <paramref name="out"/>.</returns>
+        /// <exception cref="ValueError">A stored index value is out of range under <c>mode="raise"</c>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s shape is not the result's.</exception>
+        /// <remarks>Until API-parity batch 8 this ran the module form (masks of the choices included, a masked index read
+        ///     as 0); NumPy's method never did.</remarks>
+        public NDMaskedArray choose(object[] choices, NDMaskedArray @out = null, string mode = "raise") => np.ma.ChooseMethod(this, choices, @out, mode);
 
-        /// <summary>Sorts along an axis with masked entries pushed to the end (or front) and re-masked there. Unlike NumPy's
-        /// <c>MaskedArray.sort</c>, which sorts in place and returns None, this returns the sorted copy
+        /// <summary>Sorts along an axis with masked entries pushed to the end (or front) and re-masked there — NumPy's
+        /// <c>MaskedArray.sort(axis=-1, kind=None, order=None, endwith=True, fill_value=None, *, stable=False)</c>. Unlike
+        /// NumPy's method, which sorts in place and returns None, this returns the sorted copy
         /// <see cref="MaskedArrayModule.sort"/> builds and leaves this array as it is.</summary>
         /// <param name="axis">Sort axis (default last).</param>
+        /// <param name="kind">NumPy's sort kind, or null for the default (validated with NumPy's text). Added in API-parity
+        ///     batch 9, in NumPy's second slot, where C# had <paramref name="endwith"/>.</param>
+        /// <param name="order">NumPy's structured-array field order; numeric data has no fields, so any value is NumPy's
+        ///     <c>ValueError: Cannot specify order when the array has no fields.</c></param>
         /// <param name="endwith">True (default) pushes masked to the END; false pushes them to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: true is NumPy's <c>ValueError: `stable` parameter is not
+        ///     supported for masked arrays.</c></param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: true is NumPy's <c>ValueError: `descending`
+        ///     parameter is not supported for masked arrays.</c>, checked after <paramref name="stable"/>.</param>
         /// <returns>The sorted masked array.</returns>
-        public NDMaskedArray sort(int axis = -1, bool endwith = true, object fill_value = null) => np.ma.sort(this, axis, endwith, fill_value);
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array.</exception>
+        /// <exception cref="ValueError"><paramref name="stable"/> or <paramref name="descending"/> true (stable first),
+        ///     an unknown <paramref name="kind"/>, or an <paramref name="order"/>.</exception>
+        public NDMaskedArray sort(int axis = -1, string kind = null, object order = null, bool endwith = true, object fill_value = null,
+                                  bool stable = false, bool descending = false)
+            // np.ma.sort passes stable and descending on to MaskedArray.sort, which refuses true: the same checks, the
+            // same texts.
+            => np.ma.sort(this, axis, kind, order, endwith, fill_value, stable, descending);
 
         /// <summary>Indices that would sort the array with masked entries at the end (or front), with NumPy's DEFAULT axis
-        /// (<c>MaskedArray.argsort(axis=np._NoValue)</c>: the last axis of a 0-d / 1-D array, the FLATTENED array —
-        /// NumPy's deprecated default — from two dimensions on).</summary>
+        /// (<c>MaskedArray.argsort(axis=np._NoValue, kind=None, order=None, endwith=True, fill_value=None, *,
+        /// stable=False)</c>: the last axis of a 0-d / 1-D array, the FLATTENED array — NumPy's deprecated default — from
+        /// two dimensions on).</summary>
         /// <param name="endwith">True (default) sorts masked LAST; false sorts them FIRST.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="kind">NumPy's sort kind, or null for the default (validated with NumPy's text).</param>
+        /// <param name="order">NumPy's structured-array field order (refused for numeric data).</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: true is NumPy's <c>ValueError: `stable` parameter is not
+        ///     supported for masked arrays.</c> (the method's first statement).</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: true is NumPy's <c>ValueError: `descending`
+        ///     parameter is not supported for masked arrays.</c> (the method's second statement).</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
-        public NDArray argsort(bool endwith = true, object fill_value = null) => np.ma.argsort(this, endwith, fill_value);
+        /// <exception cref="ValueError"><paramref name="stable"/> or <paramref name="descending"/> true (stable first),
+        ///     an unknown <paramref name="kind"/>, or an <paramref name="order"/>.</exception>
+        /// <remarks>C#'s spelling of NumPy's <c>axis=&lt;no value&gt;</c>: <paramref name="endwith"/> stays first so a
+        ///     positional <c>null</c> still means <c>axis=None</c> (see <see cref="argsort(int?,string,object,bool,object,bool,bool)"/>);
+        ///     name the API-parity batch 9 keywords (<c>m.argsort(kind: "stable", endwith: false)</c>).</remarks>
+        public NDArray argsort(bool endwith = true, object fill_value = null, string kind = null, object order = null, bool stable = false,
+                               bool descending = false)
+            // MaskedArray.argsort's first two statements refuse stable / descending; NumPy 2.5's ma.argsort passes both on,
+            // so the module function makes the same checks for a masked operand.
+            => np.ma.argsort(this, endwith, fill_value, kind, order, stable, descending);
 
         /// <summary>Indices that would sort the array along <paramref name="axis"/> with masked entries at the end (or
-        /// front).</summary>
+        /// front) — NumPy's <c>MaskedArray.argsort(axis, kind=None, order=None, endwith=True, fill_value=None, *,
+        /// stable=False)</c>.</summary>
         /// <param name="axis">Sort axis (negative counts from the end), or null for the flattened array.</param>
+        /// <param name="kind">NumPy's sort kind, or null for the default (validated with NumPy's text). Added in API-parity
+        ///     batch 9, in NumPy's second slot, where C# had <paramref name="endwith"/>.</param>
+        /// <param name="order">NumPy's structured-array field order (refused for numeric data).</param>
         /// <param name="endwith">True (default) sorts masked LAST; false sorts them FIRST.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: true is NumPy's <c>ValueError: `stable` parameter is not
+        ///     supported for masked arrays.</c></param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: true is NumPy's <c>ValueError: `descending`
+        ///     parameter is not supported for masked arrays.</c>, checked after <paramref name="stable"/>.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
-        public NDArray argsort(int? axis, bool endwith = true, object fill_value = null) => np.ma.argsort(this, axis, endwith, fill_value);
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array.</exception>
+        /// <exception cref="ValueError"><paramref name="stable"/> or <paramref name="descending"/> true (stable first),
+        ///     an unknown <paramref name="kind"/>, or an <paramref name="order"/>.</exception>
+        public NDArray argsort(int? axis, string kind = null, object order = null, bool endwith = true, object fill_value = null,
+                               bool stable = false, bool descending = false)
+            // MaskedArray.argsort's first statements (the module function makes them for a masked operand, see the no-axis form).
+            => np.ma.argsort(this, axis, kind, order, endwith, fill_value, stable, descending);
 
-        /// <summary>Clamps each element into <c>[a_min, a_max]</c>, preserving the mask (NumPy's <c>clip</c>).</summary>
-        /// <param name="a_min">Lower bound (array-like/scalar), or null for no lower clip.</param>
-        /// <param name="a_max">Upper bound, or null for no upper clip.</param>
-        /// <returns>The clamped masked array.</returns>
-        public NDMaskedArray clip(object a_min, object a_max) => np.ma.clip(this, a_min, a_max);
+        /// <summary>Clamps each element into <c>[min, max]</c> — NumPy's <c>MaskedArray.clip(min=None, max=None, out=None,
+        ///     **kwargs)</c>, which is <c>ndarray.clip</c>: the clip ufunc over this array, so the result is masked wherever
+        ///     this array or a masked bound is.</summary>
+        /// <param name="min">Lower bound (array-like / scalar / masked array), or null (NumPy's None, the default) for no lower
+        ///     clip.</param>
+        /// <param name="max">Upper bound, or null (the default) for no upper clip; with both null the result is a copy,
+        ///     as NumPy's <c>m.clip()</c>.</param>
+        /// <param name="out">NumPy's <c>out</c>: the clipped data is written into it and the out ITSELF is returned (the method
+        ///     has no module-level view); a masked out's mask is replaced by the operands' (hard or not). An
+        ///     <see cref="NDArray"/> converts (NumPy's plain out). Added in API-parity batch 9.</param>
+        /// <param name="dtype">NumPy's ufunc <c>dtype</c> keyword: the dtype the clip computes in. Added in API-parity batch
+        ///     9.</param>
+        /// <returns>The clamped masked array (this array's fill value and hardness), or <paramref name="out"/>.</returns>
+        /// <exception cref="OverflowError">A C# integer bound that does not fit this array's integer dtype.</exception>
+        /// <exception cref="UFuncTypeError">The clip refuses <paramref name="dtype"/> or the out's dtype.</exception>
+        /// <exception cref="ValueError">A bound or the out does not broadcast.</exception>
+        /// <remarks>NumPy 2.x's keywords since 2026-11-11 (were <c>a_min</c> / <c>a_max</c>, which NumPy's method refuses);
+        ///     the module function <see cref="MaskedArrayModule.clip(object, object, object, NDMaskedArray, object, object, object, bool?, DType)"/>
+        ///     keeps NumPy's <c>a_min</c> / <c>a_max</c> and returns a VIEW of an out.</remarks>
+        public NDMaskedArray clip(object min = null, object max = null, NDMaskedArray @out = null, DType dtype = null)
+        {
+            // Scoped by hand as the module function is: the bounds' materializations and the mask ORs are reclaimed.
+            using var scope = NDScope.Open();
+            return MaskedArrayModule.Yield(scope, np.ma.ClipMethodCore(this, min, max, @out, dtype, null, null));
+        }
 
-        /// <summary>Rounds each element to <paramref name="decimals"/> places (half-to-even), preserving the mask.</summary>
-        /// <param name="decimals">Decimal places.</param><returns>The masked, rounded array.</returns>
-        public NDMaskedArray round(int decimals = 0) => np.ma.round(this, decimals);
+        /// <summary>Rounds each element to <paramref name="decimals"/> places (half-to-even), preserving the mask — NumPy's
+        ///     <c>MaskedArray.round(decimals=0, out=None)</c>.</summary>
+        /// <param name="decimals">Decimal places (negative rounds to the left of the decimal point).</param>
+        /// <param name="out">Where to write the rounded data (returned). A MASKED out goes through NumPy's in-place
+        ///     multiply / rint / divide and their <c>__array_wrap__</c>: an infinite result there is written as 1.0
+        ///     (<c>10**-decimals</c> for negative decimals) — visible once this array's mask is set over it — and then takes
+        ///     this array's mask through <c>__setmask__</c> (a hard out also keeps the masked slots the wraps left). A plain out
+        ///     (converted) receives the rounded data only. See <see cref="MaskedArrayModule.RoundMethodInto"/>.</param>
+        /// <returns>The masked, rounded array, or <paramref name="out"/>.</returns>
+        /// <exception cref="AttributeError">Complex data into a masked <paramref name="out"/> (<c>property 'real' of
+        ///     'MaskedArray' object has no setter</c>), before anything is written.</exception>
+        /// <exception cref="UFuncOutputCastingError"><paramref name="out"/>'s dtype cannot hold the rounded values
+        ///     (<c>Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('int64') with casting rule
+        ///     'same_kind'</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another size (<c>invalid output shape</c>).</exception>
+        public NDMaskedArray round(int decimals = 0, NDMaskedArray @out = null)
+            => @out is null ? np.ma.round(this, decimals) : np.ma.RoundMethodInto(this, decimals, @out);
 
         /// <summary>Complex conjugate (real data passes through); mask preserved (NumPy's <c>conj</c>).</summary>
         /// <returns>A masked array of conj(data).</returns>
@@ -1120,43 +1688,69 @@ namespace NumSharp
         /// <returns>A masked array of conj(data).</returns>
         public NDMaskedArray conjugate() => np.ma.conjugate(this);
 
-        /// <summary>Dot product with masked slots treated as 0 (NumPy's <c>MaskedArray.dot</c>); with
-        /// <paramref name="strict"/> the mask is propagated along the contracted axes first (see
-        /// <see cref="MaskedArrayModule.dot(object,object,bool)"/>).</summary>
+        /// <summary>Dot product with masked slots treated as 0 — NumPy's <c>MaskedArray.dot(b, out=None, strict=False)</c>;
+        /// with <paramref name="strict"/> the mask is propagated along the contracted axes first (see
+        /// <see cref="MaskedArrayModule.dot(object,object,bool,NDMaskedArray)"/>).</summary>
         /// <param name="b">Right operand.</param>
+        /// <param name="out">A MASKED array to write the product and its mask into (returned); see the module form for its
+        ///     rules. It precedes <paramref name="strict"/>, as in NumPy's method (the module puts strict first), so a
+        ///     positional strict is now written <c>strict: true</c>.</param>
         /// <param name="strict">Propagate masks along the contracted axes before the product (default false).</param>
-        /// <returns>The masked dot product.</returns>
-        public NDMaskedArray dot(object b, bool strict = false) => np.ma.dot(this, b, strict);
+        /// <returns>The masked dot product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain array (<c>'numpy.ndarray' object has no
+        ///     attribute '_data'</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is not C-contiguous, has another dtype than the product's, or
+        ///     another shape (np.dot's texts).</exception>
+        /// <exception cref="TypeError">A 0-d <paramref name="out"/> without a mask (<c>'out' must be an array</c>), raised
+        ///     after its data was written.</exception>
+        /// <exception cref="IncorrectShapeException">The operands' shapes are not aligned.</exception>
+        public NDMaskedArray dot(object b, NDMaskedArray @out = null, bool strict = false) => np.ma.dot(this, b, strict, @out);
 
         /// <summary>Extracts the <paramref name="offset"/>-th diagonal (mask alike); NumPy's <c>MaskedArray.diagonal</c>.</summary>
         /// <param name="offset">Diagonal offset (0 = main).</param><param name="axis1">First plane axis.</param><param name="axis2">Second plane axis.</param>
         /// <returns>The masked diagonal.</returns>
         public NDMaskedArray diagonal(int offset = 0, int axis1 = 0, int axis2 = 1) => np.ma.diagonal(this, offset, axis1, axis2);
 
-        /// <summary>Sum of the diagonal, treating masked slots as 0 (NumPy's <c>MaskedArray.trace</c>) — a PLAIN
-        /// array; the result is float64 unless <paramref name="dtype"/> is given (NumPy's <c>astype(None)</c> quirk).</summary>
+        /// <summary>Sum of the diagonal, treating masked slots as 0 — NumPy's <c>MaskedArray.trace(offset=0, axis1=0, axis2=1,
+        /// dtype=None, out=None)</c>; a PLAIN array, float64 unless <paramref name="dtype"/> is given (NumPy's
+        /// <c>astype(None)</c> quirk).</summary>
         /// <param name="offset">Diagonal offset.</param><param name="axis1">First plane axis.</param><param name="axis2">Second plane axis.</param>
         /// <param name="dtype">Result dtype; null ⇒ float64.</param>
-        /// <returns>A plain <see cref="NDArray"/> trace.</returns>
-        public NDArray trace(int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null) => np.ma.trace(this, offset, axis1, axis2, dtype);
+        /// <param name="out">Where to write the trace: returned for a masked array; for an unmasked one the out is written
+        ///     and a float64 (or <paramref name="dtype"/>) COPY is returned (see <see cref="MaskedArrayModule.trace"/>).</param>
+        /// <returns>A plain <see cref="NDArray"/> trace, or <paramref name="out"/>.</returns>
+        /// <exception cref="ArgumentException">Fewer than two dimensions, or invalid axes.</exception>
+        /// <exception cref="TypeError">Unmasked text data: the diagonal sum has no string loop.</exception>
+        /// <exception cref="ValueError">Masked text data whose diagonal does not parse as float64, or an
+        ///     <paramref name="out"/> of the wrong rank.</exception>
+        public NDArray trace(int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null, NDArray @out = null) => np.ma.trace(this, offset, axis1, axis2, dtype, @out);
 
         /// <summary>Indices of the non-zero UNMASKED elements (NumPy's <c>MaskedArray.nonzero</c>) — one plain
         /// int64 index array per dimension; masked slots are treated as zero and excluded.</summary>
         /// <returns>An array of int64 index arrays (the house tuple convention).</returns>
         public NDArray<long>[] nonzero() => np.ma.nonzero(this);
 
-        /// <summary>The single element as a boxed scalar (NumPy's <c>MaskedArray.item</c>); a size-1 masked array
-        /// whose element is masked returns the <see cref="MaskedArrayModule.NDMasked"/> constant.</summary>
-        /// <returns>The scalar value, or <see cref="MaskedArrayModule.NDMasked"/> when the element is masked.</returns>
-        /// <exception cref="InvalidOperationException">The array does not hold exactly one element.</exception>
-        public object item()
+        /// <summary>One element as a boxed scalar — NumPy's <c>MaskedArray.item(*args)</c>, which IS <c>ndarray.item</c>: it
+        /// reads the DATA and ignores the mask, so a masked element returns its STORED value (never
+        /// <see cref="MaskedArrayModule.NDMasked"/>).</summary>
+        /// <param name="args">NumPy's <c>*args</c>: nothing (the array must hold exactly one element), one flat C-order index
+        ///     (negative counts from the end), or one index per dimension.</param>
+        /// <returns>The element's value, boxed in its C# type (a <c>long</c> for int64 data, a <c>double</c> for
+        ///     float64, …).</returns>
+        /// <exception cref="ValueError">No argument and the array does not hold exactly one element (<c>can only convert
+        ///     an array of size 1 to a Python scalar</c>), or neither one index nor one per dimension (<c>incorrect number
+        ///     of indices for array</c>): NumPy's ValueErrors since API-parity batch 13 (parity QA-04).</exception>
+        /// <exception cref="IndexOutOfRangeException">A flat index out of bounds (NumPy's IndexError text <c>index 9 is out
+        ///     of bounds for size 6</c>), or a coordinate out of its axis' bounds.</exception>
+        /// <remarks>Forwards to <see cref="NDArray.item()"/> / <see cref="NDArray.item(long)"/> /
+        ///     <see cref="NDArray.item(long[])"/> over the data, so its argument checks are ndarray's. Until API-parity batch
+        ///     8 this took no argument and answered a masked element with the masked constant; NumPy's never did.</remarks>
+        public object item(params long[] args)
         {
-            if (_data.size != 1)
-                throw new InvalidOperationException("can only convert an array of size 1 to a Python scalar");
-            // A masked single element reads as the `masked` singleton, matching NumPy's `x.item()`.
-            if (_mask is not null && np.any(_mask))
-                return np.ma.NDMasked;
-            return _data.GetAtIndex(0);
+            // ndarray.item's three call forms, decided by the argument count; a null array is the no-argument call.
+            if (args is null || args.Length == 0)
+                return _data.item();
+            return args.Length == 1 ? _data.item(args[0]) : _data.item(args);
         }
 
         // ── Instance members that operate on the DATA only (NumPy inherits these straight from ndarray, so
@@ -1248,7 +1842,7 @@ namespace NumSharp
         ///     <c>ndarray.argpartition</c>): the index permutation is computed from the raw data, and the result
         ///     carries a COPY of THIS array's mask UNMOVED (positionally; flattened with <paramref name="axis"/> null), so a
         ///     masked input position shows as masked in the result even though the result holds indices, not values.
-        ///     Reproduced for parity; prefer <see cref="argsort(int?,bool,object)"/>.
+        ///     Reproduced for parity; prefer <see cref="argsort(int?,string,object,bool,object,bool,bool)"/>.
         /// </summary>
         /// <param name="kth">Index whose element lands in final sorted position; negatives count from the end.</param>
         /// <param name="axis">Axis to partition along; null flattens first. Default last axis.</param>
@@ -1393,7 +1987,10 @@ namespace NumSharp
             {
                 var element = _data[indices];
                 if (element.ndim == 0)
-                    throw new AttributeError($"'{ElementPythonTypeName(element.GetAtIndex(0))}' object has no attribute 'size'");
+                {
+                    object scalar = element.GetAtIndex(0);
+                    throw new AttributeError($"'{ElementPythonTypeName(scalar)}' object has no attribute 'size'", "size", scalar);
+                }
             }
             NDArray savedMask = hard ? _mask.copy() : null;
             NDArray savedData = hard ? _data.copy() : null;
@@ -1616,9 +2213,9 @@ namespace NumSharp
         /// <param name="fid">Ignored (NumPy's file id).</param>
         /// <param name="sep">Ignored (NumPy's separator).</param>
         /// <param name="format">Ignored (NumPy's format).</param>
-        /// <exception cref="NotImplementedException">Always — matching NumPy's <c>NotImplementedError</c>.</exception>
+        /// <exception cref="NotImplementedError">Always — NumPy's <c>NotImplementedError</c>, type and text.</exception>
         public void tofile(string fid, string sep = "", string format = "%s")
-            => throw new NotImplementedException("MaskedArray.tofile() not implemented yet.");
+            => throw new NotImplementedError("MaskedArray.tofile() not implemented yet.");
 
         /// <summary>
         ///     Reinterprets the data buffer as another dtype (NumPy's <c>MaskedArray.view</c>) — a VIEW sharing
@@ -1671,6 +2268,94 @@ namespace NumSharp
             return MaskedArrayModule.Yield(scope, r);
         }
 
+        /// <summary>
+        ///     NumPy's <c>MaskedArray.getfield(dtype, offset=0)</c>: a masked VIEW of a field of each element - the data
+        ///     reinterpreted as <paramref name="dtype"/> at <paramref name="offset"/> bytes (<see cref="NDArray.getfield"/>),
+        ///     carrying this array's mask (shared: a masked write through either array reaches the other), hard-mask flag
+        ///     and a copy of its stored fill value, as NumPy's <c>__array_finalize__</c> carries them onto any view.
+        /// </summary>
+        /// <param name="dtype">The field's dtype; null is NumPy's default float64.</param>
+        /// <param name="offset">The field's byte offset within an element (not negative).</param>
+        /// <returns>A masked array over the field view, of this array's shape.</returns>
+        /// <exception cref="ValueError"><see cref="NDArray.getfield"/>'s refusals: a negative offset (<c>offset is
+        ///     negative</c>), a field past the element (<c>new type plus offset is larger than original type</c>).</exception>
+        /// <exception cref="TypeError"><see cref="NDArray.getfield"/>'s <c>Cannot get/set field of an object array</c>.</exception>
+        /// <exception cref="NotSupportedException"><see cref="NDArray.getfield"/>'s refusal of a non-native field
+        ///     descriptor.</exception>
+        /// <remarks>
+        ///     The stored fill is copied at THIS array's dtype and read back at the field's (a float64 fill 7.0 reads
+        ///     <c>np.float32(7.0)</c> on a float32 field, as NumPy's getter converts it); setting the field's fill leaves this
+        ///     array's alone. Scoped by hand: the field view is built before the mask is attached, and handed back through
+        ///     <see cref="MaskedArrayModule.Yield"/>. API-parity batch 12.
+        /// </remarks>
+        public NDMaskedArray getfield(DType dtype, int offset = 0)
+        {
+            using var scope = NDScope.Open();
+            var field = _data.getfield(dtype, offset);
+            // __array_finalize__ -> _update_from(self): the hard mask and a stored fill (a converted COPY, so a later set on
+            // the field leaves this array's fill alone); the mask is the same memory over the same shape (a getfield never
+            // changes the shape), so it rides along as a view.
+            var fillCopy = _fill_value is null ? null : MaskedArrayModule.StoreFill(_fill_value, _data.dtype);
+            var r = new NDMaskedArray(field, _mask?.view(), fillCopy) { _hardmask = _hardmask };
+            return MaskedArrayModule.Yield(scope, r);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>MaskedArray.setfield(val, dtype, offset=0)</c>: writes <paramref name="val"/> into the field
+        ///     <c>getfield(dtype, offset)</c> of every element - ndarray's setfield on the data, so masked slots are written
+        ///     too (a hard mask included) and the mask is unchanged.
+        /// </summary>
+        /// <param name="val">The value(s), broadcast to this array's shape and stored by NumPy's setitem (an unsafe cast: 1.5
+        ///     into an int64 field stores 1, a text <c>"7"</c> parses to 7). A C# number or string converts implicitly; a
+        ///     masked array's values go in as its <see cref="data"/>.</param>
+        /// <param name="dtype">The field's dtype; null is NumPy's default float64.</param>
+        /// <param name="offset">The field's byte offset within an element (not negative).</param>
+        /// <exception cref="ValueError">The data is read-only (<c>assignment destination is read-only</c>);
+        ///     <see cref="NDArray.getfield"/>'s dtype / offset refusals; a value that does not broadcast (<c>could not
+        ///     broadcast input array from shape (2,) into shape (3,)</c>).</exception>
+        /// <exception cref="TypeError"><see cref="NDArray.setfield"/>'s refusals (None into an integer field, an object
+        ///     field).</exception>
+        /// <exception cref="NotSupportedException">A non-native field descriptor.</exception>
+        /// <remarks>API-parity batch 12: NumPy's MaskedArray inherits ndarray.setfield, which writes the data alone.</remarks>
+        public void setfield(NDArray val, DType dtype, int offset = 0) => _data.setfield(val, dtype, offset);
+
+        /// <summary>
+        ///     The array this masked array is a view of (NumPy's <c>MaskedArray.base</c>): a NumPy masked array is an ndarray
+        ///     VIEW of its data, so its base is that data - the very array passed to <c>np.ma.array(d)</c> when no copy was
+        ///     made (<c>ReferenceEquals(np.ma.array(d).@base, d)</c>, NumPy's <c>ma.array(d).base is d</c>), the masked
+        ///     array's own data array otherwise. Never null, unlike an owning <see cref="NDArray"/>'s <c>@base</c>.
+        /// </summary>
+        /// <remarks>
+        ///     Footgun: it is the stored data object itself, not a view of it (identity is NumPy's point): disposing it
+        ///     releases this masked array's data. API-parity batch 12.
+        /// </remarks>
+        public NDArray @base => _data;
+
+        /// <summary>The device the masked array lives on: always <c>"cpu"</c> (NumPy's <c>MaskedArray.device</c>, inherited
+        ///     from ndarray; NumSharp is single-device and CPU-resident). API-parity batch 12.</summary>
+        public string device => "cpu";
+
+        /// <summary>
+        ///     Array-API device transfer (NumPy's <c>MaskedArray.to_device</c>, inherited from ndarray): <c>"cpu"</c> returns
+        ///     this same masked array, with no copy; any other device, or a stream, raises as
+        ///     <see cref="NDArray.to_device"/> does.
+        /// </summary>
+        /// <param name="device">The target device; must be <c>"cpu"</c>.</param>
+        /// <param name="stream">Accepted for the Array-API signature; must be null (NumSharp models no streams).</param>
+        /// <returns>This masked array, unchanged.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="device"/> is null (NumPy's TypeError: <c>to_device()
+        ///     argument 1 must be str, not None</c>).</exception>
+        /// <exception cref="ValueError">A stream (<c>The stream argument in to_device() is not supported</c>), or another
+        ///     device (<c>Unsupported device: gpu. Only 'cpu' is accepted.</c>), in that order.</exception>
+        /// <remarks>API-parity batch 12.</remarks>
+        public NDMaskedArray to_device(string device, object stream = null)
+        {
+            // ndarray.to_device's checks in NumPy's order (the device's type, the stream, the device's value), run on the
+            // data, which returns itself for "cpu"; the masked array is returned as NumPy returns self.
+            _data.to_device(device, stream);
+            return this;
+        }
+
         /// <summary>The addresses of the data and mask buffers (NumPy's <c>MaskedArray.ids</c>); the mask address
         /// is 0 when there is no mask (NumPy returns <c>id(nomask)</c> there — an arbitrary sentinel either way).</summary>
         /// <returns>A <c>(data, mask)</c> tuple of buffer addresses as <see cref="long"/>s.</returns>
@@ -1693,11 +2378,12 @@ namespace NumSharp
         ///     does not own its data, so it cannot be resized in place. Use the module function
         ///     <see cref="MaskedArrayModule.resize(object,Shape)"/> (which returns a NEW tiled masked array).
         /// </summary>
-        /// <param name="new_shape">Ignored (NumPy's target shape).</param>
+        /// <param name="newshape">Ignored (NumPy's target shape, keyword <c>newshape</c>).</param>
         /// <param name="refcheck">Ignored (NumPy's reference-count check flag).</param>
-        /// <exception cref="NotSupportedException">Always — NumPy raises <c>ValueError</c> with this verbatim text
-        /// (the .NET exception type differs by the house convention; the message is byte-identical).</exception>
-        public void resize(Shape new_shape, bool refcheck = true) => throw new NotSupportedException(
+        /// <param name="order">Ignored (NumPy's <c>order=False</c>, which NumPy's own source calls broken).</param>
+        /// <exception cref="ValueError">Always, NumPy's type and verbatim text (since 2026-11-11; NumSharp raised
+        ///     <see cref="NotSupportedException"/> with the same text before it had Python's exception classes).</exception>
+        public void resize(Shape newshape, bool refcheck = true, bool order = false) => throw new ValueError(
             "A masked array does not own its data and therefore cannot be resized.\n" +
             "Use the numpy.ma.resize function instead.");
 
@@ -2212,10 +2898,10 @@ namespace NumSharp
             => a is NDMaskedArray m ? m.filled(fill_value) : AsData(a);
 
         /// <summary>
-        ///     Builds a masked array from data and an optional mask (NumPy's <c>ma.array</c>/<c>masked_array</c>, the
-        ///     <c>MaskedArray.__new__</c> constructor). The data is taken via <see cref="getdata"/>; a given mask is
-        ///     converted to boolean and reconciled with the data's shape; a masked-array <paramref name="data"/> lends its
-        ///     mask, fill value and hardness.
+        ///     Builds a masked array — NumPy's <c>np.ma.array(data, dtype=None, copy=False, order=None, mask=nomask,
+        ///     fill_value=None, keep_mask=True, hard_mask=False, shrink=True, subok=True, ndmin=0)</c>, the function form of
+        ///     the <c>MaskedArray.__new__</c> constructor (<see cref="masked_array"/>), with NumPy's parameter ORDER: the dtype
+        ///     comes second and the mask fifth, so a positional mask must be named (<c>mask:</c>).
         /// </summary>
         /// <param name="data">Data array-like (a <see cref="NDMaskedArray"/>'s own mask, fill value and hard-mask flag ride
         ///     along).</param>
@@ -2223,30 +2909,36 @@ namespace NumSharp
         ///     <c>true</c> / <c>false</c> is NumPy's <c>mask=True</c> / <c>mask=False</c>: a FULL array of that value.</param>
         /// <param name="fill_value">Optional default fill value for <see cref="NDMaskedArray.filled(object)"/>; null
         ///     inherits <paramref name="data"/>'s. Checked against the dtype (<see cref="CheckFillValue"/>).</param>
-        /// <param name="copy">When true, copies the data (NumPy's <c>copy=</c>), the inherited mask and a given mask array;
-        ///     default false aliases them — a given boolean mask array of the data's shape is ADOPTED (the masked array then
-        ///     writes into it, as NumPy's does, and <see cref="getmask"/> returns it), the data's own mask is shared through
-        ///     a view.</param>
+        /// <param name="copy">When true, copies the data (NumPy's <c>copy=</c>, in <paramref name="order"/>'s layout — the
+        ///     data's own for the default), the inherited mask and a given mask array; default false aliases them — a given
+        ///     boolean mask array of the data's shape is ADOPTED (the masked array then writes into it, as NumPy's does, and
+        ///     <see cref="getmask"/> returns it), the data's own mask is shared through a view.</param>
         /// <param name="dtype">Optional dtype: an array (or masked array) is CAST to it; a C# array-like is converted INTO it
         ///     (NumPy's <c>np.array(data, dtype=dtype)</c>: <c>new object[] { "ab", null }</c> with
         ///     <c>StringDType(na_object: null)</c> holds an NA element, numbers with <c>StringDType(coerce: false)</c> are
         ///     refused).</param>
-        /// <param name="hard_mask">True/false makes the result's mask HARD/soft (NumPy's <c>hard_mask=</c>: a hard mask
-        ///     refuses a plain-value assignment's unmasking, see <see cref="NDMaskedArray.harden_mask()"/>); null inherits
-        ///     <paramref name="data"/>'s hardness. The default is false, NumPy's <c>ma.array</c> FUNCTION
-        ///     (<c>hard_mask=False</c>); <see cref="masked_array"/>, NumPy's class, defaults to null.</param>
         /// <param name="keep_mask">With a given <paramref name="mask"/>, true (default) ORs it with
         ///     <paramref name="data"/>'s own mask and false replaces that mask; without one, false erases the data's mask.</param>
         /// <param name="shrink">With no <paramref name="mask"/> and <paramref name="keep_mask"/> false: true (default) leaves
         ///     no mask (<see cref="nomask"/>), false a full all-False mask.</param>
+        /// <param name="ndmin">The minimum rank of the result: leading length-1 axes are prepended to the data (and its
+        ///     mask) as NumPy's <c>np.array(..., ndmin=)</c> does; 0 (the default) or less adds none.</param>
+        /// <param name="order">The data's memory layout, NumPy's <c>np.array(..., order=)</c>: null / <c>'K'</c> keeps it,
+        ///     <c>'A'</c> keeps a C- or F-contiguous one, <c>'C'</c> / <c>'F'</c> lay it out so (copying only when
+        ///     needed).</param>
+        /// <param name="hard_mask">True/false makes the result's mask HARD/soft (NumPy's <c>hard_mask=</c>: a hard mask
+        ///     refuses a plain-value assignment's unmasking, see <see cref="NDMaskedArray.harden_mask()"/>); null inherits
+        ///     <paramref name="data"/>'s hardness. The default is false, NumPy's <c>ma.array</c> FUNCTION
+        ///     (<c>hard_mask=False</c>); <see cref="masked_array"/>, NumPy's class, defaults to null.</param>
         /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
         /// <exception cref="MaskError">The mask is neither the data's shape, nor one element, nor the data's size
         ///     (<c>Mask and data not compatible: data size is 3, mask size is 2.</c>).</exception>
         /// <exception cref="TypeError">A <see cref="string"/> <paramref name="fill_value"/> for numeric data, or a fill
         ///     numpy.ma cannot convert to the data's dtype (see <see cref="CheckFillValue"/>).</exception>
-        /// <exception cref="ValueError">A C# array-like holding numbers with a <c>StringDType(coerce: false)</c>
-        ///     <paramref name="dtype"/> (<c>StringDType only allows string data when string coercion is disabled.</c>), or
-        ///     text data a numeric <paramref name="dtype"/> cannot parse (<c>could not convert string to float</c>).</exception>
+        /// <exception cref="ValueError">An order letter NumPy does not have (checked first, as np.array's parser does);
+        ///     <paramref name="ndmin"/> past 64 (<c>ndmin must be &lt;= ndmax (64)</c>); a C# array-like holding numbers with
+        ///     a <c>StringDType(coerce: false)</c> <paramref name="dtype"/>, or text a numeric <paramref name="dtype"/> cannot
+        ///     parse.</exception>
         /// <remarks>
         ///     <para>
         ///     <b>The mask, as NumPy reconciles it.</b> A mask of the data's shape is used as is; a ONE-element mask is
@@ -2255,13 +2947,45 @@ namespace NumSharp
         ///     the wrong size reports the MaskError even though its strings could not be converted yet (NumPy converts first,
         ///     but that conversion cannot fail).
         ///     </para>
+        ///     <para>NumPy's parameter order, <paramref name="order"/> and <paramref name="ndmin"/> arrived in API-parity batch 8
+        ///     (2026-11-12): the order was <c>(data, mask, fill_value, copy, dtype, hard_mask, keep_mask, shrink)</c>, under
+        ///     which <c>np.ma.array(x, np.float32)</c> handed the dtype to the MASK. <c>subok</c> is the parity plan's
+        ///     exclusion.</para>
         ///     <para>Scoped by hand: a scalar/array-like <paramref name="data"/> or <paramref name="mask"/> is first
         ///     materialized, then (on a dtype cast / boolean coercion) replaced by the converted array — the
         ///     superseded materializations are reclaimed on return and only the arrays the result carries leave.</para>
         /// </remarks>
-        public NDMaskedArray array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null,
-            bool? hard_mask = false, bool keep_mask = true, bool shrink = true)
+        public NDMaskedArray array(object data, DType dtype = null, bool copy = false, char? order = null, object mask = null,
+            object fill_value = null, bool keep_mask = true, bool? hard_mask = false, bool shrink = true, int ndmin = 0)
+            => MaskedArrayNew(data, mask, dtype, copy, ndmin, fill_value, keep_mask, hard_mask, shrink, order);
+
+        /// <summary>
+        ///     NumPy's <c>MaskedArray.__new__(data, mask, dtype, copy, subok, ndmin, fill_value, keep_mask, hard_mask, shrink,
+        ///     order)</c>, the body of <see cref="array"/> and <see cref="masked_array"/>: <c>np.array(data, dtype, copy, order,
+        ///     subok=True, ndmin)</c>, then the mask (NumPy's two cases), the fill value and the hardness.
+        /// </summary>
+        /// <param name="data">The data array-like.</param>
+        /// <param name="mask">The mask argument, or null.</param>
+        /// <param name="dtype">The dtype request, or null.</param>
+        /// <param name="copy">Copy the data (and the masks).</param>
+        /// <param name="ndmin">The minimum rank.</param>
+        /// <param name="fill_value">The fill value, or null to inherit.</param>
+        /// <param name="keep_mask">OR a given mask with the data's own.</param>
+        /// <param name="hard_mask">Hard / soft, or null to inherit.</param>
+        /// <param name="shrink">Shrink an erased mask to nomask.</param>
+        /// <param name="order">The data layout request, or null (<c>'K'</c>).</param>
+        /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
+        /// <exception cref="MaskError">An incompatible mask.</exception>
+        /// <exception cref="TypeError">A fill the dtype refuses.</exception>
+        /// <exception cref="ValueError">A bad order letter; <paramref name="ndmin"/> past 64; data the dtype refuses.</exception>
+        private NDMaskedArray MaskedArrayNew(object data, object mask, DType dtype, bool copy, int ndmin, object fill_value,
+            bool keep_mask, bool? hard_mask, bool shrink, char? order)
         {
+            // np.array's argument parser converts the order letter and checks ndmin before the data is touched.
+            char requested = order ?? 'K';
+            var layout = OrderResolver.Convert(requested);
+            if (ndmin > 64)
+                throw new ValueError("ndmin must be <= ndmax (64)");
             using var scope = NDScope.Open();
             var source = data as NDMaskedArray;
             // A C# array-like with a dtype is NumPy's `np.array(data, dtype=dtype)`: the elements are discovered INTO the
@@ -2270,20 +2994,38 @@ namespace NumSharp
             bool discovered = dtype is not null && data is Array && data is not NDArray;
             var d = discovered ? np.array((Array)data, dtype) : AsData(data);
             // dtype cast happens first (and subsumes the copy — astype makes a new buffer on a real cast, and
-            // copy=true forces one even when the dtype already matches); mask stays boolean regardless of dtype. A
-            // discovered array is already new and of the dtype.
+            // copy=true forces one even when the dtype already matches), in the requested layout ('K' keeps the data's);
+            // mask stays boolean regardless of dtype. A discovered array is already new and of the dtype.
             if (!discovered)
             {
                 if (dtype != null)
-                    d = d.astype(dtype, copy);
+                    d = d.astype(dtype, requested, copy: copy);
                 else if (copy)
-                    d = d.copy();
+                    d = d.copy(requested);
             }
+            // `order=` without a copy: np.array lays the data out in the requested order only when it is not already so
+            // ('K' keeps, 'A' keeps a C- or F-contiguous array).
+            if (!copy)
+                d = layout switch
+                {
+                    NPY_ORDER.NPY_CORDER => d.Shape.IsContiguous ? d : d.copy('C'),
+                    NPY_ORDER.NPY_FORTRANORDER => d.Shape.IsFContiguous ? d : d.copy('F'),
+                    NPY_ORDER.NPY_ANYORDER => d.Shape.IsContiguous || d.Shape.IsFContiguous ? d : d.copy('C'),
+                    _ => d,
+                };
+            // `ndmin=`: leading length-1 axes, a view of the data.
+            if (ndmin > d.ndim)
+                d = d.reshape(new Shape(Enumerable.Repeat(1L, ndmin - d.ndim).Concat(d.Shape.dimensions).ToArray(), copy: false));
             // np.array(masked, subok=True) keeps the data's mask: copied with the data (`_mask.copy()`), else a VIEW of it
-            // (`__array_finalize__` over the same data: `_mask = _mask.view()`) — shared memory, not the same object.
+            // (`__array_finalize__` over the same data: `_mask = _mask.view()`) — shared memory, not the same object; with
+            // ndmin the view takes the data's new leading axes.
             NDArray existing = source?._mask;
             if (existing is not null)
+            {
                 existing = copy ? existing.copy() : existing.view();
+                if (existing.ndim != d.ndim)
+                    existing = existing.reshape(new Shape(d.Shape.dimensions, copy: false));
+            }
             NDArray m;
             if (mask is null || ReferenceEquals(mask, nomask))
             {
@@ -2296,8 +3038,17 @@ namespace NumSharp
                 var given = MaskArgument(mask, d, copy);
                 m = existing is null || !keep_mask ? given : np.logical_or(given, existing);
             }
-            // `if fill_value is None: fill_value = getattr(data, '_fill_value', None)`, then _check_fill_value.
-            var result = new NDMaskedArray(d, m, StoreFill(fill_value ?? source?._fill_value, d.dtype));
+            // NumPy 2.5.4's `__new__`: a given fill_value is checked (and may raise); an inherited one
+            // (`getattr(data, '_fill_value', None)`) is checked when the dtype is the data's, and converted with its errors
+            // caught — dropped when it does not convert — when the requested dtype changed it.
+            NDArray storedFill = fill_value is not null
+                ? StoreFill(fill_value, d.dtype)
+                : source?._fill_value is null
+                    ? null
+                    : source._data.dtype != d.dtype
+                        ? CheckFillValueOrDefault(source._fill_value, d.dtype)
+                        : StoreFill(source._fill_value, d.dtype);
+            var result = new NDMaskedArray(d, m, storedFill);
             // hard_mask=None inherits the data's hardness (`getattr(data, '_hardmask', False)`); true bakes the hardness in at
             // construction, so the very first assignment already refuses to unmask.
             result._hardmask = hard_mask ?? source?._hardmask ?? false;
@@ -2359,50 +3110,129 @@ namespace NumSharp
             return false;
         }
 
-        /// <summary>Alias of <see cref="array"/> matching NumPy's <c>ma.masked_array</c> name.</summary>
-        /// <param name="data">Data array-like.</param>
-        /// <param name="mask">Optional mask (see <see cref="array"/>).</param>
-        /// <param name="fill_value">Optional default fill value.</param>
-        /// <param name="copy">Copy the data when true.</param>
-        /// <param name="dtype">Optional dtype to cast the data to.</param>
+        /// <summary>
+        ///     The masked-array constructor — NumPy's <c>np.ma.masked_array(data=None, mask=nomask, dtype=None, copy=False,
+        ///     subok=True, ndmin=0, fill_value=None, keep_mask=True, hard_mask=None, shrink=True, order=None)</c>
+        ///     (<c>MaskedArray.__new__</c>), in NumPy's parameter ORDER: the mask second, the dtype third.
+        /// </summary>
+        /// <param name="data">Data array-like (a <see cref="NDMaskedArray"/>'s own mask, fill value and hard-mask flag ride
+        ///     along). Required: NumPy's <c>masked_array()</c> is an object-dtype None, which NumSharp has no dtype for.</param>
+        /// <param name="mask">Optional mask array-like; null/omitted (or <see cref="nomask"/>) ⇒ no explicit mask. A C#
+        ///     <c>true</c> / <c>false</c> is NumPy's <c>mask=True</c> / <c>mask=False</c>: a FULL array of that value.</param>
+        /// <param name="fill_value">Optional default fill value for <see cref="NDMaskedArray.filled(object)"/>; null
+        ///     inherits <paramref name="data"/>'s. Checked against the dtype (<see cref="CheckFillValue"/>).</param>
+        /// <param name="copy">When true, copies the data (NumPy's <c>copy=</c>, in <paramref name="order"/>'s layout — the
+        ///     data's own for the default), the inherited mask and a given mask array; default false aliases them — a given
+        ///     boolean mask array of the data's shape is ADOPTED (the masked array then writes into it, as NumPy's does, and
+        ///     <see cref="getmask"/> returns it), the data's own mask is shared through a view.</param>
+        /// <param name="dtype">Optional dtype: an array (or masked array) is CAST to it; a C# array-like is converted INTO it
+        ///     (NumPy's <c>np.array(data, dtype=dtype)</c>: <c>new object[] { "ab", null }</c> with
+        ///     <c>StringDType(na_object: null)</c> holds an NA element, numbers with <c>StringDType(coerce: false)</c> are
+        ///     refused).</param>
+        /// <param name="keep_mask">With a given <paramref name="mask"/>, true (default) ORs it with
+        ///     <paramref name="data"/>'s own mask and false replaces that mask; without one, false erases the data's mask.</param>
+        /// <param name="shrink">With no <paramref name="mask"/> and <paramref name="keep_mask"/> false: true (default) leaves
+        ///     no mask (<see cref="nomask"/>), false a full all-False mask.</param>
+        /// <param name="ndmin">The minimum rank of the result: leading length-1 axes are prepended to the data (and its
+        ///     mask) as NumPy's <c>np.array(..., ndmin=)</c> does; 0 (the default) or less adds none.</param>
+        /// <param name="order">The data's memory layout, NumPy's <c>np.array(..., order=)</c>: null / <c>'K'</c> keeps it,
+        ///     <c>'A'</c> keeps a C- or F-contiguous one, <c>'C'</c> / <c>'F'</c> lay it out so (copying only when
+        ///     needed).</param>
         /// <param name="hard_mask">Hard/soft mask, or null (the default — NumPy's <c>MaskedArray(hard_mask=None)</c>) to
         ///     inherit <paramref name="data"/>'s hardness; <see cref="array"/>, NumPy's function, defaults to soft.</param>
-        /// <param name="keep_mask">OR a given mask with the data's own (see <see cref="array"/>).</param>
-        /// <param name="shrink">Shrink an erased mask to <see cref="nomask"/> (see <see cref="array"/>).</param>
         /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
-        /// <exception cref="MaskError">See <see cref="array"/>.</exception>
-        /// <exception cref="TypeError">See <see cref="array"/>.</exception>
-        public NDMaskedArray masked_array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null,
-            bool? hard_mask = null, bool keep_mask = true, bool shrink = true)
-            => array(data, mask, fill_value, copy, dtype, hard_mask, keep_mask, shrink);
+        /// <exception cref="MaskError">The mask is neither the data's shape, nor one element, nor the data's size
+        ///     (<c>Mask and data not compatible: data size is 3, mask size is 2.</c>).</exception>
+        /// <exception cref="TypeError">A <see cref="string"/> <paramref name="fill_value"/> for numeric data, or a fill
+        ///     numpy.ma cannot convert to the data's dtype (see <see cref="CheckFillValue"/>).</exception>
+        /// <exception cref="ValueError">An order letter NumPy does not have (checked first, as np.array's parser does);
+        ///     <paramref name="ndmin"/> past 64 (<c>ndmin must be &lt;= ndmax (64)</c>); a C# array-like holding numbers with
+        ///     a <c>StringDType(coerce: false)</c> <paramref name="dtype"/>, or text a numeric <paramref name="dtype"/> cannot
+        ///     parse.</exception>
+        /// <remarks>NumPy's parameter order, <paramref name="ndmin"/> and <paramref name="order"/> arrived in API-parity
+        ///     batch 8 (the third positional was the fill value, NumPy's is the dtype). <c>subok</c> is the parity plan's
+        ///     exclusion. See <see cref="array"/> for the mask rules.</remarks>
+        public NDMaskedArray masked_array(object data, object mask = null, DType dtype = null, bool copy = false, int ndmin = 0,
+            object fill_value = null, bool keep_mask = true, bool? hard_mask = null, bool shrink = true, char? order = null)
+            => MaskedArrayNew(data, mask, dtype, copy, ndmin, fill_value, keep_mask, hard_mask, shrink, order);
 
         /// <summary>
-        ///     Converts an array-like to a <see cref="NDMaskedArray"/> WITHOUT copying (NumPy's <c>ma.asarray</c>):
-        ///     an incoming masked array keeps its mask, a plain array/scalar becomes unmasked. This is the
-        ///     explicit ndarray→NDMaskedArray entry point — NumSharp's implicit <c>NDArray→NDMaskedArray</c> does the
-        ///     same for the unmasked case, but this also honors an existing mask and an optional dtype cast.
+        ///     NumPy's <c>np.ma.MaskedArray(data, mask, ...)</c>: the masked-array CLASS called as NumPy code calls it -
+        ///     <c>np.ma.masked_array</c> IS that class (<c>ma.MaskedArray is ma.masked_array</c> is True), so this is
+        ///     <see cref="masked_array"/>, parameter for parameter.
+        /// </summary>
+        /// <param name="data">Data array-like (required, as <see cref="masked_array"/>'s).</param>
+        /// <param name="mask">Optional mask array-like (see <see cref="masked_array"/>).</param>
+        /// <param name="dtype">Optional dtype the data is cast or converted to.</param>
+        /// <param name="copy">When true, copies the data and the masks.</param>
+        /// <param name="ndmin">The minimum rank of the result.</param>
+        /// <param name="fill_value">Optional default fill value.</param>
+        /// <param name="keep_mask">With a given mask, true ORs it with the data's own mask.</param>
+        /// <param name="hard_mask">Hard / soft mask, or null to inherit the data's hardness.</param>
+        /// <param name="shrink">With no mask and <paramref name="keep_mask"/> false, true leaves no mask.</param>
+        /// <param name="order">The data's memory layout (NumPy's <c>np.array(..., order=)</c>).</param>
+        /// <returns>A new <see cref="NDMaskedArray"/>, <see cref="masked_array"/>'s answer.</returns>
+        /// <exception cref="MaskError">The mask does not fit the data (see <see cref="masked_array"/>).</exception>
+        /// <exception cref="TypeError">A fill value numpy.ma cannot convert to the data's dtype.</exception>
+        /// <exception cref="ValueError">An unknown order letter, <paramref name="ndmin"/> past 64, or a data / dtype pair
+        ///     NumPy refuses (see <see cref="masked_array"/>).</exception>
+        /// <remarks>The C# class is <see cref="NDMaskedArray"/> (the ND* type naming); this member is NumPy's spelling of
+        ///     its construction. API-parity batch 13.</remarks>
+        public NDMaskedArray MaskedArray(object data, object mask = null, DType dtype = null, bool copy = false, int ndmin = 0,
+            object fill_value = null, bool keep_mask = true, bool? hard_mask = null, bool shrink = true, char? order = null)
+            => MaskedArrayNew(data, mask, dtype, copy, ndmin, fill_value, keep_mask, hard_mask, shrink, order);
+
+        /// <summary>
+        ///     Converts an array-like to a <see cref="NDMaskedArray"/> without copying when it can — NumPy's
+        ///     <c>np.ma.asarray(a, dtype=None, order=None)</c>: an incoming masked array keeps its mask, a plain array or
+        ///     scalar becomes unmasked.
         /// </summary>
         /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
         /// <param name="dtype">Optional dtype to cast the data to (no copy when it already matches).</param>
-        /// <returns>A masked array over <paramref name="a"/>'s data (aliased when possible).</returns>
+        /// <param name="order">The data's layout: null is NumPy's <c>order or 'C'</c> — C order, so an F-ordered operand is
+        ///     COPIED into C; <c>'F'</c>, <c>'A'</c>, <c>'K'</c> as for <see cref="array"/>.</param>
+        /// <returns>A masked array over <paramref name="a"/>'s data (aliased when the dtype and layout allow).</returns>
         /// <exception cref="TypeError">A masked operand's fill cannot be converted to <paramref name="dtype"/> (numpy.ma's
         ///     <c>Cannot convert fill_value … to dtype …</c>).</exception>
-        /// <exception cref="ValueError">Text data that does not parse as a numeric <paramref name="dtype"/> (NumPy's
-        ///     <c>could not convert string to float: 'a'</c> / <c>invalid literal for int() with base 10</c>).</exception>
-        /// <remarks>NumPy's <c>masked_array(a, dtype=dtype, copy=False, keep_mask=True, subok=False)</c>: the class
-        /// constructor, so a masked operand also lends its fill value (converted to the dtype) and its hard-mask flag.
-        /// Scoped by hand: a scalar/array-like operand that is materialized and then CAST leaves its pre-cast
-        /// materialization behind, which is reclaimed on return.</remarks>
-        public NDMaskedArray asarray(object a, DType dtype = null) => masked_array(a, dtype: dtype);
+        /// <exception cref="ValueError">An order letter NumPy does not have; text data that does not parse as a numeric
+        ///     <paramref name="dtype"/> (NumPy's <c>could not convert string to float: 'a'</c>).</exception>
+        /// <remarks>NumPy's <c>masked_array(a, dtype=dtype, copy=False, keep_mask=True, subok=False, order=order or
+        ///     'C')</c>: the class constructor, so a masked operand also lends its fill value (converted to the dtype) and its
+        ///     hard-mask flag. <paramref name="order"/> arrived in API-parity batch 8; before it, an F-ordered operand was
+        ///     aliased where NumPy copies it into C order.</remarks>
+        public NDMaskedArray asarray(object a, DType dtype = null, char? order = null)
+            => masked_array(a, dtype: dtype, order: order ?? 'C');
 
-        /// <summary>NumPy's <c>ma.asanyarray</c>: a masked array whose dtype already matches is returned ITSELF (NumPy's
-        /// identity rule, gh-8666); anything else goes through <see cref="asarray"/>.</summary>
-        /// <param name="a">Array-like.</param><param name="dtype">Optional dtype cast.</param>
+        /// <summary>NumPy's <c>np.ma.asanyarray(a, dtype=None, order=None)</c>: a masked array whose dtype and layout already
+        /// satisfy the request is returned ITSELF (NumPy's identity rule, gh-8666); anything else is the constructor's
+        /// conversion without a copy.</summary>
+        /// <param name="a">Array-like.</param>
+        /// <param name="dtype">Optional dtype cast.</param>
+        /// <param name="order">The data's layout: null, <c>'A'</c> or <c>'K'</c> keep a masked operand as it is; <c>'C'</c> /
+        ///     <c>'F'</c> keep it only when it is already so (NumPy's <c>a.flags.carray</c> — C-contiguous and writeable — /
+        ///     <c>f_contiguous</c>).</param>
         /// <returns><paramref name="a"/> itself, or a masked array over its data.</returns>
         /// <exception cref="TypeError">See <see cref="asarray"/>.</exception>
         /// <exception cref="ValueError">See <see cref="asarray"/>.</exception>
-        public NDMaskedArray asanyarray(object a, DType dtype = null)
-            => a is NDMaskedArray m && (dtype is null || m.dtype.Equals(dtype)) ? m : asarray(a, dtype);
+        /// <remarks><paramref name="order"/> arrived in API-parity batch 8.</remarks>
+        public NDMaskedArray asanyarray(object a, DType dtype = null, char? order = null)
+        {
+            // NumPy's identity test reads the order as given: None / 'A' / 'K' always keep, 'C' needs a writeable
+            // C-contiguous array (flags.carray), 'F' an F-contiguous one.
+            if (a is NDMaskedArray m && (dtype is null || m.dtype.Equals(dtype)))
+            {
+                bool keep = order switch
+                {
+                    null or 'A' or 'a' or 'K' or 'k' => true,
+                    'C' or 'c' => m._data.Shape.IsContiguous && m._data.Shape.IsWriteable,
+                    'F' or 'f' => m._data.Shape.IsFContiguous,
+                    _ => false,
+                };
+                if (keep)
+                    return m;
+            }
+            return masked_array(a, dtype: dtype, order: order);
+        }
 
         /// <summary>
         ///     The default fill value NumPy assigns per dtype kind (<c>default_fill_value</c>, its <c>default_filler</c>
@@ -2411,8 +3241,10 @@ namespace NumSharp
         ///     <see cref="NDMaskedArray.filled(object)"/> and the <see cref="NDMaskedArray.fill_value"/> getter when the
         ///     array holds no fill of its own.
         /// </summary>
-        /// <param name="dtype">The data dtype to pick a fill for; null is NumPy's None (see remarks).</param>
-        /// <returns>A boxed scalar of a type castable into <paramref name="dtype"/>: a <see cref="string"/> for a
+        /// <param name="obj">NumPy's <c>obj</c>: the data dtype to pick a fill for; null is NumPy's None (see remarks).
+        ///     The owner's 2026-11-11 call keeps this typed overload beside NumPy's <c>default_fill_value(obj)</c>
+        ///     (<see cref="default_fill_value(object)"/>); both answer alike, and the parameter is NumPy's name.</param>
+        /// <returns>A boxed scalar of a type castable into <paramref name="obj"/>: a <see cref="string"/> for a
         ///     <c>U</c> dtype and a fresh <see cref="byte"/>[] for an <c>S</c> dtype.</returns>
         /// <remarks>
         ///     An INSTANCE method (like <see cref="minimum_fill_value"/>/<see cref="maximum_fill_value"/>), so
@@ -2431,12 +3263,12 @@ namespace NumSharp
         ///     <see cref="DType"/> variable therefore answers <c>"?"</c> rather than throwing.
         ///     </para>
         /// </remarks>
-        public object default_fill_value(DType dtype)
+        public object default_fill_value(DType obj)
         {
             // `default_filler['O'] = '?'`: None reaches NumPy's default_fill_value as an object (its 0-d object array).
-            if (dtype is null)
+            if (obj is null)
                 return "?";
-            switch (dtype.typecode)
+            switch (obj.typecode)
             {
                 case NPTypeCode.Boolean: return true;
                 // Complex fills as (1e20+0j): NumPy's default_fill_value(complex) is a COMPLEX scalar, not a
@@ -2448,7 +3280,7 @@ namespace NumSharp
                 case NPTypeCode.Double:
                 case NPTypeCode.Decimal: return 1e20d;
                 // default_filler['U'] = 'N/A', default_filler['S'] = b'N/A' (the dtype's kind picks the class).
-                case NPTypeCode.String: return dtype.kind == 'S' ? DefaultBytesFill() : "N/A";
+                case NPTypeCode.String: return obj.kind == 'S' ? DefaultBytesFill() : "N/A";
                 default: return 999999L; // every integer kind (signed/unsigned/char)
             }
         }
@@ -2518,11 +3350,13 @@ namespace NumSharp
         {
             // `if ndtype.kind == "u": fill_value = np.uint(fill_value)`: the unsigned default is a uint64 scalar, so it stays
             // a same-kind cast into an unsigned array (NumPy 2.0's cast-safety change).
+            // The stored fill is an ARRAY (np.array(...)), written in place by a later fill_value assignment, so it is built
+            // writeable (WritableScalar), never as a read-only NumPy scalar.
             if (ndtype.typecode != NPTypeCode.String && ndtype.kind == 'u')
-                return NDArray.Scalar(999999UL);
+                return NDArray.WritableScalar(999999UL);
             // `return np.array(fill_value)`: True -> bool, 999999 -> int64, 1e20 -> float64, (1e20+0j) -> complex128, the
             // text default at its own width.
-            return NDArray.Scalar(np.ma.default_fill_value(ndtype));
+            return NDArray.WritableScalar(np.ma.default_fill_value(ndtype));
         }
 
         /// <summary>
@@ -2669,7 +3503,7 @@ namespace NumSharp
                 // back as an array for the cast below.
                 converted = NDArray.AsStoreValue(fill_value, ndtype.typecode);
             }
-            catch (Exception e) when (e is OverflowException or ValueError)
+            catch (Exception e) when (e is OverflowError or OverflowException or ValueError)
             {
                 // `except (OverflowError, ValueError) as e: raise TypeError(err_msg % (fill_value, ndtype)) from e`: the text
                 // formats the fill with Python's %s (str), the dtype with its str ("int8").
@@ -2705,6 +3539,124 @@ namespace NumSharp
             => fill_value is null ? null : CheckFillValue(fill_value, ndtype);
 
         /// <summary>
+        ///     NumPy 2.5's <c>_check_fill_value_or_default(fill_value, ndtype)</c>: <c>_check_fill_value</c> under
+        ///     <c>np.errstate(invalid='raise')</c>, with <c>TypeError</c> / <c>ValueError</c> / <c>OverflowError</c> /
+        ///     <c>FloatingPointError</c> caught — the stored fill converted to <paramref name="ndtype"/>, or null (NumPy's None:
+        ///     the array then reads its own default) when the conversion fails. The rule of a fill a masked array inherits
+        ///     ACROSS a dtype change (<c>_update_from</c>, <c>__new__</c>).
+        /// </summary>
+        /// <param name="fill">A stored fill array (0-d, or N-d for NumPy's deprecated non-scalar fill); never modified.</param>
+        /// <param name="ndtype">The new array's dtype.</param>
+        /// <returns>A fresh fill array of <paramref name="ndtype"/>, tracked by the ambient scope as <see cref="StoreFill"/>'s
+        ///     is, or null.</returns>
+        /// <remarks>
+        ///     What fails: a text fill a numeric dtype cannot parse (or the string class cannot encode / decode), and a float
+        ///     or complex fill whose cast into an integer dtype raises FE_INVALID (<see cref="FillCastRaisesInvalid"/>) — NaN,
+        ///     an infinity, or a value past the conversion's range, such as the default 1e20. An overflow into a narrower float
+        ///     (1e20 into float16 is inf) and a complex into a real dtype (the real part) are not errors: they convert.
+        /// </remarks>
+        internal static NDArray CheckFillValueOrDefault(NDArray fill, DType ndtype)
+        {
+            if (FillCastRaisesInvalid(fill, ndtype))
+                return null;
+            try
+            {
+                return StoreFill(fill, ndtype);
+            }
+            catch (Exception e) when (e is TypeError or ValueError or OverflowError or FloatingPointError or OverflowException)
+            {
+                // `except (TypeError, ValueError, OverflowError, FloatingPointError): return None`. NumSharp raises NumPy's
+                // OverflowError as the Python class (a sibling of .NET's OverflowException under ArithmeticException, not a
+                // subclass), so both are named: the Python class for NumPy's range errors, the .NET one for a checked C# cast.
+                return null;
+            }
+        }
+
+        /// <summary>
+        ///     The fill a masked array derived from another inherits (NumPy 2.5's <c>_update_from</c>): the source's stored
+        ///     fill itself when the two dtypes are equal (SHARED: a set through either array reaches the other), otherwise
+        ///     <see cref="CheckFillValueOrDefault"/>'s conversion — a fresh array of the new dtype, or null.
+        /// </summary>
+        /// <param name="fill">The source's stored fill, or null (nothing stored: null is passed on).</param>
+        /// <param name="sourceDtype">The source's data dtype.</param>
+        /// <param name="targetDtype">The derived array's data dtype.</param>
+        /// <returns><paramref name="fill"/> itself, a converted fresh array, or null.</returns>
+        internal static NDArray InheritFill(NDArray fill, DType sourceDtype, DType targetDtype)
+        {
+            if (fill is null)
+                return null;
+            // `getattr(obj, 'dtype', None) != self.dtype`: dtype equality (equivalent descriptors are equal).
+            return sourceDtype == targetDtype ? fill : CheckFillValueOrDefault(fill, targetDtype);
+        }
+
+        /// <summary>
+        ///     Whether <c>np.asarray(fill, dtype=ndtype)</c> raises FE_INVALID — the FloatingPointError NumPy's
+        ///     <c>errstate(invalid='raise')</c> turns it into: a float, decimal or complex fill (its real part) cast into an
+        ///     integer dtype where an element is NaN, an infinity, or truncates outside the range of the conversion NumPy's
+        ///     Windows build compiles (MSVC x64: a 32-bit <c>cvttsd2si</c> for the 8-, 16- and 32-bit signed targets and the
+        ///     8- and 16-bit unsigned ones, a 64-bit one for int64 and uint32, and for uint64 a 64-bit one over
+        ///     <c>[-2^63, 2^64)</c>).
+        /// </summary>
+        /// <param name="fill">The fill array.</param>
+        /// <param name="ndtype">The target dtype.</param>
+        /// <returns>True when the cast would raise; false for every other pair (no float-to-integer cast, or every element
+        ///     in range).</returns>
+        /// <remarks>
+        ///     A narrowing float cast (1e20 into float16) raises FE_OVERFLOW, not FE_INVALID, so it converts (to inf); a float
+        ///     into bool compares with zero and raises nothing. The 32-bit conversion is why 300.0 into int8 is a valid cast
+        ///     (it wraps to 44) while 1e10 into int8 is not.
+        /// </remarks>
+        private static bool FillCastRaisesInvalid(NDArray fill, DType ndtype)
+        {
+            NPTypeCode source = fill.typecode;
+            if (source is not (NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal or NPTypeCode.Complex))
+                return false;
+            // The conversion's register range, as doubles: [low, highExclusive).
+            double low, highExclusive;
+            switch (ndtype.Meta.TypeCode)
+            {
+                case NPTypeCode.SByte:
+                case NPTypeCode.Byte:
+                case NPTypeCode.Int16:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                case NPTypeCode.Int32:
+                    low = int.MinValue;
+                    highExclusive = 2147483648.0;
+                    break;
+                case NPTypeCode.UInt32:
+                case NPTypeCode.Int64:
+                    low = -9223372036854775808.0;
+                    highExclusive = 9223372036854775808.0;
+                    break;
+                case NPTypeCode.UInt64:
+                    low = -9223372036854775808.0;
+                    highExclusive = 18446744073709551616.0;
+                    break;
+                default:
+                    return false;
+            }
+            for (long i = 0; i < fill.size; i++)
+            {
+                object element = fill.GetAtIndex(i);
+                double v = element switch
+                {
+                    System.Numerics.Complex c => c.Real,
+                    Half h => (double)h,
+                    float f => f,
+                    decimal m => (double)m,
+                    _ => (double)element,
+                };
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                    return true;
+                double truncated = Math.Truncate(v);
+                if (truncated < low || truncated >= highExclusive)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         ///     The text ↔ number half of <see cref="CheckFillValue"/>: <c>np.asarray(fill, dtype=ndtype)</c> for a text array
         ///     fill and a numeric dtype (each text parsed by the dtype's <c>int()</c> / <c>float()</c> / <c>complex()</c>), or
         ///     a numeric array fill and a text dtype (each number written as its <c>str()</c>), with numpy.ma's
@@ -2724,7 +3676,7 @@ namespace NumSharp
             {
                 return fill.astype(ndtype);
             }
-            catch (Exception e) when (e is OverflowException or ValueError)
+            catch (Exception e) when (e is OverflowError or OverflowException or ValueError)
             {
                 throw new TypeError($"Cannot convert fill_value {display} to dtype {ndtype}", e);
             }
@@ -2748,7 +3700,7 @@ namespace NumSharp
             {
                 ReductionInitial.TryPack(b, tc, new Span<byte>(slot, ReductionInitial.SlotBytes));
             }
-            catch (Exception e) when (e is OverflowException or ValueError)
+            catch (Exception e) when (e is OverflowError or OverflowException or ValueError)
             {
                 throw new TypeError($"Cannot convert fill_value {PyRepr.Bytes(b)} to dtype {ndtype}", e);
             }
@@ -2848,40 +3800,253 @@ namespace NumSharp
             return AsData(a).shape;
         }
 
-        /// <summary>Total element count (NumPy's module-level <c>ma.size</c>).</summary>
-        /// <param name="a">Array-like/masked-array/scalar.</param>
-        /// <returns>The element count (1 for a scalar).</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): a scalar/array-like operand is materialized only to be measured.</remarks>
+        /// <summary>
+        ///     The element count, or the length of one axis (NumPy's module-level <c>ma.size(obj, axis=None)</c>:
+        ///     <c>np.size(getdata(obj), axis)</c>).
+        /// </summary>
+        /// <param name="obj">Array-like / masked array / scalar (NumPy's keyword <c>obj</c>).</param>
+        /// <param name="axis">NumPy's <c>axis</c>: <c>null</c> (None, the default) counts every element; an axis
+        ///     (negative counts from the end) gives that axis' length.</param>
+        /// <returns>The element count (1 for a scalar), or the axis' length.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the data's rank (a scalar has no axis:
+        ///     "axis 0 is out of bounds for array of dimension 0").</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): a scalar/array-like operand is materialized only to be measured. NumPy's
+        ///     keywords since 2026-11-11 (the operand was <c>a</c>, and <c>axis</c> was missing).</remarks>
         [NDScoped]
-        public long size(object a) => AsData(a).size;
+        public long size(object obj, int? axis = null) => np.size(AsData(obj), axis);
 
         /// <summary>Deep copy of <paramref name="a"/> as a masked array (NumPy's module-level <c>ma.copy</c>, the
         /// <c>_arraymethod('copy')</c>): the data AND the mask are copied, so mutating either the source or the copy never
         /// affects the other, and the copy takes the source's fill value and hard-mask flag (<c>_update_from(self)</c>).</summary>
         /// <param name="a">Array-like/masked-array to copy.</param>
+        /// <param name="order">The copy's layout, NumPy's <c>copy(order='C')</c>: <c>'C'</c> (the default), <c>'F'</c>,
+        ///     <c>'A'</c> or <c>'K'</c> (keep the source's) — data and mask alike.</param>
         /// <returns>A masked array over a fresh copy of the data (mask copied when present).</returns>
+        /// <exception cref="ValueError">An order letter NumPy does not have.</exception>
         /// <remarks>Scoped by hand: a scalar/array-like operand's materialization (the source of the copy) is
-        /// reclaimed; only the copies leave.</remarks>
-        public NDMaskedArray copy(object a)
+        /// reclaimed; only the copies leave. <paramref name="order"/> arrived in API-parity batch 7 (NumPy's
+        /// <c>_frommethod('copy')</c> passes it on to <c>MaskedArray.copy</c>).</remarks>
+        public NDMaskedArray copy(object a, char order = 'C')
         {
             using var scope = NDScope.Open();
             var source = a as NDMaskedArray;
-            var r = new NDMaskedArray(AsData(a).copy(), source?._mask?.copy());
+            var r = new NDMaskedArray(AsData(a).copy(order), source?._mask?.copy(order));
             if (source is not null)
                 r.UpdateFrom(source);
             return Yield(scope, r);
         }
 
-        /// <summary>Maximum over unmasked elements — alias of <see cref="max"/> (NumPy's deprecated-but-exported
-        /// <c>amax</c>).</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked maximum.</returns>
-        public NDMaskedArray amax(object a, int? axis = null, object fill_value = null, bool keepdims = false) => max(a, axis, fill_value, keepdims);
+        /// <summary>
+        ///     The maximum along an axis — NumPy's <c>ma.amax</c>, which IS <c>np.amax(a, axis=None, out=None,
+        ///     keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>: a masked operand runs its own
+        ///     <c>MaskedArray.max(axis, out, keepdims)</c> (<see cref="max(object, NDAxis?, NDMaskedArray, object, bool)"/>,
+        ///     masked slots never win), a plain one <c>np.amax</c>.
+        /// </summary>
+        /// <param name="a">Operand: a masked array, or a plain array / array-like.</param>
+        /// <param name="axis">The axis, a tuple of axes (<c>(0, 1)</c>), or null for every axis.</param>
+        /// <param name="out">NumPy's <c>out</c>: the maximum is written into it and it is returned. A masked out takes the
+        ///     result's mask (an array); a plain one (an <see cref="NDArray"/> converts) receives NaN at the masked slots and
+        ///     refuses an integer or bool dtype (see <see cref="max(object, NDAxis?, NDMaskedArray, object, bool)"/>).
+        ///     NumPy's third positional parameter, where C# had <c>fill_value</c> until API-parity batch 9.</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <param name="initial">NumPy's <c>initial</c>: a plain operand's starting value (<c>np.amax</c>'s); a masked
+        ///     operand refuses it, as its <c>MaskedArray.max</c> has no such parameter.</param>
+        /// <param name="where">NumPy's <c>where</c>: a plain operand's element filter (<c>np.amax</c>'s, which needs
+        ///     <paramref name="initial"/> for an empty selection); a masked operand refuses it.</param>
+        /// <returns>The masked maximum (<see cref="NDMasked"/> for a fully masked full reduction), or <paramref name="out"/>. A
+        ///     plain operand's answer is NumPy's plain array, wrapped mask-less (C#'s static return type).</returns>
+        /// <exception cref="TypeError">A masked operand with <paramref name="initial"/> or <paramref name="where"/>:
+        ///     <c>MaskedArray.max() got an unexpected keyword argument 'initial'</c> (or <c>'where'</c>; initial is reported
+        ///     first, in NumPy's keyword order).</exception>
+        /// <exception cref="AxisError">An axis is outside the operand.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> would receive a masked slot.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another shape than the result, or a plain operand's empty
+        ///     selection without <paramref name="initial"/>.</exception>
+        /// <remarks>NumPy's <c>_wrapreduction(a, np.maximum, 'max', axis, None, out,
+        ///     keepdims=, initial=, where=)</c>: for an object that is not a plain ndarray it calls <c>a.max(axis=axis,
+        ///     out=out, **passkwargs)</c> with only the keywords given, so a masked operand meets Python's own unexpected-keyword
+        ///     TypeError for initial / where. Until API-parity batch 9 this was <c>(a, int? axis, fill_value, keepdims)</c>:
+        ///     <c>fill_value</c> answered a call NumPy refuses (<c>amax() got an unexpected keyword argument 'fill_value'</c>),
+        ///     and a fill beyond the data won over it.</remarks>
+        public NDMaskedArray amax(object a, NDAxis? axis = null, NDMaskedArray @out = null, bool keepdims = false, object initial = null,
+                                  NDArray where = null)
+        {
+            if (a is NDMaskedArray)
+            {
+                // `MaskedArray.max(axis=axis, out=out, **passkwargs)`: Python binds the keywords before the body runs.
+                if (initial is not null)
+                    throw new TypeError("MaskedArray.max() got an unexpected keyword argument 'initial'");
+                if (where is not null)
+                    throw new TypeError("MaskedArray.max() got an unexpected keyword argument 'where'");
+                return max(a, axis, @out, null, keepdims);
+            }
+            return PlainAmax(a, axis, @out, keepdims, initial, where);
+        }
 
-        /// <summary>Minimum over unmasked elements — alias of <see cref="min"/> (NumPy's <c>amin</c>).</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="fill_value">Masked fill override.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked minimum.</returns>
-        public NDMaskedArray amin(object a, int? axis = null, object fill_value = null, bool keepdims = false) => min(a, axis, fill_value, keepdims);
+        /// <summary>
+        ///     <see cref="amax(object, NDAxis?, NDMaskedArray, bool, object, NDArray)"/> with the axis as one <c>int</c>: the
+        ///     overload a C# integer binds, forwarding to the NDAxis form.
+        /// </summary>
+        /// <param name="a">Operand: a masked array, or a plain array / array-like.</param>
+        /// <param name="axis">The axis (a negative value counts from the end).</param>
+        /// <param name="out">NumPy's <c>out</c> (see the NDAxis form).</param>
+        /// <param name="keepdims">Keep the reduced axis as size 1.</param>
+        /// <param name="initial">NumPy's <c>initial</c> (a plain operand only, see the NDAxis form).</param>
+        /// <param name="where">NumPy's <c>where</c> (a plain operand only, see the NDAxis form).</param>
+        /// <returns>The masked maximum, or <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError">A masked operand with <paramref name="initial"/> or <paramref name="where"/>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> would receive a masked slot.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another shape than the result.</exception>
+        public NDMaskedArray amax(object a, int axis, NDMaskedArray @out = null, bool keepdims = false, object initial = null, NDArray where = null)
+            => amax(a, (NDAxis?)axis, @out, keepdims, initial, where);
+
+        /// <summary>
+        ///     <see cref="amax(object, NDAxis?, NDMaskedArray, bool, object, NDArray)"/> with the axes as an <c>int[]</c>: a null
+        ///     array is NumPy's None, any other array NumPy's tuple.
+        /// </summary>
+        /// <param name="a">Operand: a masked array, or a plain array / array-like.</param>
+        /// <param name="axis">The axes as NumPy's tuple, or null for None.</param>
+        /// <param name="out">NumPy's <c>out</c> (see the NDAxis form).</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <param name="initial">NumPy's <c>initial</c> (a plain operand only, see the NDAxis form).</param>
+        /// <param name="where">NumPy's <c>where</c> (a plain operand only, see the NDAxis form).</param>
+        /// <returns>The masked maximum, or <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError">A masked operand with <paramref name="initial"/> or <paramref name="where"/>.</exception>
+        /// <exception cref="AxisError">An axis is outside the operand.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> would receive a masked slot.</exception>
+        /// <exception cref="ValueError">A repeated axis, or <paramref name="out"/> has another shape than the result.</exception>
+        public NDMaskedArray amax(object a, int[] axis, NDMaskedArray @out = null, bool keepdims = false, object initial = null, NDArray where = null)
+            => amax(a, (NDAxis?)axis, @out, keepdims, initial, where);
+
+        /// <summary>
+        ///     <c>np.amax</c> of a PLAIN operand (what NumPy's <c>ma.amax</c> is for it): the reduction with its keywords,
+        ///     written into the out's data when one is given.
+        /// </summary>
+        /// <param name="a">The plain operand (an array or an array-like).</param>
+        /// <param name="axis">The axes, or null.</param>
+        /// <param name="out">The caller's out, or null; its mask, if any, is left as it is.</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <param name="initial">np.amax's initial, or null.</param>
+        /// <param name="where">np.amax's where, or null.</param>
+        /// <returns><paramref name="out"/>, or the answer wrapped mask-less.</returns>
+        /// <exception cref="AxisError">An axis is outside the operand.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another shape than the result, or an empty selection
+        ///     without <paramref name="initial"/>.</exception>
+        /// <remarks>Scoped by hand: an array-like operand's materialization is reclaimed; the answer leaves (an out's data
+        ///     is the caller's).</remarks>
+        private NDMaskedArray PlainAmax(object a, NDAxis? axis, NDMaskedArray @out, bool keepdims, object initial, NDArray where)
+        {
+            using var scope = NDScope.Open();
+            var r = np.amax(AsData(a), axis, @out?._data, keepdims, initial, where);
+            return @out ?? Yield(scope, new NDMaskedArray(r, null));
+        }
+
+        /// <summary>
+        ///     The minimum along an axis — NumPy's <c>ma.amin</c>, which IS <c>np.amin(a, axis=None, out=None,
+        ///     keepdims=&lt;no value&gt;, initial=&lt;no value&gt;, where=&lt;no value&gt;)</c>: a masked operand runs its own
+        ///     <c>MaskedArray.min(axis, out, keepdims)</c> (<see cref="min(object, NDAxis?, NDMaskedArray, object, bool)"/>,
+        ///     masked slots never win), a plain one <c>np.amin</c>.
+        /// </summary>
+        /// <param name="a">Operand: a masked array, or a plain array / array-like.</param>
+        /// <param name="axis">The axis, a tuple of axes (<c>(0, 1)</c>), or null for every axis.</param>
+        /// <param name="out">NumPy's <c>out</c>: the minimum is written into it and it is returned. A masked out takes the
+        ///     result's mask (an array); a plain one (an <see cref="NDArray"/> converts) receives NaN at the masked slots and
+        ///     refuses an integer or bool dtype (see <see cref="min(object, NDAxis?, NDMaskedArray, object, bool)"/>).
+        ///     NumPy's third positional parameter, where C# had <c>fill_value</c> until API-parity batch 9.</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <param name="initial">NumPy's <c>initial</c>: a plain operand's starting value (<c>np.amin</c>'s); a masked
+        ///     operand refuses it, as its <c>MaskedArray.min</c> has no such parameter.</param>
+        /// <param name="where">NumPy's <c>where</c>: a plain operand's element filter (<c>np.amin</c>'s, which needs
+        ///     <paramref name="initial"/> for an empty selection); a masked operand refuses it.</param>
+        /// <returns>The masked minimum (<see cref="NDMasked"/> for a fully masked full reduction), or <paramref name="out"/>. A
+        ///     plain operand's answer is NumPy's plain array, wrapped mask-less (C#'s static return type).</returns>
+        /// <exception cref="TypeError">A masked operand with <paramref name="initial"/> or <paramref name="where"/>:
+        ///     <c>MaskedArray.min() got an unexpected keyword argument 'initial'</c> (or <c>'where'</c>; initial is reported
+        ///     first, in NumPy's keyword order).</exception>
+        /// <exception cref="AxisError">An axis is outside the operand.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> would receive a masked slot.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another shape than the result, or a plain operand's empty
+        ///     selection without <paramref name="initial"/>.</exception>
+        /// <remarks>NumPy's <c>_wrapreduction(a, np.minimum, 'min', axis, None, out,
+        ///     keepdims=, initial=, where=)</c>: for an object that is not a plain ndarray it calls <c>a.min(axis=axis,
+        ///     out=out, **passkwargs)</c> with only the keywords given, so a masked operand meets Python's own unexpected-keyword
+        ///     TypeError for initial / where. Until API-parity batch 9 this was <c>(a, int? axis, fill_value, keepdims)</c>:
+        ///     <c>fill_value</c> answered a call NumPy refuses (<c>amin() got an unexpected keyword argument 'fill_value'</c>),
+        ///     and a fill beyond the data won over it.</remarks>
+        public NDMaskedArray amin(object a, NDAxis? axis = null, NDMaskedArray @out = null, bool keepdims = false, object initial = null,
+                                  NDArray where = null)
+        {
+            if (a is NDMaskedArray)
+            {
+                // `MaskedArray.min(axis=axis, out=out, **passkwargs)`: Python binds the keywords before the body runs.
+                if (initial is not null)
+                    throw new TypeError("MaskedArray.min() got an unexpected keyword argument 'initial'");
+                if (where is not null)
+                    throw new TypeError("MaskedArray.min() got an unexpected keyword argument 'where'");
+                return min(a, axis, @out, null, keepdims);
+            }
+            return PlainAmin(a, axis, @out, keepdims, initial, where);
+        }
+
+        /// <summary>
+        ///     <see cref="amin(object, NDAxis?, NDMaskedArray, bool, object, NDArray)"/> with the axis as one <c>int</c>: the
+        ///     overload a C# integer binds, forwarding to the NDAxis form.
+        /// </summary>
+        /// <param name="a">Operand: a masked array, or a plain array / array-like.</param>
+        /// <param name="axis">The axis (a negative value counts from the end).</param>
+        /// <param name="out">NumPy's <c>out</c> (see the NDAxis form).</param>
+        /// <param name="keepdims">Keep the reduced axis as size 1.</param>
+        /// <param name="initial">NumPy's <c>initial</c> (a plain operand only, see the NDAxis form).</param>
+        /// <param name="where">NumPy's <c>where</c> (a plain operand only, see the NDAxis form).</param>
+        /// <returns>The masked minimum, or <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError">A masked operand with <paramref name="initial"/> or <paramref name="where"/>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> would receive a masked slot.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another shape than the result.</exception>
+        public NDMaskedArray amin(object a, int axis, NDMaskedArray @out = null, bool keepdims = false, object initial = null, NDArray where = null)
+            => amin(a, (NDAxis?)axis, @out, keepdims, initial, where);
+
+        /// <summary>
+        ///     <see cref="amin(object, NDAxis?, NDMaskedArray, bool, object, NDArray)"/> with the axes as an <c>int[]</c>: a null
+        ///     array is NumPy's None, any other array NumPy's tuple.
+        /// </summary>
+        /// <param name="a">Operand: a masked array, or a plain array / array-like.</param>
+        /// <param name="axis">The axes as NumPy's tuple, or null for None.</param>
+        /// <param name="out">NumPy's <c>out</c> (see the NDAxis form).</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <param name="initial">NumPy's <c>initial</c> (a plain operand only, see the NDAxis form).</param>
+        /// <param name="where">NumPy's <c>where</c> (a plain operand only, see the NDAxis form).</param>
+        /// <returns>The masked minimum, or <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError">A masked operand with <paramref name="initial"/> or <paramref name="where"/>.</exception>
+        /// <exception cref="AxisError">An axis is outside the operand.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> would receive a masked slot.</exception>
+        /// <exception cref="ValueError">A repeated axis, or <paramref name="out"/> has another shape than the result.</exception>
+        public NDMaskedArray amin(object a, int[] axis, NDMaskedArray @out = null, bool keepdims = false, object initial = null, NDArray where = null)
+            => amin(a, (NDAxis?)axis, @out, keepdims, initial, where);
+
+        /// <summary>
+        ///     <c>np.amin</c> of a PLAIN operand (what NumPy's <c>ma.amin</c> is for it): the reduction with its keywords,
+        ///     written into the out's data when one is given.
+        /// </summary>
+        /// <param name="a">The plain operand (an array or an array-like).</param>
+        /// <param name="axis">The axes, or null.</param>
+        /// <param name="out">The caller's out, or null; its mask, if any, is left as it is.</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <param name="initial">np.amin's initial, or null.</param>
+        /// <param name="where">np.amin's where, or null.</param>
+        /// <returns><paramref name="out"/>, or the answer wrapped mask-less.</returns>
+        /// <exception cref="AxisError">An axis is outside the operand.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another shape than the result, or an empty selection
+        ///     without <paramref name="initial"/>.</exception>
+        /// <remarks>Scoped by hand: an array-like operand's materialization is reclaimed; the answer leaves (an out's data
+        ///     is the caller's).</remarks>
+        private NDMaskedArray PlainAmin(object a, NDAxis? axis, NDMaskedArray @out, bool keepdims, object initial, NDArray where)
+        {
+            using var scope = NDScope.Open();
+            var r = np.amin(AsData(a), axis, @out?._data, keepdims, initial, where);
+            return @out ?? Yield(scope, new NDMaskedArray(r, null));
+        }
 
         /// <summary>
         ///     Logical-AND reduction along an axis (NumPy's <c>ma.alltrue</c> — <c>_MaskedBinaryOperation(logical_and, 1,
@@ -2962,14 +4127,37 @@ namespace NumSharp
             return Yield(scope, new NDMaskedArray(tr, mr));
         }
 
-        /// <summary>Round to <paramref name="decimals"/> places — alias of <see cref="round"/> (NumPy's <c>round_</c>).</summary>
+        /// <summary>Round to <paramref name="decimals"/> places — alias of <see cref="round"/> (NumPy's
+        ///     <c>round_(a, decimals=0, out=None)</c>, whose body <c>round</c> is).</summary>
         /// <param name="a">Operand.</param><param name="decimals">Decimal places.</param>
-        /// <returns>The masked, rounded array.</returns>
-        public NDMaskedArray round_(object a, int decimals = 0) => round(a, decimals);
+        /// <param name="out">Where to write the rounded data; a masked out takes the operand's mask object (see
+        ///     <see cref="round"/>). Added in API-parity batch 8.</param>
+        /// <returns>The masked, rounded array, or <paramref name="out"/>.</returns>
+        /// <exception cref="AttributeError">Complex data into a masked <paramref name="out"/>.</exception>
+        /// <exception cref="UFuncOutputCastingError"><paramref name="out"/>'s dtype cannot hold the rounded values.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another size than the operand.</exception>
+        public NDMaskedArray round_(object a, int decimals = 0, NDMaskedArray @out = null) => round(a, decimals, @out);
 
-        /// <summary>Stack along the first axis — alias of <see cref="vstack"/> (NumPy's <c>row_stack</c>).</summary>
+        /// <summary>Stack along the first axis — NumPy's <c>ma.row_stack</c>, which IS <c>ma.vstack</c> (the loose form,
+        ///     <see cref="vstack(object[])"/>).</summary>
         /// <param name="tup">Operands.</param><returns>The stacked masked array.</returns>
+        /// <remarks>The loose form (<c>np.ma.row_stack(a, b)</c>), kept beside
+        ///     <see cref="row_stack(object[], DType, string)"/> as vstack keeps its own. A lone <c>object[]</c> binds HERE
+        ///     (C#'s params rule), which is NumPy's sequence anyway.</remarks>
         public NDMaskedArray row_stack(params object[] tup) => vstack(tup);
+
+        /// <summary>Stack along the first axis — NumPy's <c>ma.row_stack(tup, *, dtype=None, casting='same_kind')</c>, which
+        ///     IS <c>ma.vstack</c> (<c>ma.row_stack is ma.vstack</c>): <see cref="vstack(object[], DType, string)"/>.</summary>
+        /// <param name="tup">The operands (masked arrays, arrays, array-likes).</param>
+        /// <param name="dtype">The result's dtype, or null for the operands' common type; NumPy joins the masks in it too.</param>
+        /// <param name="casting">NumPy's casting rule for both joins: <c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>,
+        ///     <c>"same_kind"</c> (the default) or <c>"unsafe"</c>.</param>
+        /// <returns>A new masked array; its mask is always an array (no fill value or hardness is inherited).</returns>
+        /// <exception cref="InvalidCastException">The data or the masks do not cast to <paramref name="dtype"/> under
+        ///     <paramref name="casting"/> (NumPy's TypeError text; NumSharp's house mapping).</exception>
+        /// <exception cref="ValueError">The operands' shapes do not join, or an unknown <paramref name="casting"/>.</exception>
+        /// <remarks>Added in API-parity batch 9, the keyword form vstack gained in batch 8.</remarks>
+        public NDMaskedArray row_stack(object[] tup, DType dtype = null, string casting = "same_kind") => vstack(tup, dtype, casting);
 
         /// <summary>Inner product — alias of <see cref="inner"/> (NumPy's <c>innerproduct</c>).</summary>
         /// <param name="a">Left.</param><param name="b">Right.</param><returns>The masked inner product.</returns>
@@ -2992,44 +4180,61 @@ namespace NumSharp
         // ─────────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        ///     Coerces an array-like to a boolean mask (NumPy's <c>make_mask</c>: <c>np.array(filled(m, True),
-        ///     dtype=bool)</c>): any non-zero number and any non-empty string becomes True, and a masked array reads True
-        ///     at its masked slots. With <paramref name="shrink"/> (default) an all-False result collapses to
-        ///     <see cref="nomask"/> — the standard "no mask needed" reduction — otherwise a full all-False array is returned.
+        ///     Coerces an array-like to a boolean mask — NumPy's <c>make_mask(m, copy=False, shrink=True, dtype=MaskType)</c>:
+        ///     <c>np.array(filled(m, True), copy=None if not copy else True, dtype=bool)</c>. Any non-zero number and any
+        ///     non-empty string becomes True, and a masked array reads True at its masked slots. With
+        ///     <paramref name="shrink"/> (default) an all-False result collapses to <see cref="nomask"/> — the standard "no
+        ///     mask needed" reduction — otherwise a full all-False array is returned.
         /// </summary>
         /// <param name="m">Array-like to coerce; null or <see cref="nomask"/> is <see cref="nomask"/>.</param>
+        /// <param name="copy">NumPy's <c>copy</c>. False (the default) is NumPy's <c>copy=None</c>: a BOOLEAN array is handed
+        ///     back ITSELF — an unmasked masked array's data as a view of it (NumPy's <c>filled</c> returns
+        ///     <c>self._data</c>, a view) — so writing the result writes <paramref name="m"/>; anything else is converted into
+        ///     a new array either way. True always returns a new array.</param>
         /// <param name="shrink">Collapse an all-False mask to <see cref="nomask"/> (default true).</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>, read through <c>make_mask_descr</c>: a dtype without fields — every
+        ///     NumSharp dtype — gives the bool mask type, so the result is bool whatever is passed.</param>
         /// <returns>A boolean mask array, or <see cref="nomask"/> when it shrinks to empty.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the operand's materialization and a coerced mask that shrinks to
-        /// <see cref="nomask"/> are reclaimed. The shared <see cref="nomask"/> sentinel must never be disposed by
-        /// the caller; a non-shrunk result is a fresh array the caller owns (NumPy's default <c>copy=False</c> would hand
-        /// back a boolean input itself; NumSharp copies it, so the caller may mutate the mask freely).</remarks>
+        /// <remarks><paramref name="copy"/> / <paramref name="dtype"/> and NumPy's parameter order arrived in API-parity
+        ///     batch 8: before, a positional <c>false</c> in NumPy's copy slot was C#'s <c>shrink</c>, and a boolean input was
+        ///     always copied. Scoped (<c>[NDScoped]</c>): the operand's materialization and a coerced mask that shrinks to
+        ///     <see cref="nomask"/> are reclaimed. The shared <see cref="nomask"/> sentinel must never be disposed by the
+        ///     caller, nor a boolean <paramref name="m"/> handed back as the result.</remarks>
         [NDScoped]
-        public NDArray make_mask(object m, bool shrink = true)
+        public NDArray make_mask(object m, bool copy = false, bool shrink = true, DType dtype = null)
         {
             // `if m is nomask: return nomask`; np.array(None, dtype=bool) is False, which shrinks to nomask as well.
             if (m is null || ReferenceEquals(m, nomask))
                 return nomask;
+            // `dtype = make_mask_descr(dtype)` replaces every field-less dtype by MaskType, so the conversion is to bool.
             // filled(m, True): a masked array's masked slots read True (formatted as 'True' into text data, whose truth
-            // values are then read).
+            // values are then read); an unmasked one hands back its data array.
             var b = m is NDMaskedArray masked && masked._mask is not null ? masked.filled(true) : AsData(m);
             // NumPy converts by truth value: numbers via `!= 0` (NaN is True; the 0 a weak Python int, so the comparison
-            // stays in b's dtype), text by non-emptiness through the text-to-bool cast (refused unless empty), booleans
-            // copied.
-            var mask = b.typecode switch
+            // stays in b's dtype), text by non-emptiness through the text-to-bool cast (refused unless empty). A boolean
+            // array needs no conversion: `copy=None` returns it as it is, `copy=True` copies it.
+            NDArray mask;
+            if (b.typecode == NPTypeCode.Boolean)
+                mask = copy ? b.copy() : m is NDMaskedArray { _mask: null } ? b.view() : b;
+            else
             {
-                NPTypeCode.Boolean => b.copy(),
-                NPTypeCode.String => b.astype(np.@bool),
-                _ => np.not_equal(b, NDArray.PythonLiteral(0)),
-            };
+                mask = b.typecode == NPTypeCode.String ? b.astype(np.@bool) : np.not_equal(b, NDArray.PythonLiteral(0));
+                // make_mask's np.array(..., dtype=MaskType): the mask is an ARRAY, 0-d included, where the comparison's 0-d
+                // answer is NumPy's scalar; the fresh answer is made an array again (NumPy's out=...).
+                mask = mask.AsArrayResult();
+            }
             return (shrink && !np.any(mask)) ? nomask : mask;
         }
 
-        /// <summary>Builds an all-False boolean mask of the given shape (NumPy's <c>make_mask_none</c>) — the
-        /// "nothing masked yet, full array" starting mask.</summary>
-        /// <param name="newshape">The mask shape.</param>
-        /// <returns>An all-False boolean <see cref="NDArray"/>.</returns>
-        public NDArray make_mask_none(Shape newshape) => np.zeros(newshape, np.@bool);
+        /// <summary>Builds an all-False boolean mask of the given shape — NumPy's <c>make_mask_none(newshape,
+        /// dtype=None)</c>, the "nothing masked yet, full array" starting mask.</summary>
+        /// <param name="newshape">The mask shape (an <c>int</c>, a <c>long</c>, a tuple or a <see cref="Shape"/> converts).</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>, read through <c>make_mask_descr</c>: a dtype without fields — every
+        ///     NumSharp dtype — gives the bool mask type. Added in API-parity batch 8.</param>
+        /// <returns>A new all-False boolean <see cref="NDArray"/>.</returns>
+        /// <exception cref="ValueError"><paramref name="newshape"/> has a negative dimension (<c>negative dimensions are not
+        ///     allowed</c>).</exception>
+        public NDArray make_mask_none(Shape newshape, DType dtype = null) => np.zeros(newshape, np.@bool);
 
         /// <summary>
         ///     Combines two masks with logical-OR (NumPy's <c>mask_or</c>): a <see cref="nomask"/> / <c>false</c> operand
@@ -3039,6 +4244,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="m1">First mask (any array-like), or null/<see cref="nomask"/>/<c>false</c>.</param>
         /// <param name="m2">Second mask (any array-like), or null/<see cref="nomask"/>/<c>false</c>.</param>
+        /// <param name="copy">NumPy's <c>copy</c>, passed to <see cref="make_mask"/> when one operand is nomask: false (the
+        ///     default) hands a boolean other operand back ITSELF, true copies it. The OR of two operands is a new array
+        ///     either way, and one boolean mask passed twice is returned itself whatever <paramref name="copy"/> says (NumPy's
+        ///     <c>m1 is m2</c> shortcut). Added in API-parity batch 8, before <paramref name="shrink"/> as in NumPy.</param>
         /// <param name="shrink">Collapse an all-False result to <see cref="nomask"/> (default true).</param>
         /// <returns>The OR of the present masks, or <see cref="nomask"/> when neither contributes (or it shrinks).</returns>
         /// <exception cref="ValueError">The two operands' dtypes differ (<c>Incompatible dtypes '&lt;U2'&lt;&gt;'bool'</c>;
@@ -3060,17 +4269,20 @@ namespace NumSharp
         ///     slots read True (the ufunc's result is masked there, and <c>make_mask</c> fills masked slots with True).
         ///     </para>
         ///     <para>Scoped (<c>[NDScoped]</c>): operands coerced to boolean and an OR that shrinks away are reclaimed. When
-        ///     one boolean mask is passed twice the result IS that mask (NumPy returns it), so the caller must not dispose a
-        ///     result it did not create.</para>
+        ///     one boolean mask is passed twice, or beside nomask without <paramref name="copy"/>, the result IS that mask
+        ///     (NumPy returns it), so the caller must not dispose — or write — a result it did not create. Before API-parity
+        ///     batch 8 the nomask case always copied; callers that store the result as a mask of their own pass
+        ///     <c>copy: true</c>, as NumPy's do.</para>
         /// </remarks>
         [NDScoped]
-        public NDArray mask_or(object m1, object m2, bool shrink = true)
+        public NDArray mask_or(object m1, object m2, bool copy = false, bool shrink = true)
         {
-            // `(m1 is nomask) or (m1 is False)`: the other operand alone, through make_mask (its own copy and shrink).
+            // `(m1 is nomask) or (m1 is False)`: the other operand alone, through make_mask with this call's copy and shrink
+            // (a boolean operand comes back itself unless copy is set).
             if (IsNoMaskOperand(m1))
-                return make_mask(m2, shrink);
+                return make_mask(m2, copy, shrink);
             if (IsNoMaskOperand(m2))
-                return make_mask(m1, shrink);
+                return make_mask(m1, copy, shrink);
             // `m1 is m2 and is_mask(m1)`: one boolean mask OR'd with itself is itself.
             if (ReferenceEquals(m1, m2) && m1 is NDArray same && same.typecode == NPTypeCode.Boolean)
                 return shrink && !np.any(same) ? nomask : same;
@@ -3081,7 +4293,7 @@ namespace NumSharp
                 throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Incompatible dtypes '{(object)d1 ?? "None"}'<>'{(object)d2 ?? "None"}'"));
             // `dtype1.names` of two dtype-less operands.
             if (d1 is null)
-                throw new AttributeError("'NoneType' object has no attribute 'names'");
+                throw new AttributeError("'NoneType' object has no attribute 'names'", "names", null);
             // make_mask(umath.logical_or(m1, m2)): text operands are read by their truth values (non-empty is True); a
             // masked operand's slots are masked in the ufunc's result and make_mask reads them as True.
             var r = np.logical_or(AsData(m1), AsData(m2));
@@ -3094,9 +4306,13 @@ namespace NumSharp
                 // A masked operand makes umath.logical_or return a MaskedArray (__array_wrap__), whose mask is the shrunk
                 // mask_or of the operands' masks: nomask here. make_mask then reads it through filled(), which hands back
                 // the result's _data — a VIEW (OWNDATA False), not the ufunc's own buffer. (The scope reclaims the ufunc's
-                // array; the view holds its own counted reference on the buffer.)
-                r = r.view();
+                // array; the view holds its own counted reference on the buffer.) `copy=True` copies that view into an
+                // array of its own.
+                r = copy ? r.copy() : r.view();
             }
+            // make_mask(...)'s np.array: the mask is an ARRAY, 0-d included, where logical_or's 0-d answer is NumPy's scalar;
+            // r is this call's fresh result (or a view of it), so it is made an array again (NumPy's out=...).
+            r = r.AsArrayResult();
             return shrink && !np.any(r) ? nomask : r;
         }
 
@@ -3418,7 +4634,7 @@ namespace NumSharp
                     CheckMaskFitsData(AsData(mask), source);
                 // np.isfinite's refusal: the dispatcher's class text for a StringDType, the legacy resolver's for S / U.
                 if (source.Storage.IsVString)
-                    throw NDStringUfuncs.VStringNoLoop("isfinite", new[] { source.dtype.Meta.ToString() });
+                    throw NDStringUfuncs.VStringNoLoop("isfinite", new object[] { source.dtype.Meta });
                 throw NDStringUfuncs.NotSupportedForInputTypes("isfinite");
             }
             // masked_array(a, copy=copy, mask=mask): the given mask ORs with a's own (keep_mask) after NumPy's shape rules,
@@ -3547,7 +4763,8 @@ namespace NumSharp
         internal NDMaskedArray ComparisonOperator(NDMaskedArray self, object other, Func<NDArray, NDArray, NDArray> compare)
         {
             using var scope = NDScope.Open();
-            var mo = mask_or(self._mask is null ? nomask : self._mask, getmask(other));
+            // `mask = mask_or(smask, omask, copy=True)`: the comparison's mask is a copy, never an operand's own mask object.
+            var mo = mask_or(self._mask is null ? nomask : self._mask, getmask(other), copy: true);
             NDArray mask = ReferenceEquals(mo, nomask) ? null : mo;
             var sdata = self._data;
             var odata = AsData(other);
@@ -3597,20 +4814,66 @@ namespace NumSharp
         /// elements to mask; null for a domain-free op.</param>
         /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result. An array
         /// result takes a masked operand's fill value (raw) and hard-mask flag (<see cref="InheritFromOperands"/>).</returns>
-        /// <remarks>Scoped by hand — the one scope every unary masked ufunc rides: the operand materialization,
-        /// the domain/non-finite predicate masks and their ORs, the broadcast mask view and the fill-back scalar
-        /// are all reclaimed here; only the result's data and mask leave (a fully-masked 0-D result's computed
-        /// value is reclaimed too, since the <see cref="NDMasked"/> singleton is returned in its place).</remarks>
+        /// <remarks>The form without an out (numpy.ma's <c>angle</c> and <c>around</c>, which take no ufunc keywords):
+        ///     <see cref="Unary(Func{NDArray, NDArray, NDArray}, object, NDMaskedArray, Func{NDArray, NDArray}, double)"/>
+        ///     with a null out.</remarks>
         private NDMaskedArray Unary(Func<NDArray, NDArray> f, object a, Func<NDArray, NDArray> domain = null)
+            => Unary((x, _) => f(x), a, null, domain);
+
+        /// <summary>
+        ///     Port of NumPy's <c>_MaskedUnaryOperation.__call__(a, *args, **kwargs)</c> with the ufunc keywords: the keywords
+        ///     (out, where, dtype) reach the ufunc through <paramref name="f"/>, then the wrapper's own statements run over
+        ///     whatever the ufunc returned — which, with an out, IS that out's data.
+        /// </summary>
+        /// <param name="f">The underlying <c>np.*</c> unary op with its keywords bound: (data, out data or null) → result.</param>
+        /// <param name="a">The operand (<see cref="NDMaskedArray"/>/<see cref="NDArray"/>/scalar).</param>
+        /// <param name="out">NumPy's <c>out</c>, or null to allocate. A masked out runs the ufunc's <c>__array_wrap__</c>
+        ///     first (<see cref="WrapIntoMaskedOut"/>); a plain one (<see cref="NDMaskedArray.IsPlainArrayWrapper"/>) only
+        ///     receives the data.</param>
+        /// <param name="domain">Optional invalid-input predicate over the RAW data (masked slots included); null for a
+        ///     domain-free op.</param>
+        /// <param name="wrapFill">The ufunc's registered fill (NumPy's <c>ufunc_fills</c>): what a masked
+        ///     <paramref name="out"/>'s wrap writes where <paramref name="domain"/> rejects an input (0.0 for sqrt, tan and
+        ///     the inverse trigonometric functions, 1.0 for the logarithms and arccosh).</param>
+        /// <returns>The masked result: a NEW masked array over the result data (over <paramref name="out"/>'s data when one
+        ///     was given) with the wrapper's mask; for a 0-D result the <see cref="NDMasked"/> constant when masked, else
+        ///     the 0-D result — <paramref name="out"/> itself when one was given (NumPy's <c>return result</c>).</returns>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand or the out's dtype (raised by
+        ///     <paramref name="f"/> before anything is written).</exception>
+        /// <exception cref="ValueError">The out or a where mask does not broadcast to the result.</exception>
+        /// <remarks>
+        ///     NumPy's statements: <c>result = self.f(d, *args, **kwargs)</c>; for a domain <c>m = ~isfinite(result) |
+        ///     domain(d) | getmask(a)</c>, else <c>m = getmask(a)</c>; a 0-d result returns <c>masked</c> or
+        ///     <c>result</c>; otherwise <c>np.copyto(result, d, where=m)</c> (the DEFAULT 'same_kind' casting, caught — a
+        ///     dtype-changing unary such as angle keeps its computed value), <c>masked_result = result.view(...)</c>,
+        ///     <c>masked_result._mask = m</c>, <c>_update_from(a)</c>. With a masked out the returned view is not the out:
+        ///     the out keeps the mask its wrap gave it, the view carries <c>m</c>. One divergence: NumPy computes
+        ///     <c>~isfinite(result)</c> OVER the masked out, so the returned mask of a domained call with a masked out is
+        ///     itself a masked array (its <c>tolist()</c> shows None where the out's wrap mask is set); NumSharp returns the
+        ///     plain bool mask with the same values.
+        ///     <para>Scoped by hand — the one scope every unary masked ufunc rides: the operand materialization, the
+        ///     domain/non-finite predicate masks and their ORs, the broadcast mask view and the fill-back scalar are all
+        ///     reclaimed here; only the result's data and mask leave (a fully-masked 0-D result's computed value is reclaimed
+        ///     too, since the <see cref="NDMasked"/> singleton is returned in its place). The out's data is the caller's: the
+        ///     egress of an array this scope never tracked is a no-op.</para>
+        /// </remarks>
+        private NDMaskedArray Unary(Func<NDArray, NDArray, NDArray> f, object a, NDMaskedArray @out, Func<NDArray, NDArray> domain = null,
+                                    double wrapFill = 0.0)
         {
             using var scope = NDScope.Open();
             var d = AsData(a);
-            var result = f(d);
+            // `result = self.f(d, *args, **kwargs)`: with an out the ufunc writes the out's data and hands it back.
+            var result = f(d, @out?._data);
+            // The domain over the raw data, evaluated once: the wrapper's mask and a masked out's wrap both read it.
+            var dom = domain?.Invoke(d);
+            if (@out is not null && !@out.IsPlainArrayWrapper)
+                WrapIntoMaskedOut(@out, unary: true, dom, NDArray.PythonLiteral(wrapFill));
             NDArray m;
             if (domain != null)
             {
-                // Domained: mask non-finite outputs, the domain's rejected inputs, and any incoming mask.
-                m = Or(NonFiniteMask(result), domain(d));
+                // Domained: mask non-finite outputs (read AFTER a masked out's wrap wrote its fill, as NumPy reads them),
+                // the domain's rejected inputs, and any incoming mask.
+                m = Or(NonFiniteMask(result), dom);
                 m = Or(m, (a as NDMaskedArray)?._mask);
             }
             else
@@ -3622,7 +4885,44 @@ namespace NumSharp
             // NumPy's unary fill-back is copyto(result, d, where=m) with the DEFAULT 'same_kind' casting,
             // caught if it fails — so a dtype-changing unary (e.g. angle: complex→float) keeps its computed
             // value at masked slots rather than force-casting the input in.
-            return Yield(scope, InheritFromOperands(Wrap(result, m, d, casting: "same_kind"), a));
+            return Yield(scope, InheritFromOperands(Wrap(result, m, d, casting: "same_kind", @out: @out), a));
+        }
+
+        /// <summary>
+        ///     The ufunc's <c>MaskedArray.__array_wrap__(obj, context)</c> on a MASKED out (<c>obj is self</c>), as numpy.ma's
+        ///     ufunc wrappers trigger it by passing <c>out=</c> on to the ufunc: the out's mask is REPLACED (a direct
+        ///     <c>result._mask = m</c>, so a hard mask is replaced too) by the masks of the ufunc's inputs — numpy.ma hands the
+        ///     ufunc plain data, so those masks are all False — and, for a ufunc numpy.ma registered with a domain, the out's
+        ///     data takes the registered fill where the domain rejects an input, which also masks those slots.
+        /// </summary>
+        /// <param name="out">The masked out (not a plain-array wrapper).</param>
+        /// <param name="unary">True for a one-input ufunc: <c>reduce(mask_or, [getmaskarray(d)])</c> of ONE input is that
+        ///     all-False ARRAY itself (mask_or never runs, so it is not shrunk); two inputs go through <c>mask_or</c>, which
+        ///     shrinks the all-False pair to nomask.</param>
+        /// <param name="domainMask">The registered domain over the ufunc's inputs (<c>ufunc_domain[func](*input_args)</c>), or
+        ///     null for a ufunc without one.</param>
+        /// <param name="fill">The registered fill (<c>ufunc_fills[func]</c>, its last entry for a binary ufunc), a weak Python
+        ///     scalar; unused without a domain.</param>
+        /// <remarks>NumPy's statements: <c>result._mask = result._mask.copy()</c>; <c>m = reduce(mask_or, [getmaskarray(arg)
+        ///     for arg in input_args])</c>; with a domain <c>d = filled(domain(*input_args).astype(bool), True)</c> and, when
+        ///     <c>d.any()</c>, <c>np.copyto(result, fill_value, where=d)</c> and <c>m = d</c> (or <c>m | d</c>); then
+        ///     <c>result._mask = m</c>. The stored mask is detached into the caller's out (<see cref="ReplaceOutMask"/>); it
+        ///     has the out's shape (a domain over broadcast inputs is broadcast to it).</remarks>
+        private static void WrapIntoMaskedOut(NDMaskedArray @out, bool unary, NDArray domainMask, NDArray fill)
+        {
+            var outShape = @out._data.Shape;
+            NDArray m = unary ? np.zeros(new Shape(outShape.dimensions, copy: false), np.@bool) : null;
+            if (domainMask is not null)
+            {
+                var d = domainMask.Shape.Equals(outShape) ? domainMask : np.broadcast_to(domainMask, outShape);
+                if (np.any(d))
+                {
+                    // `np.copyto(result, fill_value, where=d)`: the default 'same_kind' casting of a weak Python scalar.
+                    np.copyto(@out._data, fill, where: d);
+                    m = m is null ? d : np.logical_or(m, d);
+                }
+            }
+            ReplaceOutMask(@out, m);
         }
 
         /// <summary>
@@ -3666,10 +4966,41 @@ namespace NumSharp
         /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result. An array
         /// result takes the fill value (raw) and hard-mask flag of <paramref name="a"/> when it is a masked array, else of
         /// <paramref name="b"/> (<see cref="InheritFromOperands"/>).</returns>
+        /// <remarks>The form without an out: <see cref="Binary(Func{NDArray, NDArray, NDArray, NDArray}, object, object,
+        ///     NDMaskedArray, bool, bool)"/> with a null out.</remarks>
+        private NDMaskedArray Binary(Func<NDArray, NDArray, NDArray> f, object a, object b, bool promoteScalar = true, bool strongOperand = false)
+            => Binary((x, y, _) => f(x, y), a, b, null, promoteScalar, strongOperand);
+
+        /// <summary>
+        ///     Port of NumPy's <c>_MaskedBinaryOperation.__call__(a, b, *args, **kwargs)</c> with the ufunc keywords: the
+        ///     keywords (out, where, dtype) reach the ufunc through <paramref name="f"/>, the result mask is the OR of the input
+        ///     masks, masked slots get the left operand's data back, and the call returns a NEW masked array over the ufunc's
+        ///     output (an out's data when one was given).
+        /// </summary>
+        /// <param name="f">The underlying <c>np.*</c> binary op with its keywords bound: (left, right, out data or null) →
+        ///     result.</param>
+        /// <param name="a">Left operand.</param>
+        /// <param name="b">Right operand.</param>
+        /// <param name="out">NumPy's <c>out</c>, or null to allocate. A masked out runs the ufunc's <c>__array_wrap__</c>
+        ///     first, which sets its mask to nomask (<see cref="WrapIntoMaskedOut"/>; no domain is registered for these
+        ///     ufuncs); a plain one only receives the data.</param>
+        /// <param name="promoteScalar">True (the ufunc family) makes a bare C# scalar operand numpy.ma's strong
+        ///     default-width array (<see cref="PromoteMaScalar"/>).</param>
+        /// <param name="strongOperand">True for the six comparison ufuncs and the float-only <c>arctan2</c> /
+        ///     <c>hypot</c>: the scalar or 0-d side becomes a strong one-element operand instead of widening both sides.</param>
+        /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result (a 0-D result
+        ///     that is not masked is <paramref name="out"/> itself when one was given). An array result takes the fill value
+        ///     (raw) and hard-mask flag of <paramref name="a"/> when it is a masked array, else of <paramref name="b"/> — never
+        ///     the out's (<see cref="InheritFromOperands"/>).</returns>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operands or the out's dtype (raised before anything is
+        ///     written).</exception>
+        /// <exception cref="ValueError">The operands, the out or a where mask do not broadcast together.</exception>
         /// <remarks>Scoped by hand — the one scope every binary masked ufunc rides: operand materializations, the
         /// numpy.ma scalar-widening casts, the OR'd mask intermediates, the broadcast mask view and the fill-back
-        /// scalar are reclaimed; only the result's data and mask leave.</remarks>
-        private NDMaskedArray Binary(Func<NDArray, NDArray, NDArray> f, object a, object b, bool promoteScalar = true, bool strongOperand = false)
+        /// scalar are reclaimed; only the result's data and mask leave (an out's data is the caller's, never this
+        /// scope's).</remarks>
+        private NDMaskedArray Binary(Func<NDArray, NDArray, NDArray, NDArray> f, object a, object b, NDMaskedArray @out, bool promoteScalar = true,
+                                     bool strongOperand = false)
         {
             using var scope = NDScope.Open();
             var da = AsData(a);
@@ -3681,14 +5012,17 @@ namespace NumSharp
             // (ma.left_shift(int16, 1) → int16, not int64). Those callers pass promoteScalar:false.
             if (promoteScalar)
                 PromoteMaScalar(a, b, ref da, ref db, strongOperand);
-            var result = f(da, db);
+            // `result = self.f(da, db, *args, **kwargs)`: with an out the ufunc writes the out's data and hands it back.
+            var result = f(da, db, @out?._data);
+            if (@out is not null && !@out.IsPlainArrayWrapper)
+                WrapIntoMaskedOut(@out, unary: false, null, null);
             // `m = umath.logical_or(ma, getmaskarray(b))` (or the mirror, or both masks): a NEW array whenever either
             // operand has a mask — never an operand's own mask object, so a masked write through the result cannot reach
             // the operand — and nomask when neither has one.
             var ma0 = (a as NDMaskedArray)?._mask;
             var mb0 = (b as NDMaskedArray)?._mask;
             var m = ma0 is null && mb0 is null ? null : np.logical_or(ma0 ?? NDArray.Scalar(false), mb0 ?? NDArray.Scalar(false));
-            return Yield(scope, InheritFromOperands(Wrap(result, m, da), a, b));
+            return Yield(scope, InheritFromOperands(Wrap(result, m, da, @out: @out), a, b));
         }
 
         /// <summary>
@@ -3704,10 +5038,45 @@ namespace NumSharp
         /// <param name="b">Right operand (denominator).</param>
         /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result. An array
         /// result inherits like <see cref="Binary"/>'s.</returns>
-        /// <remarks>Scoped by hand — the one scope every domained masked ufunc (divide/remainder/…) rides: the
-        /// domain and non-finite predicate masks, their ORs, the widening casts, the broadcast mask view and the
-        /// zero/fill-back scalars are reclaimed; only the result's data and mask leave.</remarks>
+        /// <remarks>The form without an out: <see cref="DomainedBinary(Func{NDArray, NDArray, NDArray, NDArray},
+        ///     Func{NDArray, NDArray, NDArray}, object, object, NDMaskedArray)"/> with a null out.</remarks>
         private NDMaskedArray DomainedBinary(Func<NDArray, NDArray, NDArray> f, Func<NDArray, NDArray, NDArray> domain, object a, object b)
+            => DomainedBinary((x, y, _) => f(x, y), domain, a, b, null);
+
+        /// <summary>
+        ///     Port of NumPy's <c>_DomainedBinaryOperation.__call__(a, b, *args, **kwargs)</c> (divide / true_divide /
+        ///     floor_divide / remainder / mod / fmod) with the ufunc keywords: like <see cref="Binary(Func{NDArray, NDArray,
+        ///     NDArray, NDArray}, object, object, NDMaskedArray, bool, bool)"/>, but the result mask ALSO covers non-finite
+        ///     outputs and the inputs the domain rejects (division by ~zero, <see cref="SafeDivideDomain"/>), and the masked
+        ///     slots are zeroed and get the left operand's data ADDED back.
+        /// </summary>
+        /// <param name="f">The underlying <c>np.*</c> binary op with its keywords bound: (left, right, out data or null) →
+        ///     result.</param>
+        /// <param name="domain">Invalid-input predicate over the two raw data arrays returning a boolean mask.</param>
+        /// <param name="a">Left operand (numerator).</param>
+        /// <param name="b">Right operand (denominator).</param>
+        /// <param name="out">NumPy's <c>out</c>, or null to allocate. A masked out runs the ufunc's <c>__array_wrap__</c>
+        ///     first: these ufuncs are registered with the safe-divide domain and the fill 1, so the out's rejected slots take
+        ///     1 and become its mask (nomask when nothing is rejected), and the add-back below then skips them
+        ///     (<c>MaskedArray.__iadd__</c>). A plain out only receives the data.</param>
+        /// <returns>The masked result, or the <see cref="NDMasked"/> constant for a fully-masked 0-D result (a 0-D result
+        ///     that is not masked is <paramref name="out"/> itself when one was given). An array result inherits like
+        ///     <see cref="Binary(Func{NDArray, NDArray, NDArray, NDArray}, object, object, NDMaskedArray, bool, bool)"/>'s.</returns>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operands or the out's dtype (raised before anything is
+        ///     written).</exception>
+        /// <exception cref="ValueError">The operands, the out or a where mask do not broadcast together.</exception>
+        /// <remarks>NumPy's statements: <c>result = self.f(da, db, *args, **kwargs)</c>; <c>m = ~isfinite(result) |
+        ///     getmask(a) | getmask(b) | domain(da, db)</c>; a 0-d result returns <c>masked</c> or <c>result</c>;
+        ///     <c>np.copyto(result, 0, casting='unsafe', where=m)</c>; <c>masked_da = m * da</c>; <c>result += masked_da</c>
+        ///     when that casts safely — on a masked out that is <c>MaskedArray.__iadd__</c>, which adds 0 where the out's mask
+        ///     is set, so a slot its wrap rejected keeps 0 where a plain out gets the dividend back. The returned mask of a
+        ///     masked-out call is a masked array in NumPy (see <see cref="Unary(Func{NDArray, NDArray, NDArray}, object,
+        ///     NDMaskedArray, Func{NDArray, NDArray}, double)"/>); NumSharp returns the plain bool values.
+        ///     <para>Scoped by hand — the one scope every domained masked ufunc (divide/remainder/…) rides: the domain and
+        ///     non-finite predicate masks, their ORs, the widening casts, the broadcast mask view and the zero/fill-back
+        ///     scalars are reclaimed; only the result's data and mask leave.</para></remarks>
+        private NDMaskedArray DomainedBinary(Func<NDArray, NDArray, NDArray, NDArray> f, Func<NDArray, NDArray, NDArray> domain, object a, object b,
+                                             NDMaskedArray @out)
         {
             using var scope = NDScope.Open();
             var da = AsData(a);
@@ -3720,13 +5089,25 @@ namespace NumSharp
             var gb = StrongBareScalar(b, db);
             // Same scalar-strong promotion as Binary (e.g. ma.floor_divide(int32, 2) → int64).
             PromoteMaScalar(a, b, ref da, ref db);
-            var result = f(da, db);
-            var m = Or(NonFiniteMask(result), domain(ga, gb));
+            // `result = self.f(da, db, *args, **kwargs)`: with an out the ufunc writes the out's data and hands it back.
+            var result = f(da, db, @out?._data);
+            // The domain over the raw data, evaluated once: the wrapper's mask and a masked out's wrap both read it.
+            var dom = domain(ga, gb);
+            NDArray addBackSkip = null;
+            if (@out is not null && !@out.IsPlainArrayWrapper)
+            {
+                // ufunc_domain[f] is _DomainSafeDivide and ufunc_fills[f] is (0, 1): the wrap writes 1 where it fails.
+                WrapIntoMaskedOut(@out, unary: false, dom, NDArray.PythonLiteral(1L));
+                // `result += masked_da` is then MaskedArray.__iadd__: `np.where(self._mask, 0, other)` adds nothing where the
+                // wrap masked the out.
+                addBackSkip = @out._mask;
+            }
+            var m = Or(NonFiniteMask(result), dom);
             m = Or(m, (a as NDMaskedArray)?._mask);
             m = Or(m, (b as NDMaskedArray)?._mask);
             // Domained fill-back differs from the plain binary: NumPy zeroes masked slots then re-adds da,
             // which we reproduce as "put da back where it can safely cast, else leave zero".
-            return Yield(scope, InheritFromOperands(Wrap(result, m, da, domainedZeroFill: true), a, b));
+            return Yield(scope, InheritFromOperands(Wrap(result, m, da, domainedZeroFill: true, @out: @out, addBackSkip: addBackSkip), a, b));
         }
 
         /// <summary>
@@ -3740,25 +5121,35 @@ namespace NumSharp
         /// unary, the left operand for binary).</param>
         /// <param name="domainedZeroFill">When true, use the domained fill-back (zero then re-add) instead of
         /// the plain copy-back.</param>
+        /// <param name="casting">The plain fill-back's copy casting (<c>"same_kind"</c> for a unary op, <c>"unsafe"</c> for a
+        ///     binary one).</param>
+        /// <param name="out">The caller's out, whose data <paramref name="result"/> is, or null: a 0-D result that is not
+        ///     masked returns it (NumPy's <c>return result</c> hands back the out object).</param>
+        /// <param name="addBackSkip">The domained add-back's skip mask (a masked out's wrap mask, see
+        ///     <see cref="FillBack"/>), or null.</param>
         /// <returns>The masked result, or the <see cref="NDMasked"/> constant when a 0-D result is fully masked.</returns>
-        private NDMaskedArray Wrap(NDArray result, NDArray m, NDArray fillbackSource, bool domainedZeroFill = false, string casting = "unsafe")
+        private NDMaskedArray Wrap(NDArray result, NDArray m, NDArray fillbackSource, bool domainedZeroFill = false, string casting = "unsafe",
+                                   NDMaskedArray @out = null, NDArray addBackSkip = null)
         {
             // Keep the stored mask shape-consistent with the data (broadcast predicates/operand masks up).
             // `is not null` throughout — `m != null` would invoke NDArray's ELEMENTWISE `!=`.
             if (m is not null && !m.Shape.Equals(result.Shape))
                 m = np.broadcast_to(m, result.Shape).copy();
 
-            // 0-D result: NumPy returns the `masked` singleton if masked, else the bare scalar. We return the
-            // singleton when masked and a 0-D masked array otherwise (a deliberate C# type-consistency choice).
+            // 0-D result: NumPy returns the `masked` singleton if masked, else the bare scalar — the out object itself when
+            // one was given. We return the singleton when masked and a 0-D masked array (or the out) otherwise (a
+            // deliberate C# type-consistency choice).
             if (result.ndim == 0)
-                return (m is not null && np.any(m)) ? NDMasked : new NDMaskedArray(result, null);
+                return (m is not null && np.any(m)) ? NDMasked : @out ?? new NDMaskedArray(result, null);
 
             // Restore data at masked positions so `.data` is meaningful there (masked values are still hidden).
             // No `np.any(m)` gate: copyto with an all-false mask is already a no-op, and the scan would cost a
             // full extra O(n) pass — NumPy's unary path likewise fills back unconditionally.
             if (m is not null)
-                FillBack(result, fillbackSource, m, domainedZeroFill, casting);
+                FillBack(result, fillbackSource, m, domainedZeroFill, casting, addBackSkip);
 
+            // `masked_result = result.view(...)`: a NEW masked array over the result data (over an out's data, so writes
+            // through it reach the out), never the out object itself.
             return new NDMaskedArray(result, m);
         }
 
@@ -3778,7 +5169,10 @@ namespace NumSharp
         /// <param name="domainedZeroFill">Selects the domained zero-then-add path.</param>
         /// <param name="casting">The plain path's copy casting: <c>"same_kind"</c> for a unary op (NumPy's default),
         /// <c>"unsafe"</c> for a binary one.</param>
-        private static void FillBack(NDArray result, NDArray source, NDArray m, bool domainedZeroFill, string casting)
+        /// <param name="addBackSkip">For the domained path with a MASKED out: the out's mask after its wrap. NumPy's
+        ///     <c>result += masked_da</c> is then <c>MaskedArray.__iadd__</c>, which adds <c>np.where(self._mask, 0,
+        ///     other)</c>, so nothing comes back where it is set. Null adds everywhere (a fresh result or a plain out).</param>
+        private static void FillBack(NDArray result, NDArray source, NDArray m, bool domainedZeroFill, string casting, NDArray addBackSkip = null)
         {
             try
             {
@@ -3789,7 +5183,13 @@ namespace NumSharp
                     np.copyto(result, NDArray.Scalar(0), casting: "unsafe", where: m);
                     var maskedDa = np.multiply(m, source);
                     if (np.can_cast(maskedDa.dtype, result.dtype, "safe"))
+                    {
+                        // MaskedArray.__iadd__ on a masked out: `other_data = np.where(self._mask, other_data.dtype.type(0),
+                        // other_data)` before the data add.
+                        if (addBackSkip is not null)
+                            maskedDa = np.where(addBackSkip, np.zeros(Shape.Scalar, maskedDa.dtype), maskedDa);
                         np.add(result, maskedDa, @out: result);
+                    }
                 }
                 else
                 {
@@ -3880,11 +5280,12 @@ namespace NumSharp
         /// <summary>
         ///     Normalizes any accepted operand to its data <see cref="NDArray"/>: unwraps a
         ///     <see cref="NDMaskedArray"/>, passes an <see cref="NDArray"/> through (a <c>numpy.matrix</c> or a
-        ///     <c>numpy.char.chararray</c> as a new plain view: numpy.ma's base class is not modelled), and converts a C#
-        ///     scalar or array-like via <see cref="np.asarray(object,DType,char)"/>.
+        ///     <c>numpy.char.chararray</c> as a new plain view: numpy.ma's base class is not modelled), converts a NumPy
+        ///     scalar (a read-only 0-d array that is no explicit array) into a new writeable 0-d array as NumPy's
+        ///     <c>getdata</c> does, and converts a C# scalar or array-like into a new writeable array.
         /// </summary>
         /// <param name="a">The operand.</param>
-        /// <returns>The operand's data as an <see cref="NDArray"/>.</returns>
+        /// <returns>The operand's data as an <see cref="NDArray"/>: the operand, a view of it, or a new array.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         private static NDArray AsData(object a)
         {
@@ -3892,12 +5293,18 @@ namespace NumSharp
             {
                 case null: throw new ArgumentNullException(nameof(a));
                 case NDMaskedArray m: return m._data;
+                // A NumPy SCALAR (a read-only 0-d array that is no explicit array: a reduction's result, NDArray.Scalar)
+                // has no _data: getdata's `np.array(a, copy=None)` builds a NEW writeable 0-d array of it, which the masked
+                // array may write into (np.ma.array(np.int64(5)).put(0, 9) works, probed 2.4.2). np.asarray is that
+                // conversion; the copy is the calling function's temporary like the views below.
+                case NDArray nd when nd.IsNumPyScalar && !nd.Shape.IsWriteable && !nd.WasScalarArgument: return np.asarray(nd);
                 // A numpy.matrix or numpy.char.chararray operand is read as its plain view: numpy.ma's base class is
                 // not modelled (NDMaskedArray's constructor), so the module computes with plain-array semantics
                 // throughout. The view is the calling function's temporary (its scope reclaims it).
                 case NDArray nd: return NDSubclass.PlainView(nd);
                 case Array arr: return np.array(arr); // C# array-like (double[], int[,], …)
-                default: return NDArray.Scalar(a);    // boxed C# scalar (int/double/bool/…)
+                // A boxed C# scalar (int/double/bool/…): np.array(a) of the Python scalar, a writeable 0-d ARRAY.
+                default: return NDArray.WritableScalar(a);
             }
         }
 
@@ -4041,7 +5448,7 @@ namespace NumSharp
             }
             NPTypeCode ea = sa ?? da.typecode;
             NPTypeCode eb = sb ?? db.typecode;
-            var td = np.promote_types(ea, eb);
+            var td = DTypePromotion.PromoteTypes(ea, eb); // the frozen NPTypeCode table, as before the facade's collapse
             // astype(copy:false) is a no-op when the dtype already matches, so no redundant allocation.
             da = da.astype(td, copy: false);
             db = db.astype(td, copy: false);
@@ -4080,7 +5487,7 @@ namespace NumSharp
                 return;
             if (da.typecode == db.typecode || da.typecode == NPTypeCode.String || db.typecode == NPTypeCode.String)
                 return;
-            var td = np.promote_types(da.typecode, db.typecode);
+            var td = DTypePromotion.PromoteTypes(da.typecode, db.typecode); // the frozen table, as before
             da = da.astype(td, copy: false);
             db = db.astype(td, copy: false);
         }
@@ -4129,7 +5536,7 @@ namespace NumSharp
         ///     Masks every 1-D vector of <paramref name="a"/> along <paramref name="axis"/> that contains ANY
         ///     masked value (NumPy's <c>_mask_propagate</c>): the mask is OR'd with its own <c>any(axis)</c>
         ///     reduction broadcast back, so a single masked entry taints the whole line. Used by the strict
-        ///     <see cref="dot(object,object,bool)"/> path. An operand with no mask (or none set along the axis)
+        ///     <see cref="dot(object,object,bool,NDMaskedArray)"/> path. An operand with no mask (or none set along the axis)
         ///     is returned unchanged.
         /// </summary>
         /// <param name="a">Operand (masked array or plain array-like).</param>
@@ -4240,75 +5647,302 @@ namespace NumSharp
 
         /// <summary>Element-wise absolute value over the data; the mask is unchanged. Alias of <see cref="absolute"/>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of |data|.</returns>
-        public NDMaskedArray abs(object a) => Unary(x => np.abs(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray abs(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.abs(x, o, where, dtype), a, @out);
 
         /// <summary>Element-wise absolute value over the data; the mask is unchanged (same op as <see cref="abs"/>).</summary>
         /// <param name="a">Operand.</param><returns>A masked array of |data|.</returns>
-        public NDMaskedArray absolute(object a) => Unary(x => np.abs(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray absolute(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.abs(x, o, where, dtype), a, @out);
 
         /// <summary>Element-wise negation; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of -data.</returns>
-        public NDMaskedArray negative(object a) => Unary(x => np.negative(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray negative(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.negative(x, o, where, dtype), a, @out);
 
         /// <summary>Float-only absolute value (promotes ints to float); mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of the float |data|.</returns>
-        public NDMaskedArray fabs(object a) => Unary(x => np.fabs(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray fabs(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.fabs(x, o, where, dtype), a, @out);
 
         /// <summary>Complex conjugate (real data passes through); mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of conj(data).</returns>
-        public NDMaskedArray conjugate(object a) => Unary(x => np.conjugate(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray conjugate(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.conjugate(x, o, where, dtype), a, @out);
 
-        /// <summary>Angle (argument) of the elements; mask unchanged.</summary>
-        /// <param name="a">Operand.</param><returns>A masked array of angle(data).</returns>
-        public NDMaskedArray angle(object a) => Unary(x => np.angle(x), a);
-
-        /// <summary>Round to nearest integer, half-to-even; mask unchanged.</summary>
-        /// <param name="a">Operand.</param><returns>A masked array of round(data).</returns>
-        public NDMaskedArray around(object a) => Unary(x => np.around(x), a);
+        /// <summary>Angle (argument) of the elements — NumPy's <c>np.ma.angle(a, deg=False)</c>, which passes its arguments on
+        ///     to <see cref="np.angle(NDArray, bool)"/>; mask unchanged.</summary>
+        /// <param name="a">Operand.</param>
+        /// <param name="deg">Return the angles in degrees (true) instead of radians (false, the default) — NumPy's
+        ///     <c>deg</c>. Masked entries stay masked; their data is converted too, as NumPy's is (the function runs over the
+        ///     whole data).</param>
+        /// <returns>A masked array of angle(data), float64 (an integer or real operand's angle is 0 or pi, 180 in
+        ///     degrees).</returns>
+        /// <remarks>The <paramref name="deg"/> parameter arrived in API-parity batch 7.</remarks>
+        public NDMaskedArray angle(object a, bool deg = false) => Unary(x => np.angle(x, deg), a);
 
         /// <summary>Floor; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of floor(data).</returns>
-        public NDMaskedArray floor(object a) => Unary(x => np.floor(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray floor(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.floor(x, o, where, dtype), a, @out);
 
         /// <summary>Ceiling; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of ceil(data).</returns>
-        public NDMaskedArray ceil(object a) => Unary(x => np.ceil(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray ceil(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.ceil(x, o, where, dtype), a, @out);
 
         /// <summary>e^x; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of exp(data).</returns>
-        public NDMaskedArray exp(object a) => Unary(x => np.exp(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray exp(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.exp(x, o, where, dtype), a, @out);
 
         /// <summary>Sine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of sin(data).</returns>
-        public NDMaskedArray sin(object a) => Unary(x => np.sin(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray sin(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.sin(x, o, where, dtype), a, @out);
 
         /// <summary>Cosine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of cos(data).</returns>
-        public NDMaskedArray cos(object a) => Unary(x => np.cos(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray cos(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.cos(x, o, where, dtype), a, @out);
 
         /// <summary>Hyperbolic sine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of sinh(data).</returns>
-        public NDMaskedArray sinh(object a) => Unary(x => np.sinh(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray sinh(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.sinh(x, o, where, dtype), a, @out);
 
         /// <summary>Hyperbolic cosine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of cosh(data).</returns>
-        public NDMaskedArray cosh(object a) => Unary(x => np.cosh(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray cosh(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.cosh(x, o, where, dtype), a, @out);
 
         /// <summary>Hyperbolic tangent; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of tanh(data).</returns>
-        public NDMaskedArray tanh(object a) => Unary(x => np.tanh(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray tanh(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.tanh(x, o, where, dtype), a, @out);
 
         /// <summary>Arctangent; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arctan(data).</returns>
-        public NDMaskedArray arctan(object a) => Unary(x => np.arctan(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray arctan(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.arctan(x, o, where, dtype), a, @out);
 
         /// <summary>Inverse hyperbolic sine; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arcsinh(data).</returns>
-        public NDMaskedArray arcsinh(object a) => Unary(x => np.arcsinh(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray arcsinh(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.arcsinh(x, o, where, dtype), a, @out);
 
         /// <summary>Logical NOT of the data; mask unchanged.</summary>
         /// <param name="a">Operand.</param><returns>A masked boolean array of !data.</returns>
-        public NDMaskedArray logical_not(object a) => Unary(x => np.logical_not(x), a);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, an all-False array.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray logical_not(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.logical_not(x, o, where, dtype), a, @out);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Unary ufuncs — domained (invalid inputs are additionally masked)
@@ -4317,39 +5951,165 @@ namespace NumSharp
         /// <summary>Square root; additionally MASKS inputs <c>&lt; 0</c> (and non-finite results) rather than
         /// letting them produce NaN, which is the whole point of the masked variant.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of sqrt(data) with negatives masked.</returns>
-        public NDMaskedArray sqrt(object a) => Unary(x => np.sqrt(x), a, d => DomainGreaterEqual(d, 0.0));
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the inputs outside the domain, whose slots first take the ufunc's fill 0.0.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray sqrt(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.sqrt(x, o, where, dtype), a, @out, d => DomainGreaterEqual(d, 0.0), 0.0);
 
         /// <summary>Natural log; additionally masks inputs <c>&lt;= 0</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of log(data) with non-positives masked.</returns>
-        public NDMaskedArray log(object a) => Unary(x => np.log(x), a, d => DomainGreater(d, 0.0));
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the inputs outside the domain, whose slots first take the ufunc's fill 1.0.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray log(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.log(x, o, where, dtype), a, @out, d => DomainGreater(d, 0.0), 1.0);
 
         /// <summary>Base-2 log; additionally masks inputs <c>&lt;= 0</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of log2(data) with non-positives masked.</returns>
-        public NDMaskedArray log2(object a) => Unary(x => np.log2(x), a, d => DomainGreater(d, 0.0));
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the inputs outside the domain, whose slots first take the ufunc's fill 1.0.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray log2(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.log2(x, o, where, dtype), a, @out, d => DomainGreater(d, 0.0), 1.0);
 
         /// <summary>Base-10 log; additionally masks inputs <c>&lt;= 0</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of log10(data) with non-positives masked.</returns>
-        public NDMaskedArray log10(object a) => Unary(x => np.log10(x), a, d => DomainGreater(d, 0.0));
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the inputs outside the domain, whose slots first take the ufunc's fill 1.0.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray log10(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.log10(x, o, where, dtype), a, @out, d => DomainGreater(d, 0.0), 1.0);
 
         /// <summary>Tangent; additionally masks inputs near its poles (<c>|cos(x)| &lt; 1e-35</c>).</summary>
         /// <param name="a">Operand.</param><returns>A masked array of tan(data) with pole-neighbors masked.</returns>
-        public NDMaskedArray tan(object a) => Unary(x => np.tan(x), a, d => DomainTan(d, 1e-35));
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the inputs outside the domain, whose slots first take the ufunc's fill 0.0.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray tan(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.tan(x, o, where, dtype), a, @out, d => DomainTan(d, 1e-35), 0.0);
 
         /// <summary>Arcsine; additionally masks inputs outside <c>[-1, 1]</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arcsin(data) with out-of-domain inputs masked.</returns>
-        public NDMaskedArray arcsin(object a) => Unary(x => np.arcsin(x), a, d => DomainCheckInterval(d, -1.0, 1.0));
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the inputs outside the domain, whose slots first take the ufunc's fill 0.0.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray arcsin(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.arcsin(x, o, where, dtype), a, @out, d => DomainCheckInterval(d, -1.0, 1.0), 0.0);
 
         /// <summary>Arccosine; additionally masks inputs outside <c>[-1, 1]</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arccos(data) with out-of-domain inputs masked.</returns>
-        public NDMaskedArray arccos(object a) => Unary(x => np.arccos(x), a, d => DomainCheckInterval(d, -1.0, 1.0));
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the inputs outside the domain, whose slots first take the ufunc's fill 0.0.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray arccos(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.arccos(x, o, where, dtype), a, @out, d => DomainCheckInterval(d, -1.0, 1.0), 0.0);
 
         /// <summary>Inverse hyperbolic cosine; additionally masks inputs <c>&lt; 1</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arccosh(data) with sub-1 inputs masked.</returns>
-        public NDMaskedArray arccosh(object a) => Unary(x => np.arccosh(x), a, d => DomainGreaterEqual(d, 1.0));
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the inputs outside the domain, whose slots first take the ufunc's fill 1.0.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray arccosh(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.arccosh(x, o, where, dtype), a, @out, d => DomainGreaterEqual(d, 1.0), 1.0);
 
         /// <summary>Inverse hyperbolic tangent; additionally masks inputs outside <c>(-1, 1)</c>.</summary>
         /// <param name="a">Operand.</param><returns>A masked array of arctanh(data) with out-of-domain inputs masked.</returns>
-        public NDMaskedArray arctanh(object a) => Unary(x => np.arctanh(x), a, d => DomainCheckInterval(d, -1.0 + 1e-15, 1.0 - 1e-15));
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the inputs outside the domain, whose slots first take the ufunc's fill 0.0.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray arctanh(object a, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Unary((x, o) => np.arctanh(x, o, where, dtype), a, @out, d => DomainCheckInterval(d, -1.0 + 1e-15, 1.0 - 1e-15), 0.0);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Binary ufuncs — mask = OR of the two input masks
@@ -4358,100 +6118,341 @@ namespace NumSharp
         /// <summary>Element-wise sum; result is masked wherever EITHER operand was masked.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a+b.</returns>
-        public NDMaskedArray add(object a, object b) => Binary((x, y) => np.add(x, y), a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray add(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.add(x, y, o, where, dtype), a, b, @out);
 
         /// <summary>Element-wise difference; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a-b.</returns>
-        public NDMaskedArray subtract(object a, object b) => Binary((x, y) => np.subtract(x, y), a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray subtract(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.subtract(x, y, o, where, dtype), a, b, @out);
 
         /// <summary>Element-wise product; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a*b.</returns>
-        public NDMaskedArray multiply(object a, object b) => Binary((x, y) => np.multiply(x, y), a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray multiply(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.multiply(x, y, o, where, dtype), a, b, @out);
 
         /// <summary>Two-argument arctangent; masked where either operand was.</summary>
         /// <param name="a">y operand.</param><param name="b">x operand.</param>
         /// <returns>A masked array of arctan2(a, b).</returns>
-        public NDMaskedArray arctan2(object a, object b) => Binary((x, y) => np.arctan2(x, y), a, b, strongOperand: true);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray arctan2(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.arctan2(x, y, o, where, dtype), a, b, @out, strongOperand: true);
 
         /// <summary>Euclidean hypotenuse; masked where either operand was.</summary>
         /// <param name="a">Left leg.</param><param name="b">Right leg.</param>
         /// <returns>A masked array of hypot(a, b).</returns>
-        public NDMaskedArray hypot(object a, object b) => Binary((x, y) => np.hypot(x, y), a, b, strongOperand: true);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray hypot(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.hypot(x, y, o, where, dtype), a, b, @out, strongOperand: true);
 
         /// <summary>Element-wise equality; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a==b.</returns>
-        public NDMaskedArray equal(object a, object b) => Binary((x, y) => np.equal(x, y), a, b, strongOperand: true);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray equal(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.equal(x, y, o, where, dtype), a, b, @out, strongOperand: true);
 
         /// <summary>Element-wise inequality; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a!=b.</returns>
-        public NDMaskedArray not_equal(object a, object b) => Binary((x, y) => np.not_equal(x, y), a, b, strongOperand: true);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray not_equal(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.not_equal(x, y, o, where, dtype), a, b, @out, strongOperand: true);
 
         /// <summary>Element-wise less-than; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&lt;b.</returns>
-        public NDMaskedArray less(object a, object b) => Binary((x, y) => np.less(x, y), a, b, strongOperand: true);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray less(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.less(x, y, o, where, dtype), a, b, @out, strongOperand: true);
 
         /// <summary>Element-wise less-or-equal; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&lt;=b.</returns>
-        public NDMaskedArray less_equal(object a, object b) => Binary((x, y) => np.less_equal(x, y), a, b, strongOperand: true);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray less_equal(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.less_equal(x, y, o, where, dtype), a, b, @out, strongOperand: true);
 
         /// <summary>Element-wise greater-than; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&gt;b.</returns>
-        public NDMaskedArray greater(object a, object b) => Binary((x, y) => np.greater(x, y), a, b, strongOperand: true);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray greater(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.greater(x, y, o, where, dtype), a, b, @out, strongOperand: true);
 
         /// <summary>Element-wise greater-or-equal; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&gt;=b.</returns>
-        public NDMaskedArray greater_equal(object a, object b) => Binary((x, y) => np.greater_equal(x, y), a, b, strongOperand: true);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray greater_equal(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.greater_equal(x, y, o, where, dtype), a, b, @out, strongOperand: true);
 
         /// <summary>Logical AND; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a&amp;&amp;b.</returns>
-        public NDMaskedArray logical_and(object a, object b) => Binary((x, y) => np.logical_and(x, y), a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray logical_and(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.logical_and(x, y, o, where, dtype), a, b, @out);
 
         /// <summary>Logical OR; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a||b.</returns>
-        public NDMaskedArray logical_or(object a, object b) => Binary((x, y) => np.logical_or(x, y), a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray logical_or(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.logical_or(x, y, o, where, dtype), a, b, @out);
 
         /// <summary>Logical XOR; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked boolean array of a^b.</returns>
-        public NDMaskedArray logical_xor(object a, object b) => Binary((x, y) => np.logical_xor(x, y), a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray logical_xor(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.logical_xor(x, y, o, where, dtype), a, b, @out);
 
         /// <summary>Bitwise AND; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a&amp;b.</returns>
-        public NDMaskedArray bitwise_and(object a, object b) => Binary((x, y) => np.bitwise_and(x, y), a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray bitwise_and(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.bitwise_and(x, y, o, where, dtype), a, b, @out);
 
         /// <summary>Bitwise OR; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a|b.</returns>
-        public NDMaskedArray bitwise_or(object a, object b) => Binary((x, y) => np.bitwise_or(x, y), a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray bitwise_or(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.bitwise_or(x, y, o, where, dtype), a, b, @out);
 
         /// <summary>Bitwise XOR; masked where either operand was.</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>A masked array of a^b.</returns>
-        public NDMaskedArray bitwise_xor(object a, object b) => Binary((x, y) => np.bitwise_xor(x, y), a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's, nomask.
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray bitwise_xor(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => Binary((x, y, o) => np.bitwise_xor(x, y, o, where, dtype), a, b, @out);
 
-        /// <summary>Bit shift left (<c>a &lt;&lt; b</c>; NumPy's <c>ma.left_shift</c>). Unlike the arithmetic/bitwise ma ops,
-        /// NumPy's <c>left_shift</c> is a plain function (not a <c>_MaskedBinaryOperation</c>), so a bare shift-count
+        /// <summary>Bit shift left (<c>a &lt;&lt; n</c>; NumPy's <c>ma.left_shift(a, n)</c>). Unlike the arithmetic/bitwise ma
+        /// ops, NumPy's <c>left_shift</c> is a plain function (not a <c>_MaskedBinaryOperation</c>), so a bare shift-count
         /// scalar is NOT widened to int64 — the result keeps the value operand's dtype (<c>ma.left_shift(int16, 1)</c> →
         /// int16) — the masked slots are shifted from 0 (<c>filled(a, 0)</c>), and the result is a NEW masked array that
         /// inherits nothing from <paramref name="a"/> (see <see cref="Shift"/>).</summary>
-        /// <param name="a">Value to shift.</param><param name="b">Shift amount.</param>
-        /// <returns>A masked array of a&lt;&lt;b in <paramref name="a"/>'s dtype.</returns>
-        /// <exception cref="MaskError"><paramref name="b"/> broadcasts the result past <paramref name="a"/>'s mask (NumPy's
+        /// <param name="a">Value to shift.</param>
+        /// <param name="n">Shift amount: a C# integer (a weak Python int), an array or a masked array. NumPy's name; until
+        ///     API-parity batch 9 it was <c>b</c>, which NumPy refuses (<c>left_shift() got an unexpected keyword argument
+        ///     'b'</c>).</param>
+        /// <returns>A masked array of a&lt;&lt;n in <paramref name="a"/>'s dtype.</returns>
+        /// <exception cref="MaskError"><paramref name="n"/> broadcasts the result past <paramref name="a"/>'s mask (NumPy's
         ///     <c>masked_array(d, mask=m)</c> size check).</exception>
         /// <exception cref="TypeError">The shift has no loop for the operands (a float, complex or text value: NumPy's
         ///     "not supported for the input types" text).</exception>
-        public NDMaskedArray left_shift(object a, object b) => Shift(a, b, left: true);
+        public NDMaskedArray left_shift(object a, object n) => Shift(a, n, left: true);
 
         /// <summary>
         ///     NumPy's <c>ma.left_shift</c> / <c>ma.right_shift</c>, statement for statement: <c>m = getmask(a)</c>; without a
@@ -4514,15 +6515,17 @@ namespace NumSharp
             return Yield(scope, m is null ? masked_array(d) : masked_array(d, mask: m));
         }
 
-        /// <summary>Bit shift right (<c>a &gt;&gt; b</c>; NumPy's <c>ma.right_shift</c>): the statements of
+        /// <summary>Bit shift right (<c>a &gt;&gt; n</c>; NumPy's <c>ma.right_shift(a, n)</c>): the statements of
         /// <see cref="left_shift"/> with <c>umath.right_shift</c> — the value operand's dtype is kept for a bare scalar
         /// shift count, the masked slots are shifted from 0, and the result inherits nothing (see <see cref="Shift"/>).</summary>
-        /// <param name="a">Value to shift.</param><param name="b">Shift amount.</param>
-        /// <returns>A masked array of a&gt;&gt;b in <paramref name="a"/>'s dtype.</returns>
-        /// <exception cref="MaskError"><paramref name="b"/> broadcasts the result past <paramref name="a"/>'s mask.</exception>
+        /// <param name="a">Value to shift.</param>
+        /// <param name="n">Shift amount: a C# integer (a weak Python int), an array or a masked array. NumPy's name; until
+        ///     API-parity batch 9 it was <c>b</c>.</param>
+        /// <returns>A masked array of a&gt;&gt;n in <paramref name="a"/>'s dtype.</returns>
+        /// <exception cref="MaskError"><paramref name="n"/> broadcasts the result past <paramref name="a"/>'s mask.</exception>
         /// <exception cref="TypeError">The shift has no loop for the operands (a float, complex or text value: NumPy's
         ///     "not supported for the input types" text).</exception>
-        public NDMaskedArray right_shift(object a, object b) => Shift(a, b, left: false);
+        public NDMaskedArray right_shift(object a, object n) => Shift(a, n, left: false);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Domained binary ufuncs — division family (unsafe divides are masked)
@@ -4532,32 +6535,116 @@ namespace NumSharp
         /// masked <c>divide</c> never surfaces an inf/NaN from division by zero.</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a/b with unsafe divides masked.</returns>
-        public NDMaskedArray divide(object a, object b) => DomainedBinary((x, y) => np.divide(x, y), SafeDivideDomain, a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the zero divisors, whose slots take 1 and get no data back (a plain out gets the dividend).
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray divide(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => DomainedBinary((x, y, o) => np.divide(x, y, o, where, dtype), SafeDivideDomain, a, b, @out);
 
         /// <summary>Alias of <see cref="divide"/> (NumPy's <c>true_divide</c>).</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a/b with unsafe divides masked.</returns>
-        public NDMaskedArray true_divide(object a, object b) => DomainedBinary((x, y) => np.true_divide(x, y), SafeDivideDomain, a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the zero divisors, whose slots take 1 and get no data back (a plain out gets the dividend).
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray true_divide(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => DomainedBinary((x, y, o) => np.true_divide(x, y, o, where, dtype), SafeDivideDomain, a, b, @out);
 
         /// <summary>Floor division; masks positions where the denominator is (near) zero.</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a//b with unsafe divides masked.</returns>
-        public NDMaskedArray floor_divide(object a, object b) => DomainedBinary((x, y) => np.floor_divide(x, y), SafeDivideDomain, a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the zero divisors, whose slots take 1 and get no data back (a plain out gets the dividend).
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray floor_divide(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => DomainedBinary((x, y, o) => np.floor_divide(x, y, o, where, dtype), SafeDivideDomain, a, b, @out);
 
         /// <summary>Remainder (floored, sign follows divisor); masks positions where the denominator is (near) zero.</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a%b with unsafe divides masked.</returns>
-        public NDMaskedArray remainder(object a, object b) => DomainedBinary((x, y) => np.remainder(x, y), SafeDivideDomain, a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the zero divisors, whose slots take 1 and get no data back (a plain out gets the dividend).
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray remainder(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => DomainedBinary((x, y, o) => np.remainder(x, y, o, where, dtype), SafeDivideDomain, a, b, @out);
 
         /// <summary>Alias of <see cref="remainder"/> (NumPy's <c>mod</c>).</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of a%b with unsafe divides masked.</returns>
-        public NDMaskedArray mod(object a, object b) => DomainedBinary((x, y) => np.remainder(x, y), SafeDivideDomain, a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the zero divisors, whose slots take 1 and get no data back (a plain out gets the dividend).
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray mod(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => DomainedBinary((x, y, o) => np.remainder(x, y, o, where, dtype), SafeDivideDomain, a, b, @out);
 
         /// <summary>C-style remainder (sign follows dividend); masks positions where the denominator is (near) zero.</summary>
         /// <param name="a">Numerator.</param><param name="b">Denominator.</param>
         /// <returns>A masked array of fmod(a, b) with unsafe divides masked.</returns>
-        public NDMaskedArray fmod(object a, object b) => DomainedBinary((x, y) => np.fmod(x, y), SafeDivideDomain, a, b);
+        /// <param name="out">NumPy's <c>out</c>: the ufunc writes its result into it, the masked slots get the input's
+        ///     data back, and the call returns a NEW masked array over that data (the out itself only for a 0-d result).
+        ///     A masked out's own mask becomes the ufunc wrap's: the zero divisors, whose slots take 1 and get no data back (a plain out gets the dividend).
+        ///     An <see cref="NDArray"/> converts (NumPy's plain out); null allocates. Added in API-parity batch 9.</param>
+        /// <param name="where">NumPy's <c>where</c>: the ufunc computes only where it is True; elsewhere an
+        ///     <paramref name="out"/> keeps its values (without one those slots are unspecified, as in NumPy). The masked
+        ///     slots get the input's data back wherever they are.</param>
+        /// <param name="dtype">NumPy's <c>dtype</c>: the dtype the ufunc loop computes in (its 'same_kind' input and output
+        ///     casts apply).</param>
+        /// <exception cref="UFuncTypeError">The ufunc refuses the operand(s), the <paramref name="dtype"/> or the out's
+        ///     dtype (a <see cref="UFuncCastingError"/> with NumPy's text, raised before anything is written).</exception>
+        /// <exception cref="ValueError">The operands, <paramref name="out"/> or <paramref name="where"/> do not broadcast
+        ///     together.</exception>
+        public NDMaskedArray fmod(object a, object b, NDMaskedArray @out = null, NDArray where = null, DType dtype = null)
+            => DomainedBinary((x, y, o) => np.fmod(x, y, o, where, dtype), SafeDivideDomain, a, b, @out);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Reductions — masked entries are excluded by filling with the op's identity, and
@@ -4711,16 +6798,132 @@ namespace NumSharp
 
         /// <summary>The "all reduced elements were masked" predicate = <c>mask.all(axis)</c> (NumPy's
         /// <c>_check_mask_axis</c>): a reduced cell is masked exactly there.</summary>
-        private static NDArray AllAlongAxis(NDArray mask, int? axis, bool keepdims)
+        /// <param name="mask">The operand's mask (not null).</param>
+        /// <param name="axis">The axis or axes reduced, or null for all.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>A bool array of the result's shape.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis (<c>duplicate value in 'axis'</c>).</exception>
+        private static NDArray AllAlongAxis(NDArray mask, NDAxis? axis, bool keepdims)
             => np.all(mask, axis, null, keepdims);
 
         /// <summary>Count of UNMASKED elements along the axis, as int64 (NumPy's <c>count</c> uses
         /// <c>(~mask).sum(axis)</c>; a null mask counts every element).</summary>
-        private static NDArray CountUnmasked(NDArray mask, Shape shape, int? axis, bool keepdims)
+        /// <param name="mask">The mask, or null for none.</param>
+        /// <param name="shape">The operand's dimensions (read when there is no mask).</param>
+        /// <param name="axis">The axis or axes reduced, or null for all.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>An int64 array of the counts.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis.</exception>
+        private static NDArray CountUnmasked(NDArray mask, Shape shape, NDAxis? axis, bool keepdims)
         {
             var unmasked = mask is null ? np.ones(shape, np.@bool) : np.logical_not(mask);
             return np.sum(unmasked, axis, keepdims: keepdims, dtype: np.int64);
         }
+
+        /// <summary>How a reduction's <c>out=</c> receives the mask, per NumPy's MaskedArray statements.</summary>
+        private enum OutMaskRule
+        {
+            /// <summary>sum / prod: <c>outmask.flat = newmask</c> on a masked out (a mask created if it had none).</summary>
+            Flat,
+
+            /// <summary>min / max: as <see cref="Flat"/> on a masked out; a plain out refuses an integer or bool dtype
+            ///     (MaskError) and takes NaN at the masked cells.</summary>
+            Extremum,
+
+            /// <summary>all / any: <c>if out.ndim or mask: out.__setmask__(mask)</c> on a masked out.</summary>
+            SetMask,
+        }
+
+        /// <summary>
+        ///     NumPy's <c>target.flat = source</c>: <paramref name="source"/>'s values in C order, force-cast into
+        ///     <paramref name="target"/>'s dtype (a flat assignment casts unsafely) and repeated cyclically over
+        ///     <paramref name="target"/>'s elements in C order; a one-element source fills, an empty one writes nothing.
+        /// </summary>
+        /// <param name="target">The array written (any layout); writeable.</param>
+        /// <param name="source">The values.</param>
+        /// <remarks>Scoped by hand: the raveled, repeated and reshaped temporaries are reclaimed; <paramref name="target"/>
+        ///     is the caller's.</remarks>
+        private static void FlatAssign(NDArray target, NDArray source)
+        {
+            if (target.size == 0 || source.size == 0)
+                return;
+            using var scope = NDScope.Open();
+            var values = np.ravel(source);
+            if (values.size != target.size)
+                values = np.resize(values, new Shape(target.size));
+            // The C-order positions of target are its logical indices: a reshape of the C-ordered values to target's
+            // dimensions lines them up whatever target's memory layout.
+            np.copyto(target, np.reshape(values, new Shape(target.Shape.dimensions, copy: false)), casting: "unsafe");
+        }
+
+        /// <summary>
+        ///     numpy.ma's <c>outmask = getmask(out); if outmask is nomask: outmask = out._mask =
+        ///     make_mask_none(out.shape); outmask.flat = newmask</c> — a flat write that ignores the out's hardness.
+        /// </summary>
+        /// <param name="out">The masked out.</param>
+        /// <param name="newmask">The result's mask, or null for nomask (False everywhere).</param>
+        /// <remarks>A mask created here is stored into the caller's array, so it is detached from every scope
+        ///     (<see cref="Own"/>).</remarks>
+        private static void WriteOutMask(NDMaskedArray @out, NDArray newmask)
+        {
+            if (@out._mask is null)
+                @out._mask = Own(np.zeros(new Shape(@out._data.Shape.dimensions, copy: false), np.@bool));
+            if (newmask is null)
+                np.copyto(@out._mask, NDArray.Scalar(false));
+            else
+                FlatAssign(@out._mask, newmask);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>MaskedArray.__setmask__(mask)</c> for a dtype without fields: nothing to do for nomask on a mask-less
+        ///     array; otherwise a mask is created if needed, a HARD mask only gains masked slots (<c>current_mask |=
+        ///     mask</c>), and a soft one takes the values (<c>current_mask[...] = mask</c> / <c>.flat = mask</c>).
+        /// </summary>
+        /// <param name="target">The masked array whose mask is set.</param>
+        /// <param name="mask">The mask values, or null for nomask (False).</param>
+        private static void SetMaskLikeNumPy(NDMaskedArray target, NDArray mask)
+        {
+            if (target._mask is null)
+            {
+                if (mask is null)
+                    return;
+                target._mask = Own(np.zeros(new Shape(target._data.Shape.dimensions, copy: false), np.@bool));
+            }
+            if (target.hardmask)
+            {
+                if (mask is not null)
+                    np.logical_or(target._mask, mask, @out: target._mask);
+            }
+            else if (mask is null)
+                np.copyto(target._mask, NDArray.Scalar(false));
+            else
+                FlatAssign(target._mask, mask);
+        }
+
+        /// <summary>The <c>__array_wrap__</c> mask of an in-place ufunc into a masked out: NumPy's
+        ///     <c>mask_or(getmaskarray(a), getmaskarray(b))</c>, shrunk (an all-False mask is nomask).</summary>
+        /// <param name="m1">The first operand's mask, or null.</param>
+        /// <param name="m2">The second operand's mask, or null.</param>
+        /// <returns>The OR, or null when no element is masked.</returns>
+        private static NDArray MaskOrShrunk(NDArray m1, NDArray m2)
+            => ShrinkMask(m1 is null ? m2 : m2 is null ? m1 : np.logical_or(m1, m2));
+
+        /// <summary>Stores <paramref name="mask"/> as <paramref name="target"/>'s mask field (NumPy's <c>result._mask =
+        ///     m</c> in <c>__array_wrap__</c>, which ignores the hardness), detached from every scope.</summary>
+        /// <param name="target">The masked out.</param>
+        /// <param name="mask">The new mask, or null for nomask.</param>
+        private static void ReplaceOutMask(NDMaskedArray target, NDArray mask)
+            => target._mask = mask is null || ReferenceEquals(mask, target._mask) ? mask : Own(mask.copy());
+
+        /// <summary>NumPy's <c>out.dtype.kind in 'biu'</c>: a bool, signed or unsigned integer out, which cannot hold NaN.</summary>
+        /// <param name="data">The out's data.</param>
+        /// <returns>True for a bool or integer dtype.</returns>
+        private static bool IsBoolOrIntegerKind(NDArray data) => data.dtype.kind is 'b' or 'i' or 'u';
+
+        /// <summary>NumPy's MaskError text when a masked result would be written into a plain integer or bool out.</summary>
+        private const string MaskedDataLostText = "Masked data information would be lost in one or more location.";
 
         /// <summary>Boxes a computed reduction result + its (possibly null) mask, collapsing a fully-masked
         /// 0-D result to the <see cref="NDMasked"/> singleton (NumPy's scalar-reduction behavior).</summary>
@@ -4732,18 +6935,27 @@ namespace NumSharp
         }
 
         /// <summary>Shared identity-fill reduction: fill masked with <paramref name="identity"/>, reduce via
-        /// <paramref name="fn"/>, and mask result cells whose whole reduced slice was masked.</summary>
+        /// <paramref name="fn"/>, and mask result cells whose whole reduced slice was masked — or, with
+        /// <paramref name="out"/>, NumPy's explicit-output branch (see <see cref="OutMaskRule"/>).</summary>
         /// <param name="a">Operand.</param>
         /// <param name="identity">The op identity written at masked slots (0 sum, 1 prod, ±inf min/max, …); null for a text
         /// min/max, which fills with the operand's own fill value (NumPy's <c>filled(None)</c>).</param>
-        /// <param name="fn">The underlying <c>np.*</c> reduction (data, axis, keepdims) → result.</param>
-        /// <param name="axis">Reduction axis, or null to reduce the flattened array.</param>
+        /// <param name="fn">The underlying <c>np.*</c> reduction (data, axis, keepdims, out data or null) → result.</param>
+        /// <param name="axis">Reduction axis or axes, or null to reduce the flattened array.</param>
         /// <param name="keepdims">Keep reduced axes as size-1 (NumPy keepdims).</param>
-        /// <returns>The masked reduction result (or <see cref="NDMasked"/> for a fully-masked scalar).</returns>
-        /// <remarks>Scoped by hand — the one scope sum/prod/min/max ride: the identity-filled copy of the data (and
+        /// <param name="out">The caller's output, or null for a new result.</param>
+        /// <param name="rule">How <paramref name="out"/> receives the mask.</param>
+        /// <returns>The masked reduction result (or <see cref="NDMasked"/> for a fully-masked scalar), or
+        /// <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> of the wrong shape.</exception>
+        /// <exception cref="MaskError">An <see cref="OutMaskRule.Extremum"/> reduction into a plain integer or bool out.</exception>
+        /// <remarks>Scoped by hand — the one scope sum/prod/min/max/all/any ride: the identity-filled copy of the data (and
         /// a materialized scalar operand) is reclaimed, as is the computed value when a fully-masked 0-D result
-        /// collapses to the <see cref="NDMasked"/> singleton; only the reduction and its mask leave.</remarks>
-        private NDMaskedArray ReduceIdentity(object a, object identity, Func<NDArray, int?, bool, NDArray> fn, int? axis, bool keepdims)
+        /// collapses to the <see cref="NDMasked"/> singleton; only the reduction and its mask leave. A mask created for
+        /// <paramref name="out"/> is detached (it lives in the caller's array).</remarks>
+        private NDMaskedArray ReduceIdentity(object a, object identity, Func<NDArray, NDAxis?, bool, NDArray, NDArray> fn, NDAxis? axis,
+            bool keepdims, NDMaskedArray @out = null, OutMaskRule rule = OutMaskRule.Flat)
         {
             using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
@@ -4751,17 +6963,55 @@ namespace NumSharp
             // min/max fill the masked slots with the array's own fill value ('N/A') before the reduction answers.
             if (identity is null && mask is not null)
                 identity = ((NDMaskedArray)a).fill_value;
-            // `self.filled(0).sum(...)` of TEXT: NumPy formats the identity into the masked slots and the reduction then
-            // refuses the dtype (add.reduce / multiply over strings). FilledForNumericOp hands the reduction the unfilled
-            // data (same dtype and shape) and defers only if the reduction would compute.
             Exception deferral = null;
-            var d = mask is null ? AsData(a) : FilledForNumericOp(a, identity, ref deferral, reduction: true);
-            var result = fn(d, axis, keepdims);
+            if (@out is null)
+            {
+                // `self.filled(0).sum(...)` of TEXT: NumPy formats the identity into the masked slots and the reduction then
+                // refuses the dtype (add.reduce / multiply over strings). FilledForNumericOp hands the reduction the unfilled
+                // data (same dtype and shape) and defers only if the reduction would compute.
+                var d = mask is null ? AsData(a) : FilledForNumericOp(a, identity, ref deferral, reduction: true);
+                var result = fn(d, axis, keepdims, null);
+                if (deferral is not null)
+                    throw deferral;
+                if (mask is null)
+                    return Yield(scope, new NDMaskedArray(result, null));
+                return Yield(scope, Finalize(result, AllAlongAxis(mask, axis, keepdims)));
+            }
+
+            // The explicit-output branch: `newmask = _check_mask_axis(self._mask, axis, **kwargs)` runs FIRST (nomask stays
+            // nomask), so an axis error is its; then `self.filled(fill).<op>(axis, ..., out=out)` writes out's DATA.
+            NDArray newmask = mask is null ? null : AllAlongAxis(mask, axis, keepdims);
+            var filled = mask is null ? AsData(a) : FilledForNumericOp(a, identity, ref deferral, reduction: true);
+            fn(filled, axis, keepdims, @out._data);
             if (deferral is not null)
                 throw deferral;
-            if (mask is null)
-                return Yield(scope, new NDMaskedArray(result, null));
-            return Yield(scope, Finalize(result, AllAlongAxis(mask, axis, keepdims)));
+            bool plain = @out.IsPlainArrayWrapper;
+            switch (rule)
+            {
+                case OutMaskRule.Flat:
+                    if (!plain)
+                        WriteOutMask(@out, newmask);
+                    break;
+                case OutMaskRule.Extremum:
+                    if (!plain)
+                        WriteOutMask(@out, newmask);
+                    else
+                    {
+                        // `if out.dtype.kind in 'biu': raise MaskError(...)` — whatever the mask holds, after the data was
+                        // written; else `np.copyto(out, np.nan, where=newmask)`.
+                        if (IsBoolOrIntegerKind(@out._data))
+                            throw new MaskError(MaskedDataLostText);
+                        if (newmask is not null)
+                            np.copyto(@out._data, NDArray.Scalar(double.NaN), where: newmask);
+                    }
+                    break;
+                case OutMaskRule.SetMask:
+                    // `if out.ndim or mask: out.__setmask__(mask)` — a 0-d out with a False (or nomask) mask is left alone.
+                    if (!plain && (@out._data.ndim > 0 || (newmask is not null && np.any(newmask))))
+                        SetMaskLikeNumPy(@out, newmask);
+                    break;
+            }
+            return @out;
         }
 
         /// <summary>
@@ -4769,7 +7019,7 @@ namespace NumSharp
         ///     <c>self.filled(1).cumprod()</c>, <c>np.dot(filled(a, 0), filled(b, 0))</c>, <c>np.inner(...)</c>). Over TEXT data
         ///     NumPy writes the number into the masked text slots as its <c>str()</c> (<c>'0'</c>) — a step that cannot fail
         ///     and keeps the dtype and the shape — and the operation then decides the call: over text it refuses by dtype or
-        ///     shape (no string loop, <c>data type must provide an itemsize</c>, a misaligned product, a rank error), or it
+        ///     shape (no string loop, <c>dot not available for this type</c>, a misaligned product, a rank error), or it
         ///     computes on the text.
         /// </summary>
         /// <param name="a">The operand: a masked array, a plain array or an array-like.</param>
@@ -4821,65 +7071,290 @@ namespace NumSharp
             return r;
         }
 
-        /// <summary>Sum over the axis; masked slots contribute 0. A cell is masked iff its whole slice was.
-        /// dtype widens like <c>np.sum</c> (NEP50: int→int64).</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null (flatten).</param>
-        /// <param name="dtype">Accumulator dtype (NumPy sum dtype=).</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked sum.</returns>
-        public NDMaskedArray sum(object a, int? axis = null, DType dtype = null, bool keepdims = false)
-            => ReduceIdentity(a, 0, (x, ax, kd) => np.sum(x, ax, keepdims: kd, dtype: dtype), axis, keepdims);
+        /// <summary>
+        ///     Sum over the unmasked elements — NumPy's <c>np.ma.sum(a, axis=None, dtype=None, out=None, keepdims)</c>
+        ///     (<c>MaskedArray.sum</c>): the data with the masked slots filled with 0, reduced; a result cell is masked exactly
+        ///     where its whole slice was. NEP 50: an integer input sums in int64.
+        /// </summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked sum (the masked singleton for a fully masked 0-d result), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <remarks>NumPy's tuple axis and <paramref name="out"/> arrived in API-parity batch 8, with NumPy's parameter order
+        ///     (<paramref name="keepdims"/> after <paramref name="out"/>). A masked out takes <c>outmask.flat = newmask</c> (a
+        ///     mask created if it had none); a plain out the data only.</remarks>
+        public NDMaskedArray sum(object a, NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false)
+            => ReduceIdentity(a, 0, (x, ax, kd, o) => np.sum(x, ax, dtype, o, kd), axis, keepdims, @out, OutMaskRule.Flat);
 
-        /// <summary>Product over the axis; masked slots contribute 1.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
-        /// <param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked product.</returns>
-        public NDMaskedArray prod(object a, int? axis = null, DType dtype = null, bool keepdims = false)
-            => ReduceIdentity(a, 1, (x, ax, kd) => np.prod(x, ax, dtype, keepdims: kd), axis, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="sum(object, NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked sum (the masked singleton for a fully masked 0-d result), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray sum(object a, int axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => sum(a, NDAxis.FromNullable(axis), dtype, @out, keepdims);
 
-        /// <summary>Alias of <see cref="prod"/> (NumPy's <c>product</c>).</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
-        /// <param name="dtype">Accumulator dtype.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked product.</returns>
-        public NDMaskedArray product(object a, int? axis = null, DType dtype = null, bool keepdims = false)
-            => prod(a, axis, dtype, keepdims);
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="sum(object, NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked sum (the masked singleton for a fully masked 0-d result), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray sum(object a, int[] axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => sum(a, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, keepdims);
 
-        /// <summary>Minimum over the axis; masked slots are filled with the dtype's largest value so they are
-        /// never selected. A cell is masked iff its whole slice was masked.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
-        /// <param name="fill_value">Override the masked fill (NumPy fill_value=); null uses <see cref="minimum_fill_value"/>.</param>
-        /// <param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked minimum.</returns>
-        public NDMaskedArray min(object a, int? axis = null, object fill_value = null, bool keepdims = false)
-            => ReduceIdentity(a, fill_value ?? minimum_fill_value(a), (x, ax, kd) => np.min(x, ax, keepdims: kd), axis, keepdims);
+        /// <summary>
+        ///     Product over the unmasked elements — NumPy's <c>np.ma.prod(a, axis=None, dtype=None, out=None, keepdims)</c>:
+        ///     the masked slots filled with 1; a result cell is masked exactly where its whole slice was.
+        /// </summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <remarks>Tuple axis, <paramref name="out"/> and NumPy's parameter order since API-parity batch 8 (see
+        ///     <see cref="sum(object, NDAxis?, DType, NDMaskedArray, bool)"/>).</remarks>
+        public NDMaskedArray prod(object a, NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false)
+            => ReduceIdentity(a, 1, (x, ax, kd, o) => np.prod(x, ax, dtype, o, kd), axis, keepdims, @out, OutMaskRule.Flat);
 
-        /// <summary>Maximum over the axis; masked slots are filled with the dtype's smallest value.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
-        /// <param name="fill_value">Override the masked fill; null uses <see cref="maximum_fill_value"/>.</param>
-        /// <param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked maximum.</returns>
-        public NDMaskedArray max(object a, int? axis = null, object fill_value = null, bool keepdims = false)
-            => ReduceIdentity(a, fill_value ?? maximum_fill_value(a), (x, ax, kd) => np.max(x, ax, keepdims: kd), axis, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="prod(object, NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray prod(object a, int axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => prod(a, NDAxis.FromNullable(axis), dtype, @out, keepdims);
 
-        /// <summary>Peak-to-peak (max − min) over the axis, over unmasked elements.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
-        /// <param name="fill_value">Masked fill passed to both min and max.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked range.</returns>
-        public NDMaskedArray ptp(object a, int? axis = null, object fill_value = null, bool keepdims = false)
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="prod(object, NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray prod(object a, int[] axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => prod(a, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, keepdims);
+
+        /// <summary>Alias of <see cref="prod(object, NDAxis?, DType, NDMaskedArray, bool)"/> (NumPy's <c>np.ma.product</c>).</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray product(object a, NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false)
+            => prod(a, axis, dtype, @out, keepdims);
+
+        /// <summary>The owner's kept <c>int</c> form of <see cref="product(object, NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray product(object a, int axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => product(a, NDAxis.FromNullable(axis), dtype, @out, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="product(object, NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked product, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray product(object a, int[] axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => product(a, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, keepdims);
+
+        /// <summary>
+        ///     Minimum over the unmasked elements — NumPy's <c>np.ma.min(obj, axis=None, out=None, fill_value=None,
+        ///     keepdims)</c>: the masked slots filled with the dtype's largest value (or <paramref name="fill_value"/>) so they
+        ///     are never selected; a result cell is masked exactly where its whole slice was.
+        /// </summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="minimum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked minimum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        /// <remarks>Tuple axis, <paramref name="out"/> and NumPy's parameter order (out before fill_value, keepdims last)
+        ///     since API-parity batch 8. A plain out refuses an integer or bool dtype (MaskError, after the data was written)
+        ///     and takes NaN at the masked cells; a masked out takes the mask. The first parameter keeps the name <c>a</c>
+        ///     (NumPy's <c>obj</c> is among batch 1's deferred numpy.ma renames).</remarks>
+        public NDMaskedArray min(object a, NDAxis? axis = null, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false)
+            => ReduceIdentity(a, fill_value ?? minimum_fill_value(a), (x, ax, kd, o) => np.min(x, ax, o, kd), axis, keepdims, @out,
+                OutMaskRule.Extremum);
+
+        /// <summary>The owner's kept <c>int</c> form of <see cref="min(object, NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="minimum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked minimum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray min(object a, int axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => min(a, NDAxis.FromNullable(axis), @out, fill_value, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="min(object, NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="minimum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked minimum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray min(object a, int[] axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => min(a, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, fill_value, keepdims);
+
+        /// <summary>
+        ///     Maximum over the unmasked elements — NumPy's <c>np.ma.max(obj, axis=None, out=None, fill_value=None,
+        ///     keepdims)</c>: the masked slots filled with the dtype's smallest value (or <paramref name="fill_value"/>).
+        /// </summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="maximum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked maximum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        /// <remarks>As <see cref="min(object, NDAxis?, NDMaskedArray, object, bool)"/> (API-parity batch 8).</remarks>
+        public NDMaskedArray max(object a, NDAxis? axis = null, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false)
+            => ReduceIdentity(a, fill_value ?? maximum_fill_value(a), (x, ax, kd, o) => np.max(x, ax, o, kd), axis, keepdims, @out,
+                OutMaskRule.Extremum);
+
+        /// <summary>The owner's kept <c>int</c> form of <see cref="max(object, NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="maximum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked maximum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray max(object a, int axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => max(a, NDAxis.FromNullable(axis), @out, fill_value, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="max(object, NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The value the masked slots take before the reduction, or null for <see cref="maximum_fill_value"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked maximum, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray max(object a, int[] axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => max(a, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, fill_value, keepdims);
+
+        /// <summary>
+        ///     Peak-to-peak (max − min) over the unmasked elements — NumPy's <c>np.ma.ptp(obj, axis=None, out=None,
+        ///     fill_value=None, keepdims=False)</c>.
+        /// </summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The fill passed to both max and min, or null for their defaults.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked range (max − min), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        /// <remarks>NumPy's statements: without out, the masked max minus the masked min; with out,
+        ///     <c>out.flat = self.max(axis, out=out, ...)</c> (max's out rules: the mask, or NaN / MaskError for a plain out),
+        ///     then <c>np.subtract(out, min_value, out=out, casting='unsafe')</c>, whose <c>__array_wrap__</c> sets a masked
+        ///     out's mask to the shrunk OR of its own and the minimum's. Tuple axis and out since API-parity batch 8.</remarks>
+        public NDMaskedArray ptp(object a, NDAxis? axis = null, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false)
         {
-            // Scoped by hand: the separate max and min reductions are only the subtraction's operands and are
-            // reclaimed once the range is computed.
+            // Scoped by hand: the separate max and min reductions are only the subtraction's operands and are reclaimed once
+            // the range is computed.
             using var scope = NDScope.Open();
-            return Yield(scope, subtract(max(a, axis, fill_value, keepdims), min(a, axis, fill_value, keepdims)));
+            if (@out is null)
+                return Yield(scope, subtract(max(a, axis, null, fill_value, keepdims), min(a, axis, null, fill_value, keepdims)));
+            max(a, axis, @out, fill_value, keepdims);
+            var minValue = min(a, axis, null, fill_value, keepdims);
+            // `np.subtract(out, min_value, out=out, casting='unsafe')`: the difference computed in the operands' type and
+            // cast unsafely into out's data (a masked minimum contributes its data).
+            np.copyto(@out._data, np.subtract(@out._data, minValue._data), casting: "unsafe");
+            if (!@out.IsPlainArrayWrapper)
+                ReplaceOutMask(@out, MaskOrShrunk(@out._mask, minValue._mask));
+            return @out;
         }
 
-        /// <summary>Number of UNMASKED elements along the axis (NumPy's <c>count</c>) — a plain int64 array,
-        /// never masked.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>An int64 <see cref="NDArray"/> (0-D for a flat count).</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the negated-mask (or all-True) indicator the count sums is reclaimed.</remarks>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand (a 0-d operand accepts 0 only).</exception>
+        /// <summary>The owner's kept <c>int</c> form of <see cref="ptp(object, NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The fill passed to both max and min, or null for their defaults.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked range (max − min), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray ptp(object a, int axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => ptp(a, NDAxis.FromNullable(axis), @out, fill_value, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="ptp(object, NDAxis?, NDMaskedArray, object, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="fill_value">The fill passed to both max and min, or null for their defaults.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked range (max − min), or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="MaskError">A plain integer or bool <paramref name="out"/> (NumPy's <c>Masked data information would be lost in one or more location.</c>).</exception>
+        /// <exception cref="TypeError">A StringDType operand (no extremum fill).</exception>
+        public NDMaskedArray ptp(object a, int[] axis, NDMaskedArray @out = null, object fill_value = null, bool keepdims = false) => ptp(a, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, fill_value, keepdims);
+
+        /// <summary>Number of UNMASKED elements along the axis or axes — NumPy's <c>np.ma.count(a, axis=None, keepdims)</c>: a
+        ///     plain int64 array, never masked.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The int64 count of the unmasked elements (a plain array, never masked).</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis.</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the negated-mask (or all-True) indicator the count sums is reclaimed. NumPy's
+        ///     statements: with a mask, <c>(~m).sum(axis, dtype=intp)</c> (a ufunc reduction: <c>duplicate value in 'axis'</c>);
+        ///     without one, the counts from the SHAPE — <c>normalize_axis_tuple</c> (<c>repeated axis</c>) and
+        ///     <c>np.full(out_dims, items)</c>; a 0-d operand accepts only the axis 0 or None (a tuple, even <c>(0,)</c>, is
+        ///     NumPy's AxisError naming the tuple). The tuple axis arrived in API-parity batch 8.</remarks>
         [NDScoped]
-        public NDArray count(object a, int? axis = null, bool keepdims = false)
+        public NDArray count(object a, NDAxis? axis = null, bool keepdims = false)
         {
             var d = AsData(a);
             var m = (a as NDMaskedArray)?._mask;
@@ -4892,24 +7367,55 @@ namespace NumSharp
             // reduction's 0-d result is NumSharp's read-only stand-in for a scalar).
             if (d.ndim == 0)
             {
-                if (axis is not null && axis.Value != 0)
-                    throw new AxisError(axis.Value, 0);
+                // `if axis not in (None, 0)`: Python compares the axis OBJECT, so a tuple is never 0 and its text prints it.
+                if (axis is { } given && (given.IsTuple || given[0] != 0))
+                    throw given.IsTuple
+                        ? new AxisError($"axis {PyTupleText(given.ToArray())} is out of bounds for array of dimension 0")
+                        : new AxisError(given[0], 0);
                 return NDArray.Scalar(1L);
             }
             if (axis is null)
                 return keepdims
                     ? np.full(new Shape(Enumerable.Repeat(1L, d.ndim).ToArray(), copy: false), d.size, np.int64)
                     : NDArray.Scalar(d.size);
-            int ax = axis.Value < 0 ? axis.Value + d.ndim : axis.Value;
-            if (ax < 0 || ax >= d.ndim)
-                throw new AxisError(axis.Value, d.ndim);
+            // `axes = normalize_axis_tuple(axis, self.ndim)`: every range first, then the repeat ("repeated axis").
+            int[] axes = axis.Value.Normalize(d.ndim);
             var dims = d.Shape.dimensions;
-            long items = dims[ax];
+            long items = 1;
+            foreach (int ax in axes)
+                items *= dims[ax];
             long[] outDims = keepdims
-                ? dims.Select((n, i) => i == ax ? 1L : n).ToArray()
-                : dims.Where((_, i) => i != ax).ToArray();
+                ? dims.Select((n, i) => axes.Contains(i) ? 1L : n).ToArray()
+                : dims.Where((_, i) => !axes.Contains(i)).ToArray();
             return np.full(new Shape(outDims, copy: false), items, np.int64);
         }
+
+        /// <summary>The owner's kept <c>int</c> form of <see cref="count(object, NDAxis?, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The int64 count of the unmasked elements (a plain array, never masked).</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis.</exception>
+        public NDArray count(object a, int axis, bool keepdims = false) => count(a, NDAxis.FromNullable(axis), keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="count(object, NDAxis?, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The int64 count of the unmasked elements (a plain array, never masked).</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis.</exception>
+        public NDArray count(object a, int[] axis, bool keepdims = false) => count(a, axis is null ? (NDAxis?)null : (NDAxis)axis, keepdims);
+
+        /// <summary>Python's <c>str</c> of a tuple of ints: <c>(0,)</c> for one element, <c>(0, 1)</c> otherwise.</summary>
+        /// <param name="values">The tuple's elements.</param>
+        /// <returns>The text.</returns>
+        private static string PyTupleText(int[] values)
+            => values.Length == 1
+                ? "(" + values[0].ToString(CultureInfo.InvariantCulture) + ",)"
+                : "(" + string.Join(", ", values.Select(v => v.ToString(CultureInfo.InvariantCulture))) + ")";
+
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  mean / var / std — NumPy's MaskedArray.mean / var / std, statement for statement
@@ -4943,29 +7449,61 @@ namespace NumSharp
         ///     Without a mask it is numpy's <c>_mean</c> run on a masked array: an inf mean (or a mean of at least
         ///     <c>count / tiny</c>) comes back masked with data 1.0.
         /// </summary>
-        /// <param name="a">Operand: a <see cref="NDMaskedArray"/> (its mask decides the path), an <see cref="NDArray"/>, a C#
-        /// array or scalar (no mask).</param>
-        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
         /// <param name="dtype">NumPy's <c>dtype=</c>, the sum's loop. When null an integer, bool or char input sums in
         /// float64 and a float16 input in float32 with the mean cast back to float16; every other input sums in its own
         /// dtype.</param>
-        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
         /// <returns>The masked mean: the <see cref="NDMasked"/> singleton for a masked 0-d result, an unmasked 0-d array for
-        /// a scalar, otherwise an array with the mask NumPy gives it (null for nomask). With a mask the dtype is float64 for
-        /// an integer, bool, char, float32 or float64 input (NumPy's <c>* 1.</c> multiplies by a STRONG float64), float16 for
-        /// float16, complex128 for complex128; without one it is numpy's <c>_mean</c> dtype (float32 stays float32).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// a scalar, otherwise an array with the mask NumPy gives it (null for nomask) — or <paramref name="out"/>. With a
+        /// mask the dtype is float64 for an integer, bool, char, float32 or float64 input (NumPy's <c>* 1.</c> multiplies by
+        /// a STRONG float64), float16 for float16, complex128 for complex128; without one it is numpy's <c>_mean</c> dtype
+        /// (float32 stays float32).</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
         /// <remarks>Scoped by hand (a masked-array return): the filled copy, the sums, counts and quotients are reclaimed;
-        /// only the result's data and mask leave.</remarks>
-        public NDMaskedArray mean(object a, int? axis = null, DType dtype = null, bool keepdims = false)
+        /// only the result's data and mask leave. With <paramref name="out"/>: <c>out.flat = result</c> (a <c>masked</c>
+        /// result writes its data, 0), and a masked out's mask becomes <c>getmask(result)</c> flat (a mask created if it had
+        /// none). Tuple axis, <paramref name="out"/> and NumPy's parameter order since API-parity batch 8.</remarks>
+        public NDMaskedArray mean(object a, NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false)
         {
             using var scope = NDScope.Open();
             var m = a as NDMaskedArray;
             // `if self._mask is nomask: result = super().mean(...)[()]` — a non-masked operand is MaskedArray(a) there.
-            if (m?._mask is null)
-                return Yield(scope, NomaskMeanLikeNumPy(AsData(a), axis, dtype, keepdims));
-            return Yield(scope, MaskedMeanLikeNumPy(m, axis, dtype, keepdims));
+            var result = m?._mask is null
+                ? NomaskMeanLikeNumPy(AsData(a), axis, dtype, keepdims)
+                : MaskedMeanLikeNumPy(m, axis, dtype, keepdims);
+            if (@out is null)
+                return Yield(scope, result);
+            FlatAssign(@out._data, result._data);
+            if (!@out.IsPlainArrayWrapper)
+                WriteOutMask(@out, result._mask);
+            return @out;
         }
+
+        /// <summary>The owner's kept <c>int</c> form of <see cref="mean(object, NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked mean, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray mean(object a, int axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => mean(a, NDAxis.FromNullable(axis), dtype, @out, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="mean(object, NDAxis?, DType, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked mean, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray mean(object a, int[] axis, DType dtype = null, NDMaskedArray @out = null, bool keepdims = false) => mean(a, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, keepdims);
 
         /// <summary>
         ///     The masked branch of NumPy's <c>MaskedArray.mean</c>:
@@ -4980,7 +7518,7 @@ namespace NumSharp
         /// <returns><see cref="NDMasked"/>, an unmasked 0-d mean, or a masked array of means.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand (ma.sum's reduction raises it; a
         /// 0-d operand takes axis 0 / -1, as ufunc.reduce does).</exception>
-        private NDMaskedArray MaskedMeanLikeNumPy(NDMaskedArray self, int? axis, DType dtype, bool keepdims)
+        private NDMaskedArray MaskedMeanLikeNumPy(NDMaskedArray self, NDAxis? axis, DType dtype, bool keepdims)
         {
             var d = self._data;
             // `if dtype is None: integer / bool -> f8; float16 -> f4 (is_float16_result)`. NumSharp's char is an integer.
@@ -4997,7 +7535,7 @@ namespace NumSharp
                 }
             }
 
-            var dsum = sum(self, axis, dtype, keepdims);
+            var dsum = sum(self, axis, dtype, null, keepdims);
             var cnt = CountUnmasked(self._mask, DimsOf(d), axis, keepdims);
             // `if cnt.shape == () and (cnt == 0): result = masked` — a 0-d count only; an array of zero counts is the
             // domain's business below.
@@ -5048,7 +7586,7 @@ namespace NumSharp
         /// domain mask (null when nothing hit).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="d"/> (<c>_count_reduce_items</c>
         /// normalizes it first).</exception>
-        private NDMaskedArray NomaskMeanLikeNumPy(NDArray d, int? axis, DType dtype, bool keepdims)
+        private NDMaskedArray NomaskMeanLikeNumPy(NDArray d, NDAxis? axis, DType dtype, bool keepdims)
         {
             long rcount = ReduceItemCount(d, axis);
             bool float16Result = false;
@@ -5091,23 +7629,26 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Operand: a <see cref="NDMaskedArray"/> (its mask decides the path), an <see cref="NDArray"/>, a C#
         /// array or scalar (no mask).</param>
-        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
         /// <param name="dtype">NumPy's <c>dtype=</c>. With a mask it only selects the MEAN's sum loop (the squared
         /// anomalies sum in their own dtype), so a complex <c>dtype</c> makes a real input's variance complex; without a
         /// mask it is <c>_var</c>'s loop of both sums.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
         /// <param name="ddof">Delta degrees of freedom: the divisor is <c>count - ddof</c> (with a mask, possibly ≤ 0) or
         /// <c>max(n - ddof, 0)</c> (without).</param>
-        /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
         /// <param name="mean">NumPy 2's <c>mean=</c>, or null to compute it. With a mask it is subtracted through
         /// <c>ma.subtract</c>, which makes a C# number a STRONG array (int64 / float64 / complex128, as numpy.ma's
         /// <c>getdata</c> does); without a mask it reaches <c>_var</c> as given, so a C# number stays WEAK there. An
         /// <see cref="NDMaskedArray"/> mean brings its mask.</param>
         /// <returns>The masked variance: <see cref="NDMasked"/> for a masked 0-d result, an unmasked 0-d scalar, or an
-        /// array with NumPy's mask (null for nomask). Its dtype is float64 for every input but float16 without a mask
-        /// (float16), and complex128 when <paramref name="dtype"/> (or <paramref name="mean"/>) is complex.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// array with NumPy's mask (null for nomask) — or <paramref name="out"/>. Its dtype is float64 for every input but
+        /// float16 without a mask (float16), and complex128 when <paramref name="dtype"/> (or <paramref name="mean"/>) is
+        /// complex.</returns>
+        /// <exception cref="AxisError">An axis is outside the operand.</exception>
         /// <exception cref="ValueError">
-        ///     Without a mask, NumPy's two failures of <c>_var</c> on a masked array:
+        ///     A repeated axis, or an <paramref name="out"/> of the wrong shape; and without a mask, NumPy's two failures of
+        ///     <c>_var</c> on a masked array:
         ///     <list type="bullet">
         ///         <item>"output array is read-only" — a 0-d operand whose mean is masked (in ma's divide domain, or a masked
         ///         <paramref name="mean"/>): the 0-d <c>subtract</c> returns the read-only <c>masked</c> singleton, which the
@@ -5117,16 +7658,99 @@ namespace NumSharp
         ///         <c>x.view(dtype=(f8, (2,)))</c> cannot view that mask.</item>
         ///     </list>
         /// </exception>
+        /// <exception cref="AttributeError">A 0-d result of a MASKED operand into a masked <paramref name="out"/>: NumPy's
+        ///     <c>out.__setmask__(dvar.mask)</c> reads the mask of a numpy scalar (<c>'numpy.float64' object has no attribute
+        ///     'mask'</c>), after the data was written.</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
         /// <remarks>Scoped by hand (a masked-array return): the mean, the anomaly, its squares, the sums and counts are
-        /// reclaimed; only the variance's data and mask leave.</remarks>
-        public NDMaskedArray var(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
+        /// reclaimed; only the variance's data and mask leave. <paramref name="out"/> follows NumPy's statements: without a
+        /// mask, numpy's <c>_var(out=out)</c> writes the quotient (a masked out's <c>__array_wrap__</c> fills ma's divide
+        /// domain with 1 and sets its mask, which <c>out.__setmask__(nomask)</c> then clears unless it is hard; a plain out
+        /// takes the plain quotient); with a mask, <c>out.flat = dvar</c> and <c>out.__setmask__(dvar.mask)</c>, a masked 0-d
+        /// result writing 0 and a full mask (NaN into a plain float out). Tuple axis, <paramref name="out"/> and NumPy's
+        /// parameter order since API-parity batch 8.</remarks>
+        public NDMaskedArray var(object a, NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, int ddof = 0,
+            bool keepdims = false, object mean = null)
         {
             using var scope = NDScope.Open();
             var m = a as NDMaskedArray;
             if (m?._mask is null)
-                return Yield(scope, NomaskVarLikeNumPy(AsData(a), axis, dtype, ddof, keepdims, mean));
-            return Yield(scope, MaskedVarLikeNumPy(m, axis, dtype, ddof, keepdims, mean));
+            {
+                if (@out is null)
+                    return Yield(scope, NomaskVarLikeNumPy(AsData(a), axis, dtype, ddof, keepdims, mean));
+                bool plain = @out.IsPlainArrayWrapper;
+                var (quotient, domain) = NomaskVarCoreLikeNumPy(AsData(a), axis, dtype, ddof, keepdims, mean, wrapFinalDivide: !plain);
+                FlatAssign(@out._data, quotient);
+                if (!plain)
+                {
+                    // The final in-place divide's __array_wrap__: out's mask becomes mask_or(out's mask, the domain), shrunk;
+                    // then `out.__setmask__(nomask)` — a soft mask is cleared to False, a hard one keeps it.
+                    ReplaceOutMask(@out, MaskOrShrunk(@out._mask, domain));
+                    SetMaskLikeNumPy(@out, null);
+                }
+                return @out;
+            }
+
+            var dvar = MaskedVarLikeNumPy(m, axis, dtype, ddof, keepdims, mean);
+            if (@out is null)
+                return Yield(scope, dvar);
+            bool plainOut = @out.IsPlainArrayWrapper;
+            if (ReferenceEquals(dvar, NDMasked))
+            {
+                // `dvar = masked`: a masked out takes 0 and a full mask; a plain integer or bool out refuses; a plain float
+                // out takes NaN.
+                if (!plainOut)
+                {
+                    FlatAssign(@out._data, NDArray.Scalar(0L));
+                    SetMaskLikeNumPy(@out, NDArray.Scalar(true));
+                }
+                else if (IsBoolOrIntegerKind(@out._data))
+                    throw new MaskError(MaskedDataLostText);
+                else
+                    FlatAssign(@out._data, NDArray.Scalar(double.NaN));
+                return @out;
+            }
+            // `out.flat = dvar; if isinstance(out, MaskedArray): out.__setmask__(dvar.mask)` — a 0-d dvar is a numpy scalar
+            // there, which has no `mask`.
+            FlatAssign(@out._data, dvar._data);
+            if (!plainOut)
+            {
+                if (dvar._data.ndim == 0)
+                    throw new AttributeError($"'numpy.{dvar._data.dtype.name}' object has no attribute 'mask'", "mask", null);
+                SetMaskLikeNumPy(@out, dvar._mask);
+            }
+            return @out;
         }
+
+        /// <summary>The owner's kept <c>int</c> form of <see cref="var(object, NDAxis?, DType, NDMaskedArray, int, bool, object)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">NumPy 2's precomputed mean, or null to compute it.</param>
+        /// <returns>The masked variance, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray var(object a, int axis, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => var(a, NDAxis.FromNullable(axis), dtype, @out, ddof, keepdims, mean);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="var(object, NDAxis?, DType, NDMaskedArray, int, bool, object)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">NumPy 2's precomputed mean, or null to compute it.</param>
+        /// <returns>The masked variance, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray var(object a, int[] axis, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => var(a, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, ddof, keepdims, mean);
 
         /// <summary>
         ///     The masked branch of NumPy's <c>MaskedArray.var</c> (see <see cref="var"/>), in its statement order:
@@ -5144,7 +7768,7 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand (the count's reduction raises it).</exception>
         /// <exception cref="IncorrectShapeException">A given <paramref name="mean"/> does not broadcast against the operand:
         /// the subtract ufunc's "operands could not be broadcast together with shapes …" text.</exception>
-        private NDMaskedArray MaskedVarLikeNumPy(NDMaskedArray self, int? axis, DType dtype, int ddof, bool keepdims, object mean)
+        private NDMaskedArray MaskedVarLikeNumPy(NDMaskedArray self, NDAxis? axis, DType dtype, int ddof, bool keepdims, object mean)
         {
             var d = self._data;
             var mask = self._mask;
@@ -5165,7 +7789,7 @@ namespace NumSharp
             else if (danom._data.ndim == 0 && danom._mask is null)
                 ssum = danom;
             else
-                ssum = sum(danom, axis, null, keepdims);
+                ssum = sum(danom, axis, null, null, keepdims);
 
             var dvar = MaDivideLikeNumPy(ssum, cnt);
             if (ReferenceEquals(dvar, NDMasked))
@@ -5196,7 +7820,32 @@ namespace NumSharp
         /// <returns>The variance: <see cref="NDMasked"/>, an unmasked 0-d scalar, or an array with the domain mask.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="d"/>.</exception>
         /// <exception cref="ValueError">The two <c>_var</c>-on-a-masked-array failures documented on <see cref="var"/>.</exception>
-        private NDMaskedArray NomaskVarLikeNumPy(NDArray d, int? axis, DType dtype, int ddof, bool keepdims, object mean)
+        private NDMaskedArray NomaskVarLikeNumPy(NDArray d, NDAxis? axis, DType dtype, int ddof, bool keepdims, object mean)
+        {
+            var (ret, rmask) = NomaskVarCoreLikeNumPy(d, axis, dtype, ddof, keepdims, mean, wrapFinalDivide: true);
+            return ItemOfMaskedResult(ret, rmask);
+        }
+
+        /// <summary>
+        ///     The statements of <see cref="NomaskVarLikeNumPy"/> up to the final quotient: numpy's <c>_var</c> run on a
+        ///     masked array, returning the quotient and the domain mask of the final in-place divide's wrap UNCOLLAPSED — what
+        ///     <c>_var(out=out)</c> leaves in a caller's out.
+        /// </summary>
+        /// <param name="d">The data (any layout).</param>
+        /// <param name="axis">The reduced axis or axes, or null.</param>
+        /// <param name="dtype"><c>_var</c>'s loop of both sums, or null.</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is <c>max(n - ddof, 0)</c>.</param>
+        /// <param name="keepdims">Keep the reduced axes.</param>
+        /// <param name="mean">The given mean (a C# number stays weak), or null to compute it.</param>
+        /// <param name="wrapFinalDivide">True when the final divide goes through a masked array's <c>__array_wrap__</c>
+        ///     (ma's divide domain filled with 1 and masked): a fresh result or a masked out. False for a plain out, which
+        ///     takes the plain quotient.</param>
+        /// <returns>The quotient (writeable, the result's shape) and the domain mask (null when nothing hit or no wrap).</returns>
+        /// <exception cref="AxisError">An axis is outside <paramref name="d"/>.</exception>
+        /// <exception cref="ValueError">The two <c>_var</c>-on-a-masked-array failures documented on
+        ///     <see cref="var(object, NDAxis?, DType, NDMaskedArray, int, bool, object)"/>.</exception>
+        private (NDArray quotient, NDArray domain) NomaskVarCoreLikeNumPy(NDArray d, NDAxis? axis, DType dtype, int ddof, bool keepdims,
+            object mean, bool wrapFinalDivide)
         {
             long rcount = ReduceItemCount(d, axis);
             var inT = d.typecode;
@@ -5267,36 +7916,86 @@ namespace NumSharp
                 x2 = np.real(x);
             }
 
-            // ret = umr_sum(x, axis, dtype, out, keepdims); true_divide(ret, max(rcount - ddof, 0), out=ret).
+            // ret = umr_sum(x, axis, dtype, out, keepdims); true_divide(ret, max(rcount - ddof, 0), out=ret) — whose
+            // __array_wrap__ (a masked array's) fills ma's divide domain with 1 and masks it; a PLAIN out has no wrap.
             var ret = WriteableReduction(np.sum(x2, axis, keepdims: keepdims, dtype: dtype));
             long rc = Math.Max(rcount - ddof, 0);
             DefaultEngine.DivideByCountLikeNumPy(ret, rc);
-            var rmask = ArrayWrapDivideDomainFill(ret, rc);
-            return ItemOfMaskedResult(ret, rmask);
+            var rmask = wrapFinalDivide ? ArrayWrapDivideDomainFill(ret, rc) : null;
+            return (ret, rmask);
         }
 
-        /// <summary>Standard deviation: NumPy's <c>MaskedArray.std</c>, <c>sqrt(self.var(axis, dtype, ddof=ddof,
+        /// <summary>Standard deviation: NumPy's <c>MaskedArray.std</c>, <c>sqrt(self.var(axis, dtype, out, ddof,
         /// keepdims))</c> through ma's domained sqrt, which masks a non-finite or negative variance (and keeps the
         /// variance's own mask). A <c>masked</c> variance is returned as is.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="dtype">The variance's
-        /// <c>dtype=</c> (see <see cref="var"/>).</param>
-        /// <param name="ddof">Delta degrees of freedom.</param><param name="keepdims">Keep reduced axes.</param>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="dtype">The variance's <c>dtype=</c> (see <see cref="var(object, NDAxis?, DType, NDMaskedArray, int, bool, object)"/>).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
         /// <param name="mean">Accepted for signature parity but IGNORED — NumPy's <c>ma.std</c> forwards only
         /// <c>keepdims</c> to <c>var</c>, never <c>mean</c> (a NumPy quirk: <c>ma.std(mean=X)</c> yields the PLAIN
         /// std, unlike <c>ma.var(mean=X)</c>). Reproduced here so a ported call behaves identically.</param>
-        /// <returns>The masked standard deviation.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
-        /// <exception cref="ValueError">The variance's own failures (see <see cref="var"/>).</exception>
-        public NDMaskedArray std(object a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false, object mean = null)
+        /// <returns>The masked standard deviation, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        /// <remarks>With <paramref name="out"/>: the variance's out rules, then <c>np.power(out, 0.5, out=out,
+        ///     casting='unsafe')</c>, whose <c>__array_wrap__</c> leaves a masked out's mask as the shrunk OR of its own (an
+        ///     all-False mask becomes nomask). Tuple axis, <paramref name="out"/> and NumPy's parameter order since API-parity
+        ///     batch 8.</remarks>
+        public NDMaskedArray std(object a, NDAxis? axis = null, DType dtype = null, NDMaskedArray @out = null, int ddof = 0,
+            bool keepdims = false, object mean = null)
         {
             // Scoped by hand: the variance is only sqrt's operand; its data is reclaimed once the root is taken
             // (its mask, which sqrt carries through, is re-parented by the Yield instead).
             using var scope = NDScope.Open();
             // NumPy's ma.std deliberately does NOT pass `mean` to var (only keepdims), so a supplied mean is a
             // no-op here too — matching ma.std(mean=X) == plain std, byte-for-byte.
-            var v = var(a, axis, dtype, ddof, keepdims);
+            var v = var(a, axis, dtype, @out, ddof, keepdims);
+            if (@out is not null)
+            {
+                // `if dvar is not masked: if out is not None: np.power(out, 0.5, out=out, casting='unsafe'); return out` — var
+                // returned out itself. The root is computed in the out's type promotion and cast unsafely back.
+                np.copyto(@out._data, np.power(@out._data, NDArray.Scalar(0.5)), casting: "unsafe");
+                if (!@out.IsPlainArrayWrapper)
+                    ReplaceOutMask(@out, MaskOrShrunk(@out._mask, null));
+                return @out;
+            }
             return Yield(scope, ReferenceEquals(v, NDMasked) ? NDMasked : sqrt(v));
         }
+
+        /// <summary>The owner's kept <c>int</c> form of <see cref="std(object, NDAxis?, DType, NDMaskedArray, int, bool, object)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">Accepted for NumPy's signature and IGNORED: NumPy's ma.std does not forward it to var.</param>
+        /// <returns>The masked standard deviation, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray std(object a, int axis, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => std(a, NDAxis.FromNullable(axis), dtype, @out, ddof, keepdims, mean);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="std(object, NDAxis?, DType, NDMaskedArray, int, bool, object)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="dtype">The accumulator / result dtype, or null for NumPy's default.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="ddof">Delta degrees of freedom: the divisor is the count minus <paramref name="ddof"/>.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <param name="mean">Accepted for NumPy's signature and IGNORED: NumPy's ma.std does not forward it to var.</param>
+        /// <returns>The masked standard deviation, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <exception cref="AttributeError">A 0-d result of a masked operand into a masked <paramref name="out"/> (NumPy's numpy scalar has no <c>mask</c>).</exception>
+        /// <exception cref="MaskError">A masked 0-d result into a plain integer or bool <paramref name="out"/>.</exception>
+        public NDMaskedArray std(object a, int[] axis, DType dtype = null, NDMaskedArray @out = null, int ddof = 0, bool keepdims = false, object mean = null) => std(a, axis is null ? (NDAxis?)null : (NDAxis)axis, dtype, @out, ddof, keepdims, mean);
 
         // ── Building blocks of mean / var: numpy.ma's statements on NumSharp arrays ──────────────────
 
@@ -5308,8 +8007,16 @@ namespace NumSharp
         /// <param name="axis">The reduced axis, or null for every element.</param>
         /// <returns>The element count of one reduced slice.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside <paramref name="d"/>.</exception>
-        private static long ReduceItemCount(NDArray d, int? axis)
-            => axis is null ? d.size : d.Shape.dimensions[DefaultEngine.NormalizeAxis(axis.Value, d.ndim)];
+        private static long ReduceItemCount(NDArray d, NDAxis? axis)
+        {
+            if (axis is null)
+                return d.size;
+            // `for ax in axis: items *= arr.shape[mu.normalize_axis_index(ax, arr.ndim)]` — each axis normalized in order.
+            long items = 1;
+            foreach (int ax in axis.Value.ToArray())
+                items *= d.Shape.dimensions[DefaultEngine.NormalizeAxis(ax, d.ndim)];
+            return items;
+        }
 
         /// <summary>
         ///     A reduction result that the next in-place divide may overwrite: a 0-d reduction comes back as NumSharp's
@@ -5868,11 +8575,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="func">The reduction, e.g. <c>(m, ax) =&gt; np.ma.sum(m, ax)</c>.</param>
         /// <param name="a">Operand.</param>
-        /// <param name="axes">The axes to apply <paramref name="func"/> over, in order.</param>
+        /// <param name="axes">NumPy's <c>axes</c>: one axis or a tuple of axes, applied in order (an int is NumPy's
+        ///     <c>(axes,)</c>; <c>()</c> applies nothing; a repeat applies <paramref name="func"/> again). Negative axes count
+        ///     from the end of the OPERAND's rank, as NumPy's <c>N + axis</c> does.</param>
         /// <returns>The successively-reduced masked array.</returns>
         /// <exception cref="ValueError"><paramref name="func"/> returns an array of the wrong rank.</exception>
+        /// <exception cref="AxisError">An axis out of range — raised by <paramref name="func"/> (a reduction's own check),
+        ///     as in NumPy, which validates nothing itself.</exception>
         /// <remarks>
-        ///     <b>Ownership</b> — the same contract as <see cref="np.apply_over_axes(Func{NDArray, int, NDArray}, NDArray, int[])"/>:
+        ///     <b>Ownership</b> — the same contract as <see cref="np.apply_over_axes(Func{NDArray, int, NDArray}, NDArray, NDAxis)"/>:
         ///     every masked array <paramref name="func"/> returns stays the CALLER's (this method never disposes
         ///     one — a callback may return an array it keeps using), so an allocating reduction's per-axis
         ///     intermediates are released only by a GC unless the caller runs the call inside an
@@ -5880,14 +8591,15 @@ namespace NumSharp
         ///     and dispose — whatever the callback allocates. The re-expanded views this method creates (and a
         ///     scalar operand it had to materialize) are its own and are released as soon as they are superseded.
         /// </remarks>
-        public NDMaskedArray apply_over_axes(Func<NDMaskedArray, int, NDMaskedArray> func, object a, int[] axes)
+        public NDMaskedArray apply_over_axes(Func<NDMaskedArray, int, NDMaskedArray> func, object a, NDAxis axes)
         {
             NDMaskedArray val = asanyarray(a);
             // Whether the running value's parts are THIS method's own (a scalar/array-like operand asanyarray had
             // to materialize, or a re-expanded view) — only those are released when superseded; an array or
             // masked-array operand wraps the caller's buffers and a callback result is the caller's.
             bool valIsOurs = !(a is NDMaskedArray || a is NDArray);
-            foreach (var ax in axes)
+            // NumPy: `if array(axes).ndim == 0: axes = (axes,)` — an int is the one-element tuple.
+            foreach (var ax in axes.ToArray())
             {
                 int axis = ax < 0 ? ax + val.ndim : ax;
                 var res = func(val, axis);
@@ -5915,7 +8627,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Advances <see cref="apply_over_axes(Func{NDMaskedArray, int, NDMaskedArray}, object, int[])"/>'s
+        ///     Advances <see cref="apply_over_axes(Func{NDMaskedArray, int, NDMaskedArray}, object, NDAxis)"/>'s
         ///     running value to <paramref name="next"/>, releasing the superseded value's parts only when they are
         ///     the method's OWN (a re-expanded view or a materialized operand) — never a callback result, never the
         ///     caller's input.
@@ -5969,11 +8681,31 @@ namespace NumSharp
             part.Dispose();
         }
 
-        /// <summary>Single-axis convenience for <see cref="apply_over_axes"/>.</summary>
-        /// <param name="func">The reduction.</param><param name="a">Operand.</param><param name="axis">The axis.</param>
+        /// <summary>
+        ///     <see cref="apply_over_axes(Func{NDMaskedArray, int, NDMaskedArray}, object, NDAxis)"/> with the axes as one
+        ///     <c>int</c>: the overload a C# integer binds (the owner's kept integer form beside every NumPy-axis member),
+        ///     forwarding to the NDAxis form, so every answer and error is that overload's.
+        /// </summary>
+        /// <param name="func">The reduction.</param>
+        /// <param name="a">Operand.</param>
+        /// <param name="axes">The axis (NumPy's keyword name; this form called it <c>axis</c> before API-parity batch 7,
+        ///     a name NumPy does not have).</param>
         /// <returns>The reduced masked array.</returns>
-        public NDMaskedArray apply_over_axes(Func<NDMaskedArray, int, NDMaskedArray> func, object a, int axis)
-            => apply_over_axes(func, a, new[] { axis });
+        /// <exception cref="ValueError"><paramref name="func"/> returns an array of the wrong rank.</exception>
+        public NDMaskedArray apply_over_axes(Func<NDMaskedArray, int, NDMaskedArray> func, object a, int axes)
+            => apply_over_axes(func, a, (NDAxis)axes);
+
+        /// <summary>
+        ///     <see cref="apply_over_axes(Func{NDMaskedArray, int, NDMaskedArray}, object, NDAxis)"/> with the axes as an
+        ///     <c>int[]</c>: the overload a C# array binds (the owner's kept integer form), forwarding to the NDAxis form.
+        /// </summary>
+        /// <param name="func">The reduction.</param>
+        /// <param name="a">Operand.</param>
+        /// <param name="axes">The axes, applied in order.</param>
+        /// <returns>The successively-reduced masked array.</returns>
+        /// <exception cref="ValueError"><paramref name="func"/> returns an array of the wrong rank.</exception>
+        public NDMaskedArray apply_over_axes(Func<NDMaskedArray, int, NDMaskedArray> func, object a, int[] axes)
+            => apply_over_axes(func, a, (NDAxis)axes);
 
         /// <summary>
         ///     Applies <paramref name="func1d"/> to each 1-D MASKED slice of <paramref name="arr"/> taken along
@@ -6109,37 +8841,75 @@ namespace NumSharp
         /// </remarks>
         private NDArray ResultDefaultFill(NDArray data) => StoreFill(default_fill_value(data.dtype), data.dtype);
 
-        /// <summary>Cumulative sum along the axis; masked slots contribute 0 to the running total but their
-        /// POSITIONS stay masked in the result (NumPy semantics).</summary>
+        /// <summary>Cumulative sum along the axis — NumPy's <c>np.ma.cumsum(a, axis=None, dtype=None, out=None)</c>
+        /// (<c>MaskedArray.cumsum</c>): masked slots contribute 0 to the running total but their POSITIONS stay masked in
+        /// the result.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flatten, C-order).</param><param name="dtype">Accumulator dtype.</param>
-        /// <returns>The masked cumulative sum.</returns>
-        public NDMaskedArray cumsum(object a, int? axis = null, DType dtype = null)
-            => Scan(a, 0, (x, ax) => np.cumsum(x, ax, dtype), axis);
+        /// <param name="out">NumPy's <c>out</c>: the scan is written into it (np.cumsum's shape and cast checks) and it is
+        ///     returned. A masked out then takes the operand's mask through NumPy's <c>__setmask__</c> — a hard out only
+        ///     gains masked slots, a soft one takes the values (flattened in C order for <paramref name="axis"/> = null), and
+        ///     an unmasked operand clears a soft out's mask and leaves a mask-less out mask-less. A plain array (converted)
+        ///     receives the data only. Added in API-parity batch 8.</param>
+        /// <returns>The masked cumulative sum, or <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/>'s shape is not the scan's (NumPy's ValueError
+        ///     <c>operands could not be broadcast together with remapped shapes ...</c>, nothing written), or a HARD masked out
+        ///     whose shape the operand's mask does not broadcast to (axis=null over a 2-D operand: NumPy's <c>|=</c> refusal,
+        ///     raised after the data was written).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">A text operand: the scan has no string loop.</exception>
+        public NDMaskedArray cumsum(object a, int? axis = null, DType dtype = null, NDMaskedArray @out = null)
+            => Scan(a, 0, (x, ax, o) => np.cumsum(x, ax, dtype, o), axis, @out);
 
-        /// <summary>Cumulative product along the axis; masked slots contribute 1 but stay masked in the result.</summary>
+        /// <summary>Cumulative product along the axis — NumPy's <c>np.ma.cumprod(a, axis=None, dtype=None, out=None)</c>
+        /// (<c>MaskedArray.cumprod</c>): masked slots contribute 1 but stay masked in the result.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flatten, C-order).</param><param name="dtype">Accumulator dtype.</param>
-        /// <returns>The masked cumulative product.</returns>
-        public NDMaskedArray cumprod(object a, int? axis = null, DType dtype = null)
-            => Scan(a, 1, (x, ax) => np.cumprod(x, ax, dtype), axis);
+        /// <param name="out">NumPy's <c>out</c>, as <see cref="cumsum(object, int?, DType, NDMaskedArray)"/>'s: the scan is
+        ///     written into it and a masked out takes the operand's mask through <c>__setmask__</c>. Added in API-parity
+        ///     batch 8.</param>
+        /// <returns>The masked cumulative product, or <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/>'s shape is not the scan's, or a hard masked out
+        ///     the operand's mask does not broadcast to (raised after the data was written).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">A text operand: the scan has no string loop.</exception>
+        public NDMaskedArray cumprod(object a, int? axis = null, DType dtype = null, NDMaskedArray @out = null)
+            => Scan(a, 1, (x, ax, o) => np.cumprod(x, ax, dtype, o), axis, @out);
 
         /// <summary>Shared scan (cumsum/cumprod): fill masked with the identity, scan, and carry a COPY of the original
-        /// per-position mask (flattened to match when axis is null), as NumPy's <c>__setmask__</c> copies it.</summary>
+        /// per-position mask (flattened to match when axis is null), as NumPy's <c>__setmask__</c> copies it — or, with
+        /// <paramref name="out"/>, NumPy's explicit-output branch.</summary>
         /// <param name="a">Operand.</param>
         /// <param name="identity">The scan identity written at masked slots (0 cumsum, 1 cumprod).</param>
-        /// <param name="fn">The underlying <c>np.*</c> scan (data, axis) → result.</param>
+        /// <param name="fn">The underlying <c>np.*</c> scan (data, axis, out data or null) → result.</param>
         /// <param name="axis">Scan axis, or null to scan the flattened array.</param>
-        /// <returns>The masked scan.</returns>
+        /// <param name="out">The caller's output, or null for a new result.</param>
+        /// <returns>The masked scan, or <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectShapeException">See <see cref="cumsum(object, int?, DType, NDMaskedArray)"/>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">A text operand.</exception>
         /// <remarks>Scoped by hand — the one scope cumsum/cumprod ride: the identity-filled copy (and a
         /// materialized scalar operand) is reclaimed; the scan and its (possibly raveled) mask leave. NumPy's
         /// <c>self.filled(0).cumsum(...)</c> over TEXT formats the identity and then refuses the dtype
-        /// (<c>add.accumulate</c> / multiply over strings): the scan runs over the unfilled text to raise that refusal.</remarks>
-        private NDMaskedArray Scan(object a, object identity, Func<NDArray, int?, NDArray> fn, int? axis)
+        /// (<c>add.accumulate</c> / multiply over strings): the scan runs over the unfilled text to raise that refusal.
+        /// A mask created for <paramref name="out"/> is detached (it lives in the caller's array).</remarks>
+        private NDMaskedArray Scan(object a, object identity, Func<NDArray, int?, NDArray, NDArray> fn, int? axis, NDMaskedArray @out = null)
         {
             using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
             Exception deferral = null;
             var d = FilledForNumericOp(a, identity, ref deferral);
-            var result = fn(d, axis);
+            if (@out is not null)
+            {
+                // `result = self.filled(0).cumsum(axis=axis, dtype=dtype, out=out)` writes out's DATA (np.cumsum's own checks;
+                // accumulate calls no __array_wrap__ hook that touches the mask), then `if isinstance(out, MaskedArray):
+                // out.__setmask__(self.mask); return out` — `self.mask` of an unmasked operand is nomask itself.
+                fn(d, axis, @out._data);
+                if (deferral is not null)
+                    throw deferral;
+                if (!@out.IsPlainArrayWrapper)
+                    SetMaskLikeNumPy(@out, mask);
+                return @out;
+            }
+            var result = fn(d, axis, null);
             if (deferral is not null)
                 throw deferral;
             if (mask is null)
@@ -6156,101 +8926,292 @@ namespace NumSharp
         /// (NumPy's <c>argmin</c>) — a plain int64 array, never masked.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flattened index).</param>
         /// <param name="fill_value">Override the masked fill; null uses <see cref="minimum_fill_value"/>.</param>
-        /// <returns>An int64 <see cref="NDArray"/> of indices.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the fill-substituted copy the index is computed over is reclaimed.</remarks>
+        /// <param name="out">NumPy's <c>out</c>: the indices are written into it and it is returned (an int64-compatible
+        ///     array of the result's shape; np.argmin's checks).</param>
+        /// <param name="keepdims">NumPy's <c>keepdims</c>: keep the reduced axis (axes, for null) with length 1.</param>
+        /// <returns>An int64 <see cref="NDArray"/> of indices, or <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype cannot hold the indices under the 'safe' rule
+        ///     (<c>Cannot cast array data from dtype('float64') to dtype('int64') according to the rule 'safe'</c>).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has the wrong shape (<c>output array does not match result
+        ///     of np.argmin.</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the fill-substituted copy the index is computed over is reclaimed; a given
+        ///     <paramref name="out"/> is the caller's and is returned, never released. NumPy's <c>MaskedArray.argmin</c> is
+        ///     <c>self.filled(fill_value).view(ndarray).argmin(axis, out=out, keepdims=keepdims)</c>;
+        ///     <paramref name="out"/> and <paramref name="keepdims"/> arrived in API-parity batch 7.</remarks>
         [NDScoped]
-        public NDArray argmin(object a, int? axis = null, object fill_value = null)
+        public NDArray argmin(object a, int? axis = null, object fill_value = null, NDArray @out = null, bool keepdims = false)
         {
             var d = ArgFilled(a, fill_value ?? minimum_fill_value(a));
-            return axis is null ? NDArray.Scalar(np.argmin(d)) : np.argmin(d, axis.Value);
+            // The common call keeps its long-standing route (a 0-d index for axis None); out= or keepdims= take np.argmin's
+            // whole statement, which checks and fills out and keeps the axes.
+            if (@out is null && !keepdims)
+                return axis is null ? NDArray.Scalar(np.argmin(d)) : np.argmin(d, axis.Value);
+            return np.argmin(d, NDAxis.FromNullable(axis), @out, keepdims);
         }
 
         /// <summary>Indices of the maximum along the axis, treating masked slots as the dtype's smallest value.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null (flattened index).</param>
         /// <param name="fill_value">Override the masked fill; null uses <see cref="maximum_fill_value"/>.</param>
-        /// <returns>An int64 <see cref="NDArray"/> of indices.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the fill-substituted copy the index is computed over is reclaimed.</remarks>
+        /// <param name="out">NumPy's <c>out</c>: the indices are written into it and it is returned (an int64-compatible
+        ///     array of the result's shape; np.argmax's checks).</param>
+        /// <param name="keepdims">NumPy's <c>keepdims</c>: keep the reduced axis (axes, for null) with length 1.</param>
+        /// <returns>An int64 <see cref="NDArray"/> of indices, or <paramref name="out"/>.</returns>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype cannot hold the indices under the 'safe' rule.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has the wrong shape (<c>output array does not match result
+        ///     of np.argmax.</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <remarks>Scoped (<c>[NDScoped]</c>): the fill-substituted copy the index is computed over is reclaimed; a given
+        ///     <paramref name="out"/> is the caller's and is returned, never released. NumPy's <c>MaskedArray.argmax</c> is
+        ///     <c>self.filled(fill_value).view(ndarray).argmax(axis, out=out, keepdims=keepdims)</c>;
+        ///     <paramref name="out"/> and <paramref name="keepdims"/> arrived in API-parity batch 7.</remarks>
         [NDScoped]
-        public NDArray argmax(object a, int? axis = null, object fill_value = null)
+        public NDArray argmax(object a, int? axis = null, object fill_value = null, NDArray @out = null, bool keepdims = false)
         {
             var d = ArgFilled(a, fill_value ?? maximum_fill_value(a));
-            return axis is null ? NDArray.Scalar(np.argmax(d)) : np.argmax(d, axis.Value);
+            // As argmin: the common call keeps its route; out= or keepdims= take np.argmax's whole statement.
+            if (@out is null && !keepdims)
+                return axis is null ? NDArray.Scalar(np.argmax(d)) : np.argmax(d, axis.Value);
+            return np.argmax(d, NDAxis.FromNullable(axis), @out, keepdims);
         }
 
         /// <summary>Data with masked slots filled for an arg-reduction (null mask ⇒ raw data).</summary>
         private static NDArray ArgFilled(object a, object fill)
             => (a as NDMaskedArray)?._mask is null ? AsData(a) : ((NDMaskedArray)a).filled(fill);
 
-        /// <summary>Logical-AND reduction: masked slots are treated as True (excluded); a cell whose whole
-        /// slice was masked is itself masked.</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked all-reduction (bool data).</returns>
-        public NDMaskedArray all(object a, int? axis = null, bool keepdims = false)
-            => ReduceIdentity(a, true, (x, ax, kd) => ax is null ? NDArray.Scalar(np.all(x)) : np.all(x, ax, null, kd), axis, keepdims);
+        /// <summary>Logical-AND reduction — NumPy's <c>np.ma.all(a, axis=None, out=None, keepdims)</c>: masked slots are
+        /// treated as True (excluded); a cell whose whole slice was masked is itself masked.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-AND, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <remarks>A masked out takes NumPy's <c>if out.ndim or mask: out.__setmask__(mask)</c>. The plain-scalar shortcut
+        ///     serves only the default call (no axis, no keepdims, no out): <c>keepdims</c> with no axis keeps the reduced
+        ///     axes as NumPy does. Tuple axis and out since API-parity batch 8.</remarks>
+        public NDMaskedArray all(object a, NDAxis? axis = null, NDMaskedArray @out = null, bool keepdims = false)
+            => ReduceIdentity(a, true, (x, ax, kd, o) => ax is null && !kd && o is null ? NDArray.Scalar(np.all(x)) : np.all(x, ax, o, kd),
+                axis, keepdims, @out, OutMaskRule.SetMask);
 
-        /// <summary>Logical-OR reduction: masked slots are treated as False (excluded).</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis or null.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>The masked any-reduction (bool data).</returns>
-        public NDMaskedArray any(object a, int? axis = null, bool keepdims = false)
-            => ReduceIdentity(a, false, (x, ax, kd) => ax is null ? NDArray.Scalar(np.any(x)) : np.any(x, ax, null, kd), axis, keepdims);
+        /// <summary>The owner's kept <c>int</c> form of <see cref="all(object, NDAxis?, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-AND, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray all(object a, int axis, NDMaskedArray @out = null, bool keepdims = false) => all(a, NDAxis.FromNullable(axis), @out, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="all(object, NDAxis?, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-AND, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray all(object a, int[] axis, NDMaskedArray @out = null, bool keepdims = false) => all(a, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, keepdims);
+
+        /// <summary>Logical-OR reduction — NumPy's <c>np.ma.any(a, axis=None, out=None, keepdims)</c>: masked slots are
+        /// treated as False (excluded).</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axis or axes to reduce — an int, a tuple or an <c>int[]</c> (negative counts from the end) — or null for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-OR, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        /// <remarks>As <see cref="all(object, NDAxis?, NDMaskedArray, bool)"/> (API-parity batch 8).</remarks>
+        public NDMaskedArray any(object a, NDAxis? axis = null, NDMaskedArray @out = null, bool keepdims = false)
+            => ReduceIdentity(a, false, (x, ax, kd, o) => ax is null && !kd && o is null ? NDArray.Scalar(np.any(x)) : np.any(x, ax, o, kd),
+                axis, keepdims, @out, OutMaskRule.SetMask);
+
+        /// <summary>The owner's kept <c>int</c> form of <see cref="any(object, NDAxis?, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The one axis to reduce (negative counts from the end).</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-OR, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray any(object a, int axis, NDMaskedArray @out = null, bool keepdims = false) => any(a, NDAxis.FromNullable(axis), @out, keepdims);
+
+        /// <summary>The owner's kept <c>int[]</c> form of <see cref="any(object, NDAxis?, NDMaskedArray, bool)"/>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The axes to reduce, or null (NumPy's None) for every axis.</param>
+        /// <param name="out">Where to write the result, or null for a new one: a masked array receives the data and the mask, a plain <see cref="NDArray"/> converts and receives the data only (NumPy reads <c>isinstance(out, MaskedArray)</c>).</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The masked logical-OR, or <paramref name="out"/>.</returns>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ValueError">A repeated axis, or an <paramref name="out"/> whose shape does not match the result.</exception>
+        public NDMaskedArray any(object a, int[] axis, NDMaskedArray @out = null, bool keepdims = false) => any(a, axis is null ? (NDAxis?)null : (NDAxis)axis, @out, keepdims);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Creation — fresh, UNMASKED arrays (NumPy's `_convert2ma`: a masked wrapper over
         //  the corresponding np.* creation routine, with no element masked).
         // ─────────────────────────────────────────────────────────────────────────────
 
-        /// <summary>Masked array of zeros (no element masked). float64 by default.</summary>
-        /// <param name="shape">Result shape.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <summary>Masked array of zeros (no element masked) — NumPy's <c>np.ma.zeros(shape, dtype=None, order='C', *,
+        ///     device=None, fill_value=None, hardmask=False)</c>, the <c>_convert2ma</c> wrapper of <c>np.zeros</c>. float64 by
+        ///     default.</summary>
+        /// <param name="shape">Result shape.</param>
+        /// <param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <param name="order">The memory layout, <c>'C'</c> (the default) or <c>'F'</c> — np.zeros' own check refuses the
+        ///     rest.</param>
+        /// <param name="device">NumPy's Array-API device: null or <c>"cpu"</c>.</param>
+        /// <param name="fill_value">The result's fill value, set through <see cref="NDMaskedArray.fill_value"/> (converted
+        ///     to the dtype, so 7.9 into int64 stores 7); null leaves the dtype's default, exactly as NumPy's omitted (or
+        ///     None) argument does.</param>
+        /// <param name="hardmask">True gives the result a HARD mask (<see cref="NDMaskedArray.hardmask"/>).</param>
         /// <returns>An unmasked masked array of zeros.</returns>
-        public NDMaskedArray zeros(Shape shape, DType dtype = null) => new NDMaskedArray(np.zeros(shape, dtype ?? np.float64), null);
+        /// <exception cref="ValueError">An order letter NumPy does not have (checked first), or a device other than
+        ///     <c>"cpu"</c> (<c>Device not understood. Only "cpu" is allowed, but received: gpu</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> cannot be stored in the dtype (<c>Cannot set fill value
+        ///     of string with array of dtype float64</c>, <c>Cannot convert fill_value 300 to dtype int8</c>).</exception>
+        /// <remarks>The <paramref name="order"/>, <paramref name="device"/>, <paramref name="fill_value"/> and
+        ///     <paramref name="hardmask"/> keywords arrived in API-parity batch 7; <c>like=</c> is the parity plan's
+        ///     exclusion.</remarks>
+        public NDMaskedArray zeros(Shape shape, DType dtype = null, char order = 'C', string device = null, object fill_value = null,
+            bool hardmask = false)
+        {
+            // np.zeros parses `order` (its converter) before `device`, and both before allocating.
+            OrderResolver.Convert(order);
+            DeviceArguments.ValidateDevice(device);
+            return CreationKeywords(new NDMaskedArray(np.zeros(shape, dtype ?? np.float64, order), null), fill_value, hardmask);
+        }
 
-        /// <summary>Masked array of ones (no element masked).</summary>
-        /// <param name="shape">Result shape.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <summary>Masked array of ones (no element masked) — NumPy's <c>np.ma.ones(shape, dtype=None, order='C', *,
+        ///     device=None, fill_value=None, hardmask=False)</c>.</summary>
+        /// <param name="shape">Result shape.</param>
+        /// <param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <param name="order">The memory layout, <c>'C'</c> (the default) or <c>'F'</c>.</param>
+        /// <param name="device">NumPy's Array-API device: null or <c>"cpu"</c>.</param>
+        /// <param name="fill_value">The result's fill value (converted to the dtype); null leaves the default.</param>
+        /// <param name="hardmask">True gives the result a hard mask.</param>
         /// <returns>An unmasked masked array of ones.</returns>
-        public NDMaskedArray ones(Shape shape, DType dtype = null) => new NDMaskedArray(np.ones(shape, dtype ?? np.float64), null);
+        /// <exception cref="ValueError">A bad order letter (first), or a device other than <c>"cpu"</c>.</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> cannot be stored in the dtype.</exception>
+        /// <remarks>Keywords as in <see cref="zeros"/> (API-parity batch 7).</remarks>
+        public NDMaskedArray ones(Shape shape, DType dtype = null, char order = 'C', string device = null, object fill_value = null,
+            bool hardmask = false)
+        {
+            OrderResolver.Convert(order);
+            DeviceArguments.ValidateDevice(device);
+            return CreationKeywords(new NDMaskedArray(np.ones(shape, dtype ?? np.float64, order), null), fill_value, hardmask);
+        }
 
-        /// <summary>Masked array of uninitialized values (no element masked).</summary>
-        /// <param name="shape">Result shape.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <summary>Masked array of uninitialized values (no element masked) — NumPy's <c>np.ma.empty(shape, dtype=None,
+        ///     order='C', *, device=None, fill_value=None, hardmask=False)</c>.</summary>
+        /// <param name="shape">Result shape.</param>
+        /// <param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <param name="order">The memory layout, <c>'C'</c> (the default) or <c>'F'</c>.</param>
+        /// <param name="device">NumPy's Array-API device: null or <c>"cpu"</c>.</param>
+        /// <param name="fill_value">The result's fill value (converted to the dtype); null leaves the default.</param>
+        /// <param name="hardmask">True gives the result a hard mask.</param>
         /// <returns>An unmasked masked array of arbitrary contents.</returns>
-        public NDMaskedArray empty(Shape shape, DType dtype = null) => new NDMaskedArray(np.empty(shape, dtype ?? np.float64), null);
+        /// <exception cref="ValueError">A bad order letter (first), or a device other than <c>"cpu"</c>.</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> cannot be stored in the dtype.</exception>
+        /// <remarks>Keywords as in <see cref="zeros"/> (API-parity batch 7).</remarks>
+        public NDMaskedArray empty(Shape shape, DType dtype = null, char order = 'C', string device = null, object fill_value = null,
+            bool hardmask = false)
+        {
+            OrderResolver.Convert(order);
+            DeviceArguments.ValidateDevice(device);
+            return CreationKeywords(new NDMaskedArray(np.empty(shape, dtype ?? np.float64, order), null), fill_value, hardmask);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_convert2ma</c> tail for the creation functions that take numpy.ma's own keywords: <c>if
+        ///     "fill_value" in common_params: result.fill_value = ...</c>, <c>if "hardmask" in common_params:
+        ///     result._hardmask = bool(...)</c>. A null fill and a false hardmask are what an omitted (or None / False)
+        ///     argument gives, so they change nothing.
+        /// </summary>
+        /// <param name="result">The freshly created masked array (its data is this call's own).</param>
+        /// <param name="fill_value">The fill to set, or null.</param>
+        /// <param name="hardmask">Whether to harden the mask.</param>
+        /// <returns><paramref name="result"/>.</returns>
+        /// <exception cref="TypeError">The fill setter's refusal; the fresh data is released before it propagates.</exception>
+        private static NDMaskedArray CreationKeywords(NDMaskedArray result, object fill_value, bool hardmask)
+        {
+            if (fill_value is not null)
+            {
+                try
+                {
+                    // The setter converts to the dtype (NumPy's _check_fill_value) and raises numpy.ma's TypeError.
+                    result.fill_value = fill_value;
+                }
+                catch
+                {
+                    // The result never reached the caller: its data (and mask) are this call's to release.
+                    ReleaseParts(result);
+                    throw;
+                }
+            }
+            if (hardmask)
+                result.harden_mask();
+            return result;
+        }
 
         /// <summary>Masked zeros shaped like <paramref name="a"/> (NumPy's <c>ma.zeros_like</c>, <c>np.zeros_like</c> of the
         /// masked array): a masked prototype lends a COPY of its mask (its masked slots stay masked over the zeros), its fill
         /// value (converted to the result dtype) and its hard-mask flag; a plain prototype gives an unmasked result.</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype (null ⇒ prototype's).</param>
+        /// <param name="order">NumPy's layout: <c>'K'</c> (the default) keeps the prototype's, <c>'A'</c> / <c>'C'</c> /
+        ///     <c>'F'</c> as in np.zeros_like; the copied mask follows the RESULT's layout.</param>
+        /// <param name="shape">Override shape (null ⇒ the prototype's). A masked prototype's mask is reshaped (C order) to
+        ///     it when the sizes match and dropped when they do not, as NumPy's <c>__array_finalize__</c> does
+        ///     (<c>self._mask.shape = self.shape</c>, a ValueError read as "no mask").</param>
+        /// <param name="device">NumPy's Array-API device: null or <c>"cpu"</c>.</param>
         /// <returns>A masked array of zeros.</returns>
+        /// <exception cref="ValueError">A bad order letter or device (np.zeros_like's checks).</exception>
         /// <exception cref="TypeError">The prototype's fill cannot be converted to the result dtype: a text class that
         ///     cannot encode / decode it, or a text fill a numeric <paramref name="dtype"/> cannot parse (numpy.ma's
         ///     <c>Cannot convert fill_value … to dtype …</c>).</exception>
-        public NDMaskedArray zeros_like(object a, DType dtype = null)
+        /// <remarks>NumPy's <c>zeros_like(a, dtype=None, order='K', subok=True, shape=None, *, device=None)</c> — <c>subok</c>
+        ///     is the parity plan's exclusion (as for np.zeros_like); <paramref name="order"/>, <paramref name="shape"/> and
+        ///     <paramref name="device"/> arrived in API-parity batch 7.</remarks>
+        public NDMaskedArray zeros_like(object a, DType dtype = null, char order = 'K', Shape? shape = null, string device = null)
         {
             // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
             using var scope = NDScope.Open();
-            return Yield(scope, LikePrototype(a, np.zeros_like(AsData(a), dtype)));
+            return Yield(scope, LikePrototype(a, np.zeros_like(AsData(a), dtype, order, shape, device)));
         }
 
         /// <summary>Masked ones shaped like <paramref name="a"/> (NumPy's <c>ma.ones_like</c>): the prototype's mask (a
         /// copy), fill value and hardness ride along, as in <see cref="zeros_like"/>.</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype.</param>
+        /// <param name="order">NumPy's layout (<c>'K'</c> keeps the prototype's); the copied mask follows the result.</param>
+        /// <param name="shape">Override shape: the mask is reshaped when the sizes match, dropped when they do not.</param>
+        /// <param name="device">NumPy's Array-API device: null or <c>"cpu"</c>.</param>
         /// <returns>A masked array of ones.</returns>
+        /// <exception cref="ValueError">A bad order letter or device.</exception>
         /// <exception cref="TypeError">See <see cref="zeros_like"/>.</exception>
-        public NDMaskedArray ones_like(object a, DType dtype = null)
+        /// <remarks>Keywords as in <see cref="zeros_like"/> (API-parity batch 7).</remarks>
+        public NDMaskedArray ones_like(object a, DType dtype = null, char order = 'K', Shape? shape = null, string device = null)
         {
             // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
             using var scope = NDScope.Open();
-            return Yield(scope, LikePrototype(a, np.ones_like(AsData(a), dtype)));
+            return Yield(scope, LikePrototype(a, np.ones_like(AsData(a), dtype, order, shape, device)));
         }
 
         /// <summary>Masked uninitialized array shaped like <paramref name="a"/> (NumPy's <c>ma.empty_like</c>): the
         /// prototype's mask (a copy), fill value and hardness ride along, as in <see cref="zeros_like"/>.</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype.</param>
+        /// <param name="order">NumPy's layout (<c>'K'</c> keeps the prototype's); the copied mask follows the result.</param>
+        /// <param name="shape">Override shape: the mask is reshaped when the sizes match, dropped when they do not.</param>
+        /// <param name="device">NumPy's Array-API device: null or <c>"cpu"</c>.</param>
         /// <returns>A masked array of arbitrary contents (a <c>U</c> result is zero-filled, as NumPy's is).</returns>
+        /// <exception cref="ValueError">A bad order letter or device.</exception>
         /// <exception cref="TypeError">See <see cref="zeros_like"/>.</exception>
-        public NDMaskedArray empty_like(object a, DType dtype = null)
+        /// <remarks>Keywords as in <see cref="zeros_like"/> (API-parity batch 7).</remarks>
+        public NDMaskedArray empty_like(object a, DType dtype = null, char order = 'K', Shape? shape = null, string device = null)
         {
             // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
             using var scope = NDScope.Open();
-            return Yield(scope, LikePrototype(a, np.empty_like(AsData(a), dtype)));
+            return Yield(scope, LikePrototype(a, np.empty_like(AsData(a), dtype, order, shape, device)));
         }
 
         /// <summary>
@@ -6263,49 +9224,185 @@ namespace NumSharp
         /// <param name="data">The result's data (already filled).</param>
         /// <returns>The masked result.</returns>
         /// <exception cref="TypeError">The prototype's text fill cannot be converted into the result's text dtype.</exception>
+        /// <remarks>The mask copy follows NumPy's <c>__array_finalize__</c> (API-parity batch 7): <c>_mask.astype(...,
+        ///     order)</c> with <c>order</c> the RESULT's layout (C when it is C-contiguous, else F when F-contiguous, else K),
+        ///     then <c>self._mask.shape = self.shape</c> — a result of another shape (the <c>shape=</c> keyword) reshapes the
+        ///     mask in C order when the sizes match and drops it (nomask) when they do not.</remarks>
         private static NDMaskedArray LikePrototype(object a, NDArray data)
         {
             if (a is not NDMaskedArray source)
                 return new NDMaskedArray(data, null);
-            return new NDMaskedArray(data, source._mask?.copy()).FinalizeFrom(source);
+            NDArray mask = null;
+            if (source._mask is not null)
+            {
+                char maskOrder = data.Shape.IsContiguous ? 'C' : data.Shape.IsFContiguous ? 'F' : 'K';
+                mask = source._mask.copy(maskOrder);
+                if (!SameDims(mask.Shape, data.Shape))
+                {
+                    // `self._mask.shape = self.shape`: a size mismatch is NumPy's ValueError, caught as "no mask".
+                    if (mask.size == data.size)
+                    {
+                        var reshaped = mask.reshape(new Shape((long[])data.Shape.dimensions.Clone()));
+                        mask.Dispose();
+                        mask = reshaped;
+                    }
+                    else
+                    {
+                        mask.Dispose();
+                        mask = null;
+                    }
+                }
+            }
+            return new NDMaskedArray(data, mask).FinalizeFrom(source);
         }
 
-        /// <summary>Masked evenly-spaced values in [0, stop) (no element masked).</summary>
-        /// <param name="stop">Exclusive upper bound.</param><returns>An unmasked masked range.</returns>
-        public NDMaskedArray arange(int stop) => new NDMaskedArray(np.arange(stop), null);
+        /// <summary>Whether two shapes have the same dimensions (rank and extents) — the test of
+        ///     <see cref="LikePrototype"/>'s reshape step.</summary>
+        /// <param name="a">One shape.</param>
+        /// <param name="b">The other.</param>
+        /// <returns>True when the dimensions are equal.</returns>
+        private static bool SameDims(Shape a, Shape b)
+        {
+            var da = a.dimensions ?? System.Array.Empty<long>();
+            var db = b.dimensions ?? System.Array.Empty<long>();
+            if (da.Length != db.Length)
+                return false;
+            for (int i = 0; i < da.Length; i++)
+                if (da[i] != db[i])
+                    return false;
+            return true;
+        }
 
-        /// <summary>Masked evenly-spaced values in [start, stop) stepping by <paramref name="step"/>.</summary>
-        /// <param name="start">Inclusive start.</param><param name="stop">Exclusive stop.</param><param name="step">Step.</param>
-        /// <returns>An unmasked masked range.</returns>
-        public NDMaskedArray arange(int start, int stop, int step = 1) => new NDMaskedArray(np.arange(start, stop, step), null);
+        /// <summary>Masked evenly-spaced values in [0, stop) (no element masked) — NumPy's <c>ma.arange(stop, *, dtype=None,
+        ///     device=None, fill_value=None, hardmask=False)</c>.</summary>
+        /// <param name="stop">Exclusive upper bound (a Python int: the default dtype is int64).</param>
+        /// <param name="dtype">The result's dtype, or null for np.arange's own choice (int64 for these integer bounds).</param>
+        /// <param name="device">NumPy's Array-API device: only <c>"cpu"</c> or null.</param>
+        /// <param name="fill_value">The masked array's fill value, set through <see cref="NDMaskedArray.fill_value"/> (so a
+        ///     value the dtype cannot hold is NumPy's TypeError); null keeps the dtype's default.</param>
+        /// <param name="hardmask">True gives the result a hard mask (NumPy's <c>result._hardmask = bool(hardmask)</c>).</param>
+        /// <returns>A new masked array without a mask.</returns>
+        /// <exception cref="ValueError"><paramref name="device"/> is not <c>"cpu"</c> (<c>Device not understood. Only "cpu" is
+        ///     allowed, but received: gpu</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> does not fit the dtype (<c>Cannot set fill value of
+        ///     string with array of dtype int64</c>), or <paramref name="dtype"/> is a text dtype.</exception>
+        /// <remarks>See <see cref="arange(double, double, double, DType, string, object, bool)"/> for NumPy's statements. The
+        ///     keywords arrived in API-parity batch 9.</remarks>
+        public NDMaskedArray arange(int stop, DType dtype = null, string device = null, object fill_value = null, bool hardmask = false)
+            => ArangeConverted(dtype is null ? Device(device, () => np.arange(stop)) : np.arange(0, stop, 1, dtype, device), fill_value, hardmask);
 
-        /// <summary>Masked evenly-spaced floating values in [start, stop) stepping by <paramref name="step"/>.</summary>
-        /// <param name="start">Inclusive start.</param><param name="stop">Exclusive stop.</param><param name="step">Step.</param>
-        /// <returns>An unmasked masked range.</returns>
-        public NDMaskedArray arange(double start, double stop, double step = 1) => new NDMaskedArray(np.arange(start, stop, step), null);
+        /// <summary>Masked evenly-spaced values in [start, stop) stepping by <paramref name="step"/> — NumPy's
+        ///     <c>ma.arange(start, stop, step, *, dtype=None, device=None, fill_value=None, hardmask=False)</c>.</summary>
+        /// <param name="start">Inclusive start.</param>
+        /// <param name="stop">Exclusive stop.</param>
+        /// <param name="step">Step.</param>
+        /// <param name="dtype">The result's dtype, or null for np.arange's own choice (int64 for these integer bounds).</param>
+        /// <param name="device">NumPy's Array-API device: only <c>"cpu"</c> or null.</param>
+        /// <param name="fill_value">The masked array's fill value (see <see cref="arange(int, DType, string, object, bool)"/>);
+        ///     null keeps the dtype's default.</param>
+        /// <param name="hardmask">True gives the result a hard mask.</param>
+        /// <returns>A new masked array without a mask.</returns>
+        /// <exception cref="ValueError"><paramref name="device"/> is not <c>"cpu"</c>, or <paramref name="step"/> is 0.</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> does not fit the dtype, or <paramref name="dtype"/> is a
+        ///     text dtype.</exception>
+        /// <remarks>See <see cref="arange(double, double, double, DType, string, object, bool)"/> for NumPy's statements.
+        ///     <c>np.ma.arange(0, 5)</c> binds here (an int does not convert to <see cref="DType"/>), not to the stop form.</remarks>
+        public NDMaskedArray arange(int start, int stop, int step = 1, DType dtype = null, string device = null, object fill_value = null,
+                                    bool hardmask = false)
+            => ArangeConverted(dtype is null ? Device(device, () => np.arange(start, stop, step)) : np.arange(start, stop, step, dtype, device),
+                               fill_value, hardmask);
 
-        /// <summary>Masked identity matrix (no element masked).</summary>
-        /// <param name="n">Order.</param><param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <summary>Masked evenly-spaced floating values in [start, stop) stepping by <paramref name="step"/> — NumPy's
+        ///     <c>ma.arange(start, stop, step, *, dtype=None, device=None, fill_value=None, hardmask=False)</c>.</summary>
+        /// <param name="start">Inclusive start.</param>
+        /// <param name="stop">Exclusive stop.</param>
+        /// <param name="step">Step.</param>
+        /// <param name="dtype">The result's dtype, or null for np.arange's own choice (float64 for these bounds).</param>
+        /// <param name="device">NumPy's Array-API device: only <c>"cpu"</c> or null.</param>
+        /// <param name="fill_value">The masked array's fill value (see <see cref="arange(int, DType, string, object, bool)"/>);
+        ///     null keeps the dtype's default.</param>
+        /// <param name="hardmask">True gives the result a hard mask.</param>
+        /// <returns>A new masked array without a mask.</returns>
+        /// <exception cref="ValueError"><paramref name="device"/> is not <c>"cpu"</c>, or <paramref name="step"/> is 0.</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> does not fit the dtype, or <paramref name="dtype"/> is a
+        ///     text dtype.</exception>
+        /// <remarks>NumPy 2.4.2's <c>ma.arange</c> is <c>_convert2ma('arange', params={'fill_value': None, 'hardmask':
+        ///     False})</c>: <c>np.arange(*args, **kwargs).view(MaskedArray)</c> (the device check and the dtype are np.arange's),
+        ///     then <c>result.fill_value = fill_value</c> and <c>result._hardmask = bool(hardmask)</c> when given. A null
+        ///     <paramref name="fill_value"/> is NumPy's default, which setting None also restores, so "not given" and null
+        ///     agree. The three C# forms stay (they are not collapsed into np.arange's eleven); like= is excluded, as
+        ///     everywhere. The keywords arrived in API-parity batch 9.</remarks>
+        public NDMaskedArray arange(double start, double stop, double step = 1, DType dtype = null, string device = null, object fill_value = null,
+                                    bool hardmask = false)
+            => ArangeConverted(dtype is null ? Device(device, () => np.arange(start, stop, step)) : np.arange(start, stop, step, dtype, device),
+                               fill_value, hardmask);
+
+        /// <summary>Runs np.arange's device check before a dtype-less <c>np.arange</c> overload, which has no device
+        ///     parameter of its own (NumPy checks the device before it builds anything).</summary>
+        /// <param name="device">NumPy's Array-API device: only <c>"cpu"</c> or null.</param>
+        /// <param name="build">The dtype-less np.arange call.</param>
+        /// <returns>The array <paramref name="build"/> returns.</returns>
+        /// <exception cref="ValueError"><paramref name="device"/> is not <c>"cpu"</c>.</exception>
+        private static NDArray Device(string device, Func<NDArray> build)
+        {
+            DeviceArguments.ValidateDevice(device);
+            return build();
+        }
+
+        /// <summary>
+        ///     <c>_convert2ma</c>'s tail for <see cref="arange(int, DType, string, object, bool)"/> and its twins: the plain
+        ///     range viewed as a mask-less masked array, then the fill value and the hard mask when given.
+        /// </summary>
+        /// <param name="range">The np.arange result; the masked array adopts it (no copy).</param>
+        /// <param name="fill_value">The fill value to set, or null for the dtype's default.</param>
+        /// <param name="hardmask">True to harden the mask.</param>
+        /// <returns>The masked range.</returns>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> does not fit the range's dtype (the setter's text).</exception>
+        private static NDMaskedArray ArangeConverted(NDArray range, object fill_value, bool hardmask)
+        {
+            var r = new NDMaskedArray(range, null);
+            // `if "fill_value" in common_params: result.fill_value = ...` — through the setter, so a wrong kind raises
+            // NumPy's TypeError (the fresh range is dropped to the GC then, as any failed construction's array is).
+            if (fill_value is not null)
+                r.fill_value = fill_value;
+            // `if "hardmask" in common_params: result._hardmask = bool(...)` — false is the fresh array's own state.
+            if (hardmask)
+                r._hardmask = true;
+            return r;
+        }
+
+        /// <summary>Masked identity matrix (no element masked) — NumPy's <c>np.ma.identity(n, dtype=None, *,
+        ///     fill_value=None, hardmask=False)</c>.</summary>
+        /// <param name="n">Order.</param>
+        /// <param name="dtype">Element dtype (null ⇒ float64).</param>
+        /// <param name="fill_value">The result's fill value (converted to the dtype); null leaves the default.</param>
+        /// <param name="hardmask">True gives the result a hard mask.</param>
         /// <returns>An unmasked masked identity.</returns>
-        public NDMaskedArray identity(int n, DType dtype = null) => new NDMaskedArray(np.identity(n, dtype), null);
+        /// <exception cref="TypeError"><paramref name="fill_value"/> cannot be stored in the dtype.</exception>
+        /// <remarks><paramref name="fill_value"/> and <paramref name="hardmask"/> arrived in API-parity batch 7 (numpy.ma's
+        ///     <c>_convert2ma</c> keywords); <c>like=</c> is the parity plan's exclusion.</remarks>
+        public NDMaskedArray identity(int n, DType dtype = null, object fill_value = null, bool hardmask = false)
+            => CreationKeywords(new NDMaskedArray(np.identity(n, dtype), null), fill_value, hardmask);
 
-        /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked).</summary>
-        /// <param name="dimensions">Grid shape (32-bit spelling).</param><param name="dtype">Index dtype.</param>
-        /// <returns>An unmasked masked index grid.</returns>
-        public NDMaskedArray indices(int[] dimensions, DType dtype = null) => new NDMaskedArray(np.indices(dimensions, dtype), null);
-
-        /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked) —
-        ///     the house <see cref="long"/> shape spelling, so an <see cref="NDArray"/>'s own <c>shape</c>
-        ///     binds without a down-cast.</summary>
-        /// <param name="dimensions">Grid shape.</param><param name="dtype">Index dtype.</param>
-        /// <returns>An unmasked masked index grid.</returns>
-        public NDMaskedArray indices(long[] dimensions, DType dtype = null) => new NDMaskedArray(np.indices(dimensions, dtype), null);
-
-        /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked) —
-        ///     <see cref="Shape"/> spelling (accepts an <see cref="NDArray.Shape"/> or a value tuple).</summary>
-        /// <param name="dimensions">Grid shape.</param><param name="dtype">Index dtype.</param>
-        /// <returns>An unmasked masked index grid.</returns>
-        public NDMaskedArray indices(Shape dimensions, DType dtype = null) => new NDMaskedArray(np.indices(dimensions, dtype), null);
+        /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked) — NumPy's
+        ///     <c>np.ma.indices(dimensions, dtype=int, *, fill_value=None, hardmask=False)</c>, numpy.ma's
+        ///     <c>_convert2ma</c> wrapper of <see cref="np.indices(Shape, DType, bool)"/>.</summary>
+        /// <param name="dimensions">The grid's shape: a tuple, an <c>int[]</c> / <c>long[]</c> or a <see cref="Shape"/> (all
+        ///     convert implicitly; only the sizes are read).</param>
+        /// <param name="dtype">The index dtype; null is int64 (NumPy's <c>int</c>).</param>
+        /// <param name="fill_value">The result's fill value, set through the converting setter (numpy.ma's TypeErrors for a
+        ///     value the dtype cannot hold); null leaves the dtype's default.</param>
+        /// <param name="hardmask">True gives the result a hard mask.</param>
+        /// <returns>An unmasked masked index grid of shape <c>(len(dimensions), *dimensions)</c>.</returns>
+        /// <exception cref="ValueError">A negative dimension (np.indices' allocation).</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> cannot be stored in the dtype; an arange of
+        ///     <paramref name="dtype"/> refuses (np.indices).</exception>
+        /// <remarks>One signature since API-parity batch 8 (2026-11-12): the <c>int[]</c> / <c>long[]</c> forms went (both
+        ///     convert to <see cref="Shape"/>), and <paramref name="fill_value"/> / <paramref name="hardmask"/> arrived.
+        ///     NumPy's <c>sparse=True</c> is not offered: NumPy's own <c>np.ma.indices(..., sparse=True)</c> fails
+        ///     (<c>AttributeError: 'tuple' object has no attribute 'view'</c>).</remarks>
+        public NDMaskedArray indices(Shape dimensions, DType dtype = null, object fill_value = null, bool hardmask = false)
+            => CreationKeywords(new NDMaskedArray(np.indices(dimensions, dtype), null), fill_value, hardmask);
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  masked_* constructors — build a mask from a condition/value and OR it onto any
@@ -6353,8 +9450,10 @@ namespace NumSharp
             if (condShape.NDim != 0 && !condShape.dimensions.AsSpan().SequenceEqual(d.Shape.dimensions))
                 throw new IndexError("Inconsistent shape between the condition and the input " +
                                      $"(got {ArrayFormatter.ShapeTuple(condShape.dimensions)} and {ArrayFormatter.ShapeTuple(d.Shape.dimensions)})");
-            // make_mask(condition, shrink=False): always an array, a fresh one (text: its strings' truth values).
-            var cond = make_mask(condOperand, shrink: false);
+            // make_mask(condition, shrink=False): always an array (text: its strings' truth values). NumPy's copy=False hands a
+            // boolean condition back itself, but `result.mask = cond` then copies it into a mask of the result's own; cond
+            // is stored below as that mask, so it is requested as a copy here (copy: true).
+            var cond = make_mask(condOperand, copy: true, shrink: false);
             var source = a as NDMaskedArray;
             var existing = source?._mask;
             NDArray m;
@@ -6608,7 +9707,7 @@ namespace NumSharp
                 : CompareWithPythonValue("equal", xnew, value);
             if (deferral is not null)
                 throw deferral;
-            var ret = array(xnew, mask, fill_value: value, copy: copy);
+            var ret = array(xnew, mask: mask, fill_value: value, copy: copy);
             // ret.shrink_mask(): an all-False mask collapses to nomask.
             if (shrink && ret._mask is not null && !np.any(ret._mask))
                 ret._mask = null;
@@ -6629,14 +9728,17 @@ namespace NumSharp
         ///     Unlike <see cref="masked_equal"/>, NumPy compares with <c>umath.equal(x._data, value)</c> — the RAW value, a
         ///     weak Python scalar — so float16/float32 data compare at their own width (<c>masked_object(float32 [1.1],
         ///     1.1)</c> masks the element, <c>masked_equal</c> does not). Then <c>mask_or(x._mask, make_mask(condition,
-        ///     shrink=shrink))</c> and <c>masked_array(x, mask=mask, copy=copy, fill_value=value)</c>.
+        ///     shrink=shrink), shrink=shrink)</c> and <c>masked_array(x, mask=mask, copy=copy, fill_value=value)</c>.
+        ///     <para>NumPy 2.5 passes <paramref name="shrink"/> to <c>mask_or</c> too: with <c>shrink=False</c> an all-False
+        ///     (or empty) condition stays a full mask, where NumPy 2.4's <c>mask_or</c> shrank it back to nomask with its own
+        ///     default.</para>
         ///     <para>Scoped by hand: the comparison and the combined mask only feed the constructor.</para>
         /// </remarks>
         public NDMaskedArray masked_object(object a, object value, bool copy = true, bool shrink = true)
         {
             using var scope = NDScope.Open();
             var condition = WithBoundMasks(CompareWithPythonValue("equal", AsData(a), value), value, null);
-            var mask = mask_or((a as NDMaskedArray)?._mask, make_mask(condition, shrink));
+            var mask = mask_or((a as NDMaskedArray)?._mask, make_mask(condition, shrink: shrink), shrink: shrink);
             // `masked_array(x, mask=mask, copy=copy, fill_value=value)`: the class constructor, so x's hardness rides along.
             return Yield(scope, masked_array(a, mask, fill_value: value, copy: copy));
         }
@@ -6741,8 +9843,8 @@ namespace NumSharp
         /// <param name="first">The first operand's class.</param>
         /// <param name="second">The second operand's class.</param>
         /// <returns>The exception (not thrown).</returns>
-        private static TypeError ComparisonNoLoop(string ufunc, DTypeMeta first, DTypeMeta second)
-            => new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({first}, {second}) -> None");
+        private static UFuncNoLoopError ComparisonNoLoop(string ufunc, DTypeMeta first, DTypeMeta second)
+            => new UFuncNoLoopError(ufunc, 2, first, second, null);
 
         /// <summary>
         ///     Python's <c>a &lt; b</c> between two bounds of <see cref="masked_inside"/>/<see cref="masked_outside"/>: numbers
@@ -6924,7 +10026,9 @@ namespace NumSharp
                 // `if not result.ndim: return masked` — any mask at all collapses a 0-D power.
                 if (result.ndim == 0)
                     return Yield(scope, NDMasked);
-                finalMask = invalid is null ? m : np.logical_or(m, invalid);
+                // `result._mask = np.logical_or(m, invalid)` — always a new array. With one masked operand m IS that
+                // operand's mask object (mask_or's copy=False hands it back), so the integer route copies it as the OR would.
+                finalMask = invalid is null ? m.copy() : np.logical_or(m, invalid);
             }
             if (anyInvalid)
             {
@@ -6948,6 +10052,18 @@ namespace NumSharp
             }
             return Yield(scope, r);
         }
+
+        /// <summary>
+        ///     The one-argument <c>np.ma.where(condition)</c>: NumPy's <c>where</c> with neither x nor y is
+        ///     <c>nonzero(condition)</c> — the indices of the non-zero, UNMASKED elements (a masked slot counts as False).
+        /// </summary>
+        /// <param name="condition">The condition (a masked array, an array or an array-like); read through
+        ///     <c>filled(0)</c>.</param>
+        /// <returns>One int64 index array per dimension (the house tuple convention), as <see cref="nonzero"/>.</returns>
+        /// <exception cref="ValueError">A 0-d condition (<c>Calling nonzero on 0d arrays is not allowed</c>).</exception>
+        /// <remarks>NumPy's "Must provide both 'x' and 'y' or neither." cannot arise: C# has no two-argument form. Added in
+        ///     API-parity batch 8.</remarks>
+        public NDArray<long>[] where(object condition) => nonzero(condition);
 
         /// <summary>Masked <c>where</c> (NumPy's <c>ma.where</c>): picks <paramref name="x"/> where the condition
         /// is True, else <paramref name="y"/>; a masked or False condition selects <paramref name="y"/>, and a
@@ -6978,17 +10094,40 @@ namespace NumSharp
             return Yield(scope, new NDMaskedArray(data, np.any(mask) ? mask : null));
         }
 
-        /// <summary>Rounds each element to <paramref name="decimals"/> places (half-to-even), preserving the mask
-        /// (NumPy's <c>ma.round</c> → <c>MaskedArray.round</c>). Masked positions carry their rounded data but stay
-        /// masked.</summary>
-        /// <param name="a">Data.</param><param name="decimals">Decimal places.</param>
+        /// <summary>Rounds each element to <paramref name="decimals"/> places (half-to-even), preserving the mask — NumPy's
+        /// <c>np.ma.round(a, decimals=0, out=None)</c> (<c>round_</c>; without an out, <c>MaskedArray.round</c>). Masked
+        /// positions carry their rounded data but stay masked.</summary>
+        /// <param name="a">Data.</param><param name="decimals">Decimal places (negative rounds to the left of the decimal
+        ///     point).</param>
+        /// <param name="out">NumPy's <c>out</c>: <c>np.round(getdata(a), decimals, out)</c> writes the rounded data into it
+        ///     and it is returned. A MASKED out then takes the operand's mask OBJECT itself (<c>out._mask = getmask(a)</c>:
+        ///     shared, its hardness ignored, an unmasked operand leaving it mask-less), and its data went through NumPy's
+        ///     in-place ufunc chain, so an infinite result is written as 1.0 (<c>10**-decimals</c> for negative decimals)
+        ///     — see <see cref="RoundInto"/>. A plain array (converted) receives the rounded data only. Added in API-parity
+        ///     batch 8.</param>
         /// <returns>The masked, rounded array: it SHARES the operand's mask object and takes its fill value and hard-mask
-        /// flag; a 0-d result is <see cref="NDMasked"/> when masked, else an unmasked 0-d array.</returns>
-        public NDMaskedArray round(object a, int decimals = 0)
+        /// flag; a 0-d result is <see cref="NDMasked"/> when masked, else an unmasked 0-d array — or <paramref name="out"/>.</returns>
+        /// <exception cref="AttributeError">Complex data into a masked <paramref name="out"/> (<c>property 'real' of
+        ///     'MaskedArray' object has no setter</c>), before anything is written.</exception>
+        /// <exception cref="UFuncOutputCastingError"><paramref name="out"/>'s dtype cannot hold the rounded values
+        ///     (<c>Cannot cast ufunc 'multiply' output from dtype('float64') to dtype('int64') with casting rule
+        ///     'same_kind'</c>; 'rint' for decimals 0, 'divide' for negative decimals).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another size than the operand (<c>invalid output
+        ///     shape</c>).</exception>
+        public NDMaskedArray round(object a, int decimals = 0, NDMaskedArray @out = null)
         {
             // Scoped by hand: a scalar/array-like operand's materialization only feeds the rounding.
             using var scope = NDScope.Open();
             var source = a as NDMaskedArray;
+            if (@out is not null)
+            {
+                // round_'s out branch: `np.round(getdata(a), decimals, out); if hasattr(out, '_mask'): out._mask = getmask(a);
+                // return out` — the mask the ufunc wraps leave is replaced, so it is not stored (their data effect stays).
+                RoundInto(AsData(a), decimals, @out, storeMask: false);
+                if (!@out.IsPlainArrayWrapper)
+                    @out._mask = source?._mask;
+                return @out;
+            }
             var result = np.around(AsData(a), decimals);
             // MaskedArray.round: `if result.ndim > 0: result._mask = self._mask; result._update_from(self)` — the SAME mask
             // object, the fill value and hard mask — `elif self._mask: result = masked`.
@@ -7000,10 +10139,148 @@ namespace NumSharp
             return Yield(scope, r);
         }
 
-        /// <summary>Alias of <see cref="round"/> (NumPy's <c>around</c>).</summary>
-        /// <param name="a">Data.</param><param name="decimals">Decimal places.</param>
-        /// <returns>The masked, rounded array.</returns>
-        public NDMaskedArray around(object a, int decimals = 0) => round(a, decimals);
+        /// <summary>
+        ///     Evenly rounds to <paramref name="decimals"/> places — NumPy's <c>np.ma.around(a, decimals=0, out=None)</c>,
+        ///     which is <c>_MaskedUnaryOperation(np.around)</c>, NOT <see cref="round"/>: the masked positions get the
+        ///     operand's ORIGINAL data back (<c>np.copyto(result, d, where=m)</c>), and the result takes the operand's mask
+        ///     object, fill value and hard-mask flag.
+        /// </summary>
+        /// <param name="a">Data (a masked array, an array, a scalar or an array-like).</param>
+        /// <param name="decimals">Decimal places (negative rounds to the left of the decimal point).</param>
+        /// <param name="out">NumPy's <c>out</c>: <c>np.around(getdata(a), decimals, out=out)</c> writes the rounded data, the
+        ///     masked positions are written back with the operand's data, and the result is a NEW masked array over
+        ///     <paramref name="out"/>'s data carrying the operand's mask — the out itself keeps the mask NumPy's in-place
+        ///     ufunc wraps leave there (an all-False mask for decimals 0, the infinite results otherwise, whose data is
+        ///     written as 1.0 or <c>10**-decimals</c>; see <see cref="RoundInto"/>). A 0-d out is returned itself, or
+        ///     <see cref="NDMasked"/> when the operand is masked. Added in API-parity batch 8.</param>
+        /// <returns>The masked, rounded array (a 0-d result is <see cref="NDMasked"/> when masked, else an unmasked 0-d
+        ///     array).</returns>
+        /// <exception cref="AttributeError">Complex data into a masked <paramref name="out"/>.</exception>
+        /// <exception cref="UFuncOutputCastingError"><paramref name="out"/>'s dtype cannot hold the rounded values.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another size than the operand (<c>invalid output
+        ///     shape</c>).</exception>
+        /// <remarks>Until API-parity batch 8 NumSharp had two forms: <c>around(a)</c> (this one, decimals 0) and
+        ///     <c>around(a, decimals)</c> = <see cref="round"/>, which rounded the masked positions' data too. Scoped by hand
+        ///     with <paramref name="out"/>: a materialized operand and the ufunc-wrap temporaries are reclaimed; a mask stored
+        ///     into a masked out is detached (it lives in the caller's array).</remarks>
+        public NDMaskedArray around(object a, int decimals = 0, NDMaskedArray @out = null)
+        {
+            if (@out is null)
+                return Unary(x => np.around(x, decimals), a);
+            using var scope = NDScope.Open();
+            var d = AsData(a);
+            // `result = self.f(d, decimals, out=out)`: PyArray_Round into out, with the masked out's ufunc wraps.
+            RoundInto(d, decimals, @out, storeMask: true);
+            var m = (a as NDMaskedArray)?._mask;
+            // `if not result.ndim: return masked if m else result` — result is out itself.
+            if (@out._data.ndim == 0)
+                return m is not null && m.GetBoolean() ? NDMasked : @out;
+            // `if m is not nomask: np.copyto(result, d, where=m)` in a try (a refused cast leaves the rounded data).
+            if (m is not null)
+                FillBack(@out._data, d, m, domainedZeroFill: false, casting: "same_kind");
+            // `masked_result = result.view(get_masked_subclass(a)); masked_result._mask = m; masked_result._update_from(a)`.
+            var r = new NDMaskedArray(@out._data, m);
+            if (a is NDMaskedArray source)
+                r.UpdateFrom(source);
+            return Yield(scope, r);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>ndarray.round(decimals, out=out)</c> (<c>PyArray_Round</c>) as numpy.ma's round family meets it: the
+        ///     rounded data written into <paramref name="out"/>, plus — for a MASKED out — what the in-place ufuncs'
+        ///     <c>MaskedArray.__array_wrap__</c> calls leave there.
+        /// </summary>
+        /// <param name="x">The data rounded (a plain array: numpy.ma passes <c>getdata(a)</c> / <c>self._data</c>).</param>
+        /// <param name="decimals">Decimal places.</param>
+        /// <param name="out">The output; a plain-array wrapper receives the data only.</param>
+        /// <param name="storeMask">True to store the mask the wraps leave into a masked out (<c>MaskedArray.round</c> and
+        ///     <c>ma.around</c> read it); false when the caller replaces it anyway (<c>ma.round</c>'s
+        ///     <c>out._mask = getmask(a)</c>).</param>
+        /// <exception cref="AttributeError">Complex data into a masked <paramref name="out"/>.</exception>
+        /// <exception cref="UFuncOutputCastingError"><paramref name="out"/>'s dtype cannot hold the rounded values.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another size than <paramref name="x"/>.</exception>
+        /// <remarks>
+        ///     PyArray_Round checks the size, then rounds complex data part by part through <c>out.real</c> /
+        ///     <c>out.imag</c> — properties a masked array refuses to set — and otherwise ASSIGNS integer data with decimals
+        ///     &gt;= 0 (no ufunc, no wrap: the out's mask is untouched), runs <c>rint(x, out)</c> for decimals 0 — whose wrap
+        ///     stores <c>getmaskarray(x)</c>, an all-False mask ARRAY — and multiply / rint / true_divide (true_divide / rint /
+        ///     multiply for negative decimals) by <c>f = 10**|decimals|</c> with out=out. Those wraps shrink every all-False
+        ///     mask to nomask, and ma's divide domain <c>|q| * tiny &gt;= f</c> on the quotient (already in out) masks it and
+        ///     writes 1 there. Only an infinite quotient qualifies (<c>f / tiny</c> exceeds every finite double): for
+        ///     positive decimals the final quotient (an infinite result), for negative ones the first <c>x / f</c> cast to
+        ///     out's dtype, whose 1 the closing multiply turns into <c>f</c>. Scoped by the caller: the domain temporaries are
+        ///     its; a mask stored into the out is detached.
+        /// </remarks>
+        private static void RoundInto(NDArray x, int decimals, NDMaskedArray @out, bool storeMask)
+        {
+            bool masked = !@out.IsPlainArrayWrapper;
+            if (masked)
+            {
+                // PyArray_Round's order: the size check, then the complex branch's `arr.real = ...`, before any write.
+                if (@out._data.size != x.size)
+                    throw new ValueError("invalid output shape");
+                if (x.typecode == NPTypeCode.Complex)
+                    throw new AttributeError("property 'real' of 'MaskedArray' object has no setter");
+            }
+            double f = DefaultEngine.PowerOfTen(decimals == int.MinValue ? int.MaxValue : Math.Abs(decimals));
+            // Negative decimals: the domain reads the FIRST quotient x / f as true_divide stored it in out's dtype — taken
+            // before np.around runs, so an out that aliases x is still read unrounded. Only float / complex outs hold an inf.
+            NDArray hit = null;
+            bool inexactOut = @out._data.dtype.kind is 'f' or 'c';
+            if (masked && decimals < 0 && inexactOut)
+                hit = np.isinf(np.true_divide(x, NDArray.Scalar(f)).astype(@out._data.dtype, copy: false));
+            np.around(x, decimals, @out._data);
+            if (!masked)
+                return;
+            // Integer data with decimals >= 0 is assigned without a ufunc: no __array_wrap__ runs.
+            if (decimals >= 0 && x.dtype.kind is 'i' or 'u')
+                return;
+            if (decimals == 0)
+            {
+                // `rint(x, out)`: one input, so the wrap's mask is getmaskarray(x) unshrunk — an all-False ARRAY.
+                if (storeMask)
+                    @out._mask = Own(np.zeros(new Shape(@out._data.Shape.dimensions, copy: false), np.@bool));
+                return;
+            }
+            // Positive decimals: the closing true_divide's domain reads the final quotient.
+            if (decimals > 0 && inexactOut)
+                hit = np.isinf(@out._data);
+            if (hit is null || !np.any(hit))
+            {
+                // Every wrap's mask was all-False and shrank to nomask.
+                if (storeMask)
+                    @out._mask = null;
+                return;
+            }
+            // `np.copyto(result, fill_value, where=d)` with true_divide's fill 1 — multiplied by f afterwards when the divide
+            // came first (negative decimals) — and `m = d` as the mask.
+            np.copyto(@out._data, NDArray.Scalar(decimals > 0 ? 1.0 : f), casting: "unsafe", where: hit);
+            if (storeMask)
+                @out._mask = Own(hit);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>MaskedArray.round(decimals, out=out)</c> for a given out: <c>self._data.round(decimals, out=out)</c>
+        ///     (<see cref="RoundInto"/>, the ufunc wraps' mask stored), then <c>if isinstance(out, MaskedArray):
+        ///     out.__setmask__(self._mask)</c> — a hard out keeps what the wraps left and gains this array's masked slots, a
+        ///     soft one takes this array's mask values.
+        /// </summary>
+        /// <param name="self">The array rounded.</param>
+        /// <param name="decimals">Decimal places.</param>
+        /// <param name="out">The output (not null); a plain-array wrapper receives the data only.</param>
+        /// <returns><paramref name="out"/>.</returns>
+        /// <exception cref="AttributeError">Complex data into a masked <paramref name="out"/>.</exception>
+        /// <exception cref="UFuncOutputCastingError"><paramref name="out"/>'s dtype cannot hold the rounded values.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another size than <paramref name="self"/>.</exception>
+        /// <remarks>Scoped by hand: the ufunc-wrap temporaries are reclaimed; masks stored into the out are detached.</remarks>
+        internal NDMaskedArray RoundMethodInto(NDMaskedArray self, int decimals, NDMaskedArray @out)
+        {
+            using var scope = NDScope.Open();
+            RoundInto(self._data, decimals, @out, storeMask: true);
+            if (!@out.IsPlainArrayWrapper)
+                SetMaskLikeNumPy(@out, self._mask);
+            return @out;
+        }
 
         // ─────────────────────────────────────────────────────────────────────────────
         //  Shape / manipulation — the SAME transform is applied to the data AND the mask,
@@ -7073,6 +10350,32 @@ namespace NumSharp
             return Yield(scope, new NDMaskedArray(rd, dm));
         }
 
+        /// <summary>
+        ///     numpy.ma's <c>_fromnxfunction_seq</c> with keywords: <paramref name="f"/> (a join carrying the caller's
+        ///     <c>dtype</c> / <c>casting</c>) over the data arrays and over the full mask arrays, then
+        ///     <c>masked_array(_d, mask=_m)</c>, which reads a mask joined into another dtype back as bool (nonzero is True).
+        /// </summary>
+        /// <param name="arrays">The operands.</param>
+        /// <param name="f">The <c>np.*</c> join with its keywords bound.</param>
+        /// <returns>The joined masked array (a mask array always; no fill value or hardness inherited).</returns>
+        /// <exception cref="InvalidCastException">A join's cast refusal (the data's first, then the masks'), with NumPy's
+        ///     TypeError text (NumSharp's house mapping, <c>DTypeCasting.InvalidCastError</c>).</exception>
+        /// <exception cref="ValueError">The shapes do not join.</exception>
+        /// <remarks>Scoped by hand, as <see cref="MapSeq"/>: the materialized operands, the stand-in masks and a mask joined
+        ///     into another dtype only feed the result and are reclaimed.</remarks>
+        private NDMaskedArray MapSeqTyped(object[] arrays, Func<NDArray[], NDArray> f)
+        {
+            using var scope = NDScope.Open();
+            var rd = f(arrays.Select(AsData).ToArray());
+            // NumPy joins the masks with the SAME keywords: a dtype request joins them in that dtype, and casting judges the
+            // bool -> dtype cast (casting='no' into float32 refuses there even when the data were float32).
+            var dm = f(arrays.Select(getmaskarray).ToArray());
+            // MaskedArray.__new__: `mask = np.array(mask, dtype=MaskType)`, a cast whose nonzero values are True.
+            if (dm.typecode != NPTypeCode.Boolean)
+                dm = dm.astype(np.@bool);
+            return Yield(scope, new NDMaskedArray(rd, dm));
+        }
+
         /// <summary>Flattened VIEW in the given order (mask flattened alike). NumPy's <c>ravel</c>.</summary>
         /// <param name="a">Operand.</param><param name="order">'C' or 'F'.</param><returns>The flattened masked array.</returns>
         public NDMaskedArray ravel(object a, char order = 'C') => Map1(a, d => np.ravel(d, order));
@@ -7081,14 +10384,41 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="order">'C' or 'F'.</param><returns>The flattened masked copy.</returns>
         public NDMaskedArray flatten(object a, char order = 'C') => Map1(a, d => np.ravel(d, order).copy());
 
-        /// <summary>Reshape to <paramref name="new_shape"/> (mask reshaped alike). The parameter is spelled
-        /// <c>new_shape</c> so a NumPy call <c>ma.reshape(a, new_shape=…)</c> ports verbatim.</summary>
-        /// <param name="a">Operand.</param><param name="new_shape">New dimensions (one may be -1).</param><returns>The reshaped masked array.</returns>
-        public NDMaskedArray reshape(object a, params int[] new_shape) => Map1(a, d => np.reshape(d, new_shape));
+        /// <summary>Reshape to <paramref name="new_shape"/>, the mask reshaped alike — NumPy's
+        ///     <c>np.ma.reshape(a, new_shape, order='C')</c>, which is <c>a.reshape(new_shape, order=order)</c>.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="new_shape">The new dimensions as ONE argument: an int, a tuple, an <c>int[]</c> / <c>long[]</c> or a
+        ///     <see cref="Shape"/> (one entry may be -1, the unknown dimension).</param>
+        /// <param name="order">The index order: <c>'C'</c> (the default), <c>'F'</c>, or <c>'A'</c> (F when the operand is
+        ///     F-contiguous and not C-contiguous); <c>'K'</c> is refused, as by np.reshape.</param>
+        /// <returns>A masked array viewing the operand's data (and mask) when the new layout allows it, else a copy; it takes
+        ///     the operand's fill value and hard-mask flag (<c>result._update_from(self)</c>).</returns>
+        /// <exception cref="IncorrectShapeException">The size does not match (<c>cannot reshape array of size 6 into shape
+        ///     (4,)</c>, NumPy's ValueError text).</exception>
+        /// <exception cref="ValueError">A bad <paramref name="order"/>, or more than one unknown dimension.</exception>
+        /// <remarks>One signature since API-parity batch 8 (2026-11-12): the <c>params int[] new_shape</c> form went —
+        ///     NumPy's <c>np.ma.reshape(a, 2, 3)</c> reads the 3 as the order (<c>TypeError: order must be str, not int</c>),
+        ///     so write <c>(2, 3)</c>. NumPy hands a PLAIN array operand back as a plain array (its own reshape); NumSharp's
+        ///     static type returns a masked array without a mask.</remarks>
+        public NDMaskedArray reshape(object a, Shape new_shape, char order = 'C') => Map1(a, d => np.reshape(d, new_shape, order));
 
-        /// <summary>Reshape to a <see cref="Shape"/> (mask reshaped alike).</summary>
-        /// <param name="a">Operand.</param><param name="new_shape">New shape.</param><returns>The reshaped masked array.</returns>
-        public NDMaskedArray reshape(object a, Shape new_shape) => Map1(a, d => np.reshape(d, new_shape));
+        /// <summary>
+        ///     <c>MaskedArray.reshape(shape, order, copy)</c>'s body (<see cref="NDMaskedArray.reshape(Shape, char, bool?)"/>):
+        ///     NumPy's <c>self._data.reshape(*s, **kwargs)</c> and <c>mask.reshape(*s, **kwargs)</c> with the same keywords,
+        ///     then <c>result._update_from(self)</c>.
+        /// </summary>
+        /// <param name="self">The masked array.</param>
+        /// <param name="shape">The new dimensions.</param>
+        /// <param name="order">The index order.</param>
+        /// <param name="copy">NumPy's copy mode for both reshapes: null copies only when needed, true always, false refuses
+        ///     a copy.</param>
+        /// <returns>The reshaped masked array.</returns>
+        /// <exception cref="IncorrectShapeException">The size does not match.</exception>
+        /// <exception cref="ValueError">A bad <paramref name="order"/>, more than one unknown dimension, or
+        ///     <paramref name="copy"/> false when the data's (or the mask's) layout needs a copy (<c>Unable to avoid creating
+        ///     a copy while reshaping.</c>; the data's refusal comes first).</exception>
+        internal NDMaskedArray ReshapeMethod(NDMaskedArray self, Shape shape, char order, bool? copy)
+            => Map1(self, d => d.reshape(shape, order, copy));
 
         /// <summary>Permute axes (mask transposed alike); reverses all axes when <paramref name="axes"/> is null.</summary>
         /// <param name="a">Operand.</param><param name="axes">Permutation, or null to reverse.</param><returns>The transposed masked array.</returns>
@@ -7102,33 +10432,172 @@ namespace NumSharp
         /// <param name="a">Operand.</param><param name="source">Source axis.</param><param name="destination">Destination axis.</param><returns>The masked array.</returns>
         public NDMaskedArray moveaxis(object a, int source, int destination) => Map1(a, d => np.moveaxis(d, source, destination));
 
-        /// <summary>Remove size-1 axes (mask squeezed alike). With <paramref name="axis"/> null EVERY size-1 axis
-        /// is dropped; an explicit axis drops ONLY that one (and errors if it is not size 1, via
-        /// <see cref="np.squeeze(NDArray,int)"/>) — NumPy's <c>squeeze(axis=…)</c>.</summary>
-        /// <param name="a">Operand.</param>
-        /// <param name="axis">The single size-1 axis to drop, or null to drop all size-1 axes.</param>
-        /// <returns>The squeezed masked array.</returns>
-        public NDMaskedArray squeeze(object a, int? axis = null)
-            => Map1(a, d => axis is null ? np.squeeze(d) : np.squeeze(d, axis.Value));
+        /// <summary>Remove size-1 axes, the mask squeezed alike — NumPy's <c>np.ma.squeeze(a, axis=None, *,
+        ///     fill_value=None, hardmask=False)</c> (<c>_convert2ma</c> over <c>np.squeeze</c>). With <paramref name="axis"/>
+        ///     null EVERY size-1 axis is dropped; an axis or a tuple of axes drops ONLY those (each must be size 1).</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The size-1 axis or axes to drop (an int, a tuple, an <c>int[]</c>; negative counts from the
+        ///     end), or null to drop every size-1 axis.</param>
+        /// <param name="fill_value">The result's fill value, set through the converting setter; null leaves the operand's.</param>
+        /// <param name="hardmask">True hardens the result's mask (false leaves the hardness the result inherited).</param>
+        /// <returns>The squeezed masked array (a view of the operand's data and mask), with the operand's fill value and
+        ///     hard-mask flag unless the keywords set them.</returns>
+        /// <exception cref="ValueError">An axis whose length is not 1 (<c>cannot select an axis to squeeze out which has size
+        ///     not equal to one</c>) or a repeated axis.</exception>
+        /// <exception cref="AxisError">An axis out of range.</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> cannot be stored in the dtype (numpy.ma's
+        ///     <c>_check_fill_value</c>).</exception>
+        /// <remarks>NumPy's tuple axis, <paramref name="fill_value"/> and <paramref name="hardmask"/> arrived in API-parity
+        ///     batch 8 (the axis was one <c>int?</c>). An explicit <c>hardmask: false</c> does not soften an inherited hard
+        ///     mask (NumPy's does): C#'s default cannot tell it from an omitted argument.</remarks>
+        public NDMaskedArray squeeze(object a, NDAxis? axis = null, object fill_value = null, bool hardmask = false)
+            => ShapeKeywords(Map1(a, d => np.squeeze(d, axis)), a, fill_value, hardmask);
 
-        /// <summary>Insert a size-1 axis at <paramref name="axis"/> (mask expanded alike).</summary>
-        /// <param name="a">Operand.</param><param name="axis">Axis position.</param><returns>The masked array.</returns>
-        public NDMaskedArray expand_dims(object a, int axis) => Map1(a, d => np.expand_dims(d, axis));
+        /// <summary>Remove ONE size-1 axis — the owner's kept int form beside
+        ///     <see cref="squeeze(object, NDAxis?, object, bool)"/> (NumPy's <c>np.ma.squeeze(a, 1)</c>).</summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="axis">The size-1 axis to drop (negative counts from the end).</param>
+        /// <param name="fill_value">The result's fill value, or null.</param>
+        /// <param name="hardmask">True hardens the result's mask.</param>
+        /// <returns>The squeezed masked array.</returns>
+        /// <exception cref="ValueError">The axis' length is not 1.</exception>
+        /// <exception cref="AxisError">The axis is out of range.</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> cannot be stored in the dtype.</exception>
+        public NDMaskedArray squeeze(object a, int axis, object fill_value = null, bool hardmask = false)
+            => squeeze(a, NDAxis.FromNullable(axis), fill_value, hardmask);
+
+        /// <summary>Remove the listed size-1 axes — the owner's kept int[] form beside
+        ///     <see cref="squeeze(object, NDAxis?, object, bool)"/>; a null array is NumPy's None (every size-1 axis).</summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="axis">The size-1 axes to drop, or null for all.</param>
+        /// <param name="fill_value">The result's fill value, or null.</param>
+        /// <param name="hardmask">True hardens the result's mask.</param>
+        /// <returns>The squeezed masked array.</returns>
+        /// <exception cref="ValueError">An axis' length is not 1, or an axis repeats.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="TypeError"><paramref name="fill_value"/> cannot be stored in the dtype.</exception>
+        public NDMaskedArray squeeze(object a, int[] axis, object fill_value = null, bool hardmask = false)
+            => squeeze(a, axis is null ? (NDAxis?)null : (NDAxis)axis, fill_value, hardmask);
+
+        /// <summary>Insert size-1 axes, the mask expanded alike — NumPy's <c>np.ma.expand_dims(a, axis)</c>: each listed
+        ///     position of the RESULT becomes a new length-1 axis.</summary>
+        /// <param name="a">The operand: a masked array, an array or an array-like.</param>
+        /// <param name="axis">The new axes' positions in the result: an int, a tuple or an <c>int[]</c> (negative counts from
+        ///     the end of the result).</param>
+        /// <returns>A masked array viewing the operand's data and mask, with its fill value and hard-mask flag.</returns>
+        /// <exception cref="AxisError">A position out of range for the result's rank.</exception>
+        /// <exception cref="ValueError">A repeated position.</exception>
+        /// <remarks>NumPy's tuple axis arrived in API-parity batch 8 (it was one <c>int</c>).</remarks>
+        public NDMaskedArray expand_dims(object a, NDAxis axis) => Map1(a, d => np.expand_dims(d, axis));
+
+        /// <summary>Insert ONE size-1 axis — the owner's kept int form beside <see cref="expand_dims(object, NDAxis)"/>.</summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="axis">The new axis' position in the result.</param>
+        /// <returns>The expanded masked array.</returns>
+        /// <exception cref="AxisError">The position is out of range.</exception>
+        public NDMaskedArray expand_dims(object a, int axis) => expand_dims(a, (NDAxis)axis);
+
+        /// <summary>Insert the listed size-1 axes — the owner's kept int[] form beside
+        ///     <see cref="expand_dims(object, NDAxis)"/>.</summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="axis">The new axes' positions in the result.</param>
+        /// <returns>The expanded masked array.</returns>
+        /// <exception cref="AxisError">A position is out of range.</exception>
+        /// <exception cref="ValueError">A repeated position.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="axis"/> is null.</exception>
+        public NDMaskedArray expand_dims(object a, int[] axis)
+            => expand_dims(a, axis is null ? throw new ArgumentNullException(nameof(axis)) : (NDAxis)axis);
+
+        /// <summary>
+        ///     numpy.ma's <c>_convert2ma</c> tail for a shape function whose result VIEWS the operand (np.ma.squeeze): the
+        ///     fill value through the converting setter, then the hard mask. If the setter refuses, only the parts this call
+        ///     created are released — a no-op squeeze hands the operand's own arrays back, which belong to the caller.
+        /// </summary>
+        /// <param name="result">The transformed masked array.</param>
+        /// <param name="a">The operand the transform read.</param>
+        /// <param name="fill_value">The fill to set, or null.</param>
+        /// <param name="hardmask">Whether to harden the mask.</param>
+        /// <returns><paramref name="result"/>.</returns>
+        /// <exception cref="TypeError">The fill setter's refusal.</exception>
+        private static NDMaskedArray ShapeKeywords(NDMaskedArray result, object a, object fill_value, bool hardmask)
+        {
+            if (fill_value is not null)
+            {
+                try
+                {
+                    // The setter converts to the dtype (NumPy's _check_fill_value) and raises numpy.ma's TypeError.
+                    result.fill_value = fill_value;
+                }
+                catch
+                {
+                    // A plain operand is guarded through a mask-less wrapper: ReleaseParts compares parts by reference.
+                    var keep = a as NDMaskedArray ?? (a is NDArray plain ? new NDMaskedArray(plain, null) : null);
+                    ReleaseParts(result, keep);
+                    throw;
+                }
+            }
+            if (hardmask)
+                result.harden_mask();
+            return result;
+        }
 
         /// <summary>Repeat elements (mask repeated alike, so repeated masked entries stay masked).</summary>
         /// <param name="a">Operand.</param><param name="repeats">Repeat count.</param><param name="axis">Axis or null (flatten).</param><returns>The masked array.</returns>
         public NDMaskedArray repeat(object a, int repeats, int? axis = null) => Map1(a, d => np.repeat(d, repeats, axis));
 
-        /// <summary>Gather elements by index (mask gathered alike, so a taken element keeps its masked-ness).
-        /// <paramref name="mode"/> selects the out-of-bounds policy ("raise"/"wrap"/"clip"), applied identically
-        /// to the data and the mask gather so they stay aligned — NumPy's <c>ma.take(..., mode=…)</c>.</summary>
-        /// <param name="a">Operand.</param><param name="indices">Integer index array.</param>
-        /// <param name="axis">Axis or null.</param>
-        /// <param name="mode">Out-of-bounds policy: "raise" (default)/"wrap"/"clip".</param>
-        /// <returns>The masked array.</returns>
-        public NDMaskedArray take(object a, NDArray indices, int? axis = null, string mode = "raise")
-            // NumPy's MaskedArray.take views the plain gather (`_data.take(...)[...].view(cls)`): no _update_from.
-            => Map1(a, d => np.take(d, indices, axis, null, mode), inherit: false);
+        /// <summary>Gather elements by index — NumPy's <c>np.ma.take(a, indices, axis=None, out=None, mode='raise')</c>
+        /// (<c>MaskedArray.take</c>): the data and the mask are gathered alike, so a taken element keeps its masked-ness.
+        /// <paramref name="mode"/> selects the out-of-bounds policy, applied identically to both gathers.</summary>
+        /// <param name="a">Operand (a masked array, an array or an array-like).</param>
+        /// <param name="indices">Integer index array (a 0-d index with a null <paramref name="axis"/> gives a 0-d result).</param>
+        /// <param name="axis">Axis, or null to index the flattened operand.</param>
+        /// <param name="out">NumPy's <c>out</c>: the gathered data is written into it (np.take's shape and cast checks; under
+        ///     <c>mode="raise"</c> nothing is written when an index is out of bounds), then a masked out takes the gathered
+        ///     mask through NumPy's <c>__setmask__</c> — a hard out only gains masked slots, and an unmasked operand clears a
+        ///     soft out's mask and leaves a mask-less out mask-less. A plain array (converted) receives the data only. Added in
+        ///     API-parity batch 8.</param>
+        /// <param name="mode">Out-of-bounds policy: "raise" (default) / "wrap" / "clip". It follows
+        ///     <paramref name="out"/>, as in NumPy, so a positional mode is now written <c>mode: "clip"</c>.</param>
+        /// <returns>NumPy's <c>out[()]</c>: the gathered masked array — a NEW soft array with the default fill (NumPy views
+        ///     the plain gather, no <c>_update_from</c>), or <paramref name="out"/> — and for a 0-d result
+        ///     <see cref="NDMasked"/> when its element is masked, else an unmasked 0-d array holding the value (NumPy's
+        ///     scalar, detached from <paramref name="out"/>).</returns>
+        /// <exception cref="IndexError">An index is out of bounds under <c>mode="raise"</c>.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/>'s shape is not the result's (<c>output array does not match
+        ///     result of ndarray.take</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <remarks>NumPy's statements (<c>masked_array(a).take(...)</c>); the indices are a plain array, so NumPy's
+        ///     <c>maskindices</c> is nomask. Scoped by hand: a materialized operand and the gathered mask a masked out copies
+        ///     are reclaimed; a mask created for <paramref name="out"/> is detached (it lives in the caller's array).</remarks>
+        public NDMaskedArray take(object a, NDArray indices, int? axis = null, NDMaskedArray @out = null, string mode = "raise")
+        {
+            using var scope = NDScope.Open();
+            var d = AsData(a);
+            var mask = (a as NDMaskedArray)?._mask;
+            if (@out is null)
+            {
+                // `out = _data.take(indices, axis=axis, mode=mode)[...].view(cls)` then `out.__setmask__(_mask.take(...))` on that
+                // fresh mask-less view: the gathered mask (a new array) becomes its mask, nomask stays nomask.
+                var data = np.take(d, indices, axis, null, mode);
+                var gathered = new NDMaskedArray(data, mask is null ? null : np.take(mask, indices, axis, null, mode));
+                // `return out[()]`: a 0-d result is `masked` or a scalar.
+                if (data.ndim == 0)
+                    return gathered._mask is not null && gathered._mask.GetBoolean() ? NDMasked : Yield(scope, new NDMaskedArray(data, null));
+                return Yield(scope, gathered);
+            }
+            // `np.take(_data, indices, axis=axis, mode=mode, out=out)`, then `if isinstance(out, MaskedArray):
+            // out.__setmask__(outmask)`.
+            np.take(d, indices, axis, @out._data, mode);
+            if (!@out.IsPlainArrayWrapper)
+                SetMaskLikeNumPy(@out, mask is null ? null : np.take(mask, indices, axis, null, mode));
+            // `return out[()]`: an array out is returned (NumPy: a view sharing its data and mask); a 0-d one is `masked` when
+            // its mask is set, else its value as a scalar — copied, so writing the result never reaches the out.
+            if (@out._data.ndim != 0)
+                return @out;
+            if (!@out.IsPlainArrayWrapper && @out._mask is not null && @out._mask.GetBoolean())
+                return NDMasked;
+            return Yield(scope, new NDMaskedArray(@out._data.copy(), null));
+        }
 
         /// <summary>Diagonal: 1-D input CONSTRUCTS a matrix with the values (and mask) on the k-th diagonal;
         /// 2-D input EXTRACTS the k-th diagonal (and its mask). NumPy's <c>ma.diag</c>.</summary>
@@ -7146,13 +10615,63 @@ namespace NumSharp
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 1.</returns>
         public NDMaskedArray atleast_1d(object a) => MapFromNx(a, d => np.atleast_1d(d));
 
+        /// <summary>At-least-1-D views of SEVERAL operands — NumPy's <c>np.ma.atleast_1d(*arys)</c> with more than one array
+        ///     (<c>_fromnxfunction_allargs</c>), which returns a list: each operand's data and full mask through
+        ///     <c>np.atleast_1d</c>, as <see cref="atleast_1d(object)"/> does for one.</summary>
+        /// <param name="arys">The operands (masked arrays, arrays, scalars, array-likes).</param>
+        /// <returns>One masked array per operand, in order (empty for no operand).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> or an operand is null.</exception>
+        /// <remarks>C#'s params rule makes a LONE <c>object[]</c> the operand list itself, where NumPy reads a Python list as
+        ///     ONE array-like (<c>np.ma.atleast_1d([a, b])</c> is one array): pass such a list as an array (or wrap it in a
+        ///     second <c>object[]</c>) to get NumPy's reading. Added in API-parity batch 8.</remarks>
+        public NDMaskedArray[] atleast_1d(params object[] arys) => MapFromNxAll(arys, d => np.atleast_1d(d));
+
         /// <summary>At-least-2-D view (mask alike).</summary>
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 2.</returns>
         public NDMaskedArray atleast_2d(object a) => MapFromNx(a, d => np.atleast_2d(d));
 
+        /// <summary>At-least-2-D views of SEVERAL operands — NumPy's <c>np.ma.atleast_2d(*arys)</c> with more than one array,
+        ///     which returns a list (see <see cref="atleast_1d(object[])"/>).</summary>
+        /// <param name="arys">The operands.</param>
+        /// <returns>One masked array per operand, rank ≥ 2, in order.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> or an operand is null.</exception>
+        /// <remarks>A lone <c>object[]</c> is the operand list (C#'s params rule), not NumPy's one array-like. Added in
+        ///     API-parity batch 8.</remarks>
+        public NDMaskedArray[] atleast_2d(params object[] arys) => MapFromNxAll(arys, d => np.atleast_2d(d));
+
         /// <summary>At-least-3-D view (mask alike).</summary>
         /// <param name="a">Operand.</param><returns>The masked array, rank ≥ 3.</returns>
         public NDMaskedArray atleast_3d(object a) => MapFromNx(a, d => np.atleast_3d(d));
+
+        /// <summary>At-least-3-D views of SEVERAL operands — NumPy's <c>np.ma.atleast_3d(*arys)</c> with more than one array,
+        ///     which returns a list (see <see cref="atleast_1d(object[])"/>).</summary>
+        /// <param name="arys">The operands.</param>
+        /// <returns>One masked array per operand, rank ≥ 3, in order.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> or an operand is null.</exception>
+        /// <remarks>A lone <c>object[]</c> is the operand list (C#'s params rule), not NumPy's one array-like. Added in
+        ///     API-parity batch 8.</remarks>
+        public NDMaskedArray[] atleast_3d(params object[] arys) => MapFromNxAll(arys, d => np.atleast_3d(d));
+
+        /// <summary>
+        ///     numpy.ma.extras' <c>_fromnxfunction_allargs.__call__</c> for several operands: <c>for x in args:
+        ///     res.append(masked_array(func(np.asarray(x)), mask=func(getmaskarray(x))))</c> — each operand on its own
+        ///     (<see cref="MapFromNx"/>), the results in a list.
+        /// </summary>
+        /// <param name="arys">The operands.</param>
+        /// <param name="f">The <c>np.*</c> function run on each operand's data and full mask.</param>
+        /// <returns>The masked results, one per operand.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="arys"/> or an operand is null.</exception>
+        /// <remarks>Each element rides <see cref="MapFromNx"/>'s own scope, so each result's parts are handed back to the
+        ///     caller's scope as they are built.</remarks>
+        private NDMaskedArray[] MapFromNxAll(object[] arys, Func<NDArray, NDArray> f)
+        {
+            if (arys is null)
+                throw new ArgumentNullException(nameof(arys));
+            var res = new NDMaskedArray[arys.Length];
+            for (int i = 0; i < arys.Length; i++)
+                res[i] = MapFromNx(arys[i], f);
+            return res;
+        }
 
         /// <summary>Joins arrays along an existing axis (NumPy's <c>ma.concatenate</c>): the data joined, and the masks
         /// joined alike when some operand has one, shrunk to nomask when nothing is masked.</summary>
@@ -7167,17 +10686,71 @@ namespace NumSharp
         ///     texts).</exception>
         public NDMaskedArray concatenate(object[] arrays, int? axis = 0) => MapSeq(arrays, ds => np.concatenate(ds, axis), shrink: true);
 
-        /// <summary>Stack arrays along a NEW axis (masks stacked alike).</summary>
-        /// <param name="arrays">Operands.</param><param name="axis">New-axis position.</param><returns>The stacked masked array.</returns>
-        public NDMaskedArray stack(object[] arrays, int axis = 0) => MapSeq(arrays, ds => np.stack(ds, axis));
+        /// <summary>Join a sequence along a NEW axis — NumPy's <c>np.ma.stack(arrays, axis=0, out=None, *, dtype=None,
+        ///     casting='same_kind')</c>: <c>np.stack</c> over the data and over the full masks, with the same keywords.</summary>
+        /// <param name="arrays">The operands (masked arrays, arrays, array-likes), all of one shape.</param>
+        /// <param name="axis">The new axis' position in the result (negative counts from the end).</param>
+        /// <param name="dtype">The result's dtype, or null for the operands' common type. NumPy joins the MASKS in it too (then
+        ///     reads them back as bool), so <paramref name="casting"/> also judges the bool to <paramref name="dtype"/>
+        ///     cast.</param>
+        /// <param name="casting">NumPy's casting rule for both joins (<c>"same_kind"</c> by default).</param>
+        /// <returns>A new masked array; its mask is always an array (no fill value or hardness is inherited).</returns>
+        /// <exception cref="InvalidCastException">The data or the masks do not cast to <paramref name="dtype"/> under
+        ///     <paramref name="casting"/> (NumPy's TypeError text; NumSharp's house mapping).</exception>
+        /// <exception cref="ValueError">The operands differ in shape (<c>all input arrays must have the same shape</c>), an
+        ///     empty sequence, or an unknown <paramref name="casting"/>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the result's rank.</exception>
+        /// <remarks>numpy.ma's <c>_fromnxfunction_seq</c>. <paramref name="dtype"/> / <paramref name="casting"/> arrived in
+        ///     API-parity batch 8; NumPy's <c>out=</c> is not offered: NumPy's ma.stack hands the SAME out to the data join and
+        ///     then to the mask join, so the result's data is the mask (a quirk left for a decision of its own).</remarks>
+        public NDMaskedArray stack(object[] arrays, int axis = 0, DType dtype = null, string casting = "same_kind")
+            => MapSeqTyped(arrays, ds => np.stack(ds, axis, null, dtype, casting));
 
         /// <summary>Stack row-wise / along the first axis (masks alike).</summary>
         /// <param name="tup">Operands.</param><returns>The stacked masked array.</returns>
+        /// <remarks>The loose form (<c>np.ma.vstack(a, b)</c>), kept beside NumPy's
+        ///     <see cref="vstack(object[], DType, string)"/> as np.vstack keeps its own (the owner's call, API-parity batch 3).
+        ///     A lone <c>object[]</c> binds HERE (C#'s params rule), which is NumPy's sequence anyway.</remarks>
         public NDMaskedArray vstack(params object[] tup) => MapSeq(tup, np.vstack);
+
+        /// <summary>Stack row-wise / along the first axis — NumPy's <c>np.ma.vstack(tup, *, dtype=None,
+        ///     casting='same_kind')</c>: <c>np.vstack</c> over the data and over the full masks, with the same keywords.</summary>
+        /// <param name="tup">The operands (masked arrays, arrays, array-likes).</param>
+        /// <param name="dtype">The result's dtype, or null for the operands' common type. NumPy joins the MASKS in it too (then
+        ///     reads them back as bool), so <paramref name="casting"/> also judges the bool to <paramref name="dtype"/>
+        ///     cast.</param>
+        /// <param name="casting">NumPy's casting rule for both joins: <c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>,
+        ///     <c>"same_kind"</c> (the default) or <c>"unsafe"</c>.</param>
+        /// <returns>A new masked array; its mask is always an array (no fill value or hardness is inherited).</returns>
+        /// <exception cref="InvalidCastException">The data or the masks do not cast to <paramref name="dtype"/> under
+        ///     <paramref name="casting"/>, with NumPy's TypeError text (<c>Cannot cast array data from dtype('int64') to
+        ///     dtype('float32') according to the rule 'no'</c>; NumSharp's house mapping).</exception>
+        /// <exception cref="ValueError">The operands' shapes do not join, or an unknown <paramref name="casting"/>.</exception>
+        /// <remarks>numpy.ma's <c>_fromnxfunction_seq</c>. Added in API-parity batch 8.</remarks>
+        public NDMaskedArray vstack(object[] tup, DType dtype = null, string casting = "same_kind")
+            => MapSeqTyped(tup, ds => np.vstack(ds, dtype, casting));
 
         /// <summary>Stack column-wise / along the second axis (masks alike).</summary>
         /// <param name="tup">Operands.</param><returns>The stacked masked array.</returns>
+        /// <remarks>The loose form (<c>np.ma.hstack(a, b)</c>), kept beside NumPy's
+        ///     <see cref="hstack(object[], DType, string)"/> as np.hstack keeps its own (the owner's call, API-parity batch 3).
+        ///     A lone <c>object[]</c> binds HERE (C#'s params rule), which is NumPy's sequence anyway.</remarks>
         public NDMaskedArray hstack(params object[] tup) => MapSeq(tup, np.hstack);
+
+        /// <summary>Stack column-wise / along the second axis — NumPy's <c>np.ma.hstack(tup, *, dtype=None,
+        ///     casting='same_kind')</c>: <c>np.hstack</c> over the data and over the full masks, with the same keywords.</summary>
+        /// <param name="tup">The operands (masked arrays, arrays, array-likes).</param>
+        /// <param name="dtype">The result's dtype, or null for the operands' common type. NumPy joins the MASKS in it too (then
+        ///     reads them back as bool), so <paramref name="casting"/> also judges the bool to <paramref name="dtype"/>
+        ///     cast.</param>
+        /// <param name="casting">NumPy's casting rule for both joins (<c>"same_kind"</c> by default).</param>
+        /// <returns>A new masked array; its mask is always an array (no fill value or hardness is inherited).</returns>
+        /// <exception cref="InvalidCastException">The data or the masks do not cast to <paramref name="dtype"/> under
+        ///     <paramref name="casting"/> (NumPy's TypeError text; NumSharp's house mapping).</exception>
+        /// <exception cref="ValueError">The operands' shapes do not join, or an unknown <paramref name="casting"/>.</exception>
+        /// <remarks>numpy.ma's <c>_fromnxfunction_seq</c>. Added in API-parity batch 8.</remarks>
+        public NDMaskedArray hstack(object[] tup, DType dtype = null, string casting = "same_kind")
+            => MapSeqTyped(tup, ds => np.hstack(ds, dtype, casting));
 
         /// <summary>Stack along the third axis (masks alike).</summary>
         /// <param name="tup">Operands.</param><returns>The stacked masked array.</returns>
@@ -7207,70 +10780,308 @@ namespace NumSharp
         //  diagonal / trace / nonzero / diff / append)
         // ─────────────────────────────────────────────────────────────────────────────
 
-        /// <summary>Clamps each element into <c>[a_min, a_max]</c>, preserving the mask (NumPy's <c>ma.clip</c>).
-        /// A null bound disables that side of the clip.</summary>
-        /// <param name="a">Data.</param><param name="a_min">Lower bound (array-like/scalar), or null.</param>
-        /// <param name="a_max">Upper bound (array-like/scalar), or null.</param>
-        /// <returns>The clamped masked array: a COPY of the operand's mask, its fill value and hard-mask flag.</returns>
-        /// <remarks>NumPy's <c>ma.clip</c> calls <c>np.clip</c>, which runs <c>MaskedArray.clip</c> =
-        /// <c>_arraymethod('clip', onmask=False)</c>: the clamp of the raw data (masked slots too), <c>_update_from(self)</c>,
-        /// and <c>__setmask__(self._mask)</c>, which writes the mask's values into a mask of the result's own.</remarks>
-        public NDMaskedArray clip(object a, object a_min, object a_max)
+        /// <summary>
+        ///     Clamps each element into <c>[a_min, a_max]</c> — NumPy's <c>ma.clip(a, a_min, a_max, out=None, *, min, max,
+        ///     fill_value=None, hardmask=False, dtype=None)</c>, which is <c>np.clip(...)</c> viewed as a masked array: the clip
+        ///     runs over the masked operand, so the result is masked wherever ANY operand is (a masked bound masks too).
+        /// </summary>
+        /// <param name="a">The operand: a masked array, or a plain array / array-like / scalar.</param>
+        /// <param name="a_min">Lower bound (array-like / scalar / masked array), or null (NumPy's None: no lower clip).</param>
+        /// <param name="a_max">Upper bound, or null (no upper clip). With both bounds and <paramref name="min"/> /
+        ///     <paramref name="max"/> null the result is a copy.</param>
+        /// <param name="out">NumPy's <c>out</c>: the clipped data is written into it and a NEW masked view of it is returned
+        ///     (not the out object). A masked out's own mask is REPLACED by the operands' (the clip ufunc's wrap; a hard mask
+        ///     too) and keeps its fill value and hardness, which the returned view takes; a plain one (an
+        ///     <see cref="NDArray"/> converts) receives the data and the view is mask-less.</param>
+        /// <param name="min">NumPy 2.1's keyword alias of <paramref name="a_min"/>, used when neither positional bound is
+        ///     given (np.clip's rule, with its TypeError / ValueError otherwise).</param>
+        /// <param name="max">NumPy 2.1's keyword alias of <paramref name="a_max"/>.</param>
+        /// <param name="fill_value">NumPy's <c>fill_value</c>: set on the result through <see cref="NDMaskedArray.fill_value"/>
+        ///     (NumPy's TypeError for a wrong kind); null keeps the inherited one. NumPy resets the fill for an explicit
+        ///     <c>None</c>, which C# cannot tell from "not given".</param>
+        /// <param name="hardmask">NumPy's <c>hardmask</c>: true hardens, false softens the result's mask; null (C#'s "not
+        ///     given") keeps what the result inherited (a hard operand gives a hard result). A <c>bool?</c> so that an
+        ///     explicit false softens, as NumPy's <c>hardmask=False</c> does.</param>
+        /// <param name="dtype">NumPy's ufunc <c>dtype</c>: the dtype the clip computes in (its 'same_kind' casting).</param>
+        /// <returns>A new masked array: the clipped data, the OR of the operands' masks (nomask when nothing is masked), and
+        ///     the fill value and hardness of the first masked operand — or, with <paramref name="out"/>, a view of the out.
+        ///     A fully masked 0-d result is <see cref="NDMasked"/>; a plain 0-d answer is wrapped mask-less (NumPy returns a
+        ///     scalar).</returns>
+        /// <exception cref="TypeError">np.clip's argument rule: <c>clip() missing 1 required positional argument: 'a_min'</c>
+        ///     / <c>'a_max'</c> when only one positional bound comes with a keyword bound; a wrong
+        ///     <paramref name="fill_value"/> kind.</exception>
+        /// <exception cref="ValueError">Both positional bounds with <paramref name="min"/> or <paramref name="max"/>
+        ///     (<c>Passing `min` or `max` keyword argument when `a_min` and `a_max` are provided is forbidden.</c>), or the
+        ///     operands / out do not broadcast.</exception>
+        /// <exception cref="OverflowError">A C# integer bound that does not fit an integer operand's dtype.</exception>
+        /// <exception cref="UFuncTypeError">The clip refuses <paramref name="dtype"/> or the out's dtype.</exception>
+        /// <remarks>
+        ///     NumPy 2.4.2's statements: <c>clip = _convert2ma('clip', params={'fill_value': None, 'hardmask': False})</c>, so
+        ///     <c>result = np.clip(*args, **kwargs).view(MaskedArray)</c>, then <c>result.fill_value = fill_value</c> and
+        ///     <c>result._hardmask = bool(hardmask)</c> when given. np.clip runs <c>a.clip(...)</c>, and MaskedArray has no clip
+        ///     of its own (it is <c>ndarray.clip</c>): <c>_clip</c> drops a Python-int bound past an integer dtype's range and
+        ///     routes to <c>positive</c> / <c>minimum</c> / <c>maximum</c> / <c>clip</c>, a ufunc over the masked operand whose
+        ///     <c>__array_wrap__</c> (<see cref="ClipMethodCore"/>) sets the mask. Until API-parity batch 9 this was
+        ///     <c>(a, a_min, a_max)</c>, which clipped the raw data and copied <paramref name="a"/>'s mask only: a masked
+        ///     bound's mask was lost. Scoped by hand: the bounds' materializations and the mask ORs are reclaimed.
+        /// </remarks>
+        public NDMaskedArray clip(object a, object a_min = null, object a_max = null, NDMaskedArray @out = null, object min = null, object max = null,
+                                  object fill_value = null, bool? hardmask = null, DType dtype = null)
         {
-            // Scoped by hand: the bounds (and a scalar operand) are materialized only to feed np.clip.
             using var scope = NDScope.Open();
-            var source = a as NDMaskedArray;
-            var m = source?._mask;
-            // The base np.clip does the clamp on the raw data; masked data is hidden anyway, so clamping it too is
-            // harmless and matches NumPy's ma.clip. The bounds reach np.clip as given (MaskedArray.clip forwards them to
-            // ndarray.clip): a bare C# number is a weak Python scalar there (drop rule, packing, the array's dtype kept).
-            var r = new NDMaskedArray(np.clip(AsData(a), a_min is null ? null : AsPassThroughOperand(a_min), a_max is null ? null : AsPassThroughOperand(a_max)), m?.copy());
-            if (source is not null)
-                r.UpdateFrom(source);
-            return Yield(scope, r);
+            var r = ClipMethodCore(a, a_min, a_max, @out, dtype, min, max);
+            NDMaskedArray view;
+            if (@out is null)
+                // A fresh result: its `.view(MaskedArray)` is the same data and mask, so the result stands for it.
+                view = r;
+            else if (@out.IsPlainArrayWrapper)
+                // `np.clip(..., out=plain).view(MaskedArray)`: a mask-less view of the caller's array.
+                view = new NDMaskedArray(@out._data, null);
+            else
+                // A view of the masked out: its data and mask shared, its fill value and hardness copied.
+                view = new NDMaskedArray(@out._data, @out._mask).UpdateFrom(@out);
+            if (!ReferenceEquals(view, NDMasked))
+            {
+                // `if "fill_value" in common_params: result.fill_value = ...` (the setter's checks and texts).
+                if (fill_value is not null)
+                    view.fill_value = fill_value;
+                // `if "hardmask" in common_params: result._hardmask = bool(hardmask)`.
+                if (hardmask is not null)
+                    view._hardmask = hardmask.Value;
+            }
+            return Yield(scope, view);
         }
 
         /// <summary>
-        ///     Merges choice arrays by an index array (NumPy's <c>ma.choose</c>): output[i] = choices[indices[i]][i].
-        ///     The result element is masked iff the CHOSEN element was masked (or the index itself was masked) —
-        ///     the mask is chosen by the SAME index array, mirroring the data.
+        ///     <c>ndarray.clip</c> over a masked operand — what <c>MaskedArray.clip</c> and np.clip run: np.clip's argument rule
+        ///     and <c>_clip</c> over the data (NumSharp's np.clip ports both), then the routed ufunc's <c>__array_wrap__</c>: the
+        ///     result's mask is <c>reduce(mask_or, [getmaskarray(arg) for arg in inputs])</c> over the ufunc's inputs (the
+        ///     operand and each bound <c>_clip</c> kept), and its fill value and hardness are those of the first masked input.
         /// </summary>
-        /// <param name="indices">Integer index array (each in <c>[0, n-1]</c>); a masked index masks its output.</param>
-        /// <param name="choices">The <c>n</c> choice arrays (<see cref="NDMaskedArray"/>/<see cref="NDArray"/>/array-like).</param>
-        /// <param name="mode">Out-of-bounds policy: "raise" (default), "wrap", or "clip".</param>
-        /// <returns>The merged masked array.</returns>
-        /// <remarks>Scoped by hand: the zero-filled index copy, the materialized choices, the stand-in masks of
-        /// unmasked choices and the pre-OR chosen mask are reclaimed; only the merged data and mask leave.</remarks>
-        public NDMaskedArray choose(object indices, object[] choices, string mode = "raise")
+        /// <param name="a">The operand.</param>
+        /// <param name="a_min">The lower bound, or null.</param>
+        /// <param name="a_max">The upper bound, or null.</param>
+        /// <param name="out">The caller's out, or null.</param>
+        /// <param name="dtype">The ufunc's dtype, or null.</param>
+        /// <param name="min">np.clip's keyword alias of the lower bound, or null.</param>
+        /// <param name="max">np.clip's keyword alias of the upper bound, or null.</param>
+        /// <returns>With an out, the out itself (a masked out with its mask replaced — the wrap's direct
+        ///     <c>result._mask = m</c>, hard or not — and its own fill value and hardness; a plain-array wrapper as it is).
+        ///     Without one: a new masked array, or <see cref="NDMasked"/> for a fully masked 0-d result.</returns>
+        /// <exception cref="TypeError">np.clip's argument-rule TypeErrors.</exception>
+        /// <exception cref="ValueError">np.clip's argument-rule ValueError, or a broadcast failure.</exception>
+        /// <exception cref="OverflowError">A C# integer bound that does not fit an integer operand's dtype.</exception>
+        /// <exception cref="UFuncTypeError">The clip refuses <paramref name="dtype"/> or the out's dtype.</exception>
+        /// <remarks>
+        ///     The wrap's mask: one input (both bounds None or dropped: <c>um.positive(a)</c>) is <c>getmaskarray(a)</c> as it
+        ///     is, an all-False ARRAY for a mask-less operand (mask_or never runs, so nothing shrinks it; NumPy even shares the
+        ///     operand's mask object, which NumSharp copies); two or three inputs go through <c>mask_or</c>, which shrinks an
+        ///     all-False result to nomask. Without any masked input NumPy's result is a plain array (nomask once viewed). A
+        ///     bare C# number bound is NumPy's Python scalar (<see cref="AsPassThroughOperand"/>), so <c>_clip</c>'s drop rule
+        ///     applies to it, never to an array bound. The masks are this call's temporaries except the one stored into a
+        ///     masked out (detached there) or carried by the result (left to the caller's scope).
+        /// </remarks>
+        internal NDMaskedArray ClipMethodCore(object a, object a_min, object a_max, NDMaskedArray @out, DType dtype, object min, object max)
+        {
+            var d = AsData(a);
+            NDArray Bound(object b) => b is null ? null : AsPassThroughOperand(b);
+            NDArray loArr = Bound(a_min), hiArr = Bound(a_max), minArr = Bound(min), maxArr = Bound(max);
+            // np.clip: the argument rule, _clip's drop + route, the ufunc over the data (into the out's data when given).
+            var res = np.clip(d, loArr, hiArr, @out?._data, dtype, minArr, maxArr);
+            // The bounds the ufunc saw: the keyword aliases stand in when no positional bound was given (np.clip refused every
+            // other mix above), and _clip drops a Python int past an integer dtype's range.
+            bool keywords = a_min is null && a_max is null;
+            object lo = keywords ? min : a_min, hi = keywords ? max : a_max;
+            NDArray loIn = keywords ? minArr : loArr, hiIn = keywords ? maxArr : hiArr;
+            var inputs = new List<object> { a };
+            if (lo is not null && !ClipBoundDropped(loIn, d.typecode, lower: true))
+                inputs.Add(lo);
+            if (hi is not null && !ClipBoundDropped(hiIn, d.typecode, lower: false))
+                inputs.Add(hi);
+            var wrapper = inputs.OfType<NDMaskedArray>().FirstOrDefault();
+            if (@out is not null)
+            {
+                // The wrap runs on a MASKED out only (obj is self: no _update_from); a plain out is returned as it is.
+                if (!@out.IsPlainArrayWrapper)
+                    ReplaceOutMask(@out, ClipWrapMask(inputs, res));
+                return @out;
+            }
+            if (wrapper is null)
+                // No masked input: the ufunc's answer is a plain array.
+                return new NDMaskedArray(res, null);
+            var m = ClipWrapMask(inputs, res);
+            // `if result is not self and result.shape == () and m: return masked`.
+            if (res.ndim == 0 && m is not null && np.any(m))
+                return NDMasked;
+            return new NDMaskedArray(res, m).UpdateFrom(wrapper);
+        }
+
+        /// <summary><c>__array_wrap__</c>'s <c>m = reduce(mask_or, [getmaskarray(arg) for arg in input_args])</c> for the clip
+        ///     ufuncs.</summary>
+        /// <param name="inputs">The ufunc's inputs: the operand, then each bound it kept.</param>
+        /// <param name="res">The ufunc's result (the masks broadcast to its shape).</param>
+        /// <returns>One input: its getmaskarray (a copy of a masked operand's mask, or an all-False array); several: their OR,
+        ///     or null (nomask) when nothing is masked.</returns>
+        private static NDArray ClipWrapMask(List<object> inputs, NDArray res)
+        {
+            var shape = new Shape(res.Shape.dimensions, copy: false);
+            if (inputs.Count == 1)
+                return inputs[0] is NDMaskedArray { _mask: not null } single
+                    ? np.broadcast_to(single._mask, shape).copy()
+                    : np.zeros(shape, np.@bool);
+            NDArray m = null;
+            foreach (var input in inputs)
+                if (input is NDMaskedArray { _mask: not null } masked)
+                    m = m is null ? masked._mask : np.logical_or(m, masked._mask);
+            // mask_or's shrink: an all-False OR is nomask; a kept one covers the result's shape.
+            if (m is null || !np.any(m))
+                return null;
+            return m.Shape.Equals(res.Shape) ? m.copy() : np.broadcast_to(m, shape).copy();
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_clip</c> drop rule for one bound, as np.clip applies it: on an integer operand a Python int at or
+        ///     past the dtype's limit is set to None, so it is no input of the ufunc (and adds no mask).
+        /// </summary>
+        /// <param name="bound">The bound as np.clip received it (a C# number became a literal-marked 0-d array).</param>
+        /// <param name="dataType">The operand's dtype (its range decides).</param>
+        /// <param name="lower">True for the lower bound (dropped at or below the minimum), false for the upper one.</param>
+        /// <returns>True when NumPy drops the bound.</returns>
+        private static bool ClipBoundDropped(NDArray bound, NPTypeCode dataType, bool lower)
+        {
+            // `type(min) is int`: only a Python int (a literal-marked integer 0-d array) is dropped, never a bool, float or
+            // array bound; only an integer operand ('iu' kinds) takes the rule.
+            if (bound is null || !bound.WasPythonLiteral || bound.ndim != 0
+                || !NDExprTypeRules.IsIntegerKind(dataType) || !NDExprTypeRules.IsIntegerKind(bound.GetTypeCode))
+                return false;
+            var (lo, hi) = NDExprTypeRules.IntBounds(dataType);
+            // Every integer dtype's value fits Int128 exactly (uint64 included).
+            Int128 v = bound.GetAtIndex(0) switch
+            {
+                ulong u => u,
+                IConvertible c => c.ToInt64(System.Globalization.CultureInfo.InvariantCulture),
+                _ => 0,
+            };
+            return lower ? v <= lo : v >= hi;
+        }
+
+        /// <summary>
+        ///     Merges choice arrays by an index array — NumPy's <c>np.ma.choose(indices, choices, out=None, mode='raise')</c>:
+        ///     output[i] = choices[indices[i]][i]. The result element is masked iff the CHOSEN element was masked (or the index
+        ///     itself was masked) — the mask is chosen by the SAME index array, mirroring the data.
+        /// </summary>
+        /// <param name="indices">Integer index array (each in <c>[0, n-1]</c>); a masked index masks its output (its data
+        ///     is read as 0).</param>
+        /// <param name="choices">The <c>n</c> choice arrays (<see cref="NDMaskedArray"/>/<see cref="NDArray"/>/array-like).
+        ///     A masked choice contributes its data FILLED with its own fill value (NumPy's <c>fmask</c>): hidden under the
+        ///     result's mask, but visible through a plain <paramref name="out"/>.</param>
+        /// <param name="out">NumPy's <c>out</c>: the chosen data is written into it (np.choose's shape and cast checks) and
+        ///     it is returned; a masked out then takes the result's mask through NumPy's <c>__setmask__</c> (a hard out only
+        ///     gains masked slots; nothing masked clears a soft out's mask and leaves a mask-less out mask-less). A plain array
+        ///     (converted) receives the data only. Added in API-parity batch 8.</param>
+        /// <param name="mode">Out-of-bounds policy: "raise" (default), "wrap", or "clip". It follows
+        ///     <paramref name="out"/>, as in NumPy, so a positional mode is now written <c>mode: "clip"</c>.</param>
+        /// <returns>The merged masked array (a new soft array with the default fill), or <paramref name="out"/>.</returns>
+        /// <exception cref="ValueError">An index is out of range under <c>mode="raise"</c> (np.choose's
+        ///     <c>invalid entry in choice array</c>), checked before anything is written.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s shape is not the result's (<c>choose: invalid shape for output
+        ///     array.</c>).</exception>
+        /// <remarks>NumPy's statements: <c>c = filled(indices, 0)</c>, the masks chosen and shrunk FIRST
+        ///     (<c>make_mask(mask_or(np.choose(c, masks), getmask(indices)), shrink=True)</c>), then the filled data chosen.
+        ///     Scoped by hand: the zero-filled index copy, the filled / materialized choices, the stand-in masks of unmasked
+        ///     choices and the pre-OR chosen mask are reclaimed; only the merged data and mask leave, and a mask created for
+        ///     <paramref name="out"/> is detached (it lives in the caller's array).</remarks>
+        public NDMaskedArray choose(object indices, object[] choices, NDMaskedArray @out = null, string mode = "raise")
         {
             using var scope = NDScope.Open();
             // Index data with masked slots filled by 0 (NumPy's filled(indices, 0)).
             var im = (indices as NDMaskedArray)?._mask;
             var c = im is null ? AsData(indices) : ((NDMaskedArray)indices).filled(0);
-            // Pick the data by index; masked choice slots are hidden by the mask set below.
-            var data = np.choose(c, choices.Select(AsData).ToArray(), mode: mode);
-            bool anyMasked = im is not null || choices.Any(ch => (ch as NDMaskedArray)?._mask is not null);
-            if (!anyMasked)
-                return Yield(scope, new NDMaskedArray(data, null));
-            // Pick each choice's full mask by the SAME index, then OR in the index's own mask.
-            var outmask = np.choose(c, choices.Select(getmaskarray).ToArray(), mode: mode);
-            outmask = Or(outmask, im);
-            return Yield(scope, new NDMaskedArray(data, (outmask is not null && np.any(outmask)) ? outmask : null));
+            // `outputmask = np.choose(c, masks, mode=mode)` runs before the data choose: each choice's full mask picked by
+            // the SAME index, OR'd with the index's own mask and shrunk (nothing masked is nomask).
+            NDArray outputmask = null;
+            if (im is not null || choices.Any(ch => (ch as NDMaskedArray)?._mask is not null))
+                outputmask = ShrinkMask(Or(np.choose(c, choices.Select(getmaskarray).ToArray(), mode: mode), im));
+            // `data = [fmask(x) for x in choices]`: a choice's FILLED data (True for the masked constant).
+            var data = choices.Select(ChooseChoiceData).ToArray();
+            if (@out is not null)
+            {
+                // `d = np.choose(c, data, mode=mode, out=out)`; `if isinstance(out, MaskedArray): out.__setmask__(outputmask);
+                // return out`.
+                np.choose(c, data, @out._data, mode);
+                if (!@out.IsPlainArrayWrapper)
+                    SetMaskLikeNumPy(@out, outputmask);
+                return @out;
+            }
+            // `d.__setmask__(outputmask)` on the fresh view of the chosen data: the shrunk mask (a new array) or nomask.
+            return Yield(scope, new NDMaskedArray(np.choose(c, data, null, mode), outputmask));
         }
 
-        /// <summary>Keeps only the elements where <paramref name="condition"/> is truthy (NumPy's <c>ma.compress</c>);
-        /// data AND mask are compressed alike so the survivors keep their masked-ness.</summary>
+        /// <summary>numpy.ma.choose's <c>fmask(x)</c>: a choice's data as NumPy's <c>filled(x)</c> reads it — a masked array
+        ///     filled with its OWN fill value, the <c>masked</c> constant as <c>True</c>, anything else as its data.</summary>
+        /// <param name="x">One choice.</param>
+        /// <returns>The data np.choose picks from: the filled copy, the masked array's own data when it has no mask, or the
+        ///     operand / its materialization.</returns>
+        private NDArray ChooseChoiceData(object x)
+        {
+            if (ReferenceEquals(x, NDMasked))
+                return NDArray.Scalar(true);
+            return x is NDMaskedArray m ? m.filled() : AsData(x);
+        }
+
+        /// <summary>
+        ///     <c>MaskedArray.choose</c>, which numpy.ma does not define: it is <c>ndarray.choose(choices, out=None,
+        ///     mode='raise')</c> run on the masked array's buffers — the index's STORED values (a masked slot's too) select
+        ///     from the choices' raw data, and no mask is read from the choices.
+        /// </summary>
+        /// <param name="self">The index array.</param>
+        /// <param name="choices">The choice arrays (masked arrays contribute their raw data).</param>
+        /// <param name="out">The output, or null: np.choose writes its data and it is returned; no mask is set on it (no
+        ///     MaskedArray hook runs inside <c>PyArray_Choose</c>).</param>
+        /// <param name="mode">Out-of-bounds policy for the stored index values: "raise", "wrap" or "clip".</param>
+        /// <returns>A new masked array of the chosen data carrying a COPY of the index's mask and the index's fill value and
+        ///     hard-mask flag (<c>PyArray_NewFromDescr(Py_TYPE(ap), ..., ap)</c>: <c>__array_finalize__</c> from the index),
+        ///     or <paramref name="out"/>.</returns>
+        /// <exception cref="ValueError">A stored index value is out of range under <c>mode="raise"</c> — a masked
+        ///     slot's raw value included, where the module form reads 0.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s shape is not the result's.</exception>
+        /// <remarks>Scoped by hand: the materialized choices are reclaimed; the chosen data and the mask copy leave.</remarks>
+        internal NDMaskedArray ChooseMethod(NDMaskedArray self, object[] choices, NDMaskedArray @out, string mode)
+        {
+            using var scope = NDScope.Open();
+            var data = choices.Select(AsData).ToArray();
+            if (@out is not null)
+            {
+                np.choose(self._data, data, @out._data, mode);
+                return @out;
+            }
+            var r = new NDMaskedArray(np.choose(self._data, data, null, mode), self._mask?.copy());
+            r.UpdateFrom(self);
+            return Yield(scope, r);
+        }
+
+        /// <summary>Keeps only the elements where <paramref name="condition"/> is truthy — NumPy's <c>np.ma.compress(condition,
+        /// a, axis=None, out=None)</c>; data AND mask are compressed alike so the survivors keep their masked-ness.</summary>
         /// <param name="condition">1-D array-like selector, read by truth value (non-zero numbers, non-empty strings) over
         ///     the flattened elements or along <paramref name="axis"/>.</param>
         /// <param name="a">Data.</param><param name="axis">Axis to compress along, or null to flatten first.</param>
-        /// <returns>The compressed masked array; it keeps a masked <paramref name="a"/>'s fill value and hardness.</returns>
+        /// <param name="out">NumPy's <c>out</c>: the compressed DATA is written into it (np.compress's shape and cast checks)
+        ///     and its mask is never touched. The result is then a NEW masked array over <paramref name="out"/>'s data whose
+        ///     mask is the operand's compressed mask — or, for an unmasked operand, <paramref name="out"/>'s own mask object
+        ///     (NumPy's <c>out.view(type(self))</c> shares it). Added in API-parity batch 8.</param>
+        /// <returns>The compressed masked array; it keeps a masked <paramref name="a"/>'s fill value and hardness (also when
+        ///     it is a view of <paramref name="out"/>).</returns>
         /// <exception cref="ArgumentException">The condition is not 1-D (NumPy's ValueError <c>condition must be a 1-d
         ///     array</c>), checked before its values are read.</exception>
         /// <exception cref="IndexError">A truthy condition entry past the axis length.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/>'s shape is not the result's (<c>output array does not match
+        ///     result of ndarray.take</c>).</exception>
         /// <remarks>NumPy's <c>MaskedArray.compress</c>: <c>condition = np.asarray(condition)</c>, then
-        /// <c>_data.compress(condition, axis)</c> — whose 1-d check, nonzero and take run in NumPy's order inside
-        /// <see cref="np.compress"/> — and the same compress of the mask, with <c>_update_from(self)</c>.</remarks>
-        public NDMaskedArray compress(object condition, object a, int? axis = null)
+        /// <c>_new = _data.compress(condition, axis=axis, out=out).view(type(self))</c> — whose 1-d check, nonzero and take
+        /// run in NumPy's order inside <see cref="np.compress"/> — <c>_new._update_from(self)</c>, and
+        /// <c>if _mask is not nomask: _new._mask = _mask.compress(condition, axis=axis)</c>, which rebinds the NEW array's
+        /// mask only.</remarks>
+        public NDMaskedArray compress(object condition, object a, int? axis = null, NDMaskedArray @out = null)
         {
             // Scoped by hand: the materialized operands only feed the two compresses.
             using var scope = NDScope.Open();
@@ -7278,8 +11089,20 @@ namespace NumSharp
             var cond = AsData(condition);
             var source = a as NDMaskedArray;
             var m = source?._mask;
-            var data = np.compress(cond, AsData(a), axis);
-            var result = new NDMaskedArray(data, m is null ? null : np.compress(cond, m, axis));
+            NDMaskedArray result;
+            if (@out is null)
+            {
+                var data = np.compress(cond, AsData(a), axis);
+                result = new NDMaskedArray(data, m is null ? null : np.compress(cond, m, axis));
+            }
+            else
+            {
+                // `_data.compress(condition, axis=axis, out=out)` returns out itself; its `.view(type(self))` is a new masked
+                // array over out's buffer whose mask is a view of out's (nomask for a plain out) until an operand mask
+                // replaces it. The result shares out's data object, as the plain-array wrapper does.
+                np.compress(cond, AsData(a), axis, @out._data);
+                result = new NDMaskedArray(@out._data, m is not null ? np.compress(cond, m, axis) : @out.IsPlainArrayWrapper ? null : @out._mask);
+            }
             if (source is not null)
                 result.UpdateFrom(source);
             return Yield(scope, result);
@@ -7306,35 +11129,45 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Sum of the diagonal, treating masked slots as 0 (NumPy's <c>ma.trace</c>, <c>MaskedArray.trace</c>). Returns a
-        ///     PLAIN array, and — matching NumPy's <c>astype(None)</c> quirk — the result is float64 unless
-        ///     <paramref name="dtype"/> is given (so <c>ma.trace</c> of an int matrix is float64, not int).
+        ///     Sum of the diagonal, treating masked slots as 0 — NumPy's <c>np.ma.trace(a, offset=0, axis1=0, axis2=1,
+        ///     dtype=None, out=None)</c> (<c>MaskedArray.trace</c>). Returns a PLAIN array, and — matching NumPy's
+        ///     <c>astype(None)</c> quirk — the result is float64 unless <paramref name="dtype"/> is given (so <c>ma.trace</c>
+        ///     of an int matrix is float64, not int).
         /// </summary>
         /// <param name="a">Data (rank ≥ 2).</param><param name="offset">Diagonal offset.</param>
         /// <param name="axis1">First plane axis.</param><param name="axis2">Second plane axis.</param>
         /// <param name="dtype">Result dtype; null ⇒ float64 (NumPy's default).</param>
-        /// <returns>A plain <see cref="NDArray"/> trace.</returns>
+        /// <param name="out">NumPy's <c>out</c> (np.sum's / np.trace's checks). A MASKED operand's trace is summed into it
+        ///     (in <paramref name="dtype"/>, then cast to the out's dtype) and it is returned. An UNMASKED operand's trace is
+        ///     written into it WITHOUT <paramref name="dtype"/> (NumPy passes only the axes) and the result is then
+        ///     <c>out.astype(dtype)</c> — a new float64 (or <paramref name="dtype"/>) copy, not the out. Added in API-parity
+        ///     batch 8.</param>
+        /// <returns>A plain <see cref="NDArray"/> trace: <paramref name="out"/> for a masked operand, else a new array.</returns>
         /// <exception cref="ArgumentException">The operand has fewer than two dimensions (NumPy's ValueError <c>diag requires
         ///     an array of at least two dimensions</c>), or the axes are invalid.</exception>
         /// <exception cref="TypeError">A nomask text operand: the diagonal sum has no string loop.</exception>
         /// <exception cref="ValueError">A masked text operand whose diagonal does not parse as float64: NumPy casts the
-        ///     diagonal first (<c>D.astype(None)</c>: <c>could not convert string to float</c>).</exception>
+        ///     diagonal first (<c>D.astype(None)</c>: <c>could not convert string to float</c>); or an <paramref name="out"/> of
+        ///     the wrong rank (<c>output parameter for reduction operation add has the wrong number of dimensions: Found 1 but
+        ///     expected 0</c>).</exception>
         /// <remarks>
-        ///     NumPy's statements: with no mask, <c>super().trace(offset, axis1, axis2).astype(dtype)</c>; with a mask,
-        ///     <c>D = self.diagonal(offset, axis1, axis2); return D.astype(dtype).filled(0).sum(axis=-1)</c> — the cast comes
-        ///     BEFORE the fill, so the diagonal is summed in the result dtype (float64 by default), and a rank error is the
-        ///     diagonal's own. Scoped (<c>[NDScoped]</c>): the diagonal, its cast and the zero-filled copy are reclaimed.
+        ///     NumPy's statements: with no mask, <c>super().trace(offset, axis1, axis2, out=out).astype(dtype)</c>; with a
+        ///     mask, <c>D = self.diagonal(offset, axis1, axis2); return D.astype(dtype).filled(0).sum(axis=-1, out=out)</c> — the
+        ///     cast comes BEFORE the fill, so the diagonal is summed in the result dtype (float64 by default), and a rank error
+        ///     is the diagonal's own. Scoped (<c>[NDScoped]</c>): the diagonal, its cast and the zero-filled copy are reclaimed;
+        ///     a returned <paramref name="out"/> is the caller's and is never released.
         /// </remarks>
         [NDScoped]
-        public NDArray trace(object a, int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null)
+        public NDArray trace(object a, int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null, NDArray @out = null)
         {
             var dt = dtype ?? np.float64;
-            // `if m is nomask: return super().trace(...).astype(dtype)` — astype(None) is float64.
+            // `if m is nomask: return super().trace(offset=offset, axis1=axis1, axis2=axis2, out=out).astype(dtype)` —
+            // astype(None) is float64, and astype copies, so an out is written but not returned.
             if ((a as NDMaskedArray)?._mask is null)
-                return np.trace(AsData(a), offset, axis1, axis2).astype(dt);
+                return np.trace(AsData(a), offset, axis1, axis2, null, @out).astype(dt);
             // `D = self.diagonal(...)` raises for a 1-D or 0-d operand before anything reads the data.
             var D = diagonal(a, offset, axis1, axis2);
-            return np.sum(D.astype(dt).filled(0), -1);
+            return np.sum(D.astype(dt).filled(0), -1, null, @out);
         }
 
         /// <summary>Indices of the non-zero UNMASKED elements (NumPy's <c>ma.nonzero</c>): masked slots are filled
@@ -7503,43 +11336,134 @@ namespace NumSharp
             return Yield(scope, result);
         }
 
-        /// <summary>Weighted average over unmasked elements (NumPy's <c>average</c>): with no weights this is the
-        /// mean; otherwise <c>sum(a·w)/sum(w)</c> with masked slots dropped from BOTH sums.</summary>
-        /// <param name="a">Data.</param><param name="axis">Axis or null.</param>
-        /// <param name="weights">Weights (same shape as <paramref name="a"/>, or 1-D along <paramref name="axis"/>); null ⇒ uniform.</param>
-        /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
-        /// <returns>The masked (weighted) average.</returns>
-        public NDMaskedArray average(object a, int? axis = null, object weights = null, bool keepdims = false)
+        /// <summary>
+        ///     The result of <see cref="average(object, int?, object, bool, bool)"/> - NumPy's bare-masked-average-OR-tuple
+        ///     return as one type: the masked average (<see cref="values"/>, typed <see cref="NDMaskedArray"/>), plus
+        ///     <see cref="sum_of_weights"/> when <c>returned</c> was set (null otherwise). It converts implicitly to
+        ///     <see cref="NDMaskedArray"/> and deconstructs: <c>var (avg, sum_of_weights) = np.ma.average(a, returned:
+        ///     true);</c>.
+        /// </summary>
+        /// <remarks>
+        ///     <para>API-parity batch 11 (the owner's decision 3): it replaces np.ma.average's NDMaskedArray return and the
+        ///     NumSharp-only <c>np.ma.average_returned</c>. Its constructor is internal: only np.ma.average builds it, so
+        ///     <see cref="values"/> is always the masked average. The masked array's members callers read on an average
+        ///     (data, mask, shape, dtype, size, filled) forward to <see cref="values"/>.</para>
+        ///     <para>Footgun: an extension method of <see cref="NDMaskedArray"/> does not see through the implicit
+        ///     conversion - call it on <see cref="values"/>.</para>
+        /// </remarks>
+        public readonly struct AverageResult : INDArrayCarrier
         {
-            // Scoped by hand: the shared core also computes the sum-of-weights, which this form discards — it is
-            // reclaimed with the core's other intermediates; only the average and its mask leave.
-            using var scope = NDScope.Open();
-            return Yield(scope, AverageCore(a, axis, weights, keepdims).avg);
+            /// <summary>The masked average (0-d over every axis; a full reduction of a fully masked operand is
+            ///     masked). Always present.</summary>
+            public NDMaskedArray values { get; }
+
+            /// <summary>The sum of weights in the average's shape (the unmasked count without weights), or <c>null</c>
+            ///     when <c>returned</c> was false. NumPy's is a MaskedArray or an ndarray depending on the case; here it is
+            ///     whichever the computation produced, typed <see cref="NDArray"/>.</summary>
+            public NDArray sum_of_weights { get; }
+
+            /// <summary>Wraps the outputs <see cref="average(object, int?, object, bool, bool)"/> computed.</summary>
+            /// <param name="values">The masked average.</param>
+            /// <param name="sum_of_weights">The sum of weights, or null without <c>returned</c>.</param>
+            internal AverageResult(NDMaskedArray values, NDArray sum_of_weights)
+            {
+                this.values = values;
+                this.sum_of_weights = sum_of_weights;
+            }
+
+            /// <summary>The average's data (<see cref="NDMaskedArray.data"/>).</summary>
+            public NDArray data => values.data;
+
+            /// <summary>The average's mask (<see cref="NDMaskedArray.mask"/>).</summary>
+            public NDArray mask => values.mask;
+
+            /// <summary>The average's shape.</summary>
+            public long[] shape => values.shape;
+
+            /// <summary>The average's dtype.</summary>
+            public DType dtype => values.dtype;
+
+            /// <summary>The average's element count.</summary>
+            public long size => values.size;
+
+            /// <summary>The average with its masked slots replaced (<see cref="NDMaskedArray.filled"/>).</summary>
+            /// <param name="fill_value">The value for the masked slots, or null for the average's fill value.</param>
+            /// <returns>A plain array.</returns>
+            public NDArray filled(object fill_value = null) => values.filled(fill_value);
+
+            /// <summary>Number of present outputs: 1, or 2 with <c>returned</c>.</summary>
+            public int Length => sum_of_weights is null ? 1 : 2;
+
+            /// <summary>The masked average: NumPy's first tuple element, and the whole result without <c>returned</c>.</summary>
+            /// <param name="result">The result.</param>
+            /// <returns><see cref="values"/>.</returns>
+            public static implicit operator NDMaskedArray(AverageResult result) => result.values;
+
+            /// <summary>Deconstructs a <c>returned=True</c> result: <c>var (avg, sum_of_weights) = ...</c>.</summary>
+            /// <param name="values">The masked average.</param>
+            /// <param name="sum_of_weights">The sum of weights.</param>
+            /// <exception cref="InvalidOperationException">The result holds the average alone: Python's <c>not enough
+            ///     values to unpack (expected 2, got 1)</c>.</exception>
+            public void Deconstruct(out NDMaskedArray values, out NDArray sum_of_weights)
+            {
+                if (this.sum_of_weights is null)
+                    throw new InvalidOperationException("not enough values to unpack (expected 2, got 1)");
+                values = this.values;
+                sum_of_weights = this.sum_of_weights;
+            }
+
+            // Yields the average's parts (data, mask, a stored fill) and the sum of weights: a scoped caller returning this
+            // result keeps them alive.
+            void INDArrayCarrier.YieldTo(NDScope scope)
+            {
+                scope.Returns(values?._data);
+                scope.Returns(values?._mask);
+                scope.Returns(values?._fill_value);
+                scope.Returns(sum_of_weights);
+            }
         }
 
         /// <summary>
-        ///     Weighted average AND its sum-of-weights (NumPy's <c>average(..., returned=True)</c>, which returns
-        ///     the pair). The C# analog of NumPy's tuple return — <c>var (avg, sws) = np.ma.average_returned(a)</c>
-        ///     — mirroring the base library's <see cref="np.average_returned(NDArray,int?,NDArray,bool)"/>. With no
-        ///     weights the sum-of-weights is the COUNT of unmasked elements (as float64), matching NumPy.
+        ///     Weighted average over unmasked elements - NumPy's <c>ma.average(a, axis=None, weights=None, returned=False,
+        ///     *, keepdims)</c>: with no weights this is the mean; otherwise <c>sum(a·w)/sum(w)</c> with masked slots
+        ///     dropped from BOTH sums, and with <paramref name="returned"/> the sum of weights too.
         /// </summary>
-        /// <param name="a">Data.</param><param name="axis">Axis or null.</param>
-        /// <param name="weights">Weights, or null for uniform.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>A tuple of the masked average and the (plain float64) sum of weights.</returns>
-        public (NDMaskedArray avg, NDArray sumOfWeights) average_returned(object a, int? axis = null, object weights = null, bool keepdims = false)
+        /// <param name="a">Data.</param>
+        /// <param name="axis">Axis or null.</param>
+        /// <param name="weights">Weights (same shape as <paramref name="a"/>, or 1-D along <paramref name="axis"/>); null ⇒
+        ///     uniform.</param>
+        /// <param name="returned">NumPy's <c>returned</c>: also return the sum of weights (the COUNT of unmasked elements,
+        ///     in the average's dtype, without weights).</param>
+        /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
+        /// <returns>An <see cref="AverageResult"/>: the masked (weighted) average (it converts implicitly to
+        ///     <see cref="NDMaskedArray"/>) and, with <paramref name="returned"/>, the sum of weights.</returns>
+        /// <exception cref="AxisError">The axis is out of bounds (<c>axis: axis 5 is out of bounds for array of dimension
+        ///     1</c>).</exception>
+        /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
+        ///     and weights differ.</c>); text weights against a masked operand; a text operand.</exception>
+        /// <exception cref="ValueError">Weights that are not 1-D of the axis's length (<c>Shape of weights must be consistent
+        ///     with shape of a along specified axis.</c>).</exception>
+        /// <remarks>
+        ///     <para>Scoped by hand (a struct carrying a masked array is not a shape the weaver yields): the average's
+        ///     data / mask and, with <paramref name="returned"/>, the sum of weights are handed back; everything else the
+        ///     core built (a sum of weights not asked for included) is reclaimed.</para>
+        ///     <para>API-parity batch 11 (the owner's decision 3): NumPy's <c>returned</c> in NumPy's place (before
+        ///     <c>keepdims</c>, keyword-only in NumPy) and the <see cref="AverageResult"/> return; the NumSharp-only
+        ///     <c>average_returned</c> went.</para>
+        /// </remarks>
+        public AverageResult average(object a, int? axis = null, object weights = null, bool returned = false, bool keepdims = false)
         {
-            // Scoped by hand (a tuple carrying a masked array is not a shape the weaver yields): both halves of the
-            // pair are handed back — the average's data/mask and the sum-of-weights — and everything else the core
-            // built is reclaimed.
             using var scope = NDScope.Open();
             var result = AverageCore(a, axis, weights, keepdims);
             Yield(scope, result.avg);
+            if (!returned)
+                return new AverageResult(result.avg, null);
             scope.Returns(result.sumOfWeights);
-            return result;
+            return new AverageResult(result.avg, result.sumOfWeights);
         }
 
-        /// <summary>Shared core of <see cref="average"/>/<see cref="average_returned"/>: computes the masked
-        /// average and the sum-of-weights so the two public entry points never drift apart.</summary>
+        /// <summary>The core of <see cref="average"/>: computes the masked average and the sum-of-weights (the caller keeps
+        /// the second only for <c>returned</c>).</summary>
         /// <param name="a">Data.</param>
         /// <param name="axis">Axis or null.</param>
         /// <param name="weights">Weights, or null for the uniform (mean) form.</param>
@@ -7563,7 +11487,7 @@ namespace NumSharp
         ///     / scl</c>. The division is numpy.ma's (a zero sum of weights is masked) except for a full reduction, whose sums
         ///     are NumPy scalars: there <c>0/0</c> is a plain nan.
         ///     </para>
-        ///     <para>Unscoped on purpose: both callers open the scope and decide which halves of the pair leave, so
+        ///     <para>Unscoped on purpose: the caller opens the scope and decides which halves of the pair leave, so
         ///     the core's intermediates (the casts, broadcast weights, weighted products) ride the caller's scope.</para>
         /// </remarks>
         private (NDMaskedArray avg, NDArray sumOfWeights) AverageCore(object a, int? axis, object weights, bool keepdims)
@@ -7584,7 +11508,7 @@ namespace NumSharp
             {
                 // Uniform: the average is the plain masked mean, and the sum-of-weights is the unmasked COUNT in the
                 // average's dtype (`avg.dtype.type(a.count(axis))`).
-                var avgU = mean(am, ax, null, keepdims);
+                var avgU = mean(am, ax, null, null, keepdims);
                 var scl = CountUnmasked(mask, am.Shape, ax, keepdims).astype(avgU.dtype);
                 return (avgU, scl);
             }
@@ -7612,21 +11536,21 @@ namespace NumSharp
                 // A 0-d product is a NumPy SCALAR in numpy.ma (`_MaskedBinaryOperation` returns the bare result), and
                 // `wgt.mask |= a.mask` then fails on it: NumPy's own AttributeError, naming the scalar's type.
                 if (!ReferenceEquals(weighted, NDMasked) && weighted._data.ndim == 0)
-                    throw new AttributeError($"'numpy.{weighted.dtype.name}' object has no attribute 'mask'");
+                    throw new AttributeError($"'numpy.{weighted.dtype.name}' object has no attribute 'mask'", "mask", weighted._data.GetAtIndex(0));
                 weighted._mask = Or(weighted._mask, mask);
                 wgt = weighted;
             }
             // scl = wgt.sum(axis=axis, dtype=result_dtype): the ufunc's dtype check refuses a sized string dtype (a text
             // operand). NumPy fills the masked slots with 0 first, which cannot fail, so the check is its answer.
             DefaultEngine.UfuncLoopCode(resultDtype);
-            var sclMasked = sum(wgt, ax, resultDtype, keepdims);
+            var sclMasked = sum(wgt, ax, resultDtype, null, keepdims);
             // avg = np.multiply(a, wgt, dtype=result_dtype).sum(axis) / scl; the raw ufunc's result is masked where
             // either operand is.
             var product = np.multiply(am._data, wgt._data, dtype: resultDtype);
             var productMask = Or(mask, wgt._mask);
             if (productMask is not null && !productMask.Shape.dimensions.AsSpan().SequenceEqual(product.Shape.dimensions))
                 productMask = np.broadcast_to(productMask, product.Shape).copy();
-            var num = sum(new NDMaskedArray(product, productMask), ax, null, keepdims);
+            var num = sum(new NDMaskedArray(product, productMask), ax, null, null, keepdims);
             NDMaskedArray avg;
             if (ax is null && !keepdims)
                 // A full reduction's sums are NumPy scalars (or `masked`): plain scalar division, so 0/0 is nan, unmasked.
@@ -7643,43 +11567,83 @@ namespace NumSharp
             return (avg, sumOfWeights);
         }
 
-        /// <summary>Median over unmasked elements (NumPy's <c>median</c>). Supports the flat case, the
-        /// unmasked-axis case, AND a masked array with an explicit axis (the per-slice masked median — the axis is
-        /// masked-sorted, then the low/high middle of each slice's unmasked count is averaged).</summary>
-        /// <param name="a">Data.</param><param name="axis">Axis or null (flatten).</param>
+        /// <summary>
+        ///     Median over unmasked elements — NumPy's <c>ma.median(a, axis=None, out=None, overwrite_input=False,
+        ///     keepdims=False)</c>. Supports the flat case, the unmasked-axis case, a masked array with an explicit axis (the
+        ///     per-slice masked median — the axis is masked-sorted, then the low/high middle of each slice's unmasked count is
+        ///     averaged) and several axes at once (merged into one, as NumPy's <c>_ureduce</c> does).
+        /// </summary>
+        /// <param name="a">Data: a masked array, or a plain array / array-like (NumPy's <c>np.median</c> then answers).</param>
+        /// <param name="axis">The axis, a tuple of axes (<c>(0, 2)</c>, <c>new[] { 0, 2 }</c>), or null for the flattened
+        ///     array.</param>
+        /// <param name="out">NumPy's <c>out</c>, of the result's shape (the keepdims shape with <paramref name="keepdims"/>):
+        ///     the median is written into it and it is returned. A masked out takes the result's mask as an array (the
+        ///     reduction's <c>outmask.flat = newmask</c>), except where NumPy's flattened path halves an even count through a
+        ///     ufunc into the out, whose wrap leaves nomask; with <paramref name="keepdims"/> NumPy writes through a view of the
+        ///     out, so a mask-less out stays mask-less. A plain out (an <see cref="NDArray"/> converts) receives the data, but
+        ///     NumPy refuses it for an inexact operand reduced along an axis (see the exceptions). Added in API-parity batch
+        ///     9.</param>
+        /// <param name="overwrite_input">NumPy's <c>overwrite_input</c>: true lets the call sort a masked operand IN PLACE (the
+        ///     flattened array, or along <paramref name="axis"/>): its data and mask are reordered, masked slots last. The
+        ///     median is the same. A flattened operand that is not contiguous is sorted in a copy (NumPy's <c>ravel</c>), and
+        ///     several axes are merged into a reshaped array first, which is the operand only when the reshape is a view.
+        ///     Added in API-parity batch 9.</param>
         /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
-        /// <returns>The masked median (a slice with no unmasked element is <see cref="NDMasked"/>; an unmasked NaN in
-        /// a slice makes that slice's median NaN, matching NumPy).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
-        /// <exception cref="TypeError">A text operand: NumPy's <c>_median</c> averages the middles with <c>mean</c>, whose
-        ///     <c>add.reduce</c> has no string loop (<c>the resolved dtypes are not compatible with add.reduce</c>); a
-        ///     <c>StringDType</c> operand with a mask (an all-False one included) stops earlier, at the masked sort's
-        ///     <c>Unsuitable type ... for calculating minimum.</c></exception>
+        /// <returns>The masked median (a slice with no unmasked element is <see cref="NDMasked"/>; an unmasked NaN in a slice
+        ///     makes that slice's median NaN, matching NumPy), or <paramref name="out"/>. NumPy returns a scalar for a full
+        ///     reduction and a plain array for a full reduction with keepdims; NumSharp's static type returns a mask-less masked
+        ///     array.</returns>
+        /// <exception cref="AxisError">An axis is outside the operand.</exception>
+        /// <exception cref="ValueError">The same axis twice (<c>repeated axis</c>), or <paramref name="out"/> has another shape
+        ///     than the result.</exception>
+        /// <exception cref="TypeError">A plain <paramref name="out"/> for an inexact masked operand reduced along an axis:
+        ///     NumPy's <c>np.true_divide(s.data, 2., out=s.data)</c> reads a plain array's <c>.data</c>, a memoryview
+        ///     (<c>return arrays must be of ArrayType</c>). A text operand: NumPy's <c>_median</c> averages the middles with
+        ///     <c>mean</c>, whose <c>add.reduce</c> has no string loop (<c>the resolved dtypes are not compatible with
+        ///     add.reduce</c>); a <c>StringDType</c> operand with a mask (an all-False one included) stops earlier, at the
+        ///     masked sort's <c>Unsuitable type ... for calculating minimum.</c></exception>
         /// <exception cref="InvalidOperationException">Never for a caller's input: the mean of a masked text median returned
         ///     instead of refusing (a wiring error inside NumSharp).</exception>
-        /// <remarks>Scoped by hand: the compressed copy, the masked sort, the middle-index arithmetic, the gathered
-        /// middles and the NaN probe (see <see cref="MedianAxisMasked"/>) are all reclaimed here; only the median
-        /// and its mask leave.</remarks>
-        public NDMaskedArray median(object a, int? axis = null, bool keepdims = false)
+        /// <remarks>
+        ///     NumPy's statements: a plain operand is <c>np.median(getdata(a), axis, out, overwrite_input, keepdims)</c>,
+        ///     wrapped by <c>masked_array(m, copy=False)</c> when N-d; a masked one runs <c>_ureduce(a, func=_median,
+        ///     keepdims, axis, out, overwrite_input)</c> — the axes normalized (<c>normalize_axis_tuple</c>), several merged
+        ///     (the kept axes swapped to the front, the rest reshaped into one last axis), <c>_median</c> run, the reduced axes
+        ///     re-inserted for keepdims, and <c>out</c> returned when given. <c>_median</c> sorts with <c>fill_value=np.inf</c>
+        ///     for an inexact dtype (in place for overwrite_input), then averages the middles; a 1-D sorted array takes
+        ///     <c>mid.sum(out=out)</c> and, for an even count, <c>np.true_divide(s, 2., out=out)</c>.
+        ///     <para>One signature (with your int / int[] forms) since API-parity batch 9: the positional order is NumPy's, so
+        ///     <c>np.ma.median(m, 1, true)</c> (true is NumPy's out) no longer compiles; write <c>keepdims: true</c>.</para>
+        ///     <para>Scoped by hand: the compressed copy, the masked sort, the merged reshape, the middle-index arithmetic, the
+        ///     gathered middles and the NaN probe (see <see cref="MedianAxisMasked"/>) are all reclaimed here; only the median
+        ///     and its mask leave (an out's arrays are the caller's; a mask created for it is detached).</para>
+        /// </remarks>
+        public NDMaskedArray median(object a, NDAxis? axis = null, NDMaskedArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
             using var scope = NDScope.Open();
-            var mask = (a as NDMaskedArray)?._mask;
+            var source = a as NDMaskedArray;
+            var mask = source?._mask;
             var d = AsData(a);
             // A StringDType MASKED array without a mask: numpy.ma's own _median (the data sorted, then the masked mean,
             // whose sum is an ndarray and whose divide refuses). A plain array takes np.median below, as NumPy's
             // `if not hasattr(a, 'mask')` does.
-            if (mask is null && a is NDMaskedArray && d.Storage.IsVString)
-                throw NDVStringStatistics.MaskedMedian(d, axis);
-            if (mask is null)
-                return Yield(scope, new NDMaskedArray(np.median(d, axis, null, false, keepdims), null));
+            if (mask is null && source is not null && d.Storage.IsVString)
+                throw NDVStringStatistics.MaskedMedian(d, axis is { Count: 1 } single ? single[0] : (int?)null);
+            if (source is null)
+            {
+                // `m = np.median(getdata(a, subok=True), axis=axis, out=out, overwrite_input=overwrite_input,
+                // keepdims=keepdims)`, then `masked_array(m, copy=False)`: a NEW mask-less view of the answer (over the out's
+                // data when one was given; NumPy hands a scalar back bare, NumSharp's static type wraps it too).
+                var plain = np.median(d, axis, @out?._data, overwrite_input, keepdims);
+                return Yield(scope, new NDMaskedArray(plain, null));
+            }
             // TEXT with a mask: NumPy's _median sorts the strings (a computation that cannot fail; its axis check comes
             // first) and then takes ma.mean of the middle elements — of an empty slice too — whose add.reduce refuses the
             // string dtype. So every text median is that refusal, whatever the strings and the mask: np.mean raises it
             // with NumPy's text for the operand's dtype.
-            if (d.typecode == NPTypeCode.String)
+            if (mask is not null && d.typecode == NPTypeCode.String)
             {
-                if (axis is { } textAxis && (textAxis < -d.ndim || textAxis >= d.ndim))
-                    throw new AxisError(textAxis, d.ndim);
+                axis?.Normalize(d.ndim);
                 // StringDType: _median's `sort(a, ...)` is the masked sort, whose argsort asks for minimum_fill_value
                 // before anything is ordered — NumPy's Unsuitable type refusal, an all-False mask included.
                 ThrowIfUnsuitableExtremum(d, "minimum");
@@ -7689,18 +11653,196 @@ namespace NumSharp
                 throw new InvalidOperationException(
                     $"np.mean returned for a {d.dtype.ToString(true)} operand; numpy.ma's median of text has no result to return.");
             }
-            if (axis is null)
+
+            // ---- _ureduce: normalize the axes, and merge several into one last axis ----
+            int nd = d.ndim;
+            int[] axes = axis?.Normalize(nd);
+            var x = source;
+            int? ax = null;
+            if (axes is not null && axes.Length == 1)
+                ax = axes[0];
+            else if (axes is not null)
             {
-                var comp = compressed(a);
-                if (comp.size == 0)
-                    return NDMasked;
-                var med = np.median(comp);
-                // keepdims on a flattened reduction ⇒ an all-ones shape of the input's rank (NumPy's (1,…,1)).
-                if (keepdims && d.ndim > 0)
-                    med = np.reshape(med, new Shape(Enumerable.Repeat(1L, d.ndim).ToArray(), copy: false));
-                return Yield(scope, new NDMaskedArray(med, null));
+                // `keep = set(range(nd)) - set(axis)`; `for i, s in enumerate(sorted(keep)): a = a.swapaxes(i, s)`;
+                // `a = a.reshape(a.shape[:nkeep] + (-1,))`; `kwargs['axis'] = -1`.
+                var keep = Enumerable.Range(0, nd).Where(i => Array.IndexOf(axes, i) < 0).ToArray();
+                for (int i = 0; i < keep.Length; i++)
+                    x = swapaxes(x, i, keep[i]);
+                var merged = new long[keep.Length + 1];
+                for (int i = 0; i < keep.Length; i++)
+                    merged[i] = x._data.Shape.dimensions[i];
+                merged[keep.Length] = -1;
+                x = reshape(x, new Shape(merged, copy: false));
+                ax = -1;
             }
-            return Yield(scope, MedianAxisMasked((NDMaskedArray)a, axis.Value, keepdims));
+
+            // ---- _median's overwrite_input: the in-place masked sort (fill_value=np.inf for an inexact dtype) ----
+            if (overwrite_input)
+                SortInPlaceForMedian(x, ax);
+
+            // ---- _median: the value (unchanged machinery; keepdims is _ureduce's, applied below) ----
+            NDMaskedArray r;
+            bool oneDPath = ax is null || x._data.ndim == 1;
+            if (x._mask is null)
+                r = new NDMaskedArray(np.median(x._data, ax is null ? (NDAxis?)null : ax.Value), null);
+            else if (ax is null)
+            {
+                var comp = compressed(x);
+                r = comp.size == 0 ? NDMasked : new NDMaskedArray(np.median(comp), null);
+            }
+            else
+                r = MedianAxisMasked(x, ax.Value, keepdims: false);
+
+            // ---- _ureduce's keepdims: the reduced axes re-inserted with length 1 (`r[(Ellipsis,) + index_r]`) ----
+            if (keepdims)
+            {
+                var kd = (long[])d.Shape.dimensions.Clone();
+                for (int i = 0; i < kd.Length; i++)
+                    if (axes is null || Array.IndexOf(axes, i) >= 0)
+                        kd[i] = 1;
+                var kdShape = new Shape(kd, copy: false);
+                NDArray rd = r._data, rm = r._mask;
+                // A fully masked median is the `masked` singleton, which NumPy's newaxis indexing turns into an ordinary
+                // (1, ..., 1) float64 masked array (data 0.0, masked): reshape COPIES of the singleton's parts, never views
+                // of the process-wide constant, which a write through the result would otherwise reach.
+                if (ReferenceEquals(r, NDMasked))
+                {
+                    rd = rd.copy();
+                    rm = rm?.copy();
+                }
+                r = new NDMaskedArray(np.reshape(rd, kdShape), rm is null ? null : np.reshape(rm, kdShape));
+            }
+
+            if (@out is null)
+                return Yield(scope, r);
+            MedianIntoOut(@out, r, d, oneDPath, keepdims, CountUnmaskedForMedian(x, ax));
+            return Yield(scope, @out);
+        }
+
+        /// <summary>
+        ///     <see cref="median(object, NDAxis?, NDMaskedArray, bool, bool)"/> with the axis as one <c>int</c>: the overload a C#
+        ///     integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the NDAxis form.
+        /// </summary>
+        /// <param name="a">Data: a masked array, or a plain array / array-like.</param>
+        /// <param name="axis">The axis (a negative value counts from the end).</param>
+        /// <param name="out">NumPy's <c>out</c> (see the NDAxis form).</param>
+        /// <param name="overwrite_input">NumPy's <c>overwrite_input</c> (see the NDAxis form).</param>
+        /// <param name="keepdims">Keep the reduced axis as size 1.</param>
+        /// <returns>The masked median, or <paramref name="out"/> (see the NDAxis form).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another shape than the result.</exception>
+        /// <exception cref="TypeError">A plain out for an inexact masked operand, or a text operand (see the NDAxis form).</exception>
+        public NDMaskedArray median(object a, int axis, NDMaskedArray @out = null, bool overwrite_input = false, bool keepdims = false)
+            => median(a, (NDAxis?)axis, @out, overwrite_input, keepdims);
+
+        /// <summary>
+        ///     <see cref="median(object, NDAxis?, NDMaskedArray, bool, bool)"/> with the axes as an <c>int[]</c>: the overload an
+        ///     <c>int[]</c> binds; a null array is NumPy's None, any other array NumPy's tuple.
+        /// </summary>
+        /// <param name="a">Data: a masked array, or a plain array / array-like.</param>
+        /// <param name="axis">The axes as NumPy's tuple, or null for None.</param>
+        /// <param name="out">NumPy's <c>out</c> (see the NDAxis form).</param>
+        /// <param name="overwrite_input">NumPy's <c>overwrite_input</c> (see the NDAxis form).</param>
+        /// <param name="keepdims">Keep the reduced axes as size 1.</param>
+        /// <returns>The masked median, or <paramref name="out"/> (see the NDAxis form).</returns>
+        /// <exception cref="AxisError">An axis is outside the operand.</exception>
+        /// <exception cref="ValueError">A repeated axis, or <paramref name="out"/> has another shape than the result.</exception>
+        /// <exception cref="TypeError">A plain out for an inexact masked operand, or a text operand (see the NDAxis form).</exception>
+        public NDMaskedArray median(object a, int[] axis, NDMaskedArray @out = null, bool overwrite_input = false, bool keepdims = false)
+            => median(a, (NDAxis?)axis, @out, overwrite_input, keepdims);
+
+        /// <summary>
+        ///     <c>_median</c>'s overwrite_input sort: <c>asorted = a.ravel(); asorted.sort(fill_value=fill_value)</c> for the
+        ///     flattened median, <c>a.sort(axis=axis, fill_value=fill_value)</c> otherwise — NumPy's IN-PLACE MaskedArray.sort,
+        ///     with <c>fill_value = np.inf</c> for an inexact dtype (None, the endwith default, otherwise).
+        /// </summary>
+        /// <param name="x">The masked operand (after _ureduce's merge); its data and mask are reordered.</param>
+        /// <param name="ax">The axis, or null for the flattened array.</param>
+        /// <remarks>The sorted copy <see cref="sort(object, int?, string, object, bool, object, bool?)"/> builds is written
+        ///     back through this module's indexer — MaskedArray.sort's own <c>self[...] = np.take_along_axis(self, sidx,
+        ///     axis)</c>, so a hard mask keeps its masked slots' data as NumPy's does. A flattened operand that is not
+        ///     C-contiguous has a COPY for its ravel in NumPy, so nothing reaches the operand then; a mask-less one sorts its
+        ///     data (<c>ndarray.sort</c>).</remarks>
+        private void SortInPlaceForMedian(NDMaskedArray x, int? ax)
+        {
+            object fill = IsInexact(x._data.typecode) ? double.PositiveInfinity : null;
+            if (ax is null)
+            {
+                // `a.ravel()` is a view only of a C-contiguous array (data and mask alike): sorting a copy changes nothing.
+                if (!x._data.Shape.IsContiguous || (x._mask is not null && !x._mask.Shape.IsContiguous))
+                    return;
+                var flat = ravel(x);
+                flat[Slice.Ellipsis] = sort(flat, -1, fill_value: fill);
+                return;
+            }
+            x[Slice.Ellipsis] = sort(x, ax, fill_value: fill);
+        }
+
+        /// <summary>The dimensions as NumPy prints a shape's members (<c>2, 3</c>), culture-independent (an exception text must
+        ///     not change with the culture).</summary>
+        /// <param name="dims">The dimensions.</param>
+        /// <returns>The comma-separated invariant text.</returns>
+        private static string DimsText(long[] dims)
+            => string.Join(", ", dims.Select(dim => dim.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+
+        /// <summary><c>_median</c>'s <c>count(asorted)</c> for the flattened path: the number of unmasked elements, whose
+        ///     parity decides whether NumPy halves the middle through a ufunc into the out (see
+        ///     <see cref="MedianIntoOut"/>).</summary>
+        /// <param name="x">The masked operand (after _ureduce's merge).</param>
+        /// <param name="ax">The axis, or null for the flattened array.</param>
+        /// <returns>The unmasked count of the whole array; only read for the flattened (1-D) path.</returns>
+        private static long CountUnmaskedForMedian(NDMaskedArray x, int? ax)
+            => x._mask is null ? x._data.size : x._data.size - (long)np.count_nonzero(x._mask);
+
+        /// <summary>
+        ///     Delivers <paramref name="r"/> into the caller's out the way NumPy's <c>_median</c> writes it: through
+        ///     <c>MaskedArray.sum(out=)</c> / <c>mean(out=)</c> (the out's data, and a masked out's mask as an array:
+        ///     <c>outmask.flat = newmask</c>), followed on the flattened path, for an even count, by
+        ///     <c>np.true_divide(s, 2., out=out)</c>, whose ufunc wrap leaves a masked out nomask.
+        /// </summary>
+        /// <param name="out">The caller's out (a plain-array wrapper or a masked array).</param>
+        /// <param name="r">The computed median (keepdims applied), or <see cref="NDMasked"/>.</param>
+        /// <param name="d">The operand's data (its dtype decides NumPy's inexact branch).</param>
+        /// <param name="oneDPath">True when NumPy's sorted array is 1-D (axis None, a 1-D operand, or every axis reduced).</param>
+        /// <param name="keepdims">True: NumPy writes through <c>out[..., 0, ...]</c>, a VIEW, so a mask-less out stays
+        ///     mask-less and a masked one has the result's mask written into its own.</param>
+        /// <param name="unmasked">The unmasked count of the flattened operand (the even/odd rule of the 1-D path).</param>
+        /// <exception cref="TypeError">A plain out for an inexact operand on the axis path (<c>return arrays must be of
+        ///     ArrayType</c>), checked before anything is written.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/>'s shape is not the result's.</exception>
+        private void MedianIntoOut(NDMaskedArray @out, NDMaskedArray r, NDArray d, bool oneDPath, bool keepdims, long unmasked)
+        {
+            if (@out.IsPlainArrayWrapper && !oneDPath && IsInexact(d.typecode))
+                // `np.true_divide(s.data, 2., casting='unsafe', out=s.data)`: a plain array's .data is a memoryview.
+                throw new TypeError("return arrays must be of ArrayType");
+            bool masked = ReferenceEquals(r, NDMasked);
+            var data = masked ? null : r._data;
+            if (data is not null && !data.Shape.dimensions.AsSpan().SequenceEqual(@out._data.Shape.dimensions))
+                // NumPy's text comes from the reduction's broadcast of the out (its operand shapes are _median internals);
+                // NumSharp names the two shapes instead.
+                throw new ValueError(
+                    $"output array of shape ({DimsText(@out._data.Shape.dimensions)}) does not match the median's shape ({DimsText(data.Shape.dimensions)})");
+            // `out.flat = result` / the reduction's unsafe write of the data (a fully masked flattened median writes 0, the
+            // sum of the filled middles).
+            np.copyto(@out._data, masked ? NDArray.Scalar(0.0) : data, casting: "unsafe");
+            if (@out.IsPlainArrayWrapper)
+                return;
+            var newmask = masked ? NDArray.Scalar(true) : r._mask;
+            if (keepdims)
+            {
+                // The write went through a view of the out: an existing mask takes the values, a missing one stays missing.
+                if (@out._mask is not null)
+                    FlatAssign(@out._mask, newmask ?? NDArray.Scalar(false));
+                return;
+            }
+            if (oneDPath && !masked && unmasked % 2 == 0)
+            {
+                // `np.true_divide(s, 2., casting='safe', out=out)` with s the out itself: the wrap's mask_or of the two
+                // inputs' all-False masks shrinks to nomask.
+                ReplaceOutMask(@out, null);
+                return;
+            }
+            WriteOutMask(@out, newmask);
         }
 
         /// <summary>
@@ -7731,7 +11873,7 @@ namespace NumSharp
             // that slips past the reduced-axis-only guard further down). mean is the correct empty-slice
             // value AND is already the empty-reduced-axis handler below.
             if (data.size == 0)
-                return mean(self, ax, null, keepdims);
+                return mean(self, ax, null, null, keepdims);
 
             // Masked entries sort to the END (endwith default → minimum_fill_value key = +inf for float, dtype-max
             // for int), reproducing NumPy's fill_value=inf/None so a masked slot can never be picked as a middle.
@@ -7741,7 +11883,7 @@ namespace NumSharp
 
             // Empty reduced axis: the median of an empty slice is NaN (NumPy takes the mean of the 0-length slice).
             if (sdata.Shape.dimensions[ax] == 0)
-                return mean(asorted, ax, null, keepdims);
+                return mean(asorted, ax, null, null, keepdims);
 
             bool inexact = IsInexact(data.typecode);
 
@@ -7953,19 +12095,33 @@ namespace NumSharp
             => filled(less_equal(absolute(subtract(x, y)), add(atol, multiply(rtol, absolute(y)))), masked_equal);
 
         /// <summary>Dot product with masked slots treated as 0; a result element is masked only if NO valid
-        /// (both-unmasked) term contributed to it (NumPy's <c>ma.dot</c>). With <paramref name="strict"/> the
-        /// mask is PROPAGATED first — any masked value in a contracted row/column masks that whole vector — so a
-        /// result element is masked whenever a masked value touched it (NumPy's <c>strict=True</c>).</summary>
+        /// (both-unmasked) term contributed to it — NumPy's <c>np.ma.dot(a, b, strict=False, out=None)</c>. With
+        /// <paramref name="strict"/> the mask is PROPAGATED first — any masked value in a contracted row/column masks that
+        /// whole vector — so a result element is masked whenever a masked value touched it (NumPy's <c>strict=True</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <param name="strict">Propagate masks along the contracted axes before the product (default false =
         /// treat masked as 0).</param>
+        /// <param name="out">NumPy's <c>out</c>, which must be a MASKED array: the product is written into its data (np.dot's
+        ///     rules: the product's exact dtype, C-contiguous, the product's shape) and the no-valid-pair mask into its mask
+        ///     in place — a hard mask overwritten too, a mask-less out given a mask of the product's shape — and it is
+        ///     returned. Added in API-parity batch 8.</param>
         /// <returns>The masked dot product, soft with the default fill value: an array result always carries a mask ARRAY
-        ///     (all-False when every slot has a valid pair); a 0-d result is unmasked or carries a 0-d True mask.</returns>
+        ///     (all-False when every slot has a valid pair); a 0-d result is unmasked or carries a 0-d True mask. Or
+        ///     <paramref name="out"/>.</returns>
+        /// <exception cref="AttributeError"><paramref name="out"/> is a plain array (<c>'numpy.ndarray' object has no
+        ///     attribute '_data'</c>), raised before the product.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> has another dtype than the product's or is not C-contiguous
+        ///     (<c>output array is not acceptable (must have the right datatype, number of dimensions, and be a
+        ///     C-Array)</c>), or another shape (<c>output array has wrong dimensions</c>).</exception>
+        /// <exception cref="TypeError">A 0-d <paramref name="out"/> without a mask: NumPy hands its nomask to the mask product
+        ///     (<c>'out' must be an array</c>), after the data was written.</exception>
+        /// <exception cref="IncorrectShapeException">The operands' shapes are not aligned.</exception>
         /// <remarks>Scoped by hand: the propagated operands, the zero-filled copies, the validity indicators and
-        /// their product are reclaimed; only the product and its mask leave. Over text NumPy's product refuses by dtype
-        /// (<c>data type must provide an itemsize</c>, or a scalar operand's multiply loop) after formatting the fill, and
-        /// that refusal is raised over the unfilled data.</remarks>
-        public NDMaskedArray dot(object a, object b, bool strict = false)
+        /// their product are reclaimed; only the product and its mask leave (a mask created for <paramref name="out"/> is
+        /// detached: it lives in the caller's array). Over text NumPy's product refuses by dtype (<c>dot not available for
+        /// this type</c>, or a scalar operand's multiply loop) after formatting the fill, and that refusal is raised over
+        /// the unfilled data.</remarks>
+        public NDMaskedArray dot(object a, object b, bool strict = false, NDMaskedArray @out = null)
         {
             using var scope = NDScope.Open();
             if (strict)
@@ -7982,17 +12138,35 @@ namespace NumSharp
             }
             // `d = np.dot(filled(a, 0), filled(b, 0))`.
             Exception deferral = null;
-            var product = np.dot(FilledForNumericOp(a, 0, ref deferral), FilledForNumericOp(b, 0, ref deferral));
+            var fa = FilledForNumericOp(a, 0, ref deferral);
+            var fb = FilledForNumericOp(b, 0, ref deferral);
+            if (@out is not null)
+            {
+                // `d = np.dot(filled(a, 0), filled(b, 0), out._data)`: the fills are evaluated first, then `out._data`, which a
+                // plain ndarray does not have.
+                if (@out.IsPlainArrayWrapper)
+                    throw new AttributeError("'numpy.ndarray' object has no attribute '_data'");
+                np.dot(fa, fb, @out._data);
+                if (deferral is not null)
+                    throw deferral;
+                var outMask = NoValidPairMask(a, b);
+                // `if out.mask.shape != d.shape: out._mask = np.empty(d.shape, MaskType)` — a mask-less out's `mask` is a 0-d
+                // False, so it gets a mask of the product's shape, except when the product is 0-d: then the shapes agree and
+                // `np.dot(am, bm, out._mask)` is handed the nomask scalar.
+                if (@out._mask is null)
+                {
+                    if (@out._data.ndim == 0)
+                        throw new TypeError("'out' must be an array");
+                    @out._mask = Own(np.empty(new Shape(@out._data.Shape.dimensions, copy: false), np.@bool));
+                }
+                // `np.dot(am, bm, out._mask); np.logical_not(out._mask, out._mask)`: written in place, a hard mask included.
+                np.copyto(@out._mask, outMask);
+                return @out;
+            }
+            var product = np.dot(fa, fb);
             if (deferral is not null)
                 throw deferral;
-            var ma_ = (a as NDMaskedArray)?._mask;
-            var mb_ = (b as NDMaskedArray)?._mask;
-            // `m = ~np.dot(~getmaskarray(a), ~getmaskarray(b))` — computed even when neither operand has a mask: a slot
-            // with NO valid pair is masked, which an empty contraction (shape (2,0) @ (0,3)) makes of every slot.
-            var va = (ma_ is null ? np.ones(DimsOf(AsData(a)), np.@bool) : np.logical_not(ma_)).astype(np.float64);
-            var vb = (mb_ is null ? np.ones(DimsOf(AsData(b)), np.@bool) : np.logical_not(mb_)).astype(np.float64);
-            var valid = np.dot(va, vb); // count of valid contributing pairs
-            var m = np.equal(valid, NDArray.Scalar(0.0));
+            var m = NoValidPairMask(a, b);
             // `r.__setmask__(m)` on the fresh result: an array result gets the FULL mask (all-False included, never
             // shrunk); a 0-d one stays nomask unless masked (`np.False_ is nomask`), then a 0-d True mask — not the
             // `masked` singleton.
@@ -8001,12 +12175,32 @@ namespace NumSharp
             return Yield(scope, new NDMaskedArray(product, m));
         }
 
+        /// <summary>
+        ///     <see cref="dot(object, object, bool, NDMaskedArray)"/>'s mask, NumPy's <c>m = ~np.dot(~getmaskarray(a),
+        ///     ~getmaskarray(b))</c>: a slot is masked when NO contracted pair has both factors unmasked — computed even when
+        ///     neither operand has a mask, which an empty contraction (shape (2,0) @ (0,3)) masks entirely.
+        /// </summary>
+        /// <param name="a">The left operand (after any strict propagation).</param>
+        /// <param name="b">The right operand (after any strict propagation).</param>
+        /// <returns>A new bool array of the product's shape (0-d for a scalar product).</returns>
+        /// <remarks>The validity indicators are multiplied as float64 counts (the number of valid pairs) and compared with
+        ///     0, the same verdict as NumPy's boolean product; the temporaries stay in the caller's scope.</remarks>
+        private static NDArray NoValidPairMask(object a, object b)
+        {
+            var ma_ = (a as NDMaskedArray)?._mask;
+            var mb_ = (b as NDMaskedArray)?._mask;
+            var va = (ma_ is null ? np.ones(DimsOf(AsData(a)), np.@bool) : np.logical_not(ma_)).astype(np.float64);
+            var vb = (mb_ is null ? np.ones(DimsOf(AsData(b)), np.@bool) : np.logical_not(mb_)).astype(np.float64);
+            var valid = np.dot(va, vb); // count of valid contributing pairs
+            return np.equal(valid, NDArray.Scalar(0.0));
+        }
+
         /// <summary>Inner product with masked slots treated as 0 (NumPy's <c>ma.inner</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>The masked inner product (mask dropped — result treats masked as 0).</returns>
         /// <exception cref="IncorrectShapeException">The last axes differ (<c>shapes (3,) and (1,) not aligned: ...</c>);
         ///     a 0-d operand counts as one element.</exception>
-        /// <exception cref="ValueError">A text operand (<c>data type must provide an itemsize</c>).</exception>
+        /// <exception cref="ValueError">A text operand (<c>dot not available for this type</c>).</exception>
         /// <remarks>NumPy's statements: <c>fa = filled(a, 0); fb = filled(b, 0)</c>; a 0-d one is reshaped to <c>(1,)</c>
         /// (so a scalar operand is a one-element vector, not np.inner's scalar product); then <c>np.inner(fa, fb)</c>
         /// viewed as a masked array with no mask. Scoped by hand: the zero-filled operand copies only feed the
@@ -8232,8 +12426,8 @@ namespace NumSharp
         /// <param name="a">2-D operand.</param>
         /// <returns>The surviving rows: the data ITSELF when nothing is masked, an empty float64 array when everything
         ///     is (NumPy's <c>compress_nd</c>).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D (<c>compress_rows works for 2D arrays
-        ///     only.</c>).</exception>
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D (NumPy's <c>compress_rows works for 2D
+        ///     arrays only.</c>).</exception>
         /// <remarks>NumPy's statements: <c>a = asarray(a); if a.ndim != 2: raise NotImplementedError(...); return
         /// compress_rowcols(a, 0)</c>. Scoped (<c>[NDScoped]</c>): an array-like operand the rank check had to materialize
         /// is reclaimed.</remarks>
@@ -8241,40 +12435,59 @@ namespace NumSharp
         public NDArray compress_rows(object a)
         {
             if (AsData(a).ndim != 2)
-                throw new NotImplementedException("compress_rows works for 2D arrays only.");
+                throw new NotImplementedError("compress_rows works for 2D arrays only.");
             return compress_rowcols(a, 0);
         }
 
         /// <summary>Drops the COLUMNS of a 2-D array that contain ANY masked element (NumPy's <c>compress_cols</c>).</summary>
         /// <param name="a">2-D operand.</param>
         /// <returns>The surviving columns (see <see cref="compress_rows"/> for the unmasked and all-masked forms).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D (<c>compress_cols works for 2D arrays
-        ///     only.</c>).</exception>
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D (NumPy's <c>compress_cols works for 2D
+        ///     arrays only.</c>).</exception>
         /// <remarks>NumPy's <c>compress_rowcols(a, 1)</c> after its own rank check. Scoped (<c>[NDScoped]</c>), as
         /// <see cref="compress_rows"/>.</remarks>
         [NDScoped]
         public NDArray compress_cols(object a)
         {
             if (AsData(a).ndim != 2)
-                throw new NotImplementedException("compress_cols works for 2D arrays only.");
+                throw new NotImplementedError("compress_cols works for 2D arrays only.");
             return compress_rowcols(a, 1);
         }
 
-        /// <summary>Masks the ENTIRE rows of a 2-D array that contain any masked element (NumPy's <c>mask_rows</c>, which
-        /// is <c>mask_rowcols(a, 0)</c>).</summary>
+        /// <summary>Masks the ENTIRE rows of a 2-D array that contain any masked element (NumPy's <c>mask_rows(a,
+        /// axis=np._NoValue)</c>, which is <c>mask_rowcols(a, 0)</c>).</summary>
         /// <param name="a">2-D operand.</param>
+        /// <param name="axis">NumPy's deprecated <c>axis</c>, IGNORED as NumPy ignores it (NumPy 1.18 deprecated passing it
+        ///     - "The axis argument has always been ignored, in future passing it will raise TypeError" - and NumSharp has no
+        ///     warnings): any value, null included, masks the rows.</param>
         /// <returns>The row-masked array (over the operand's data, with a new mask).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D: NumPy reports it from
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D: NumPy reports it from
         ///     <c>mask_rowcols</c> (<c>mask_rowcols works for 2D arrays only.</c>).</exception>
-        public NDMaskedArray mask_rows(object a) => mask_rowcols(a, 0);
+        /// <remarks>API-parity batch 11: <paramref name="axis"/> was missing, so a ported call that passes it did not
+        ///     compile.</remarks>
+        public NDMaskedArray mask_rows(object a, int? axis = null)
+        {
+            // NumPy only warns about a given axis and then ignores it: the rows are masked whatever it says.
+            _ = axis;
+            return mask_rowcols(a, 0);
+        }
 
-        /// <summary>Masks the ENTIRE columns of a 2-D array that contain any masked element (NumPy's <c>mask_cols</c>,
-        /// which is <c>mask_rowcols(a, 1)</c>).</summary>
+        /// <summary>Masks the ENTIRE columns of a 2-D array that contain any masked element (NumPy's <c>mask_cols(a,
+        /// axis=np._NoValue)</c>, which is <c>mask_rowcols(a, 1)</c>).</summary>
         /// <param name="a">2-D operand.</param>
+        /// <param name="axis">NumPy's deprecated <c>axis</c>, IGNORED as NumPy ignores it (see <see cref="mask_rows"/>): any
+        ///     value, null included, masks the columns.</param>
         /// <returns>The column-masked array (over the operand's data, with a new mask).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D (<c>mask_rowcols works for 2D arrays
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D (NumPy's <c>mask_rowcols works for 2D arrays
         ///     only.</c>).</exception>
-        public NDMaskedArray mask_cols(object a) => mask_rowcols(a, 1);
+        /// <remarks>API-parity batch 11: <paramref name="axis"/> was missing, so a ported call that passes it did not
+        ///     compile.</remarks>
+        public NDMaskedArray mask_cols(object a, int? axis = null)
+        {
+            // NumPy only warns about a given axis and then ignores it: the columns are masked whatever it says.
+            _ = axis;
+            return mask_rowcols(a, 1);
+        }
 
         /// <summary>
         ///     Masks whole rows and/or columns of a 2-D array that contain any masked element (NumPy's
@@ -8285,7 +12498,8 @@ namespace NumSharp
         /// <param name="a">2-D operand.</param>
         /// <param name="axis">null (rows AND cols), 0 (rows), or 1/-1 (cols).</param>
         /// <returns>The row/column-masked array (an all-unmasked input is returned unchanged).</returns>
-        /// <exception cref="NotImplementedException"><paramref name="a"/> is not 2-D.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D (NumPy's <c>mask_rowcols works for 2D
+        ///     arrays only.</c>).</exception>
         /// <remarks>Scoped by hand: the working mask copy, the per-axis reductions, their broadcasts and the
         /// superseded OR steps are reclaimed (on the rank throw too); only the result's data and final mask leave.</remarks>
         public NDMaskedArray mask_rowcols(object a, int? axis = null)
@@ -8293,7 +12507,7 @@ namespace NumSharp
             using var scope = NDScope.Open();
             var ma_ = array(a);
             if (ma_.ndim != 2)
-                throw new NotImplementedException("mask_rowcols works for 2D arrays only.");
+                throw new NotImplementedError("mask_rowcols works for 2D arrays only.");
             var m = ma_._mask;
             if (m is null || !np.any(m))
                 return Yield(scope, ma_);
@@ -8369,14 +12583,15 @@ namespace NumSharp
         /// <param name="x">2-D operand.</param>
         /// <param name="axis">null (rows AND cols), 0 (rows), or 1 (cols).</param>
         /// <returns>The surviving data as a plain <see cref="NDArray"/>.</returns>
-        /// <exception cref="NotImplementedException"><paramref name="x"/> is not 2-D.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="x"/> is not 2-D (NumPy's <c>compress_rowcols works for 2D
+        ///     arrays only.</c>).</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): an array-like operand the rank check had to materialize is
         /// reclaimed; <see cref="compress_nd"/> scopes its own intermediates.</remarks>
         [NDScoped]
         public NDArray compress_rowcols(object x, int? axis = null)
         {
             if (AsData(x).ndim != 2)
-                throw new NotImplementedException("compress_rowcols works for 2D arrays only.");
+                throw new NotImplementedError("compress_rowcols works for 2D arrays only.");
             return compress_nd(x, axis);
         }
 
@@ -8446,8 +12661,8 @@ namespace NumSharp
         /// <returns><c>Slice[]</c> for the flat/1-D case; <c>Slice[][]</c> for a 2-D explicit axis. Returned as
         /// <see cref="object"/> because the nesting depends on the runtime axis, as it does in NumPy — cast at the
         /// call site.</returns>
-        /// <exception cref="NotSupportedException">The input has more than 2 dimensions (NumPy's
-        /// <c>NotImplementedError("Currently limited to at most 2D array.")</c>).</exception>
+        /// <exception cref="NotImplementedError">The input has more than 2 dimensions (NumPy's
+        /// <c>NotImplementedError("Currently limited to at most 2D array.")</c>, type and text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for the operand's rank.</exception>
         /// <remarks>Scoped by hand (the result holds no array): the masked operand wrapper, every per-line view and
         /// the raveled/inverted masks behind each line's runs are reclaimed before the slices are returned.</remarks>
@@ -8457,7 +12672,7 @@ namespace NumSharp
             var d = AsData(a);
             int nd = d.ndim;
             if (nd > 2)
-                throw new NotSupportedException("Currently limited to at most 2D array."); // NumPy's message
+                throw new NotImplementedError("Currently limited to at most 2D array."); // NumPy's type and message
             if (axis is null || nd == 1)
                 return flatnotmasked_contiguous(a);
 
@@ -8537,11 +12752,12 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Under a hard mask, <c>ndarray.resize</c>'s errors for an
         ///     <see cref="NDArray"/> <paramref name="values"/> of another size than <paramref name="indices"/> (the caller
         ///     holds it, so NumPy's reference check refuses: <c>cannot resize an array that references or is referenced by
-        ///     another array in this way. Use the np.resize function or refcheck=False</c>; a view: <c>cannot resize this
-        ///     array: it does not own its data</c>) or of a non-contiguous layout (<c>resize only works on single-segment
-        ///     arrays</c>). The house type of NumSharp's <c>ndarray.resize</c> errors; NumPy raises ValueError.</exception>
+        ///     another object in this way. Use the np.resize function to get a new resized copy or set refcheck=False to
+        ///     disable this check</c>; a view: <c>cannot resize this array: it does not own its data</c>) or of a
+        ///     non-contiguous layout (<c>resize only works on single-segment arrays</c>). The house type of NumSharp's
+        ///     <c>ndarray.resize</c> errors; NumPy raises ValueError.</exception>
         /// <exception cref="TypeError">A float or complex index array (<c>ndarray.put</c>'s safe cast).</exception>
-        /// <exception cref="OverflowException">Without a hard mask: a C# literal out of the target's range (NumPy's
+        /// <exception cref="OverflowError">Without a hard mask: a C# literal out of the target's range (NumPy's
         ///     <c>PyArray_Pack</c>); under a hard mask the literal becomes an int64 / float64 array first and is cast.</exception>
         /// <remarks>
         ///     <para>
@@ -8608,14 +12824,19 @@ namespace NumSharp
                 // index), not the flat positions put writes.
                 var hidden = x._mask[indices];
 
-                // indices = narray(indices, copy=None) is the index array itself; values = narray(values, copy=None,
-                // subok=True); values.resize(indices.shape) — zero-padded or truncated, never cycled.
-                var resized = ResizeValuesForHardPut(values, indices);
+                // indices = narray(indices, copy=None): the index array itself, or the 0-d ARRAY of a NumPy scalar index
+                // (np.array(np.int64(0), copy=None) is array(0)), which the next statements index as an array - indexing
+                // the scalar would raise NumPy's "invalid index to scalar variable." instead of the array's text.
+                var indexArray = np.asarray(indices);
+
+                // values = narray(values, copy=None, subok=True); values.resize(indices.shape) — zero-padded or
+                // truncated, never cycled.
+                var resized = ResizeValuesForHardPut(values, indexArray);
 
                 // indices = indices[~mask]; values = values[~mask]. For an N-D mask `hidden` has more dimensions than the
                 // index array, so the first statement is the IndexError NumPy raises (the boolean indexer's too-many text).
                 var keep = np.logical_not(hidden);
-                dataIndices = indices[keep];
+                dataIndices = indexArray[keep];
                 dataValues = resized[keep];
             }
 
@@ -8720,8 +12941,9 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException"><c>resize only works on single-segment arrays</c> (neither C- nor
         ///     F-contiguous; checked first, so even a same-size strided view raises), <c>cannot resize this array: it does
         ///     not own its data</c> (a view of another size), or <c>cannot resize an array that references or is referenced
-        ///     by another array in this way. Use the np.resize function or refcheck=False</c> (an owning array of another
-        ///     size) — NumPy's texts, NumSharp's resize error type.</exception>
+        ///     by another object in this way. Use the np.resize function to get a new resized copy or set refcheck=False to
+        ///     disable this check</c> (an owning array of another size; NumPy 2.5's text, line breaks included) — NumPy's
+        ///     texts, NumSharp's resize error type.</exception>
         /// <remarks>
         ///     NumPy relabels the caller's array itself when the size matches (its C strides, or F strides for an F-only
         ///     contiguous array: the memory order, which is the order its elements are then read). NumSharp relabels an
@@ -8748,8 +12970,8 @@ namespace NumSharp
                 if (!nd.Storage.OwnsData)
                     throw new IncorrectShapeException("cannot resize this array: it does not own its data");
                 throw new IncorrectShapeException(
-                    "cannot resize an array that references or is referenced\nby another array in this way.\n" +
-                    "Use the np.resize function or refcheck=False");
+                    "cannot resize an array that references or is referenced\nby another object in this way.\n" +
+                    "Use the np.resize function to get a new resized copy or\n set refcheck=False to disable this check");
             }
 
             // Same size: the relabel keeps the memory order (C, or F for an F-only contiguous array).
@@ -8885,7 +13107,7 @@ namespace NumSharp
         /// <see cref="np.int64"/> for integer grids.</param>
         /// <returns>An unmasked masked array of <paramref name="function"/>'s result.</returns>
         /// <remarks>
-        ///     The null default USED to fall through to <see cref="np.indices(int[], DType)"/>'s own default
+        ///     The null default USED to fall through to <see cref="np.indices(Shape, DType, bool)"/>'s own default
         ///     (int64), so every default-dtype call computed on integer grids where NumPy computes on float64 —
         ///     a wrong result dtype (and integer arithmetic, e.g. division) for the most common spelling.
         ///     <para>
@@ -8902,7 +13124,8 @@ namespace NumSharp
         {
             var dims = shape.dimensions.Select(x => (int)x).ToArray();
             // shape (ndim, *dims); grid[i] is the i-th coordinate grid, float64 unless the caller asked otherwise.
-            var grid = np.indices(dims, dtype ?? np.float64);
+            // The dense grid (np.indices' result converts to its NDArray): released below, after the callback.
+            NDArray grid = np.indices(dims, dtype ?? np.float64);
             var args = new NDArray[dims.Length];
             NDArray result = null;
             try
@@ -8969,12 +13192,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Enumerates <c>(index, value)</c> pairs for the UNMASKED elements only, in C-order (NumPy's
-        ///     <c>ma.ndenumerate</c> — masked positions are SKIPPED, unlike <see cref="np.ndenumerate(NDArray)"/>
-        ///     which yields every element). Each index is a fresh <c>long[]</c> coordinate.
+        ///     Enumerates <c>(index, value)</c> pairs in C-order — NumPy's <c>ma.ndenumerate(a, compressed=True)</c>. By
+        ///     default the masked positions are SKIPPED (unlike <see cref="np.ndenumerate(NDArray)"/>, which yields every
+        ///     element); with <paramref name="compressed"/> false they yield <c>(index, np.ma.masked)</c> instead, so the
+        ///     walk covers every position. Each index is a fresh <c>long[]</c> coordinate.
         /// </summary>
-        /// <param name="a">Operand.</param>
-        /// <returns>The unmasked <c>(index, value)</c> pairs.</returns>
+        /// <param name="a">Operand: a masked array, a plain array or an array-like (a plain operand has no masked
+        ///     position, so both settings yield every element).</param>
+        /// <param name="compressed">NumPy's <c>compressed</c>: true (the default) skips the masked positions; false yields
+        ///     them with the <see cref="NDMasked"/> constant as the value (added in API-parity batch 9).</param>
+        /// <returns>The <c>(index, value)</c> pairs: the unmasked ones, or every one with <see cref="NDMasked"/> at the
+        ///     masked positions.</returns>
         /// <remarks>
         ///     An ITERATOR, so it cannot hold an <see cref="NDScope"/> (a scope is per-thread and would straddle
         ///     every <c>yield</c> — the consumer's own scopes would interleave with it). It releases its two own
@@ -8982,8 +13210,10 @@ namespace NumSharp
         ///     has been read into the managed flag array, and an array-like operand <see cref="AsData"/> had to
         ///     materialize when the walk ends — including when the consumer stops early and disposes the
         ///     enumerator. An array or masked-array operand is the caller's and is never released.
+        ///     <para>NumPy's statements: <c>for it, mask in zip(np.ndenumerate(a), getmaskarray(a).flat): if not mask:
+        ///     yield it; elif not compressed: yield it[0], masked</c>.</para>
         /// </remarks>
-        public IEnumerable<(long[] index, object value)> ndenumerate(object a)
+        public IEnumerable<(long[] index, object value)> ndenumerate(object a, bool compressed = true)
         {
             var d = AsData(a);
             // AsData materializes a scalar/array-like operand into a fresh array; an array or masked-array
@@ -9006,6 +13236,9 @@ namespace NumSharp
                 {
                     if (mflat is null || !mflat[k])
                         yield return pair;
+                    else if (!compressed)
+                        // `elif not compressed: yield it[0], masked` — the index of the masked slot with the constant.
+                        yield return (pair.Item1, NDMasked);
                     k++;
                 }
             }
@@ -9030,25 +13263,50 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Operand.</param>
         /// <param name="axis">Sort axis (default last; negative counts from the end), or null to sort the flattened array.</param>
+        /// <param name="kind">NumPy's sort kind (<c>"quicksort"</c>, <c>"mergesort"</c>, <c>"heapsort"</c>, <c>"stable"</c> and
+        ///     their prefixes), or null for the default; validated by <see cref="np.sort"/> with NumPy's text (<c>sort kind
+        ///     must be one of 'quick', 'heap', or 'stable' (got 'bogus')</c>). Added in API-parity batch 9, in NumPy's third
+        ///     slot, where C# had <paramref name="endwith"/>.</param>
+        /// <param name="order">NumPy's structured-array field order; numeric data has no fields, so any value is NumPy's
+        ///     <c>ValueError: Cannot specify order when the array has no fields.</c></param>
         /// <param name="endwith">True (default) pushes masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default (see
         /// <see cref="SortFill"/>).</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: true on a masked operand is NumPy's
+        ///     <c>ValueError: `stable` parameter is not supported for masked arrays.</c> (MaskedArray.sort refuses it); a plain
+        ///     operand passes it on to <see cref="np.sort"/>.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: true on a masked operand is NumPy's
+        ///     <c>ValueError: `descending` parameter is not supported for masked arrays.</c>; a plain operand passes it on to
+        ///     <see cref="np.sort"/>, which sorts descending.</param>
         /// <returns>The sorted masked array — a copy finalized from <paramref name="a"/>: its hard-mask flag and fill value.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="ValueError"><paramref name="stable"/> or <paramref name="descending"/> true on a masked operand
+        ///     (checked before the axis and the kind, as NumPy's method does first; stable first), an unknown
+        ///     <paramref name="kind"/>, or an <paramref name="order"/>.</exception>
         /// <remarks>
         ///     NumPy's statements: <c>a = np.array(a, copy=True, subok=True)</c> (a copy that keeps the subclass, so it
         ///     finalizes from the operand), <c>a = a.flatten(); axis = 0</c> for <c>axis=None</c>, then
-        ///     <c>MaskedArray.sort</c>: without a mask the data is sorted in place; with one <c>sidx = a.argsort(axis,
-        ///     endwith=, fill_value=)</c> and <c>a[...] = np.take_along_axis(a, sidx, axis)</c>. That last write goes through
-        ///     <c>__setitem__</c>, so on a HARD-masked operand the slots that were masked keep their old data and the masks
-        ///     are OR-ed — NumPy's (surprising) answer, reproduced here through this module's indexer.
+        ///     <c>MaskedArray.sort(axis, kind, order, endwith, fill_value, stable=stable)</c> (a plain operand:
+        ///     <c>ndarray.sort(axis, kind, order, stable=stable)</c>): <c>if stable: raise ValueError(...)</c>; without a mask
+        ///     the data is sorted in place (<c>ndarray.sort(self, axis, kind, order)</c>); with one <c>sidx = a.argsort(axis,
+        ///     kind=, order=, endwith=, fill_value=)</c> and <c>a[...] = np.take_along_axis(a, sidx, axis)</c>. That last write
+        ///     goes through <c>__setitem__</c>, so on a HARD-masked operand the slots that were masked keep their old data and
+        ///     the masks are OR-ed — NumPy's (surprising) answer, reproduced here through this module's indexer.
         ///     <para>Scoped by hand: the filled sort keys, the permutation and the gathered values are reclaimed (as is an
         ///     array-like operand this method had to materialize); only the sorted copy leaves.</para>
+        ///     <para>NumPy's order since API-parity batch 9 (kind / order / stable added): a positional third argument is
+        ///     the kind, so <c>np.ma.sort(x, 0, false)</c> no longer compiles (NumPy: <c>sort kind must be str, not
+        ///     bool</c>); write <c>endwith: false</c>.</para>
         /// </remarks>
-        public NDMaskedArray sort(object a, int? axis = -1, bool endwith = true, object fill_value = null)
+        public NDMaskedArray sort(object a, int? axis = -1, string kind = null, object order = null, bool endwith = true, object fill_value = null,
+                                  bool? stable = null, bool? descending = null)
         {
             using var scope = NDScope.Open();
             var source = a as NDMaskedArray;
+            // MaskedArray.sort refuses the keywords before it reads anything (a plain operand's copy is an ndarray, whose
+            // sort takes them).
+            if (source is not null)
+                RefuseSortKeywords(stable, descending);
             // `a = np.array(a, copy=True, subok=True)`: the data and mask copied, the attributes finalized from the operand.
             var x = new NDMaskedArray(AsData(a).copy(), source?._mask?.copy());
             if (source is not null)
@@ -9062,11 +13320,15 @@ namespace NumSharp
             }
             else
                 ax = axis.Value;
-            // MaskedArray.sort: `if self._mask is nomask: ndarray.sort(self, axis=axis); return`.
+            // MaskedArray.sort: `if self._mask is nomask: ndarray.sort(self, axis=axis, kind=kind, order=order); return` -
+            // without stable / descending, which the masked operand refused above when true; a plain operand's ndarray.sort
+            // receives them (NumPy's `else: a.sort(axis=..., kind=..., order=..., stable=..., descending=...)`).
             if (x._mask is null)
-                return Yield(scope, new NDMaskedArray(np.sort(x._data, ax), null).UpdateFrom(x));
-            // `sidx = self.argsort(...)`; `self[...] = np.take_along_axis(self, sidx, axis=axis)` through __setitem__.
-            var sidx = argsort(x, ax, endwith, fill_value);
+                return Yield(scope, new NDMaskedArray(source is null ? np.sort(x._data, ax, kind, order, stable, descending)
+                    : np.sort(x._data, ax, kind, order), null).UpdateFrom(x));
+            // `sidx = self.argsort(axis=axis, kind=kind, order=order, fill_value=fill_value, endwith=endwith)`;
+            // `self[...] = np.take_along_axis(self, sidx, axis=axis)` through __setitem__.
+            var sidx = argsort(x, ax, kind, order, endwith, fill_value);
             var taken = new NDMaskedArray(np.take_along_axis(x._data, sidx, ax), np.take_along_axis(x._mask, sidx, ax));
             x[Slice.Ellipsis] = taken;
             return Yield(scope, x);
@@ -9079,39 +13341,92 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Operand.</param>
         /// <param name="axis">Sort axis (negative counts from the end), or null for the flattened array (NumPy's
-        ///     <c>axis=None</c>). Omitting it is NumPy's default (see <see cref="argsort(object,bool,object)"/>).</param>
+        ///     <c>axis=None</c>). Omitting it is NumPy's default (see
+        ///     <see cref="argsort(object,bool,object,string,object,bool?,bool?)"/>).</param>
+        /// <param name="kind">NumPy's sort kind, or null for the default; validated by <see cref="np.argsort"/> with NumPy's
+        ///     text. Added in API-parity batch 9, in NumPy's third slot, where C# had <paramref name="endwith"/>.</param>
+        /// <param name="order">NumPy's structured-array field order; numeric data has no fields, so any value is NumPy's
+        ///     <c>ValueError: Cannot specify order when the array has no fields.</c></param>
         /// <param name="endwith">True (default) sends masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable</c>: a masked operand refuses true (NumPy 2.5's ma.argsort
+        ///     passes it on to the method, where 2.4 passed None); a plain operand's <c>ndarray.argsort</c> takes it.</param>
+        /// <param name="descending">NumPy 2.5's keyword-only <c>descending</c>: a masked operand refuses true; a plain
+        ///     operand's <c>ndarray.argsort</c> orders descending.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): the filled sort keys (and an array-like operand this method had to
-        /// materialize) are reclaimed; only the index array leaves.</remarks>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
+        /// <exception cref="ValueError">A masked operand with <paramref name="stable"/> or <paramref name="descending"/>
+        ///     true (stable first), an unknown <paramref name="kind"/>, or an <paramref name="order"/>.</exception>
+        /// <remarks>NumPy's statements: <c>a = np.asanyarray(a)</c>; a masked operand runs <c>a.argsort(axis=axis, kind=kind,
+        ///     order=order, endwith=endwith, fill_value=fill_value, stable=stable, descending=descending)</c> (the keywords
+        ///     refused when true, the sort keys filled, then <c>filled.argsort(axis, kind, order)</c>), a plain one
+        ///     <c>a.argsort(axis, kind, order, stable=stable, descending=descending)</c>.
+        ///     Scoped (<c>[NDScoped]</c>): the filled sort keys (and an array-like operand this method had to materialize) are
+        ///     reclaimed; only the index array leaves.</remarks>
         [NDScoped]
-        public NDArray argsort(object a, int? axis, bool endwith = true, object fill_value = null)
+        public NDArray argsort(object a, int? axis, string kind = null, object order = null, bool endwith = true, object fill_value = null,
+                               bool? stable = null, bool? descending = null)
         {
+            // MaskedArray.argsort refuses the keywords first; a plain operand goes to ndarray.argsort with them.
+            if (a is NDMaskedArray)
+                RefuseSortKeywords(stable, descending);
+            else
+            {
+                var plain = AsData(a);
+                return axis is null ? np.argsort(np.ravel(plain), -1, kind, order, stable, descending)
+                    : np.argsort(plain, axis.Value, kind, order, stable, descending);
+            }
             // `if fill_value is None: fill_value = minimum_fill_value(self)` runs before `self.filled(fill_value)` reads the
             // mask: a StringDType masked array refuses there (Unsuitable type), with a mask or without one.
             if (fill_value is null && a is NDMaskedArray { _data.Storage.IsVString: true })
                 _ = SortFill(a, endwith);
             var d = (a as NDMaskedArray)?._mask is null ? AsData(a) : ((NDMaskedArray)a).filled(fill_value ?? SortFill(a, endwith));
-            // `filled.argsort(axis=None)` sorts the flattened array.
-            return axis is null ? np.argsort(np.ravel(d), -1) : np.argsort(d, axis.Value);
+            // `filled.argsort(axis=None, kind, order)` sorts the flattened array; stable / descending stop at the method's
+            // refusal above (MaskedArray.argsort hands its filled keys neither).
+            return axis is null ? np.argsort(np.ravel(d), -1, kind, order) : np.argsort(d, axis.Value, kind, order);
         }
 
         /// <summary>
-        ///     <see cref="argsort(object,int?,bool,object)"/> with NumPy's DEFAULT axis (<c>ma.argsort(a,
+        ///     <see cref="argsort(object,int?,string,object,bool,object,bool?,bool?)"/> with NumPy's DEFAULT axis (<c>ma.argsort(a,
         ///     axis=np._NoValue)</c>): <c>_deprecate_argsort_axis</c> picks the last axis for a 0-d or 1-D operand and None
         ///     (the FLATTENED array, with NumPy's FutureWarning) from two dimensions on.
         /// </summary>
         /// <param name="a">Operand.</param>
         /// <param name="endwith">True (default) sends masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
+        /// <param name="kind">NumPy's sort kind, or null for the default (see the axis form).</param>
+        /// <param name="order">NumPy's structured-array field order (refused for numeric data, see the axis form).</param>
+        /// <param name="stable">See the axis form: a masked operand refuses true.</param>
+        /// <param name="descending">See the axis form: a masked operand refuses true.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices (1-D for an operand of two or more dimensions).</returns>
-        /// <remarks>Scoped (<c>[NDScoped]</c>): an array-like operand materialized to read its rank is reclaimed.</remarks>
+        /// <exception cref="ValueError">A masked operand with <paramref name="stable"/> or <paramref name="descending"/>
+        ///     true, an unknown <paramref name="kind"/>, or an <paramref name="order"/>.</exception>
+        /// <remarks>C#'s spelling of NumPy's <c>axis=&lt;no value&gt;</c>: <paramref name="endwith"/> and
+        ///     <paramref name="fill_value"/> stay first and the API-parity batch 9 keywords follow them, so a positional
+        ///     <c>null</c> second argument still binds the axis form (<c>axis=None</c>) instead of being ambiguous with a
+        ///     kind. Name the keywords: <c>np.ma.argsort(a, kind: "stable")</c>. Scoped (<c>[NDScoped]</c>): an array-like
+        ///     operand materialized to read its rank is reclaimed.</remarks>
         [NDScoped]
-        public NDArray argsort(object a, bool endwith = true, object fill_value = null)
-            => argsort(a, AsData(a).ndim <= 1 ? -1 : (int?)null, endwith, fill_value);
+        public NDArray argsort(object a, bool endwith = true, object fill_value = null, string kind = null, object order = null,
+                               bool? stable = null, bool? descending = null)
+            => argsort(a, AsData(a).ndim <= 1 ? -1 : (int?)null, kind, order, endwith, fill_value, stable, descending);
 
-        /// <summary>The masked-slot sort key for <see cref="sort"/>/<see cref="argsort(object,int?,bool,object)"/>, NumPy's
+        /// <summary>
+        ///     <c>MaskedArray.sort</c> / <c>MaskedArray.argsort</c>'s refusal of the keyword-only sort options, in NumPy's
+        ///     order: <c>if stable: raise</c>, then <c>if descending: raise</c> (a false or absent one passes).
+        /// </summary>
+        /// <param name="stable">The <c>stable=</c> argument.</param>
+        /// <param name="descending">The <c>descending=</c> argument.</param>
+        /// <exception cref="ValueError">Either is true.</exception>
+        private static void RefuseSortKeywords(bool? stable, bool? descending)
+        {
+            if (stable == true)
+                throw new ValueError("`stable` parameter is not supported for masked arrays.");
+            if (descending == true)
+                throw new ValueError("`descending` parameter is not supported for masked arrays.");
+        }
+
+        /// <summary>The masked-slot sort key for <see cref="sort"/>/<see cref="argsort(object,int?,string,object,bool,object,bool?,bool?)"/>, NumPy's
         /// <c>MaskedArray.argsort</c>: with endwith a FLOATING dtype (float16 / float32 / float64) uses NaN ("nan &gt;
         /// inf": a masked slot sorts after a +inf element) and every other dtype its largest value
         /// (<see cref="minimum_fill_value"/>); without endwith the dtype's smallest value (masked sorts first).</summary>

@@ -59,8 +59,10 @@ jobs:
         with:
           python-version: '3.12'
 
+      # numpy-version.txt is the repository's one NumPy pin (the oracle, the coverage inventory, these twins).
       - name: Install Python deps (pin numpy for cross-release comparability)
-        run: pip install "numpy==2.4.2" matplotlib tabulate
+        shell: bash
+        run: pip install "numpy==$(cat numpy-version.txt)" matplotlib tabulate
 
       - name: Stage pinned OpenBLAS runtime assets
         run: python src/NumSharp.Interop.OpenBLAS/tools/fetch_openblas.py

@@ -17,13 +17,16 @@ paths:
 `NumSharp.Interop.ParquetNet` (Parquet columns decoded straight into `NDArray` buffers) is unreleased: it builds, tests
 and merges like everything else, but no NuGet package is created and no release or public documentation mentions it.
 `NumSharp.Interop.OnnxRuntime` and `NumSharp.Interop.MLNet` were unreleased the same way from 2026-10-02 and ship from
-0.80.0 (the owner's decision of 2026-11-02). Unreleased is exactly three things:
+0.80.0 (the owner's decision of 2026-11-02); `NumSharp.Interop.TorchSharp` (NDArray ↔ TorchSharp tensors, below) was
+unreleased from 2026-11-12 and ships from 0.81.0 (the owner's decision of the same day, asked with its docs page).
+Unreleased is exactly three things:
 1. No package. The csproj sets `<IsPackable>false</IsPackable>`, which makes `dotnet pack` a silent no-op (exit 0, no
    `.nupkg`, not even a compile). CI still names it in the signing check and in `build-nuget`'s Build and Pack steps,
    and `create-release` lists exactly the `.nupkg` files that were packed (ids read from each nuspec), so packing,
    signing, publishing and the release text all follow that one property.
-2. No docs. ParquetNet has no page (its `PackageProjectUrl` points at the page to write when it ships). DocFX publishes
-   every `.md` under `docs/website-src`, toc entry or not, so a hidden package's page needs a `docfx.json` exclude.
+2. No docs. ParquetNet has no page (its `PackageProjectUrl` points at the page to write when it ships).
+   DocFX publishes every `.md` under `docs/website-src`, toc entry or not, so a hidden package's page needs a
+   `docfx.json` exclude.
 3. Gated. The `interop-test` job builds and tests it on both TFMs; apart from `build-nuget`'s Build step on a release
    tag (which compiles it so that releasing it needs no workflow edit), nothing else compiles it in CI. It READS text
    (`ParquetConvert.TextKindOf`, keyed on both Parquet.Net's CLR type - `ReadOnlyMemory<char>` / `<byte>` in Parquet.Net
@@ -45,10 +48,13 @@ and merges like everything else, but no NuGet package is created and no release 
    refuses the whole schema, a decimal past 28-29 digits rounds or overflows, and the decimal's trailing zeros are dropped.
 
 Keep it out of release notes (`docs/releases/RELEASE_<version>.md`; when that file is missing, GitHub generates the
-notes from merged PR titles, so PR titles stay free of it too), the website, the root README, and the shipped XML docs
-and README of every released package: a released package's IntelliSense must not point at a bridge nobody can install.
+notes from merged PR titles, so PR titles stay free of it too), the website, the root README (its integrations picture
+included), and the shipped XML docs and README of every released package: a released package's IntelliSense must not
+point at a bridge nobody can install.
 To release it: delete its `IsPackable` property, write its page and add its `toc.yml` entry and its `interop/index.md`
-row and "See also" link (the two packages released for 0.80.0 got theirs back from git history). CI needs no
+row and "See also" link (the two packages released for 0.80.0 got theirs back from git history), and give it an octagon
+in the integrations picture that the README and `interop/index.md` show (`ITEMS` and `SIDES` in
+`tools/gen_integrations_diagram.py`; run the script and commit `docs/website-src/images/integrations.svg`). CI needs no
 edit, but the package is a NEW id on nuget.org: check before the tag that the Trusted Publishing policy may push new
 packages (`ci-release.md`).
 
@@ -135,7 +141,11 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   400). Every value the bridge touches carries an ARC token: from birth for `ToOrtValue` / `AsOrtValue` / `GetMapKeys`
   results, adopted by the first public verb for a value ORT allocated (never: a slot already holding a
   `MemoryHandle`, `_owned == false`, `_compositeMembers` set; nor the `Run` tier's outputs and the readers' elements,
-  which pass `adopt: false`). A verb holds a CALL lease (`OrtValueBooking.Enter`, which also makes the disposal checks)
+  which pass `adopt: false`). The synchronous `Run` / `RunInto`'s own input and pre-allocated-output handles are
+  TRANSIENT (`OrtTensor(..., transient: true)`): no token, no `ValueOwners` / `DisposedValues` entry, ORT's own `Dispose`
+  in the call's `finally` - they never leave the call or its thread (27 inputs of a GPT-2 decoder step: 42 us / 17 KB
+  in that machinery, `RunTierTransientHandleTests` pins it through `TakenOverReleases`). The asynchronous verbs and every
+  public export keep it; never pass `transient: true` for a value that can outlive the call or cross a thread. A verb holds a CALL lease (`OrtValueBooking.Enter`, which also makes the disposal checks)
   while it calls ORT; a view holds a VIEW lease for its life. The token's `Unpin` runs inside ORT's `Dispose(true)`
   before ORT's own release: it waits for the calls, moves the native value into a shadow `OrtValue` (ORT's internal
   constructor), zeroes `_handle` (ORT's own release becomes a no-op) and sets `_disposed`; the shadow is disposed at
@@ -160,7 +170,16 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   row, so the model gathers on axis 1), and `TextRunTierEdgeTests` (text input through `RunInto` into a preallocated
   numeric output, `Run`, `RunAsync` / `RunIntoAsync` over the fixed-shape LabelEncoder model - `RunAsync` cannot allocate
   for an output declared without dimensions -, the declared rank validated, StringNormalizer stopwords removing elements
-  down to one empty string, eight concurrent string runs). The `interop-test` CI job
+  down to one empty string, eight concurrent string runs), and the execution providers: `ProviderEndToEndTests` (each
+  CPU-side provider the loaded ORT carries runs `matmul_const_f32` - X times a CONSTANT W, the MatMul form XNNPACK takes
+  - and its output is imported through `AsNDArray`, `ToNDArray` and `Run(zeroCopyOutputs)`, the output's allocator
+  asserted so a silent CPU fallback cannot pass; each GPU provider's output, bound to its own memory through
+  `OrtIoBinding`, is refused) and `HelperEdgeTests`' table of every provider's allocator from ORT's sources (CPU-device
+  memory read, GPU / NPU memory refused, via ORT 1.23's `CreateMemoryInfo_V2`). Desktop ORT packages carry only the CPU
+  provider, so `test/NumSharp.Tests.Interop.OnnxRuntime.Android` (an instrumentation-only app, not in the sln: no
+  Android workload in CI; run by hand over adb, its README) runs the same `ProviderEndToEnd` code on a device: CPU,
+  XNNPACK (outputs in `XnnpackExecutionProvider` memory) and NNAPI imported, WebGPU's `WebGPU_Buf` refused. The
+  `interop-test` CI job
   runs it against ONNX Runtime 1.16.0 (the async tests Inconclusive, the refusal tested) and 1.31.1, the current
   release (the only gating leg that runs the async tests: never set it below 1.30.0), and (advisory) against the newest
   `Microsoft.ML.OnnxRuntime` on nuget.org, release candidates included, with no Python. Its "Package consumer:" steps
@@ -265,6 +284,96 @@ None of these computes NumSharp operations: each converts tensors between NumSha
   `UnicodeDecodeError` / `UnicodeEncodeError`) and `TextRefusalTests` (every class × layout × unmanaged verb refused
   before any layout check, naming the class and `ToStringTensor()`); `ApiSurfaceTests` approves the text verbs.
 - Docs: `docs/website-src/docs/interop/system-numerics-tensors.md`.
+
+### `NumSharp.Interop.TorchSharp` (released from 0.81.0)
+
+- `NDArrayTorchInterop` verbs and `TorchCodecMode { Auto, View, Copy }` (the owner's codec modes; NumPy/PyTorch's
+  `copy=None/False/True`). Sources (`src/NumSharp.Interop.TorchSharp/`): `NDArrayTorchInterop.{cs,Export.cs,Import.cs}`
+  (counters, dtype maps, `MayShareMemory`, shared plumbing; `AsTensor` / `ToTensor`; `AsNDArray` / `ToNDArray`),
+  `LibTorchSharpNative.cs` (the five natives the bridge binds itself, the `THSTensor_new` ABI detection),
+  `TorchLeases.cs` (`ExportLease`, `ImportLease`). TorchSharp's sources are not vendored: read them on GitHub.
+- How memory crosses. TorchSharp has no public way to wrap memory it did not allocate (`from_array` / `frombuffer` pin a
+  managed `Array` only, its `Memory<T>` overloads copy), so the export calls LibTorchSharp's `THSTensor_new` (libtorch's
+  `from_blob` with a deleter) itself and wraps the handle with the public `Tensor.UnsafeCreateTensor`. A C-contiguous
+  array is one `from_blob`; any other non-negative-stride layout is `from_blob` over its reach + `as_strided`; a broadcast
+  over writeable memory (`Storage.BaseStorage`'s flag, never `nd.@base`, which allocates a pinned NDArray) is the memory
+  under it + torch's `expand`. Each export lease holds one ARC reference (`TryAddRef`) and a per-lease delegate rooted in a
+  static dictionary until libtorch's deleter runs; the deleter `Release`s (not `Abandon`s: libtorch calls it exactly when
+  nothing in torch can read the memory) on whichever thread drops the storage. The import holds a `THSTensor_detach` of the
+  tensor (its own `TensorImpl` over the storage) as a raw handle in an `ImportLease` (no managed `Tensor`, so no
+  `DisposeScope` can dispose it under the view), books the storage's `THSStorage_nbytes`, and is released by the view's
+  memory-block Disposer. Copies are NumSharp buffers: `np.copyto(…, casting)` into a fresh array, lent like a view.
+- The owner's decisions (2026-11-12): a broadcast of writeable memory crosses as `expand`, every other read-only array
+  (NumPy scalars, read-only foreign memory, a broadcast of either) copies under Auto and throws under View; NumSharp's
+  uint16 / uint32 / uint64 / char take NEP 50's `np.promote_types(dtype, np.int8)` (int32, int64, float64, int32), decimal
+  float64, and an explicit `dtype` converts through `np.copyto`'s `casting` (default `"same_kind"`), so `dtype: Int64`
+  downcasts uint64; torch's complex64 / bfloat16 widen exactly in NumSharp (float pairs → `.real` / `.imag`; bf16 bits
+  zero-extended into a uint32 view of the result and `left_shift` 16), View throws; a `requires_grad` tensor is a
+  READ-ONLY view (no TorchSharp / LibTorchSharp API bumps autograd's version counter; `t.detach().AsNDArray()` is the
+  writeable route); floor TorchSharp 0.100.0, tested with 0.107.0, no upper bound; released from 0.81.0 with its docs
+  page (decided 2026-11-12; a NEW nuget.org id, so the Trusted Publishing policy must allow new packages before the tag).
+- Docs: `docs/website-src/docs/interop/torchsharp.md` (on the site's Interoperability toc, an index row and an octagon in
+  the integrations picture since 0.81.0). Its layout tables are the state matrix's answers (the fixture below), and each
+  of its code blocks is a `DocExampleTests` test (`Page_*`, plus the README's two): edit a block and its test together.
+- Torch facts the package is built around (measured on 0.107.0 unless noted): `conj()` is lazy (the memory holds the
+  unconjugated values; `.imag` of it carries the neg bit), so a view refuses `is_conj()` / `is_neg()`; `THSTensor_data` of
+  a META tensor is null with NO recorded error (decide by `device_type`), of a sparse one null with an error; an empty
+  tensor's data pointer is null; `THSTensor_alias` shares the caller's `TensorImpl` (its data pointer moved after
+  `t.set_(other)`), `detach` does not; the deleter fires even for a 0-byte storage and on the GC finalizer thread
+  through TorchSharp's `~Tensor`; `from_blob` storage is not resizable; `as_strided` refuses negative strides and any
+  layout past the storage; libtorch refuses in-place ops over overlapping (expanded) lanes but `t[0].fill_()` writes one;
+  TorchSharp's `Tensor.Dispose` takes no lock.
+- Version traps (the package compiles against 0.100.0): every `Tensor.to(...)` overload gained parameters by 0.107.0
+  (MissingMethodException for a floor binary), so the package never calls `to` (conversions in NumSharp, device moves
+  via `cpu()`, which never changed; no `device:` parameter - `nd.AsTensor().cuda()`); `THSTensor_new` took 6 arguments in
+  0.100.x (`TorchSharp.PInvoke.LibTorchSharp`) and 9 from 0.101.0 (`TorchSharp.PInvoke.NativeMethods`):
+  `LibTorchSharpNative.DetectAbi` reads TorchSharp's own declaration and refuses an unknown form; `ScalarType` names the
+  quantized codes (12-14) only from 0.107.0 and never names libtorch's uint16/32/64 (27-29, imported as NumSharp's
+  unsigned dtypes), so the sources use the ordinals; 0.100.0 ships no osx-arm64 natives; TorchSharp 0.100.0 brings
+  SkiaSharp 2.88.3 (NU1903 audit warning; current TorchSharp brings 2.88.6).
+- macOS trap: libtorch 2.10.0's osx-arm64 `libtorch_cpu.dylib` links OpenMP by Homebrew's ABSOLUTE path
+  (`/opt/homebrew/opt/libomp/lib/libomp.dylib`, read from its `LC_LOAD_DYLIB`), so the `libomp.dylib` the
+  `libtorch-cpu-osx-arm64` package ships beside it is never found, and without `brew install libomp` TorchSharp's own
+  native load fails ("Failed to load native component ... libLibTorchSharp.dylib") in every test. The `interop-test`
+  job's "TorchSharp: libomp (macOS)" step installs it (PR #635's first macOS run failed every test of the current leg
+  on `macos-26-arm64`); the TorchSharp page tells users the same.
+- The namespace is the package name, so inside `NumSharp.Interop.TorchSharp` (and the test namespace) a qualified
+  `TorchSharp.` resolves to this namespace: import TorchSharp with file-level `using`s, never qualify.
+- What no reference covers (documented, not guarded): an in-place resize of an imported tensor's storage (libtorch's
+  `resize_`) frees the memory a view reads - PyTorch's `numpy()` marks the storage non-resizable, which TorchSharp offers
+  no way to; a tensor disposed on another thread while a verb reads it.
+- Gate: `test/NumSharp.Tests.Interop.TorchSharp` (`TorchSharpVersion` / `LibTorchVersion` properties, default the floor
+  0.100.0 / 2.0.1.1; it references `TorchSharp` + the runner's `libtorch-cpu-<rid>` package, not `TorchSharp-cpu`, which
+  restores all three OSes' natives, ~1.2 GB per version). The `interop-test` job runs the floor leg (Windows, Linux) and
+  the current leg (0.107.0 / 2.10.0, all three OSes) on both TFMs; the current leg is the binary-compatibility gate for
+  the floor-compiled package, and runs the sparse / quantized / libtorch-uint16 tests the floor leg reports Inconclusive.
+  Suites: `AbiTests` (the detected form, `Classify`'s refusal of every near-miss signature, the floor reference),
+  `DtypeMapTests`, `ExportTests`, `ExportLayoutTests` (every shared dtype × layout, broadcast `expand`, reversed /
+  read-only / misaligned copies, views ending at the buffer's last element), `ImportTests`, `LifetimeTests` (dispose /
+  scope / finalizer / torch views / `set_` / booking), `ConcurrencyTests`, `ApiSurfaceTests`, `DocExampleTests`,
+  `ExplicitDtypeTests` (every target × every source dtype under NumPy's casting), `FailurePathTests` (the cleanup paths
+  through internal seams: an unknown native ABI, libtorch refusing `from_blob`, a handle without storage, double lease
+  releases), `SpecialStateTests` (NumPy scalars, foreign memory, `NDArray<T>`, `NDMatrix`, `NDScope`, flags changed
+  around an export), and the STATE MATRIX: `StateMatrixExportTests` (45 array states × the ten shared dtypes × the three
+  modes: NumSharp's own flags C / F / OWNDATA / WRITEABLE / ALIGNED and strides must be NumPy's for the same recipe, and a
+  shared tensor's strides and `is_contiguous()` `torch.from_numpy`'s; write-through both ways), `StateMatrixImportTests`
+  (24 tensor states × their dtypes × the modes against `t.numpy()` / `t.numpy(force=True)`), `StateMatrixRoundTripTests`,
+  `ConvertedDtypeStateTests` (the five NEP 50 dtypes × 13 deciding layouts) and `StateCatalogSyncTests`; the leak gate
+  (`LiveExports` / `LiveImports` back to the baseline) after every test. The matrix's answers are
+  `Fixtures/torch_interop_states.json`, written by `test/oracle/gen_torch_interop_states.py` (the pinned NumPy +
+  PyTorch: run it WITHOUT `-I` under the interop ecosystem venv `python-envs/make_env.py` builds, numpy 2.5.4 with
+  torch 2.13.0+cpu; 386 array cases, 205 tensor cases; `StateCatalogSyncTests.Fixture_IsThePinnedNumPy` holds it to
+  `numpy-version.txt`), with the recipes mirrored by name in `StateCatalog.cs`.
+  Divergences from PyTorch asserted as such: read-only, broadcast-over-read-only, misaligned and off-16-byte complex128
+  arrays copy where `from_numpy` shares; a negative stride on a length-1 axis shares where `from_numpy` refuses; an
+  expanded tensor and a tensor that requires grad import READ-ONLY where `numpy()` gives a writeable view / refuses;
+  complex64 and bfloat16 widen. Run it under `NUMSHARP_DEBUG_GUARD_PAGES=1` after touching the export layouts (green on
+  both legs; guard-page mode ends every buffer at a page boundary, so a recipe that needs a misaligned address finds one at
+  run time). Coverage of the package (`coverage/bridge.runsettings` + `coverage/union_cobertura.py` in the suite, the
+  floor and current legs unioned): 94.3 % of lines, 95.5 % of branches on 2026-11-12; what stays uncovered needs fault
+  injection or hardware - allocation failures in the lease and copy cleanups, libtorch returning no tensor without an error,
+  a failed `detach`, a CPU tensor without a data pointer, a TorchSharp with no recognizable `THSTensor_new`, `cpu()` of a
+  GPU tensor, the deleter's last-resort catch.
 
 ## The pythonnet bridge carries text
 

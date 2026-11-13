@@ -1,7 +1,5 @@
 using System;
-using System.Runtime.CompilerServices;
 using NumSharp.Backends;
-using NumSharp.Generic;
 
 namespace NumSharp
 {
@@ -16,7 +14,9 @@ namespace NumSharp
         /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF (NumPy's bool cast of the
         ///     text).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html — the reduction is the engine's
-        ///     (<c>TensorEngine.All</c>).</remarks>
+        ///     (<c>TensorEngine.All</c>). The C# <see cref="bool"/> of NumPy's <c>np.all(a)</c> (its <c>np.bool</c>
+        ///     scalar), kept beside the axis signature below as C# programs read it (<c>if (np.all(mask))</c>); with
+        ///     any argument after <paramref name="a"/> C# binds the axis signature, whose answer is an array.</remarks>
         public static bool all(NDArray a)
         {
             if (a is null)
@@ -25,159 +25,89 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Test whether all array elements along a given axis evaluate to True.
+        ///     NumPy's <c>np.all(a, axis=None, out=None, keepdims=False, *, where=True)</c>: whether every element evaluates to True
+        ///     along the given axes (every axis by default), as NumPy's
+        ///     <c>np.logical_and.reduce(a, axis, bool, out, keepdims=keepdims, where=where)</c>.
         /// </summary>
-        /// <param name="nd">Input array or object that can be converted to an array.</param>
-        /// <param name="axis">Axis along which a logical AND reduction is performed.</param>
-        /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
-        /// <returns>A new boolean ndarray is returned; a 0-d one (a 1-D input reduced) is read-only, NumPy's
-        ///     scalar.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range (a 0-d array accepts 0 and -1).</exception>
-        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html — the reduction is the engine's
-        ///     (<c>TensorEngine.All(nd, axis, keepdims)</c>); this marks a 0-d result as NumPy's scalar.</remarks>
-        [NDScoped] // boundary for the engine reduction tree (reshape/chained-axis temps); the reduced result is yielded
-        public static NDArray<bool> all(NDArray nd, int axis, bool keepdims = false)
-        {
-            if (nd is null)
-                throw new ArgumentNullException(nameof(nd));
-
-            var reduced = nd.TensorEngine.All(nd, axis, keepdims);
-            reduced.MarkReductionScalar(); // 1-D input reduced to 0-d -> numpy scalar (read-only)
-            return reduced;
-        }
-
-        /// <summary>
-        ///     Test whether all array elements along the given axes evaluate to True.
-        ///     Multiple axes can be specified by passing an array of ints.
-        /// </summary>
-        /// <param name="nd">Input array.</param>
-        /// <param name="axis">Tuple of axes along which a logical AND reduction is performed.
-        ///     An empty array returns the input cast to bool (no reduction).</param>
-        /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
-        /// <returns>A new boolean ndarray is returned; a 0-d one (every axis reduced) is read-only, NumPy's
-        ///     scalar.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="nd"/> or <paramref name="axis"/> is null.</exception>
-        /// <exception cref="AxisError">An axis is out of range (the first one, in the tuple's order).</exception>
-        /// <exception cref="ValueError">An axis appears twice (<c>duplicate value in 'axis'</c>).</exception>
-        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html — the reduction is the engine's
-        ///     (<c>TensorEngine.All(nd, axis, keepdims)</c>).</remarks>
-        // See the tuple-axis out=/where= overload: a bare null axis goes to the int? overload instead.
-        [OverloadResolutionPriority(-1)]
-        [NDScoped] // boundary for the engine multi-axis tree (axis-run reshape view, chained single-axis intermediates)
-        public static NDArray<bool> all(NDArray nd, int[] axis, bool keepdims = false)
-        {
-            if (nd is null)
-                throw new ArgumentNullException(nameof(nd));
-            if (axis is null)
-                throw new ArgumentNullException(nameof(axis));
-
-            var reduced = nd.TensorEngine.All(nd, axis, keepdims);
-            reduced.MarkReductionScalar(); // every axis reduced away -> numpy scalar (read-only)
-            return reduced;
-        }
-
-        /// <summary>
-        ///     Test whether all array elements evaluate to True, optionally keeping reduced dimensions.
-        ///     Reduces over all axes (axis = None semantics).
-        /// </summary>
-        /// <param name="nd">Input array.</param>
-        /// <param name="keepdims">If True, the result is broadcast-compatible with the input
-        ///     (every dimension becomes size 1). Otherwise the result is a 0-d array.</param>
-        /// <returns>A new boolean ndarray.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
-        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html — the engine's axis=None form
-        ///     (<c>TensorEngine.All(nd, null, keepdims)</c>): a fresh, writeable owner, a 0-d one included.</remarks>
-        public static NDArray<bool> all(NDArray nd, bool keepdims)
-        {
-            if (nd is null)
-                throw new ArgumentNullException(nameof(nd));
-
-            // Every axis (NumPy's axis=None): the engine's flat answer as a fresh, writeable owner of the keepdims shape.
-            return nd.TensorEngine.All(nd, (int?)null, keepdims);
-        }
-
-        /// <summary>
-        ///     Test whether all array elements along the given axis evaluate to True, with optional
-        ///     out= destination and where= mask. Matches NumPy 2.x:
-        ///     <c>all(a, axis=None, out=None, keepdims=False, *, where=True)</c>.
-        /// </summary>
-        /// <param name="a">Input array.</param>
-        /// <param name="axis">Axis along which to reduce. Pass <c>null</c> for axis=None (all axes).</param>
-        /// <param name="out">Destination array. Its dtype is preserved (e.g. an int <paramref name="out"/>
-        ///     stores 0/1 instead of bool). Pass <c>null</c> to allocate a fresh boolean array.</param>
-        /// <param name="keepdims">If True, the reduced axes are left as dimensions with size one.</param>
-        /// <param name="where">A bool mask that broadcasts TO <paramref name="a"/>'s shape. Elements where it is
-        ///     False are left out of the reduction (they count as True, the identity of <c>all</c>).
-        ///     A mask of any other dtype raises, as in NumPy. Pass <c>null</c> for no mask.</param>
-        /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="a"/> is <c>null</c>.</exception>
+        /// <param name="a">Input array (any dtype; a text element is true when non-empty).</param>
+        /// <param name="axis">NumPy's <c>axis</c>: <c>null</c> (None, the default) reduces every axis; one axis
+        ///     (<c>0</c>, <c>-1</c>) reduces that axis; a tuple (<c>(0, 2)</c> or <c>new[] { 0, 2 }</c>) reduces each of its
+        ///     axes, and the empty tuple reduces none (the truth values in <paramref name="a"/>'s shape). Negative axes
+        ///     count from the end. A 0-d <paramref name="a"/> takes the integer axis 0 or -1 (the ufunc reduction's
+        ///     special case) and the empty tuple.</param>
+        /// <param name="out">NumPy's <c>out=</c>: an array of the result's shape and ANY dtype that receives the result
+        ///     with unsafe casting (an int <paramref name="out"/> stores 0 / 1), and is returned; null allocates a fresh bool
+        ///     array. A C# scalar here (<c>np.all(a, 0, true)</c>) is NumPy's <c>TypeError: return arrays must be of
+        ///     ArrayType</c>: write <c>keepdims: true</c>.</param>
+        /// <param name="keepdims">If True, the reduced axes are left as dimensions with size one, so the result broadcasts
+        ///     against <paramref name="a"/>.</param>
+        /// <param name="where">NumPy's <c>where=</c>: a bool mask that broadcasts TO <paramref name="a"/>'s shape. Elements
+        ///     where it is False are left out of the reduction (they count as True, the identity of
+        ///     <c>all</c>). A mask of any other dtype raises, as in NumPy. Null for no mask.</param>
+        /// <returns><paramref name="out"/> itself when given (of its own dtype, which is why the declared type is
+        ///     <see cref="NDArray"/>); otherwise a fresh bool array (an <c>NDArray&lt;bool&gt;</c> instance:
+        ///     <c>AsGeneric&lt;bool&gt;()</c> gives the typed view), read-only when 0-d (NumPy's <c>np.bool</c>
+        ///     scalar). A <c>numpy.matrix</c> operand gives NumPy's <c>matrix.all</c> answer: the scalar without an
+        ///     axis, otherwise a matrix that keeps the reduced axes with length one.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only ("output array is read-only", checked
-        ///     first), has the wrong rank, or cannot hold the result (NumPy's reduction-iterator texts), or
+        ///     first), has the wrong rank, or cannot hold the result (NumPy's reduction-iterator texts);
         ///     <paramref name="where"/> has more axes than <paramref name="a"/> or would make <paramref name="a"/>
-        ///     stretch.</exception>
+        ///     stretch; or a tuple names an axis twice ("duplicate value in 'axis'", after every axis' range).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's <c>TypeError</c>
         ///     text: the mask must cast to bool under the <c>safe</c> rule).</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds (the first one in order, as given).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not
         ///     broadcast against <paramref name="a"/>.</exception>
+        /// <exception cref="TypeError"><paramref name="out"/> is a C# scalar (<c>return arrays must be of
+        ///     ArrayType</c>); a <c>numpy.matrix</c> operand with <c>keepdims: true</c> or a mask: NumPy calls the matrix
+        ///     method, which has no such keyword (<c>matrix.all() got an unexpected keyword argument 'keepdims'</c>), or
+        ///     with an <paramref name="out"/> (<c>Cannot construct a dtype from an array</c>).</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
         /// <remarks>
-        ///     A bare <c>null</c> axis binds this overload (NumPy's <c>axis=None</c>): the <c>int[]</c>-axis overloads
-        ///     carry a lower <c>OverloadResolutionPriority</c> for exactly that literal.
-        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.all.html</para>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.all.html
+        ///     <para>One signature since API-parity batch 4 (2026-11-12): it replaces the <c>int?</c> and <c>int[]</c>
+        ///     <c>out=</c> overloads and the three typed <c>NDArray&lt;bool&gt;</c> forms (<c>(nd, int axis, keepdims)</c>,
+        ///     <c>(nd, int[] axis, keepdims)</c>, <c>(nd, bool keepdims)</c>). The typed forms could not return NumPy's
+        ///     answer for an <paramref name="out"/> of another dtype or for a matrix operand (they returned a plain
+        ///     array); <c>np.all(a, null)</c> was ambiguous (CS0121). A former <c>np.all(a, 0, true)</c> (keepdims)
+        ///     now binds <paramref name="out"/> and raises NumPy's TypeError: name the keyword.</para>
         /// </remarks>
-        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
         [NDScoped] // the boundary of the matrix rule and the engine call (the engine reclaims its own temporaries)
-        public static NDArray all(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
+        public static NDArray all(NDArray a, NDAxis? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
         {
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
-            // np.all IS np.logical_and.reduce(a, axis, bool, out, keepdims=, where=), and NumPy's whole call (the
-            // reduce prologue, the text truth route, the masked reduction, the out= store) is the engine's:
-            // DefaultEngine.All.
-            return a.TensorEngine.All(a, axis, @out, keepdims, @where);
+            // np.all IS np.logical_and.reduce(a, axis, bool, out, keepdims=, where=), and NumPy's whole call (the reduce
+            // prologue, the text truth route, the masked reduction, the out= store) is the engine's. A tuple takes the
+            // engine's tuple member (every axis' range, then a repeat); None and an integer its
+            // single-axis member (a 0-d operand accepts the integer 0 / -1). Both members declare the
+            // same matrix dispatch, so a matrix operand reaches matrix.all with the axis as given.
+            return axis is { IsTuple: true } tuple
+                ? a.TensorEngine.All(a, tuple.ToArray(), @out, keepdims, @where)
+                : a.TensorEngine.All(a, axis is { } single ? single[0] : (int?)null, @out, keepdims, @where);
         }
 
         /// <summary>
-        ///     Tuple-axis variant of the full <c>np.all</c> overload (with <paramref name="out"/> and <paramref name="where"/>).
+        ///     <see cref="all(NDArray, NDAxis?, NDArray, bool, NDArray)"/> with the axis as one <c>int</c>: the
+        ///     overload a C# integer binds (its identity conversion beats NDAxis' implicit one), forwarding to the
+        ///     NDAxis form, so every answer, error, layout and subclass result is that overload's.
         /// </summary>
-        /// <param name="a">Input array.</param>
-        /// <param name="axis">Axes along which to reduce.</param>
-        /// <param name="out">Destination array. Its dtype is preserved.</param>
-        /// <param name="keepdims">If True, reduced axes are left as size-one dimensions.</param>
-        /// <param name="where">A bool mask that broadcasts TO <paramref name="a"/>'s shape; any other dtype
-        ///     raises.</param>
-        /// <returns>The reduced array, or <paramref name="out"/> when supplied.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="a"/> is <c>null</c>.</exception>
-        /// <exception cref="ValueError"><paramref name="out"/> is read-only ("output array is read-only", checked
-        ///     first), has the wrong rank, or cannot hold the result (NumPy's reduction-iterator texts), or
-        ///     <paramref name="where"/> has more axes than <paramref name="a"/> or would make <paramref name="a"/>
-        ///     stretch, or an axis repeats ("duplicate value in 'axis'").</exception>
-        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's <c>TypeError</c>
-        ///     text: the mask must cast to bool under the <c>safe</c> rule).</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="axis"/> is <c>null</c>.</exception>
-        /// <exception cref="AxisError">An axis is out of bounds.</exception>
-        /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not
-        ///     broadcast against <paramref name="a"/>.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
-        // A bare null axis fits int? and int[] equally well (CS0121 for np.all(a, null, null, false, w)); the
-        // lower priority hands that literal to the int? overload (NumPy's axis=None). An int[] argument fits only
-        // the int[] overloads, so they still bind it.
-        [OverloadResolutionPriority(-1)]
-        [NDScoped] // the boundary of the engine call (the engine reclaims its own temporaries)
-        public static NDArray all(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray @where = null)
-        {
-            if (a is null)
-                throw new ArgumentNullException(nameof(a));
-            if (axis is null)
-                throw new ArgumentNullException(nameof(axis));
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="all(NDArray, NDAxis?, NDArray, bool, NDArray)"/>
+        public static NDArray all(NDArray a, int axis, NDArray @out = null, bool keepdims = false, NDArray @where = null)
+            => all(a, (NDAxis?)axis, @out, keepdims, @where);
 
-            // NumPy's whole call with a tuple axis is the engine's too (see the int? overload).
-            return a.TensorEngine.All(a, axis, @out, keepdims, @where);
-        }
+        /// <summary>
+        ///     <see cref="all(NDArray, NDAxis?, NDArray, bool, NDArray)"/> with the axes as an <c>int[]</c>: the
+        ///     overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better than to
+        ///     NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any other array NumPy's tuple
+        ///     (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="all(NDArray, NDAxis?, NDArray, bool, NDArray)"/>
+        public static NDArray all(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false, NDArray @where = null)
+            => all(a, (NDAxis?)axis, @out, keepdims, @where);
     }
 }

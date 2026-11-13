@@ -272,11 +272,66 @@ namespace NumSharp.Tests.View
         [TestMethod]
         public void AsClean_EmptySteppedView_TakesTheCStridesOfItsDimensions()
         {
-            // C-contiguity is set for every empty shape, so only the exact stride comparison sees the view's (0, 2).
-            var s = ViewShape(() => np.zeros(new Shape(0, 6))[":, ::2"]);
+            // C-contiguity is set for every empty shape, so only the exact stride comparison sees the view's (0, 2). The
+            // view is built directly: a fresh empty array has all-zero strides (NumPy's layout, so np.zeros((0, 6))[:, ::2]
+            // is (0, 0) in NumPy too), and no slice of one carries a stray stride any more.
+            var s = new Shape(new long[] { 0, 3 }, new long[] { 0, 2 });
             s.IsContiguous.Should().BeTrue();
             s.strides.Should().Equal(new long[] { 0, 2 });
             s.AsClean().strides.Should().Equal(new long[] { 3, 1 });
+        }
+
+        /// <summary>
+        ///     A fresh zero-size allocation gets every stride 0, NumPy's layout for it, through the allocation funnel and so
+        ///     through every allocator (np.zeros in either order, a ufunc result over an empty operand) — with the empty
+        ///     flags kept: C, F, writeable, never broadcast.
+        /// </summary>
+        [TestMethod]
+        public void ForFreshAllocation_EmptyShape_HasAllZeroStrides()
+        {
+            // NumPy zeroes every stride of a fresh zero-size allocation (PyArray_NewFromDescr_int, nbytes == 0), whatever
+            // layout was asked for (probed 2.4.2: np.zeros((3, 0)).strides == (0, 0), np.zeros((2, 0, 3), order='F') has
+            // (0, 0, 0), np.negative(np.zeros((0, 3))) too). The flags stay C, F and writeable.
+            foreach (var dims in new[] { new long[] { 0, 3 }, new long[] { 3, 0 }, new long[] { 2, 0, 3 }, new long[] { 0 } })
+            {
+                var fresh = new Shape(dims, copy: false).ForFreshAllocation();
+                fresh.strides.Should().Equal(new long[dims.Length]);
+                fresh.IsContiguous.Should().BeTrue();
+                fresh.IsFContiguous.Should().BeTrue();
+                fresh.IsWriteable.Should().BeTrue();
+                fresh.IsBroadcasted.Should().BeFalse();
+                np.zeros(new Shape(dims)).strides.Should().Equal(new long[dims.Length]);
+                np.zeros(new Shape(dims), order: 'F').strides.Should().Equal(new long[dims.Length]);
+                np.negative(np.ones(new Shape(dims))).strides.Should().Equal(new long[dims.Length]);
+            }
+        }
+
+        /// <summary>
+        ///     FIXED 2026-11-05 (moved from OpenBugs.EmptyStrides.cs): every zero-size array NumPy allocates has all-zero byte
+        ///     strides — <c>np.zeros((2, 0))</c>, <c>np.zeros((0, 3))</c>, <c>np.zeros(0)</c>, <c>np.empty((2, 3, 0))</c>,
+        ///     <c>np.ones((0, 3))</c>, <c>np.full((2, 0), 7.0)</c>, <c>np.arange(0)</c>, and the transpose
+        ///     <c>np.zeros((2, 0)).T</c> (probed 2.4.2). NumSharp used to report C strides with the zero extent multiplied in
+        ///     (<c>(0, 8)</c>, <c>(24, 8)</c>, <c>(8,)</c>, <c>(0, 0, 8)</c>, …).
+        /// </summary>
+        [TestMethod]
+        public void EmptyAllocation_HasAllZeroStrides()
+        {
+            foreach (var (name, make) in new (string, Func<NDArray>)[]
+                     {
+                         ("np.zeros((2, 0))", () => np.zeros(new Shape(2L, 0L))),
+                         ("np.zeros((0, 3))", () => np.zeros(new Shape(0L, 3L))),
+                         ("np.zeros(0)", () => np.zeros(new Shape(0L))),
+                         ("np.empty((2, 3, 0))", () => np.empty(new Shape(2L, 3L, 0L))),
+                         ("np.ones((0, 3))", () => np.ones(new Shape(0L, 3L))),
+                         ("np.full((2, 0), 7.0)", () => np.full(new Shape(2L, 0L), 7.0)),
+                         ("np.arange(0)", () => np.arange(0)),
+                         ("np.zeros((2, 0)).T", () => np.zeros(new Shape(2L, 0L)).T),
+                     })
+            {
+                using var a = make();
+                a.size.Should().Be(0, name);
+                a.strides.Should().OnlyContain(s => s == 0, $"{name}: NumPy zeroes every stride of an array it allocates empty");
+            }
         }
 
         [TestMethod]

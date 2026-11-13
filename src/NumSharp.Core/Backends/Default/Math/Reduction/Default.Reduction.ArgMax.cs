@@ -8,6 +8,8 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <inheritdoc />
+        /// <exception cref="TypeError"><paramref name="out"/> is a C# scalar converted to a 0-d array (<c>output must be an
+        ///     array</c>), raised first; the inherited out-dtype refusals.</exception>
         /// <remarks>
         ///     DefaultEngine computes the indices (<see cref="ArgMaxIndices"/>) and then writes them into
         ///     <paramref name="out"/> (<see cref="WriteArgOut"/>). A numeric computation raises only what NumPy raises
@@ -17,6 +19,11 @@ namespace NumSharp.Backends
         /// </remarks>
         public override NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false, NDArray @out = null)
         {
+            // ndarray.argmax's argument parser (PyArray_OutputConverter): an out that is not an array - a C# literal the
+            // implicit conversion turned into a 0-d array, as np.argmax(a, 0, true) passes true as out= - is refused before
+            // the axis' bounds and every other check (probed 2.4.2).
+            if (@out is not null && @out.WasScalarArgument)
+                throw new TypeError("output must be an array");
             // NumPy's _PyArray_ArgMinMaxCommon: the axis (a 0-d input ravels first), the empty length and the out, all
             // before its arg_func compares an element. Only a text comparison can raise, so only text needs them first.
             if (@out is not null && (Strings.NDStringUfuncs.IsVString(arr) || Strings.NDStringUfuncs.IsString(arr)))
@@ -133,7 +140,7 @@ namespace NumSharp.Backends
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
                 }
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
 
             if (axis_ == null)
@@ -148,7 +155,7 @@ namespace NumSharp.Backends
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape, copy: false));
                 }
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
 
             var axis = axisChecked.Value;
@@ -166,7 +173,7 @@ namespace NumSharp.Backends
                 // a fresh 0-d — a numpy SCALAR (read-only) at the boundary.
                 var reducedDims = Shape.GetAxis(shape, axis);
                 var reduced = NewArray(NPTypeCode.Int64, reducedDims.Length == 0 ? Shape.Scalar : new Shape(reducedDims, copy: false), true);
-                return reduced.MarkReductionScalar();
+                return reduced.PyArray_Return();
             }
 
             //handle keepdims - prepare output shape
@@ -220,7 +227,7 @@ namespace NumSharp.Backends
             {
                 if (keepdims)
                     fast.Storage.Reshape(outputShape);
-                return fast.MarkReductionScalar();
+                return fast.PyArray_Return();
             }
 
             // ArgMax/ArgMin always output Int64
@@ -249,7 +256,7 @@ namespace NumSharp.Backends
                 ret.Storage.Reshape(outputShape);
 
             // 1-D input reduced over its only axis → numpy SCALAR (read-only) at the boundary.
-            return ret.MarkReductionScalar();
+            return ret.PyArray_Return();
         }
 
         /// <summary>
@@ -282,7 +289,7 @@ namespace NumSharp.Backends
                 ret.Storage.Reshape(outputShape);
 
             // 1-D input reduced over its only axis → numpy SCALAR (read-only) at the boundary.
-            return ret.MarkReductionScalar();
+            return ret.PyArray_Return();
         }
 
         /// <summary>
@@ -351,7 +358,7 @@ namespace NumSharp.Backends
                 ret.Storage.Reshape(outputShape);
 
             // 1-D input reduced over its only axis → numpy SCALAR (read-only) at the boundary.
-            return ret.MarkReductionScalar();
+            return ret.PyArray_Return();
         }
 
         /// <summary>
@@ -422,7 +429,7 @@ namespace NumSharp.Backends
                 ret.Storage.Reshape(outputShape);
 
             // 1-D input reduced over its only axis → numpy SCALAR (read-only) at the boundary.
-            return ret.MarkReductionScalar();
+            return ret.PyArray_Return();
         }
 
     }

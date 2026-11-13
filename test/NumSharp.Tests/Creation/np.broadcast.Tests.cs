@@ -260,7 +260,7 @@ namespace NumSharp.Tests.Creation
         NDArray _create_arange(Shape shape)
         {
             // np.arange returns int64 by default (NumPy 2.x)
-            return np.arange(shape.size).reshape(ref shape);
+            return np.arange(shape.size).reshape(shape);
         }
 
         NDArray _create_arange(params int[] dims)

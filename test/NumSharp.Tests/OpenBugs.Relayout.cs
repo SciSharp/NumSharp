@@ -16,11 +16,10 @@ namespace NumSharp.Tests
     // members the array-object oracle's repros (OpenBugs.ViewFlags.cs) do not already cover:
     //
     //   * Offset views (VALUES, RL01-RL04). A C-contiguous view whose Shape carries a non-zero offset (an np.split,
-    //     np.unstack or np.array_split child) is read from its OWNER'S START by np.nancumsum / np.nancumprod of
-    //     float16 / complex128 (they run np.where(np.isnan(a), fill, a)) and np.ldexp's mantissa; np.digitize (its x is
+    //     np.unstack or np.array_split child) was read from its OWNER'S START by np.nancumsum / np.nancumprod of
+    //     float16 / complex128 (they ran np.where(np.isnan(a), fill, a)), np.ldexp's mantissa, np.digitize (its x is
     //     np.searchsorted's v), np.isin of a complex128 / float16 element (its sort + searchsorted route),
-    //     np.unique_values and np.intersect1d's first operand were, and are fixed (below). The results are silently
-    //     wrong.
+    //     np.unique_values and np.intersect1d's first operand; all are fixed (below). The results were silently wrong.
     //   * Empty operands (RL06, RL07). The NDArray comparison operators return np.empty(lhs.Shape, bool) for an empty
     //     left operand, and np.logaddexp / np.logaddexp2 return a clone of an empty operand: neither broadcasts the
     //     operands (no error where NumPy raises, the wrong shape where NumPy broadcasts) nor, for logaddexp, promotes
@@ -43,6 +42,11 @@ namespace NumSharp.Tests
     // since parity batch 10 (a KEEPORDER iterator over condition, x and y), and np.nancumsum / np.nancumprod run
     // _replace_nan's statements, so RL02 matches NumPy; its two pins are untagged the same way, and the generator's RL02
     // rule is dropped.
+    //
+    // FIXED 2026-11-08 (the ufunc result-layout port, branch qa/ufunc-keeporder re-ported onto the 0.80.0 release):
+    // np.ldexp's operand materialization (DefaultEngine.MaterializeContiguous) copies a C-contiguous view at a non-zero
+    // offset instead of handing it to a kernel that reads .Address without Shape.offset, so RL03 matches NumPy; its pin is
+    // untagged the same way, and the generator's RL03 rule is dropped. No relayout gap is open.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so
@@ -120,11 +124,14 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        ///     FIXED 2026-11-08 (the ufunc result-layout port): NumSharp gives NumPy's answer now, and this test pins it.
         ///     <c>np.ldexp(x1, x2)</c> with the MANTISSA an <c>np.split</c> child (offset 3, <c>[0.5, -1.5, 3]</c>) and
-        ///     <c>x2 = [1, 2, 3]</c>: NumPy returns <c>[1, -6, 24]</c>; NumSharp scales the owner's sentinels to
-        ///     <c>[14, 28, 56]</c> (gap RL03; the exponent side is ViewFlags_Ldexp_ExponentAtAnOffset_ShouldReadTheView).
+        ///     <c>x2 = [1, 2, 3]</c>: NumPy returns <c>[1, -6, 24]</c>. Before the fix NumSharp scaled the owner's sentinels
+        ///     to <c>[14, 28, 56]</c> (gap RL03: the operand materialization kept a C-contiguous view at a non-zero offset,
+        ///     which the kernel read from the storage's start; such a view is now copied first). The exponent side is
+        ///     ViewFlags_Ldexp_ExponentAtAnOffset_ShouldReadTheView.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL03")]
+        [TestMethod]
         public void Relayout_Ldexp_MantissaAtAnOffset_ShouldReadTheView()
         {
             using var mbase = np.array(new double[] { 7, 7, 7, 0.5, -1.5, 3 });

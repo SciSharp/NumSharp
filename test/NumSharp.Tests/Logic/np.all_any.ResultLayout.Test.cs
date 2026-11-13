@@ -37,8 +37,8 @@ namespace NumSharp.Tests.Logic
         /// <returns>The result.</returns>
         private static NDArray Reduce(string fn, NDArray a, int axis, bool keepdims) => fn switch
         {
-            "any" => np.any(a, axis, keepdims),
-            "all" => np.all(a, axis, keepdims),
+            "any" => np.any(a, axis, keepdims: keepdims),
+            "all" => np.all(a, axis, keepdims: keepdims),
             _ => np.count_nonzero(a, axis, keepdims),
         };
 
@@ -156,8 +156,8 @@ namespace NumSharp.Tests.Logic
             foreach (var fn in new[] { "any", "all" })
             foreach (var (axes, kd, dims, strides) in cases)
             {
-                var r = fn == "any" ? np.any(f, axes, kd) : np.all(f, axes, kd);
-                var reference = fn == "any" ? np.any(c, axes, kd) : np.all(c, axes, kd);
+                var r = fn == "any" ? np.any(f, axes, keepdims: kd) : np.all(f, axes, keepdims: kd);
+                var reference = fn == "any" ? np.any(c, axes, keepdims: kd) : np.all(c, axes, keepdims: kd);
                 AssertLayout(r, reference, dims, strides, c: false, f: true, $"{fn}(F, axis=({string.Join(",", axes)}), keepdims={kd})");
             }
         }

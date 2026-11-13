@@ -34,7 +34,7 @@ returns `np.UniqueResult`, a `readonly struct` standing in for both NumPy shapes
   are always NumPy's view of the gathered rows (`reshape_uniq`'s `np.moveaxis` runs at axis 0 too, so `flags.owndata` is
   False), and a C-contiguous operand at an offset (an `np.split` / `np.array_split` / `np.unstack` child) is read from
   its own first element.
-- `[Misaligned]`: for float16 + axis + NaN, NumPy 2.4.2's structured sort puts NaN first (unlike its own 1-D float16 sort
+- `[Misaligned]`: for float16 + axis + NaN, NumPy 2.5.4's structured sort puts NaN first (unlike its own 1-D float16 sort
   and its float32/64 structured sorts); NumSharp keeps NaN last for every float width (the unique rows and counts match).
 - Gates: `Manipulation/np.unique.AxisEdgeCases.Test.cs` (`UniqueResult_*`, `BareReturn_*`) and `NDArray.unique.Test.cs`.
 

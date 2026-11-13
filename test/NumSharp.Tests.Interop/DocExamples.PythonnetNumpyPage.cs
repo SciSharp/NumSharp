@@ -922,7 +922,7 @@ namespace NumSharp.Tests.Interop
             held.Dispose();
             Pump();
 
-            // "cannot resize an array that references or is referenced by another array in this way"
+            // "cannot resize an array that references or is referenced by another object in this way"
             // (the raised message carries NumPy's own line wrap after "referenced", so it is
             // asserted as its two fragments)
             var nd = np.arange(8).astype(NPTypeCode.Double);
@@ -930,7 +930,7 @@ namespace NumSharp.Tests.Interop
             ((Action)(() => nd.resize(new Shape(16))))
                 .Should().Throw<Exception>()
                 .WithMessage("*cannot resize an array that references or is referenced*")
-                .WithMessage("*by another array in this way*");
+                .WithMessage("*by another object in this way*");
             PyExec("del t_ex");
 
             // "cannot resize this array: it does not own its data"

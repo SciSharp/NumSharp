@@ -10,7 +10,7 @@ namespace NumSharp
         /// <summary>
         ///     Constructs an array — NumPy's low-level <c>numpy.ndarray(shape, dtype=float, buffer=None, offset=0,
         ///     strides=None, order=None)</c>. Without a buffer it allocates an UNINITIALIZED array, like
-        ///     <see cref="empty(Shape, DType, string)"/>; with a buffer it lays the array over the buffer's BYTES without
+        ///     <see cref="empty(Shape, DType, char, string)"/>; with a buffer it lays the array over the buffer's BYTES without
         ///     copying them, so writes through the result change the buffer.
         /// </summary>
         /// <param name="shape">
@@ -35,9 +35,9 @@ namespace NumSharp
         /// <param name="strides">The BYTE stride of every axis (NumPy's unit, as <see cref="NDArray.strides"/> reports),
         ///     or null for the strides of <paramref name="order"/>. Checked against the buffer, or against the array's own
         ///     size without one. A stride of 0 repeats elements and keeps the array writeable.</param>
-        /// <param name="order"><c>'C'</c> (the default, NumPy's <c>None</c>) or <c>'F'</c> for the row-major or
-        ///     column-major strides; <c>'A'</c> and <c>'K'</c> mean <c>'C'</c> here, and lowercase is accepted. Ignored
-        ///     when <paramref name="strides"/> is given.</param>
+        /// <param name="order"><c>'C'</c> or <c>'F'</c> for the row-major or column-major strides; <c>null</c> (NumPy's
+        ///     <c>None</c>, the default) is <c>'C'</c>, <c>'A'</c> and <c>'K'</c> mean <c>'C'</c> here, and lowercase is
+        ///     accepted. Ignored when <paramref name="strides"/> is given.</param>
         /// <returns>
         ///     Without a buffer: a new array that owns its uninitialized memory (an empty one has all-zero strides, as
         ///     NumPy allocates it). With a buffer: a view of the buffer that does not own its data, whose <c>base</c> is the
@@ -107,13 +107,14 @@ namespace NumSharp
         ///     allocator). <c>np.frombuffer(a.tobytes(), dtype)</c> reads the same cells as a copy.
         ///     </para>
         /// </remarks>
-        public static NDArray ndarray(Shape shape, DType dtype = null, object buffer = null, long offset = 0, long[] strides = null, char order = 'C')
+        public static NDArray ndarray(Shape shape, DType dtype = null, object buffer = null, long offset = 0, long[] strides = null, char? order = null)
         {
             // PyArray_IntpConverter refuses None before any other argument is converted.
             if (shape.dimensions is null)
                 throw new TypeError("Use () not None as shape arguments");
 
-            return UnmanagedStorage.ArrayNew(shape, dtype, buffer, offset, strides, order);
+            // order=None is C for the ndarray constructor (array_new's PyArray_OrderConverter default, NPY_CORDER).
+            return UnmanagedStorage.ArrayNew(shape, dtype, buffer, offset, strides, order ?? 'C');
         }
 
         /// <summary>

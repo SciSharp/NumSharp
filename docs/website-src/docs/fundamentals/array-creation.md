@@ -85,7 +85,7 @@ NumPy raises when a Python *list* literal overflows the requested dtype (`np.arr
 np.array([127, 128, 129], np.int8);  // [127, -128, -127]  ← wraps (strong array)
 ```
 
-A *weak* C# scalar assigned into an integer array **does** range-check and raise (`OverflowException`). The full rules are in [Getting & Setting Values → Value coercion](../getting-and-setting-values.md#value-coercion-on-assignment-nep50).
+A *weak* C# scalar assigned into an integer array **does** range-check and raise (`OverflowError`). The full rules are in [Getting & Setting Values → Value coercion](../getting-and-setting-values.md#value-coercion-on-assignment-nep50).
 
 ---
 
@@ -96,7 +96,7 @@ A *weak* C# scalar assigned into an integer array **does** range-check and raise
 | Function | Produces |
 |----------|----------|
 | `np.arange(stop)` / `np.arange(start, stop, step)` | regularly incrementing values (stop **exclusive**); integer overloads are **int64** |
-| `np.linspace(start, stop, num)` | `num` values, endpoints included |
+| `np.linspace(start, stop, num)` | `num` values, endpoints included; array ends give one ramp per element |
 | `np.logspace(start, stop, num, base)` | `base ** linspace(...)` - log-scaled |
 | `np.geomspace(start, stop, num)` | geometric progression between endpoints |
 
@@ -110,6 +110,14 @@ np.geomspace(1, 1000, 4);      // [1. 10. 100. 1000.]
 ```
 
 As in NumPy, prefer `linspace` when you need a guaranteed element count and both endpoints; `arange` with a float step can miss or include `stop` from roundoff.
+
+`linspace` computes in the ends' dtype, as NumPy's `result_type(start, stop, 1.0)`: C# numbers are Python numbers (float64), float32 ends stay float32, and array ends add the sample axis in front (or where `axis` puts it). `retstep: true` also returns the step:
+
+```csharp
+np.linspace(np.array(new[] { 0.0, 1.0 }), np.array(new[] { 1.0, 3.0 }), 3);   // [[0.  1. ] [0.5 2. ] [1.  3. ]]
+np.linspace(NDArray.Scalar(0.1f), NDArray.Scalar(0.7f), 11);                  // float32 samples, NumPy's bits
+var (samples, step) = np.linspace(0, 1, 5, retstep: true);                    // step: 0.25
+```
 
 ### 2-D / matrix constructors
 
@@ -144,18 +152,19 @@ np.full((2, 2), 7.5);                  // filled with 7.5
 np.zeros((2, 3), np.int32);            // dtype override
 ```
 
-`np.indices(shape)` returns one grid array per dimension (stacked), useful for evaluating functions on a regular grid. The shape accepts any .NET spelling - an `int[]`/`long[]`, a value tuple (reads like NumPy), or an array's own `.shape` (which is `long[]`, so no cast is needed):
+`np.indices(shape)` returns one grid array per dimension (stacked), useful for evaluating functions on a regular grid. The shape is one `Shape`: a collection expression (NumPy's list), an `int[]`/`long[]`, a value tuple (reads like NumPy) or an array's own `.shape` (a `long[]`, so no cast is needed) converts to it:
 
 ```csharp
-np.indices([3, 3]);            // collection expression (int[])
+np.indices([3, 3]);            // collection expression - like NumPy's np.indices([3, 3])
+np.indices(new[] { 3, 3 });    // int[]
 np.indices((3, 3));            // value tuple - like NumPy's np.indices((3, 3))
 np.indices(new long[]{ 3, 3 });
 np.indices(other.shape);       // feed an array's own long[] shape directly
 // [[[0 0 0] [1 1 1] [2 2 2]],
 //  [[0 1 2] [0 1 2] [0 1 2]]]
 
-// The sparse form returns one broadcast-shaped array per dimension:
-np.indices_sparse((3, 3));     // shapes (3,1) and (1,3)
+// sparse: true is NumPy's tuple of one broadcast-shaped array per dimension:
+var (rows, cols) = np.indices((3, 3), sparse: true);   // shapes (3,1) and (1,3)
 ```
 
 Coordinate grids also come from `np.meshgrid`, `np.mgrid`, and `np.ogrid` (open mesh). See the [API reference](../../api/index.md).
@@ -225,7 +234,7 @@ var fromFile = np.fromfile("data.bin", np.int16);
 
 ## 6. Special library functions
 
-`np.random` produces arrays from distributions, with **byte-identical seed/state parity** to NumPy 2.4.2 (MT19937 bit generator):
+`np.random` produces arrays from distributions, with **byte-identical seed/state parity** to NumPy 2.5.4 (MT19937 bit generator):
 
 ```csharp
 np.random.seed(42);

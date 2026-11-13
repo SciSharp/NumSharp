@@ -81,8 +81,8 @@ namespace NumSharp.Backends
             // requested class (any request: a numeric one too) as the output.
             if (vstring)
                 throw Backends.Strings.NDStringUfuncs.VStringNoLoop(name,
-                    new[] { Backends.Strings.NDStringUfuncs.DispatchClass(x1), Backends.Strings.NDStringUfuncs.DispatchClass(x2) },
-                    dtype is null ? "None" : dtype.Meta.ToString());
+                    new[] { Backends.Strings.NDStringUfuncs.DispatchMeta(x1), Backends.Strings.NDStringUfuncs.DispatchMeta(x2) },
+                    dtype?.Meta);
             if (request)
                 throw Backends.Strings.NDStringUfuncs.GufuncDTypeLoopError(name, dtype, x1, x2);
             // Fixed-width text without a request has no loop; under a numeric request the loop exists and the casts decide.
@@ -123,9 +123,10 @@ namespace NumSharp.Backends
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <param name="casting">The casting rule: <c>np.matmul</c>'s argument (already validated), <c>"same_kind"</c>
         ///     for the gufuncs without the keyword (NumPy's default).</param>
-        /// <exception cref="TypeError">A cast the rule refuses, with NumPy's UFuncTypeError text: "Cannot
-        ///     cast ufunc '{name}' input {i} from {from} to {loop} with casting rule '{casting}'", or "... output from {loop}
-        ///     to {out} ...".</exception>
+        /// <exception cref="UFuncInputCastingError">An input cast the rule refuses (NumPy's text: "Cannot cast ufunc
+        ///     '{name}' input {i} from {from} to {loop} with casting rule '{casting}'").</exception>
+        /// <exception cref="UFuncOutputCastingError">The loop's cast to <paramref name="out"/> the rule refuses ("... output
+        ///     from {loop} to {out} ...").</exception>
         /// <remarks>
         ///     Checked by descriptor, so a text <paramref name="out"/> (whose storage lane alone carries no width or class)
         ///     gets NumPy's answer: a number to fixed-width text cast is same_kind (not safe), a number to StringDType is
@@ -135,27 +136,30 @@ namespace NumSharp.Backends
         internal static void ValidateCasting(string name, NDArray x1, NDArray x2, DType loop, NDArray @out, string casting)
         {
             var rule = DTypeCasting.ParseCasting(casting);
-            RequireCast(name, "input 0", x1.dtype, loop, casting, rule);
-            RequireCast(name, "input 1", x2.dtype, loop, casting, rule);
+            RequireCast(name, false, 0, x1.dtype, loop, casting, rule);
+            RequireCast(name, false, 1, x2.dtype, loop, casting, rule);
             if (@out is not null)
-                RequireCast(name, "output", loop, @out.dtype, casting, rule);
+                RequireCast(name, true, 2, loop, @out.dtype, casting, rule);
         }
 
         /// <summary>One cast of <see cref="ValidateCasting"/>.</summary>
         /// <param name="name">NumPy's gufunc name.</param>
-        /// <param name="role"><c>"input 0"</c>, <c>"input 1"</c> or <c>"output"</c>, as NumPy names the operand.</param>
+        /// <param name="output">True for the output's cast, false for an input's.</param>
+        /// <param name="index">The operand's index among all operands (the two inputs, then the output: 2).</param>
         /// <param name="from">The source descriptor.</param>
         /// <param name="to">The target descriptor.</param>
         /// <param name="casting">The rule's name, as the message quotes it.</param>
         /// <param name="rule">The rule.</param>
-        /// <exception cref="TypeError">The rule refuses the cast (NumPy's UFuncTypeError text).</exception>
-        private static void RequireCast(string name, string role, DType from, DType to, string casting, NPY_CASTING rule)
+        /// <exception cref="UFuncInputCastingError">The rule refuses an input's cast (the two-input gufunc names its
+        ///     index).</exception>
+        /// <exception cref="UFuncOutputCastingError">The rule refuses the output's cast.</exception>
+        private static void RequireCast(string name, bool output, int index, DType from, DType to, string casting, NPY_CASTING rule)
         {
             if (from == to || DTypeCasting.CanCastTypeTo(from, to, rule))
                 return;
-            throw new TypeError(
-                $"Cannot cast ufunc '{name}' {role} from {from.ToString(true)} to {to.ToString(true)} " +
-                $"with casting rule '{casting}'");
+            if (output)
+                throw new UFuncOutputCastingError(name, 1, casting, from, to, index);
+            throw new UFuncInputCastingError(name, 2, casting, from, to, index);
         }
 
         /// <summary>
@@ -223,14 +227,14 @@ namespace NumSharp.Backends
         ///     <para>The scalar step is NumPy's <c>replace_with_wrapped_result_and_return</c> (ufunc_object.c): it calls
         ///     <c>npy_apply_wrap</c> with <c>return_scalar</c> set when the output is 0-d and no <c>out=</c> was given,
         ///     which is <c>PyArray_Return</c>. NumSharp has no scalar type, so the 0-d array takes the scalar's flags
-        ///     (<see cref="NDArray.MarkReductionScalar"/>, the reductions' rule; probed 2.4.2:
+        ///     (<see cref="NDArray.PyArray_Return"/>, the reductions' rule; probed 2.4.2:
         ///     <c>np.matmul(a, b).flags</c> of two vectors and <c>np.vecdot(a, b).flags</c> are C, F, OWNDATA and not
         ///     WRITEABLE). A given <c>out=</c> clears <c>return_scalar</c>, so a 0-d out comes back itself, writeable.</para>
         /// </remarks>
         internal static NDArray Deliver(NDArray result, NDArray @out)
         {
             if (@out is null)
-                return result.MarkReductionScalar();   // no-op unless 0-d
+                return result.PyArray_Return();   // no-op unless 0-d
 
             UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING);   // cast already validated
             return @out;

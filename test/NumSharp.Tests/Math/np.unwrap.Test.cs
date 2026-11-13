@@ -242,12 +242,12 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Unwrap_UnsignedIntegerPeriod_Throws_Overflow()
         {
-            var ex = Assert.ThrowsException<OverflowException>(
+            var ex = Assert.ThrowsException<OverflowError>(
                 () => np.unwrap(np.array(new byte[] { 0, 1, 2, 3, 0 }), period: 4));
             ex.Message.Should().Contain("out of bounds for uint8");
 
             // Empty unsigned still raises (the scalar-cast check is size-independent, matching NumPy).
-            Assert.ThrowsException<OverflowException>(
+            Assert.ThrowsException<OverflowError>(
                 () => np.unwrap(np.array(new byte[] { }), period: 4));
         }
 
@@ -255,7 +255,7 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Unwrap_NarrowSignedInteger_Throws_Overflow()
         {
-            var ex = Assert.ThrowsException<OverflowException>(
+            var ex = Assert.ThrowsException<OverflowError>(
                 () => np.unwrap(np.array(new sbyte[] { 0, 1, 2, 3, 0 }), period: 300));
             ex.Message.Should().Contain("-150 out of bounds for int8");
         }

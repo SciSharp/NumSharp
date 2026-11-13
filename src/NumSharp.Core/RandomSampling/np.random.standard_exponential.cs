@@ -29,9 +29,9 @@ namespace NumSharp
         ///     per value, so the uniforms come from the bit generator's bulk fill and are transformed in place.
         ///     Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray standard_exponential(Shape size)
+        public NDArray standard_exponential(Shape? size)
         {
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -39,11 +39,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyStandardExponential(ref one));
+                        return NDArray.WritableScalar(LegacyStandardExponential(ref one));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

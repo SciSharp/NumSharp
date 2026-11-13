@@ -45,14 +45,14 @@ namespace NumSharp
         ///     compares NaN forever and never returns; NumSharp returns <paramref name="mu"/> wrapped to <c>[-pi, pi]</c> —
         ///     the distribution's limit — without drawing. Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray vonmises(double mu, double kappa, Shape size)
+        public NDArray vonmises(double mu, double kappa, Shape? size)
         {
             RandomConstraints.Check(kappa, "kappa", ConstraintType.CONS_NON_NEGATIVE);
 
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyVonmisesSetup(mu, kappa);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -60,11 +60,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyVonmises(ref one, in setup));
+                        return NDArray.WritableScalar(LegacyVonmises(ref one, in setup));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

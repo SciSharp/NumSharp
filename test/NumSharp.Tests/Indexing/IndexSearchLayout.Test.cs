@@ -530,9 +530,9 @@ namespace NumSharp.Tests.Indexing
         [TestMethod]
         public void OrderConverter_IsNumPysAcrossTheOrderTakingApis()
         {
-            Action zerosQ = () => np.zeros(new Shape(2, 3), 'Q');
+            Action zerosQ = () => np.zeros(new Shape(2, 3), order: 'Q');
             zerosQ.Should().Throw<ValueError>().WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'Q')");
-            Action zerosA = () => np.zeros(new Shape(2, 3), 'a');
+            Action zerosA = () => np.zeros(new Shape(2, 3), order: 'a');
             zerosA.Should().Throw<ValueError>().WithMessage("only 'C' or 'F' order is permitted");
             Action eyeK = () => np.eye(3, order: 'K');
             eyeK.Should().Throw<ValueError>().WithMessage("only 'C' or 'F' order is permitted");

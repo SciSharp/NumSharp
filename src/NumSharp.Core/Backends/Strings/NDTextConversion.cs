@@ -57,7 +57,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError">A text is not a number of the destination's kind (NumPy's <c>int()</c> /
         ///     <c>float()</c> / <c>complex()</c> texts, quoting <c>np.str_('…')</c> / <c>np.bytes_(b'…')</c>), or an integer
         ///     text has more than 4300 digits.</exception>
-        /// <exception cref="OverflowException">An integer text does not fit the destination (NumPy's LP64 OverflowError
+        /// <exception cref="OverflowError">An integer text does not fit the destination (NumPy's LP64 OverflowError
         ///     texts).</exception>
         /// <exception cref="SystemError">A <c>U</c> element is one unit above U+10FFFF.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> element converted to complex is not UTF-8.</exception>
@@ -110,7 +110,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ArgumentException">Both or neither of <paramref name="dst"/> and <paramref name="src"/> hold
         ///     text, or the mask is not bool.</exception>
         /// <exception cref="ValueError">A selected text is not a number of the destination's kind.</exception>
-        /// <exception cref="OverflowException">A selected integer text does not fit the destination.</exception>
+        /// <exception cref="OverflowError">A selected integer text does not fit the destination.</exception>
         /// <exception cref="SystemError">A selected <c>U</c> element is one unit above U+10FFFF.</exception>
         /// <exception cref="UnicodeDecodeError">A selected <c>S</c> element converted to complex is not UTF-8.</exception>
         internal static void Convert(UnmanagedStorage dst, UnmanagedStorage src, UnmanagedStorage where)
@@ -206,7 +206,7 @@ namespace NumSharp.Backends.Strings
         ///     Python object itself, so its error quotes <c>'x'</c>, not <c>np.str_('x')</c>): no cast has that loop, so the
         ///     parse runs with that quoting directly.</param>
         /// <exception cref="ValueError">A text is not a number of the destination's kind, or has too many digits.</exception>
-        /// <exception cref="OverflowException">An integer text does not fit the destination.</exception>
+        /// <exception cref="OverflowError">An integer text does not fit the destination.</exception>
         /// <exception cref="SystemError">A <c>U</c> element is one unit above U+10FFFF.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> element converted to complex is not UTF-8.</exception>
         private static void Walk(UnmanagedStorage dst, UnmanagedStorage src, UnmanagedStorage mask = null,
@@ -315,7 +315,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="scratch">Work space of <see cref="NDTextParse.ScratchBytes"/>(<paramref name="chars"/>) bytes.</param>
         /// <param name="style">How an error quotes the text.</param>
         /// <exception cref="ValueError">A text is not a number of the destination's kind, or has too many digits.</exception>
-        /// <exception cref="OverflowException">An integer text does not fit the destination.</exception>
+        /// <exception cref="OverflowError">An integer text does not fit the destination.</exception>
         /// <exception cref="SystemError">A <c>U</c> element is one unit above U+10FFFF.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> element converted to complex is not UTF-8.</exception>
         internal static void ParseRun(byte* src, long srcStride, bool unicode, int chars, byte* dst, long dstStride,

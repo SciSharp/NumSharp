@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.Tests.Math
 {
     /// <summary>
-    ///     Pins <see cref="np.binary_repr(long,int?)"/> and <see cref="np.base_repr(long,int,int)"/> against
+    ///     Pins <see cref="np.binary_repr(System.Numerics.BigInteger,int?)"/> and <see cref="np.base_repr(System.Numerics.BigInteger,int,int)"/> against
     ///     NumPy 2.4.2 (numpy/_core/numeric.py). These are SCALAR integer → string formatters with no array
     ///     operand, so they have no differential-fuzz corpus entry (they are classified sibling-owned in the
     ///     oracle surface guard) — this suite IS their gate. Coverage: the two's-complement width path incl.
@@ -98,7 +98,7 @@ namespace NumSharp.Tests.Math
 
         // ------------------------------------------------------------------ base_repr
 
-        /// <summary>Base 2 renders like <see cref="np.binary_repr(long,int?)"/> (without its two's-complement
+        /// <summary>Base 2 renders like <see cref="np.binary_repr(System.Numerics.BigInteger,int?)"/> (without its two's-complement
         /// behaviour), and zero is a single '0'.</summary>
         [TestMethod]
         public void BaseRepr_Basic()

@@ -16,12 +16,13 @@ namespace NumSharp.Tests.Manipulation
     [TestClass]
     public class astypeTests
     {
+        /// <summary>int32 to int64: both the copying and the copy=False call return a new array (the dtype changes); the input keeps int32.</summary>
         [TestMethod]
         public void Upcasting()
         {
             var nd = np.ones(new Shape(3, 3), np.int32);
-            var int64_copied = nd.astype(np.int64, true);
-            var int64 = nd.astype(np.int64, false);
+            var int64_copied = nd.astype(np.int64);
+            var int64 = nd.astype(np.int64, copy: false);
 
             // A conversion always yields a fresh array; the input keeps its dtype.
             Assert.IsTrue(int64_copied.Array != nd.Array);
@@ -31,12 +32,13 @@ namespace NumSharp.Tests.Manipulation
             int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
+        /// <summary>uint8 to int64: a new array either way; the input keeps uint8.</summary>
         [TestMethod]
         public void UpcastingByteToLong()
         {
             var nd = np.ones(new Shape(3, 3), np.uint8);
-            var int64_copied = nd.astype(np.int64, true);
-            var int64 = nd.astype(np.int64, false);
+            var int64_copied = nd.astype(np.int64);
+            var int64 = nd.astype(np.int64, copy: false);
 
             Assert.IsTrue(int64_copied.Array != nd.Array);
             Assert.IsTrue(int64.Array != nd.Array);
@@ -45,12 +47,13 @@ namespace NumSharp.Tests.Manipulation
             int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
+        /// <summary>char to int64: a new array either way; the input keeps char.</summary>
         [TestMethod]
         public void UpcastingCharsToLong()
         {
             var nd = np.ones(new Shape(3, 3), np.@char);
-            var int64_copied = nd.astype(np.int64, true);
-            var int64 = nd.astype(np.int64, false);
+            var int64_copied = nd.astype(np.int64);
+            var int64 = nd.astype(np.int64, copy: false);
 
             Assert.IsTrue(int64_copied.Array != nd.Array);
             Assert.IsTrue(int64.Array != nd.Array);
@@ -59,12 +62,13 @@ namespace NumSharp.Tests.Manipulation
             int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
+        /// <summary>int32 to int16: a new array either way; the input keeps int32.</summary>
         [TestMethod]
         public void DowncastingIntToShort()
         {
             var nd = np.ones(new Shape(3, 3), np.int32);
-            var int16_copied = nd.astype(np.int16, true);
-            var int16 = nd.astype(np.int16, false);
+            var int16_copied = nd.astype(np.int16);
+            var int16 = nd.astype(np.int16, copy: false);
 
             Assert.IsTrue(int16_copied.Array != nd.Array);
             Assert.IsTrue(int16.Array != nd.Array);
@@ -73,6 +77,7 @@ namespace NumSharp.Tests.Manipulation
             int16.GetTypeCode.Should().Be(NPTypeCode.Int16);
         }
 
+        /// <summary>float64 1.3 to int32 truncates to 1 in both results and leaves the input's 1.3.</summary>
         [TestMethod]
         public void DowncastingDoubleToInt()
         {
@@ -82,8 +87,8 @@ namespace NumSharp.Tests.Manipulation
                 nd.SetAtIndex(1.3d, i);
             }
 
-            var int32_copied = nd.astype(np.int32, true);
-            var int32 = nd.astype(np.int32, false);
+            var int32_copied = nd.astype(np.int32);
+            var int32 = nd.astype(np.int32, copy: false);
 
             Assert.IsTrue(int32_copied.Array != nd.Array);
             Assert.IsTrue(int32.Array != nd.Array);
@@ -99,13 +104,14 @@ namespace NumSharp.Tests.Manipulation
             }
         }
 
+        /// <summary>int32 to uint16: a new array either way, the values kept.</summary>
         [TestMethod]
         public void DowncastingIntToUShort()
         {
             var nd = np.ones(new Shape(3, 3), np.int32);
             nd[2, 2].Data<int>()[0].Should().Be(1);
-            var int16_copied = nd.astype(np.uint16, true);
-            var int16 = nd.astype(np.uint16, false);
+            var int16_copied = nd.astype(np.uint16);
+            var int16 = nd.astype(np.uint16, copy: false);
 
             Assert.IsTrue(int16_copied.Array != nd.Array);
             Assert.IsTrue(int16.Array != nd.Array);
@@ -115,16 +121,17 @@ namespace NumSharp.Tests.Manipulation
             int16.GetAtIndex<ushort>(0).Should().Be((ushort)1);
         }
 
+        /// <summary>NumPy: a.astype(a.dtype, copy=False) is a; with copy the same dtype still copies.</summary>
         [TestMethod]
         public void SameDtype_NoCopy_ReturnsSelf()
         {
             // NumPy: a.astype(a.dtype, copy=False) is a → True.
             var nd = np.ones(new Shape(3, 3), np.int32);
-            var same = nd.astype(np.int32, false);
+            var same = nd.astype(np.int32, copy: false);
             Assert.IsTrue(ReferenceEquals(same, nd));
 
             // copy:true with the same dtype still copies.
-            var copied = nd.astype(np.int32, true);
+            var copied = nd.astype(np.int32);
             Assert.IsFalse(ReferenceEquals(copied, nd));
             Assert.IsTrue(copied.Array != nd.Array);
         }
@@ -146,16 +153,17 @@ namespace NumSharp.Tests.Manipulation
             cond.GetTypeCode.Should().Be(NPTypeCode.Int32);
         }
 
+        /// <summary>The empty sentinel casts to an empty uint16 array (copy or not) and stays int32 itself.</summary>
         [TestMethod]
         public void CastEmptyNDArray()
         {
             var nd = new NDArray(NPTypeCode.Int32);
-            var int16_copied = nd.astype(np.uint16, true);
+            var int16_copied = nd.astype(np.uint16);
             int16_copied.Should().BeEquivalentTo(nd);
             int16_copied.Shape.IsEmpty.Should().BeTrue();
 
             // A copy:false conversion on the empty sentinel also leaves the input alone.
-            var int16 = nd.astype(np.uint16, false);
+            var int16 = nd.astype(np.uint16, copy: false);
             int16.GetTypeCode.Should().Be(NPTypeCode.UInt16);
             nd.GetTypeCode.Should().Be(NPTypeCode.Int32);
         }
@@ -171,8 +179,8 @@ namespace NumSharp.Tests.Manipulation
         {
             var nd = np.ones(new Shape(3, 3), np.dtype("U1"));
             nd.item(2, 2).Should().Be("1");
-            var output_copied = nd.astype(np.uint8, true);
-            var output = nd.astype(np.uint8, false);
+            var output_copied = nd.astype(np.uint8);
+            var output = nd.astype(np.uint8, copy: false);
 
             output_copied.Should().BeOfType<byte>().And.BeShaped(3, 3).And.AllValuesBe((byte)1);
             output.Should().BeOfType<byte>().And.BeShaped(3, 3).And.AllValuesBe((byte)1);
@@ -192,8 +200,8 @@ namespace NumSharp.Tests.Manipulation
         {
             var nd = np.ones(new Shape(3, 3), np.uint8);
             nd.item(2, 2).Should().Be((byte)1);
-            var output_copied = nd.astype(np.dtype("U"), true);
-            var output = nd.astype(np.dtype("U"), false);
+            var output_copied = nd.astype(np.dtype("U"));
+            var output = nd.astype(np.dtype("U"), copy: false);
 
             output_copied.dtype.str.Should().Be("<U3");
             output.dtype.str.Should().Be("<U3");
@@ -205,13 +213,14 @@ namespace NumSharp.Tests.Manipulation
         }
 
 
+        /// <summary>Placeholder for int32 to complex128 (its body is commented out; the complex casts are covered by the casting suites).</summary>
         [TestMethod, Ignore("Complex dtype is not supported yet")] //TODO!
         public void CastingIntToComplex()
         {
             //var nd = np.ones(new Shape(3, 3), np.int32);
             //nd[2, 2].Data<int>()[0].Should().Be(1);
-            //var output_copied = nd.astype(np.complex128, true);
-            //var output = nd.astype(np.complex128, false);
+            //var output_copied = nd.astype(np.complex128);
+            //var output = nd.astype(np.complex128, copy: false);
             //
             ////test copying
             //output_copied.Array.Should().Equal(nd.Array);

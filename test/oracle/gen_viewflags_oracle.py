@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-gen_viewflags_oracle.py -- the array-OBJECT oracle: what NumPy 2.4.2 hands back, not only its values.
+gen_viewflags_oracle.py -- the array-OBJECT oracle: what NumPy 2.5.4 hands back, not only its values.
 
 Every other differential tier records a result as (dtype, shape, C-order bytes). That contract cannot see
 three things a NumPy port must still get right, and this generator gates them:
@@ -50,7 +50,7 @@ case, the documented gap NumSharp is known to have there (GAPS). A carved case i
 replay holds every carved case to NumPy and fails while the gap is open. ``--uncarved DIR`` writes the whole
 matrix (the way the carve rules were drawn and how to re-probe after a fix).
 
-Run (needs numpy==2.4.2):
+Run (needs the pinned NumPy (numpy-version.txt, 2.5.4)):
     python test/oracle/gen_viewflags_oracle.py [all|views|out|shapes|arrays] [--uncarved DIR]
 """
 import argparse
@@ -60,11 +60,12 @@ import sys
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_viewflags_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CORPUS = os.path.normpath(os.path.join(HERE, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
@@ -1811,7 +1812,7 @@ _ARRAY_JOB_NUMPY = {
 # out np.dot refuses (F, stepped, transposed, reversed) is refused and VO01 matches NumPy; its GAPS entry and its rule
 # are dropped and its 4 cases moved back into out_flags.jsonl the same way.
 # 2026-11-04 (parity QA-34, f0a00d4a): np.broadcast_arrays returns an operand that already has the broadcast shape as
-# ITSELF and keeps a read-only operand's views read-only, as NumPy 2.4.2 does, so VF17 matches NumPy; its GAPS entry and
+# ITSELF and keeps a read-only operand's views read-only, as NumPy 2.5.4 does, so VF17 matches NumPy; its GAPS entry and
 # its rule are dropped and its 6 cases moved back into view_flags.jsonl the same way (no regeneration).
 # 2026-11-05 (parity QA-15): np.nansum / np.nanprod are NumPy's statements (np.sum / np.prod of _replace_nan), and their
 # one-element shortcut reads a view from its offset, so VF30 matches NumPy; its GAPS entry and its rule are dropped and its
@@ -1833,17 +1834,29 @@ _ARRAY_JOB_NUMPY = {
 # offset) converged before it, with batch 10's np.where and the reduction work that landed after it (the snapshot before
 # QA-48 already matches both). Their GAPS entries and rules are dropped and their 105 cases (VF36 78, VF37 23, VA03 1 +
 # 3) moved back into view_flags.jsonl / array_args.jsonl the same way (no regeneration).
+# 2026-11-08 (the ufunc result-layout port, branch qa/ufunc-keeporder re-ported onto the 0.80.0 release): a fresh
+# elementwise result takes NumPy's ufunc layout (try_trivial_single_output_loop's plain C / F allocation when every N-D
+# input is aligned, uncast and C- or F-contiguous alike, NpyIter's K order otherwise), so np.positive of a read-only
+# owner or a same-shape broadcast is a fresh writeable array (VF14); np.median along an axis takes its mean's layout
+# over the partitioned K-order copy (VF08's np.median half); np.ldexp's operand materialization copies a C-contiguous
+# view at a non-zero offset (VA05). VF14's and VA05's GAPS entries and rules are dropped, VF08's narrowed to
+# np.nanmedian (whose numpy.ma chain is still open), and their 17 cases (VF14 2, VF08 14, VA05 1) moved back into
+# view_flags.jsonl / array_args.jsonl the same way (no regeneration).
+# 2026-11-11 (the scalar plan's S2a, branch feat/numpy-scalars): every ufunc and the functions NumPy ends in PyArray_Return
+# (clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) hand a fresh 0-d result back as NumSharp's
+# scalar (a read-only 0-d array, NDArray.PyArray_Return), and np.nan_to_num(z, copy=False) of a 0-d z hands back a
+# read-only copy, so VF01 matches NumPy and VF02 keeps only element access (a[i, j], z[()], np.flip(z)). VF01's GAPS entry
+# and rule are dropped, VF02's narrowed, and their 72 cases (VF01 71, VF02 1) moved back into view_flags.jsonl the same
+# way (no regeneration).
+# 2026-11-11 (the scalar plan's S2b, same branch): a full integer index is NumPy's item (array_item / PyArray_Scalar), a
+# read-only 0-d COPY of the element, so a[i, j], z[()] and np.flip(z) of a 0-d z (whose indexer is z[()]) match NumPy.
+# VF02's GAPS entry and rule are dropped, and its 12 cases moved back into view_flags.jsonl the same way (no regeneration).
 GAPS = {
-    "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
-            "comes back as a WRITEABLE 0-d array",
-    "VF02": "element access that NumPy answers with a scalar COPY (a[i, j], z[()], np.flip(z), np.nan_to_num(z, "
-            "copy=False) of a 0-d z) returns a writeable 0-d VIEW of the operand",
     "VF04": "np.squeeze / ndarray.squeeze with no length-1 axis return a new view where NumPy returns the operand itself",
-    "VF08": "np.median / np.nanmedian along an axis of an F or permuted 3-D input return a C-ordered result; NumPy "
-            "keeps the input's axis order",
+    "VF08": "np.nanmedian along an axis of an F or permuted 3-D input returns a C-ordered result that owns its data; "
+            "NumPy's (numpy.ma's median of the sorted K-order copy, then MaskedArray.filled's _data view) keeps the "
+            "input's axis order and is a view",
     "VF13": "np.array(a, copy=False) returns a new view where NumPy returns the operand itself",
-    "VF14": "np.positive(ro) of a read-only owner or a same-shape broadcast stays READ-ONLY (np.array's copy is "
-            "writeable since parity QA-35)",
     "VF16": "ndarray.astype(same dtype, copy=False, order='C' or 'F') of a strided 1-D view returns the operand; "
             "NumPy copies to satisfy the requested order",
     "VF19": "np.dot / np.inner of a 0-d with an F 2-D array: -0.0 where NumPy's scalar daxpy gives +0.0, and an F "
@@ -1858,19 +1871,11 @@ GAPS = {
             "np.kron with a 0-d, np.nanmedian along an axis — MaskedArray.filled's _data view) come back owning "
             "their data",
     "VF29": "np.median / np.nanmedian of a 0-d with keepdims=True are read-only; NumPy returns a writeable 0-d array",
-    "VS01": "np.zeros / ones / empty / full given a view's Shape of a dense F or permuted layout allocate that "
-            "layout; NumPy's np.zeros(x.shape) is always C-ordered",
     "VA02": "np.take_along_axis with F-ordered indices returns a C-ordered result; NumPy's follows the indices (F)",
     "VA04": "np.cov / np.corrcoef results do not own their data (OWNDATA false): both end with ndarray.squeeze, which "
             "in NumSharp returns a new view where NumPy returns the array itself (VF04)",
-    "VA05": "np.ldexp reads a C-contiguous exponent array x2 at a non-zero offset (an np.split child) WRONG",
 }
 
-# The ufuncs of the tier (unary and binary), for the rules keyed on "a ufunc".
-_UFUNC_FNS = set(UNARY_K) | set(BINARY_K) | {"invert", "bitwise_and"}
-# The fns whose 0-d result NumPy hands back as a scalar and NumSharp as a writeable 0-d array (VF01).
-_VF01_FNS = _UFUNC_FNS | {"clip", "round", "conj", "conjugate", "ndarray.conj", "ndarray.conjugate", "dot", "inner",
-                          "kron"}
 
 
 def _is_scalar_result(expected):
@@ -1903,23 +1908,14 @@ def _gap_of(tier, case):
     if case.get("expects_throw"):
         return None
     if tier == "views":
-        scalar = _is_scalar_result(e)
         axis = p.get("axis")
-        if fn in _VF01_FNS and scalar and not (fn == "nan_to_num"):
-            return "VF01"
-        if fn == "nan_to_num" and scalar:
-            return "VF01" if p.get("copy") else "VF02"
-        if fn in ("getitem", "flip") and scalar:
-            return "VF02"
         if fn in ("squeeze", "ndarray.squeeze") and "axis" not in p and e["mem"]["same"][0]:
             return "VF04"
-        if fn in ("median", "nanmedian") and axis is not None and (
+        if fn == "nanmedian" and axis is not None and (
                 lay == "own_f_3d" or (lay == "view_perm_3d" and axis != 0)):
             return "VF08"
         if fn == "array" and p.get("copy") is False:
             return "VF13"
-        if lay in ("own_ro_2d", "view_bsame_2d") and fn == "positive":
-            return "VF14"
         if (fn == "ndarray.astype" and p.get("copy") is False and p.get("dtype") == "int64"
                 and p.get("order") in ("C", "F") and lay in ("view_step_1d", "view_rev_1d")):
             return "VF16"
@@ -1937,19 +1933,15 @@ def _gap_of(tier, case):
             return "VF29"
         return None
     if tier == "shapes":
-        # Only where the view's dense layout is a real F / permuted one: a (1,1) or an empty transposed view's Shape is
-        # also C, so NumSharp keeps NumPy's answer there.
-        if (fn in ("zeros", "ones", "empty", "full") and p["form"] in ("view:transposed", "view:permuted")
-                and p["dims"] in ([2, 3], [2, 3, 4])):
-            return "VS01"
+        # The shapes tier keeps no gap since VS01 (np.zeros / ones / empty / full allocating a view Shape's F or permuted
+        # layout) was fixed by API-parity batch 8 on 2026-11-12: a new array is laid out from the dimensions and the
+        # order letter alone.
         return None
     if tier == "arrays":
         if fn == "take_along_axis" and lay in ("indices=f", "indices=t"):
             return "VA02"
         if fn in ("cov", "corrcoef"):
             return "VA04"
-        if fn == "ldexp" and lay == "x2=off":
-            return "VA05"
         return None
     return None
 

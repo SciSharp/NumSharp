@@ -208,7 +208,7 @@ the verbs so those stay conversion-only:
 |---|---|
 | `Postprocess.Softmax(logits, axis = -1)` (max-shifted, rows sum to 1), `LogSoftmax`, `Sigmoid` | the `Math.Exp` / `Sum` / `Select` loop |
 | `Postprocess.Argmax(scores, axis = -1)` → int64, first occurrence | `GetMaxValueIndex` |
-| `Postprocess.TopK(scores, k, axis = -1, largest = true)` → `(values, indices)` | `OrderByDescending().Take(k)` — ONNX `TopK` semantics, ties lower-index-first |
+| `Postprocess.TopK(scores, k, axis = -1, largest = true)` → `(values, indices)` | `OrderByDescending().Take(k)` — ONNX `TopK` semantics, ties lower-index-first; `k = 1` is `np.argmax`, a `k` up to half the axis (4,096+ elements) is selected with `np.argpartition` and only the `k` are sorted |
 
 They agree with ORT's own `Softmax` / `ArgMax` / `TopK` operators run on the same data (the tests do exactly
 that). Float32 in gives float32 out. A bool or integer input is promoted to NumPy's float tier before the
@@ -270,7 +270,9 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   touches carries an ARC: a verb holds a lease while it calls ORT on the value, a view for its whole life, and a
   `Dispose` - from any thread, any number of times at once - waits for the verbs in flight and releases the value
   once, after its last view. A `ToOrtValue` result and an `AsOrtValue` value have it from birth; a value ORT
-  allocated (a `Run` output of ORT's own API) gets it at its first bridge verb. For sessions, use
+  allocated (a `Run` output of ORT's own API) gets it at its first bridge verb. The values the synchronous `Run` and
+  `RunInto` create for their own inputs and pre-allocated outputs carry none: they are made, read by ORT and released
+  within the one call, on its thread, and never reach the caller (an asynchronous run's keep theirs). For sessions, use
   **`NDInferenceSession`** (a drop-in `InferenceSession` with ORT's eight constructors): its `Dispose` releases the
   native session once, after the bridge's runs on it returned (the asynchronous release runs on the thread pool),
   and refuses new runs. ORT's own calls (its `Run` overloads, `GetTensorDataAsSpan`, an `OrtIoBinding`) take no
@@ -311,9 +313,10 @@ The one copy left — `stack` + `astype`/divide producing the planar normalized 
   view lives still frees the memory under it: keep them alive, or copy with `ToNDArray`.
 - **Only CPU-addressable tensors** can be read or viewed. A CUDA / DirectML / TensorRT-resident output is
   refused (`the tensor lives in 'Cuda' memory ... which the CPU cannot address`) — bind a CPU output or copy
-  to CPU first. Host-accessible device memory (`CudaPinned`, `HipPinned`, `QnnHtpShared`) and `CpuAligned4K`
-  are fine: the bridge asks ORT for the device memory kind where the loaded ORT can tell, and uses the
-  allocator name otherwise.
+  to CPU first. Host-accessible device memory (`CudaPinned`, `HipPinned`, `QnnHtpShared`), `CpuAligned4K` and
+  XNNPACK's outputs (CPU memory under its own allocator name, `XnnpackExecutionProvider`, on ORT's Android and
+  iOS packages) are fine: the bridge asks ORT for the device memory kind where the loaded ORT can tell, and uses
+  the allocator name otherwise.
 - No GIL, no interpreter lifetime, no thread-affinity: ORT is thread-safe and the verbs are plain calls.
 
 ## Limits (stated up front)

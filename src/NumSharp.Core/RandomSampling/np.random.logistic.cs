@@ -43,11 +43,11 @@ namespace NumSharp
         ///     <c>scale == 0</c> STILL consumes a uniform per value (the former shortcut skipped the draw and desynchronized
         ///     every later value). Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray logistic(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray logistic(double loc = 0.0, double scale = 1.0, Shape? size = null)
         {
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_NON_NEGATIVE);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -55,11 +55,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(Distributions.RandomLogistic(ref one, loc, scale));
+                        return NDArray.WritableScalar(Distributions.RandomLogistic(ref one, loc, scale));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

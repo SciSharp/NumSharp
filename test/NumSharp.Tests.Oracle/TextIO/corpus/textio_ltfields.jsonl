@@ -1,4 +1,4 @@
-{"header": {"section": "ltfields", "generator": "gen_textio_oracle.py", "version": 1, "numpy": "2.4.2", "python": "3.12.3", "seed": 8104, "cases": 4883}}
+{"header": {"section": "ltfields", "generator": "gen_textio_oracle.py", "version": 1, "numpy": "2.5.4", "python": "3.12.3", "seed": 8104, "cases": 4883}}
 {"id": "ltfields/0", "dtype": "uint8", "source": "lines", "params": {"delimiter": ","}, "lines": ["-3307703268\n"], "error": {"type": "ValueError", "msg": "could not convert string '-3307703268' to uint8 at row 0, column 1."}, "conv_calls": {}}
 {"id": "ltfields/1", "dtype": "uint8", "source": "lines", "params": {"delimiter": ","}, "lines": ["32767\n"], "error": {"type": "ValueError", "msg": "could not convert string '32767' to uint8 at row 0, column 1."}, "conv_calls": {}}
 {"id": "ltfields/2", "dtype": "int8", "source": "lines", "params": {"delimiter": ","}, "lines": ["x\n"], "error": {"type": "ValueError", "msg": "could not convert string 'x' to int8 at row 0, column 1."}, "conv_calls": {}}

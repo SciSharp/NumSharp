@@ -46,8 +46,9 @@ namespace NumSharp.Tests.Creation
                 1036831949u, 1053609165u, 1060320052u, 1065353216u, 1067869799u, 1070386381u, 1072902964u);
             np.arange(0.1, 0.55, 0.1, np.float16).ToArray<Half>().Select(BitConverter.HalfToUInt16Bits).Should().Equal(
                 (ushort)11878, (ushort)12902, (ushort)13516, (ushort)13926, (ushort)14336);
-            // a C# float overload is the double overload with dtype float32
-            np.arange(0.1f, 2f, 0.3f).dtype.Should().Be(np.float32);
+            // A C# float is a Python float (API-parity batch 13, parity QA-02): NumPy's dtype for float arguments is
+            // float64 (np.arange(np.float32(0.1), np.float32(2), np.float32(0.3)) is float64 too); float32 takes the dtype.
+            np.arange(0.1f, 2f, 0.3f).dtype.Should().Be(np.float64);
         }
 
         /// <summary>
@@ -63,11 +64,11 @@ namespace NumSharp.Tests.Creation
             np.arange(100, 150, 10, np.int8).ToArray<sbyte>().Should().Equal((sbyte)100, (sbyte)110, (sbyte)120, (sbyte)-126, (sbyte)-116);
             np.arange(5, -5, -2, np.uint8).ToArray<byte>().Should().Equal((byte)5, (byte)3, (byte)1, (byte)255, (byte)253);
 
-            new Action(() => np.arange(300, 310, 1, np.int8)).Should().Throw<OverflowException>()
+            new Action(() => np.arange(300, 310, 1, np.int8)).Should().Throw<OverflowError>()
                 .WithMessage("Python integer 300 out of bounds for int8");
-            new Action(() => np.arange(120, 140, 10, np.int8)).Should().Throw<OverflowException>()
+            new Action(() => np.arange(120, 140, 10, np.int8)).Should().Throw<OverflowError>()
                 .WithMessage("Python integer 130 out of bounds for int8");
-            new Action(() => np.arange(-1, 3, 1, np.uint8)).Should().Throw<OverflowException>()
+            new Action(() => np.arange(-1, 3, 1, np.uint8)).Should().Throw<OverflowError>()
                 .WithMessage("Python integer -1 out of bounds for uint8");
         }
 
@@ -108,8 +109,8 @@ namespace NumSharp.Tests.Creation
         [TestMethod]
         public void Errors_AreNumPys()
         {
-            new Action(() => np.arange(0, 5, 0)).Should().Throw<DivideByZeroException>().WithMessage("division by zero");
-            new Action(() => np.arange(0.0, 5.0, 0.0)).Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            new Action(() => np.arange(0, 5, 0)).Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
+            new Action(() => np.arange(0.0, 5.0, 0.0)).Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
             new Action(() => np.arange(0.0, double.NaN, 1.0)).Should().Throw<ValueError>().WithMessage("arange: cannot compute length");
             new Action(() => np.arange(0.0, double.PositiveInfinity, 1.0)).Should().Throw<ValueError>()
                 .WithMessage("Maximum allowed size exceeded");

@@ -10,7 +10,9 @@ namespace NumSharp.Backends
         ///     dtype and NaN / +inf.
         /// </summary>
         /// <param name="arr">The operand (any dtype, any layout).</param>
-        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), a tuple of axes reduced together (<c>_var</c>'s
+        /// statements over the set: the count, both sums one pass of NumPy's reduction iterator each; the empty tuple gives a
+        /// deviation of 0 from every element's own mean), or null for every axis.</param>
         /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
         /// <param name="ddof">Delta degrees of freedom (null is 0): the divisor is <c>max(n - ddof, 0)</c>.</param>
         /// <param name="dtype">The loop of both sums (an integer or bool input defaults to float64, every other input
@@ -22,8 +24,8 @@ namespace NumSharp.Backends
         /// <param name="correction">NumPy's <c>correction=</c>, or null (see <see cref="ReduceVar"/>).</param>
         /// <returns><paramref name="out"/> itself when given; otherwise the standard deviation: a read-only 0-d scalar when
         /// the result has no dimensions, a fresh array else.</returns>
-        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included, without a
-        /// mask).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is outside the operand (a 0-d operand
+        /// included, without a mask).</exception>
         /// <exception cref="TypeError">A bool input with <c>dtype=bool</c> or a bool <paramref name="mean"/> of a bool input
         /// (NumPy's boolean-subtract TypeError), or a text out for a float or complex input.</exception>
         /// <exception cref="TypeError">An integer or bool <paramref name="dtype"/> with a result that has dimensions,
@@ -31,7 +33,9 @@ namespace NumSharp.Backends
         ///     without out truncates the root instead).</exception>
         /// <exception cref="System.ArgumentException">A non-bool <paramref name="where"/>.</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape; a nonzero
-        /// <paramref name="ddof"/> together with <paramref name="correction"/>.</exception>
+        /// <paramref name="ddof"/> together with <paramref name="correction"/>; a tuple that
+        /// names an axis twice (<c>duplicate value in 'axis'</c>, raised by the mean's sum before the out is looked at); a
+        /// <c>StringDType</c> operand over two axes or more (not reorderable).</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/>, <paramref name="where"/> or
         /// <paramref name="mean"/> does not broadcast against the input.</exception>
         /// <remarks>
@@ -40,13 +44,25 @@ namespace NumSharp.Backends
         ///     <paramref name="mean"/>, inputs, are never tracked).
         /// </remarks>
         [NDScoped]
-        public override NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null,
+        public override NDArray ReduceStd(NDArray arr, NDAxis? axis, bool keepdims = false, int? ddof = null, DType dtype = null,
             NDArray @out = null, NDArray @where = null, NDArray mean = null, int? correction = null)
         {
             // fromnumeric's correction= rule runs before anything else; then where= / mean= take _std's keyword statements.
             int d = DdofWithCorrection(ddof, correction);
             if (IsPythonTrueMask(@where))
                 @where = null;
+            // A tuple: one axis or every axis is the integer / None route below (_count_reduce_items and every umr_sum read
+            // the same axes); any other tuple is _var's statements over the set (VarStdKeywordsNumPy without a mask or a
+            // mean: the count, the keepdims mean, the squared deviations, their sum), which raise in NumPy's order - each
+            // item's bounds from the count, the repeat from the mean's sum.
+            int? axis_;
+            if (axis is { IsTuple: true } tuple)
+            {
+                if (!ReductionArguments.TryIntegerForm(arr.ndim, tuple, out axis_))
+                    return VarStdKeywordsNumPy(arr, tuple, keepdims, d, dtype, @out, @where, mean, takeSqrt: true);
+            }
+            else
+                axis_ = ReductionArguments.IntegerAxis(axis);
             if (@where is not null || mean is not null)
                 return VarStdKeywordsNumPy(arr, axis_, keepdims, d, dtype, @out, @where, mean, takeSqrt: true);
             return @out is null

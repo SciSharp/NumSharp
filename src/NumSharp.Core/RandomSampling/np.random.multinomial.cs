@@ -105,46 +105,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Draw samples from a multinomial distribution.
-        /// </summary>
-        /// <param name="n">Number of experiments (&gt;= 0; NumPy's <c>long n</c>).</param>
-        /// <param name="pvals">Probabilities of each of the k different outcomes. Must sum to ~1.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples with shape (*size, k), where each row sums to n (int64).</returns>
-        /// <exception cref="TypeError"><paramref name="pvals"/> is null.</exception>
-        /// <exception cref="ValueError">A validation of <see cref="multinomial(long, double[], Shape?)"/> fails.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray multinomial(long n, double[] pvals, int[] size)
-            => multinomial(n, pvals, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a multinomial distribution.
-        /// </summary>
-        /// <param name="n">Number of experiments (&gt;= 0; NumPy's <c>long n</c>).</param>
-        /// <param name="pvals">Probabilities of each of the k different outcomes. Must sum to ~1.</param>
-        /// <param name="size">Number of samples to draw — NumPy's integer <c>size</c>, an npy_intp (int64) dimension.</param>
-        /// <returns>Drawn samples with shape (size, k), where each row sums to n (int64).</returns>
-        /// <exception cref="TypeError"><paramref name="pvals"/> is null.</exception>
-        /// <exception cref="ValueError">A validation of <see cref="multinomial(long, double[], Shape?)"/> fails.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray multinomial(long n, double[] pvals, long size)
-            => multinomial(n, pvals, new Shape(size));
-
-        /// <summary>
         ///     The shared body of the <c>multinomial</c> overloads — NumPy's legacy <c>multinomial</c> after the pvals
         ///     conversion: validate, allocate the zeroed output, validate <c>n</c>, then one row per sample.
         /// </summary>
@@ -208,17 +168,16 @@ namespace NumSharp
             // gh-20483: Avoids divide by 0
             long niter = d != 0 ? sz / d : 0;
             // Read-ahead draws (bulk-filled by the bit generator). Every row has the same parameters, so the rows are
-            // all-or-nothing: a row's binomials skip the stream only for n == 0 or p == 0, and when n > 0 its first category
-            // j < d-1 with pvals[j] != 0 runs with the full n and p = pvals[j] / 1.0 (remaining_p only ever lost zeros
-            // before it), so it draws. Either every row draws at least once — the rows still owed bound the draws still to
-            // come — or no row ever touches the stream and the buffer never refills; a full read-ahead is exact either way.
+            // all-or-nothing: the legacy binomial always draws (it has no n == 0 / p == 0 shortcut), so with d >= 2 every
+            // row draws at least once in its first category — the rows still owed bound the draws still to come — and with
+            // d <= 1 no row ever touches the stream and the buffer never refills; a full read-ahead is exact either way.
             double* storage = stackalloc double[DrawBufferDouble.Capacity];
             var src = new DrawBufferDouble(randomizer, storage, DrawBufferDouble.Capacity);
             lock (randomizer.@lock)
             {
                 // A row cycles through one binomial key per category, on which NumPy's single-entry cache never hits; a
-                // memo of those setups for the fill skips the recomputation without changing a bit (see BinomialState).
-                // It is installed and removed under the lock, so no other sampler ever sees it.
+                // memo of those (legacy) setups for the fill skips the recomputation without changing a bit (see
+                // BinomialState). It is installed and removed under the lock, so no other sampler ever sees it.
                 if (niter >= MultinomialMemoMinRows)
                     _binomial.Memo = new BinomialSetup[1 << BinomialState.MemoBits];
                 try
@@ -227,7 +186,7 @@ namespace NumSharp
                     for (long i = 0; i < niter; i++)
                     {
                         src.Owed = niter - i;
-                        Distributions.RandomMultinomial(ref src, n, mnix + offset, pix, d, _binomial);
+                        LegacyMultinomial(ref src, n, mnix + offset, pix, d);
                         offset += d;
                     }
                 }

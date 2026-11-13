@@ -59,7 +59,7 @@ which re-emit other tiers' cases), np.evaluate trees and iterator traces (no sin
 np.frombuffer (its operand stands for Python bytes), and every operand of dtype char or decimal (no NumPy analog).
 Run it after every other generator: its sources are their files.
 
-Run (needs numpy==2.4.2; deterministic: a rerun is byte-identical):
+Run (needs the pinned NumPy (numpy-version.txt, 2.5.4); deterministic: a rerun is byte-identical):
     python test/oracle/gen_relayout_oracle.py [--uncarved DIR] [--report]
 """
 import argparse
@@ -72,11 +72,12 @@ import sys
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_relayout_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -540,7 +541,14 @@ def reproduces(c):
         return bool(c.get("expects_throw")) and err.get("type") == type(e).__name__ and err.get("text") == str(e)
     if c.get("expects_throw"):
         return False
-    s = serialize(r)
+    try:
+        s = serialize(r)
+    except ValueError:
+        # A tuple of differently shaped results (qr's (Q, R) or svd's (U, S, Vh) of an empty operand) is not one array,
+        # so it cannot reproduce a single-array case. NumPy 2.4.2's array coercion collapsed such a tuple of empty
+        # factors into a (k, 0) array, whose shape then failed the comparison below; NumPy 2.5 refuses the ragged
+        # sequence ("inhomogeneous shape after 2 dimensions") instead, which means the same thing here.
+        return False
     return s["dtype"] == exp.get("dtype") and s["shape"] == exp.get("shape") and s["buffer"] == exp.get("buffer")
 
 
@@ -797,11 +805,12 @@ def _predicted_kind(tname, nd, size):
 # rewrite (a KEEPORDER iterator over condition, x and y), and np.nancumsum / np.nancumprod run _replace_nan's
 # statements, so RL02 matches NumPy (as VA03 does in the array-object oracle); its rule is dropped and its 17 cases
 # moved back into relayout.jsonl the same way (no regeneration).
-GAPS = {
-    "RL03": "np.ldexp reads a C-contiguous mantissa x1 already of the result dtype, or an int32 / int64 exponent x2, at "
-            "a non-zero offset from the owner's start (WRONG values): MaterializeContiguous passes such an operand "
-            "through np.ascontiguousarray unchanged and the kernel reads .Address without Shape.offset (VA05, x1 too)",
-}
+# 2026-11-08 (the ufunc result-layout port, branch qa/ufunc-keeporder re-ported onto the 0.80.0 release): np.ldexp's
+# operand materialization (DefaultEngine.MaterializeContiguous) copies a C-contiguous view at a non-zero offset instead
+# of passing it through np.ascontiguousarray to a kernel that reads .Address without Shape.offset, so RL03 matches
+# NumPy (as VA05 does in the array-object oracle); its rule is dropped and its 3 cases moved back into relayout.jsonl
+# the same way (no regeneration). No relayout gap is open.
+GAPS = {}
 
 # The kinds whose first element sits past the buffer's start by an EXTRA offset (kind_of): the operands a kernel
 # that forgets Shape.offset misreads.
@@ -849,13 +858,7 @@ def _gap_of(case, misread):
     pos = int(pos)
     if kind in ("empty", "empty_view"):
         return _empty_gap(case, op, pos)
-    if not misread:
-        return None
-    dts = [d["dtype"] for d in case["operands"]]
-    result_dt = (case.get("expected") or {}).get("dtype")
-    if kind == "c_offset":
-        if op == "ldexp" and ((pos == 0 and dts[0] == result_dt) or (pos == 1 and dts[1] in ("int32", "int64"))):
-            return "RL03"
+    # No offset-misread gap is open (RL01 - RL05 are fixed); a new one is a rule here, gated on ``misread``.
     return None
 
 

@@ -111,11 +111,20 @@ namespace NumSharp
                         idx = ChoiceNoReplaceWeighted(pw, count, shape);
                     else if (popExceedsInt64)
                         // NumPy assigns pop_size to a C int64 here: OverflowError.
-                        throw new OverflowException("Python int too large to convert to C long");
+                        throw new OverflowError("Python int too large to convert to C long");
                     else
                         idx = ChoiceNoReplaceUniform(popSize, count, shuffle, shape);
                 }
             }
+
+            // NumPy: `if is_scalar and isinstance(idx, np.ndarray): idx = idx.item(0)` — size=None unpacks the one
+            // sample into a Python int, which NumSharp returns as a fresh owning, WRITEABLE 0-d array whichever path drew
+            // it (the uniform path without replacement leaves a 0-d VIEW of its one-element draw buffer since NumPy 2.5).
+            // The writeable twin, not NDArray.Scalar: since the NumPy-scalar seams (S1) NDArray.Scalar is the read-only
+            // scalar, and the random module's size=None draws stay writeable 0-d arrays until the scalar plan's S8 decides
+            // their kind. The array population takes the unpacked index too, so np.take below reads a 0-d index either way.
+            if (isScalar)
+                idx = NDArray.WritableScalar(idx.GetAtIndex<long>(0));
 
             // ---- map indices back onto the population ----
             if (aIsScalarPop)
@@ -143,7 +152,7 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public NDArray choice(long a, Shape? size = null, bool replace = true, NDArray p = null, int axis = 0, bool shuffle = true)
-            => choice(NDArray.Scalar(a), size, replace, p, axis, shuffle);
+            => choice(NDArray.WritableScalar(a), size, replace, p, axis, shuffle);
 
         /// <summary>
         ///     NumPy's <c>pop_size = operator.index(a.item())</c> for a 0-d population.
@@ -265,7 +274,7 @@ namespace NumSharp
         /// <summary>
         ///     <c>replace=False, p=None</c>: Floyd's algorithm (small samples) or a tail partial-shuffle (large
         ///     samples of a large population), then the optional full shuffle — NumPy's heuristic and draws, written
-        ///     straight into a fresh array that owns its data, as NumPy's result does.
+        ///     into a fresh 1-D buffer whose reshape VIEW is the result, as NumPy 2.5's is.
         /// </summary>
         /// <param name="popSize">The population size.</param>
         /// <param name="size">The number of samples (validated &lt;= <paramref name="popSize"/>; equals the element count of
@@ -274,27 +283,28 @@ namespace NumSharp
         ///     1/50 of the population, NumPy's tuning).</param>
         /// <param name="shape">The output shape: <see cref="Shape.Scalar"/> for <c>size=None</c> / <c>()</c>, else the
         ///     caller's size (dimensions only — its layout is ignored).</param>
-        /// <returns>A fresh C-contiguous int64 array of <paramref name="shape"/> that owns its data.</returns>
+        /// <returns>A C-contiguous int64 view of <paramref name="shape"/> over a fresh 1-D buffer of the
+        ///     <paramref name="size"/> draws: <c>owndata</c> False, its <c>base</c> that buffer.</returns>
         /// <remarks>
         ///     <para>
         ///     NumPy fills a 1-D <c>np.empty(size)</c> (Floyd) or copies the tail of a shuffled <c>arange(pop_size)</c>
         ///     (<c>idx[(pop_size - size):].copy()</c>, "to allow potentially large array backing idx to be gc"), and both
-        ///     end with <c>idx.shape = shape</c> — an IN-PLACE shape assignment, so the result owns its data. Allocating
-        ///     the final shape once and writing its flat C-order buffer is the same sequence with nothing observable in
-        ///     between. The former <c>np.array(long[]).reshape(shape)</c> returned a reshape VIEW (<c>owndata</c> False,
-        ///     so a size-changing <c>resize</c> refused) after a managed array and a second copy.
+        ///     end with <c>idx = idx.reshape(shape)</c> (NumPy 2.5; NumPy 2.4's in-place <c>idx.shape = shape</c> left the
+        ///     result owning its data). The view is observable: <c>flags.owndata</c> is False and <c>base</c> is the 1-D
+        ///     draws, at every size (<c>()</c> and <c>(0,)</c> included). A size-changing in-place <c>resize</c> therefore
+        ///     refuses the result, as NumPy's does.
         ///     </para>
         ///     <para>
         ///     Both branches draw with <c>random_bounded_uint64(0, j, 0, 0)</c> == <see cref="BoundedUInt64Scalar"/>, one
         ///     sequential, data-dependent draw per step, so neither loop can be vectorized without changing the stream.
-        ///     The caller holds the lock.
+        ///     The caller holds the lock and its scope reclaims the buffer's own wrapper; the view keeps the buffer alive.
         ///     </para>
         /// </remarks>
         private unsafe NDArray ChoiceNoReplaceUniform(long popSize, long size, bool shuffle, Shape shape)
         {
-            // NumPy's size is dimensions only: lay the result out in C order whatever layout the caller's Shape carries
-            // (AsClean, as every sampler allocates), so the flat writes below land in NumPy's element order.
-            var idx = new NDArray(NPTypeCode.Int64, shape.AsClean(), false);
+            // The draws land in NumPy's flat 1-D buffer (np.empty(size) / the tail copy); the reshape at the end lays it
+            // out in C order whatever layout the caller's Shape carries (AsClean: NumPy's size is dimensions only).
+            var idx = new NDArray(NPTypeCode.Int64, new Shape(new[] { size }, copy: false), false);
             long* data = (long*)idx.Address;
             int cutoff = shuffle ? 50 : 20;
 
@@ -348,7 +358,8 @@ namespace NumSharp
                     ShuffleIntBuffer(data, size, 1);
             }
 
-            return idx;
+            // NumPy 2.5's `idx = idx.reshape(shape)`: a view of the 1-D draws (owndata False), never the buffer itself.
+            return idx.reshape(shape.AsClean());
         }
 
         /// <summary>

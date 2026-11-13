@@ -297,7 +297,7 @@ namespace NumSharp.Tests.Math
                 .WithMessage("operands could not be broadcast together with shapes (3,4) (4,3) ");
             new Action(() => np.around(a, 1, transposed)).Should().Throw<ArgumentException>()
                 .WithMessage("operands could not be broadcast together with shapes (3,4) () (4,3) ");
-            new Action(() => np.round_(a, -1, transposed)).Should().Throw<ArgumentException>()
+            new Action(() => np.round(a, -1, transposed)).Should().Throw<ArgumentException>()
                 .WithMessage("operands could not be broadcast together with shapes (3,4) () (4,3) ");
             new Action(() => np.around(ai, 0, transposedInt)).Should().Throw<ValueError>()
                 .WithMessage("could not broadcast input array from shape (3,4) into shape (4,3)");

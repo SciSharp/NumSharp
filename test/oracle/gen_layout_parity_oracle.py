@@ -1,4 +1,4 @@
-"""Layout-parity oracle: NumPy 2.4.2 differential corpus for the modelled numpy-internal
+"""Layout-parity oracle: NumPy 2.5.4 (the pin) differential corpus for the modelled numpy-internal
 representations (the formerly-[Misaligned] set, fixed on journey3):
 
   reshape   _reshape_with_copy_arg + _attempt_nocopy_reshape: nocopy strided VIEWS,
@@ -14,6 +14,10 @@ representations (the formerly-[Misaligned] set, fixed on journey3):
   ravelmi   np.ravel_multi_index: the iterator's ALLOCATE output, KEEPORDER over the
             coordinate arrays (F coordinates give an F result, mixed ones C)
   copyk     copy(order='K') / astype(order='K') true KEEPORDER allocation
+  ufunc     a fresh ufunc result's layout: the trivial loop's C / F, else NpyIter's K order (C wins conflicts),
+            over C / F / permuted / stepped / reversed / flipped-F / broadcast operands, plus the functions built on
+            ufuncs or K copies (where, divmod / modf / frexp, np.array, nan_to_num, around, diff, the scans, keepdims
+            sums, median, tril, shifts, ldexp, clip) and the extent-1 strides that tell the two allocators apart
   linspace  the in-place-mutated arange VIEW (owndata=False) vs owning astype copies
   reduce    full reductions return read-only numpy SCALARS (PyArray_Return, num=263)
   bcastw    views of a setflags(write=True)-re-enabled broadcast inherit the override
@@ -25,7 +29,7 @@ source, and the result VALUES as base64(tobytes(order='C')) — so the C# replay
 where a surface is knowingly not byte-comparable (partition's between-anchor arrangement)
 or where a PRE-EXISTING unrelated divergence would otherwise leak in.
 
-Regenerate:  python test/oracle/gen_layout_parity_oracle.py   (needs numpy==2.4.2)
+Regenerate:  python test/oracle/gen_layout_parity_oracle.py   (needs the pinned NumPy (numpy-version.txt, 2.5.4))
 Twin:        test/NumSharp.Tests/Backends/LayoutParityOracleTests.cs (builders keyed 1:1)
 """
 import base64
@@ -33,8 +37,9 @@ import json
 import os
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_layout_parity_oracle.py")
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                    "..", "NumSharp.Tests", "Backends", "corpus", "layout_parity_oracle.jsonl")
@@ -80,6 +85,17 @@ def SRC(name, dt="int64"):
     if name == "ust":    return np.arange(12).astype(dt)[::2]
     if name == "ue":     return np.zeros((0, 3), dtype=dt)
     if name == "u11":    return np.array([[4]]).astype(dt)
+    # 3-D layouts of the ufunc family (values 1..24, so every op below is exact)
+    if name == "c3":     return np.arange(1, 25).astype(dt).reshape(2, 3, 4)
+    if name == "f3":     return np.asfortranarray(np.arange(1, 25).astype(dt).reshape(2, 3, 4))
+    if name == "p3":     return np.arange(1, 25).astype(dt).reshape(3, 2, 4).transpose(1, 0, 2)
+    if name == "q3":     return np.arange(1, 25).astype(dt).reshape(4, 2, 3).transpose(1, 2, 0)
+    if name == "s3":     return np.arange(1, 49).astype(dt).reshape(2, 3, 8)[..., ::2]
+    if name == "r3":     return np.arange(1, 25).astype(dt).reshape(2, 3, 4)[:, ::-1]
+    if name == "flipf3": return np.flip(np.asfortranarray(np.arange(1, 25).astype(dt).reshape(2, 3, 4)), 2)
+    if name == "b3":     return np.broadcast_to(np.arange(1, 5).astype(dt), (2, 3, 4))
+    if name == "f213":   return np.asfortranarray(np.arange(1, 7).astype(dt).reshape(2, 1, 3))
+    if name == "e203":   return np.zeros((2, 0, 3), dtype=dt)
     raise KeyError(name)
 
 
@@ -275,6 +291,77 @@ def main():
         cases.append(rec("copyk", f"{s}_copy", "int64", src.copy(order="K"), src=src))
         cases.append(rec("copyk", f"{s}_astype", "float64",
                          src.astype(np.float64, order="K", copy=True), src=src))
+
+    # ---------------------------------------------------------------- ufunc result layouts
+    # A fresh ufunc result's layout (QA-36 / P19): try_trivial_single_output_loop's C / F allocation when the call
+    # qualifies (no mask, one output, no input of two or more dimensions cast), NpyIter's K order otherwise
+    # (npyiter_find_best_axis_ordering + npyiter_new_temp_array: C wins conflicts, a stride-0 or extent-1 axis abstains,
+    # an allocated output never flips a negative stride). The functions built on ufuncs or on order='K' copies follow
+    # (np.where, the two-output ufuncs, np.array, nan_to_num, around, diff, the scans, the keepdims reductions, median,
+    # tril, the shifts, ldexp, clip). Values 1..24 keep every op exact, so the values compare bit for bit.
+    UF = {  # (twin: UfuncOp)
+        "neg": lambda x: np.negative(x),
+        "sqrt": lambda x: np.sqrt(x),
+        "sqrti": lambda x: np.sqrt(x.astype(np.int32)),
+        "isnan": lambda x: np.isnan(x),
+        "add0d": lambda x: x + 1.5,
+        "addself": lambda x: x + x,
+        "addrow": lambda x: x + np.arange(1.0, 5.0),
+        "addc": lambda x: x + SRC("c3", "float64"),
+        "muli": lambda x: x.astype(np.int32) * x,
+        "maximum": lambda x: np.maximum(x, 7.0),
+        "copysign": lambda x: np.copysign(x, -1.0),
+        "gt": lambda x: x > 7.0,
+        "eq": lambda x: np.equal(x, x),
+        "land": lambda x: np.logical_and(x, x > 5.0),
+        "where": lambda x: np.where(x > 7.0, x, 0.0),
+        "divmod": lambda x: np.divmod(x, 5.0)[1],
+        "modf": lambda x: np.modf(x)[1],
+        "frexp": lambda x: np.frexp(x)[1],
+        "array": lambda x: np.array(x),
+        "n2n": lambda x: np.nan_to_num(x),
+        "around1": lambda x: np.around(x, 1),
+        "diff1": lambda x: np.diff(x, axis=1),
+        "cumsum1": lambda x: np.cumsum(x, axis=1),
+        "cumprod0": lambda x: np.cumprod(x, axis=0),
+        "nancumsum2": lambda x: np.nancumsum(x, axis=2),
+        "sumk1": lambda x: np.sum(x, axis=1, keepdims=True),
+        "median1": lambda x: np.median(x, axis=1),
+        "mediank1": lambda x: np.median(x, axis=1, keepdims=True),
+        "tril": lambda x: np.tril(x),
+        "shl": lambda x: np.left_shift(x.astype(np.int64), 2),
+        "ldexp": lambda x: np.ldexp(x, 2),
+        "clip": lambda x: np.clip(x, 3.0, 9.0),
+    }
+    for s in ["c3", "f3", "p3", "q3", "s3", "r3", "flipf3", "b3"]:
+        for op, f in UF.items():
+            src = SRC(s, "float64")
+            res = f(src)
+            r = rec("ufunc", f"{op}_{s}", "float64", res, src=src)
+            r["rdtype"] = str(res.dtype)
+            cases.append(r)
+    # The extent-1 strides tell NumPy's two allocators apart: the trivial loop fills plain F strides, NpyIter gives the
+    # extent-1 axis its sorted place (an int32 F (2,1,3) array: negative (4,8,8), sqrt — a cast input — (8,48,16)).
+    UF1 = {  # (twin: UfuncOp, the f213 rows)
+        "neg": lambda x: np.negative(x),
+        "sqrt": lambda x: np.sqrt(x),
+        "add0d": lambda x: x + 1.5,
+        "addself": lambda x: x + x,
+        "adds111": lambda x: x.astype(np.float64) + np.ones((1, 1, 1)),
+        "isnan": lambda x: np.isnan(x.astype(np.float64)),
+    }
+    for op, f in UF1.items():
+        src = SRC("f213", "int32")
+        res = f(src)
+        r = rec("ufunc", f"{op}_f213", "int32", res, src=src)
+        r["rdtype"] = str(res.dtype)
+        cases.append(r)
+    # A complex round of a row broadcast: PyArray_Round's complex branch rounds an order='K' COPY, which a row
+    # broadcast's stride-0 axis makes F-contiguous (the rint ufunc would vote C).
+    bcx = np.broadcast_to(np.array([1.5 + 2.5j, 2.5 - 0.5j]), (3, 2))
+    r = rec("ufunc", "around0_bcx", "complex128", np.around(bcx), src=bcx)
+    r["rdtype"] = "complex128"
+    cases.append(r)
 
     # ---------------------------------------------------------------- linspace
     lin_cells = [

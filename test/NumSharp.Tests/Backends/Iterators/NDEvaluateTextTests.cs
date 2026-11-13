@@ -12,7 +12,7 @@ namespace NumSharp.Tests.Backends.Iterators
     ///     a tree; their numeric results feed every numeric node, reduction and keyword of the fused remainder. Each runs as
     ///     NumPy's own statement (the engine's string functions), so its values, its StringDType NA rules and its errors are
     ///     NumPy's; every other node with a text operand is refused, naming the node (docs/plans/evaluate-text.md lists the
-    ///     phase that lifts each refusal). Every expected value and message was probed against numpy==2.4.2.
+    ///     phase that lifts each refusal). Every expected value and message was probed against numpy==2.5.4.
     /// </summary>
     [TestClass]
     public class NDEvaluateTextTests
@@ -193,9 +193,10 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         /// <summary>
-        ///     StringDType's NA rules follow NumPy's loop, which reads them from its FIRST descriptor: a NaN-like NA makes
-        ///     every comparison with it False (<c>!=</c> too) on the left, while <c>'a' OP t</c> promotes the str to a
-        ///     default StringDType that reads the NA as <c>''</c>; a None-like NA equals <c>''</c> and refuses an ordering.
+        ///     StringDType's NA rules follow NumPy's loop, which reads them from the first operand whose descriptor HAS an NA
+        ///     object (NumPy 2.5.2's effective NA descriptor; 2.4 read the first descriptor, so <c>'a' OP t</c> read the NA as
+        ///     <c>''</c>): a NaN-like NA makes every comparison with it False (<c>!=</c> too) on either side; a None-like NA
+        ///     equals <c>''</c> and refuses an ordering.
         /// </summary>
         [TestMethod]
         public void StringDTypeNA_IsNumPysFirstDescriptorRule()
@@ -203,9 +204,9 @@ namespace NumSharp.Tests.Backends.Iterators
             using var tn = np.array(new object[] { "a", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
             B(np.evaluate(NDExpr.Equal(tn, "a"))).Should().Equal(true, false, false);
             B(np.evaluate(NDExpr.NotEqual(tn, "a"))).Should().Equal(false, false, true);
-            B(np.evaluate(NDExpr.NotEqual("a", tn))).Should().Equal(false, true, true);
+            B(np.evaluate(NDExpr.NotEqual("a", tn))).Should().Equal(false, false, true);
             B(np.evaluate(NDExpr.Less(tn, "a"))).Should().Equal(false, false, false);
-            B(np.evaluate(NDExpr.Greater("a", tn))).Should().Equal(false, true, false);
+            B(np.evaluate(NDExpr.Greater("a", tn))).Should().Equal(false, false, false);
             B(np.evaluate(NDExpr.GreaterEqual(tn, tn))).Should().Equal(true, false, true);
             ((long)np.evaluate(NDExpr.CountNonzero(NDExpr.NotEqual(tn, "b")))).Should().Be(1);
 
@@ -413,8 +414,9 @@ namespace NumSharp.Tests.Backends.Iterators
             var age = Age();
             np.evaluate(NDExpr.StrLen(u)).ToArray<long>().Should().Equal(0L, 1, 1, 2, 1, 1, 1, 3, 2);
             np.evaluate(NDExpr.StrLen(S())).ToArray<long>().Should().Equal(0L, 1, 1, 2, 1, 2, 3, 3, 2);
-            np.evaluate(NDExpr.StrLen(t)).ToArray<long>().Should().Equal(0L, 1, 1, 2, 1, 1, 1, 3, 2);
-            ((long)np.evaluate(NDExpr.Sum(NDExpr.StrLen(t)))).Should().Be(12);
+            // A StringDType text's trailing NUL is a character since NumPy 2.5.3: 'a\0' has length 2 (U drops it).
+            np.evaluate(NDExpr.StrLen(t)).ToArray<long>().Should().Equal(0L, 1, 2, 2, 1, 1, 1, 3, 2);
+            ((long)np.evaluate(NDExpr.Sum(NDExpr.StrLen(t)))).Should().Be(13);
 
             np.evaluate(NDExpr.IsAlpha(u)).ToArray<bool>().Should().Equal(Row("FTTTTTFFT"));
             np.evaluate(NDExpr.IsDigit(np.array(new object[] { "1", "a", "", "²", "١" }, np.dtypes.StringDType())))
@@ -503,9 +505,9 @@ namespace NumSharp.Tests.Backends.Iterators
                 .ToArray<float>().Should().Equal(1.5f, -2000f, float.PositiveInfinity);
 
             new Action(() => np.evaluate(NDExpr.Cast(nums, NPTypeCode.SByte)))
-                .Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+                .Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
             new Action(() => np.evaluate(NDExpr.Cast(nums, NPTypeCode.Byte)))
-                .Should().Throw<OverflowException>().WithMessage("Python integer -3 out of bounds for uint8");
+                .Should().Throw<OverflowError>().WithMessage("Python integer -3 out of bounds for uint8");
             new Action(() => np.evaluate(NDExpr.Cast(U(), NPTypeCode.Int64)))
                 .Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('')");
             using var tf = np.array(new object[] { "a", "", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
@@ -546,7 +548,7 @@ namespace NumSharp.Tests.Backends.Iterators
             np.evaluate(NDExpr.StrLen(NDExpr.Input(0)) * NDExpr.Input(1), new[] { u, age })
                 .ToArray<long>().Should().Equal(0L, 7, 4, 2, 8, 5, 2, 27, 12);
             var positional = NDExpr.StrLen(NDExpr.Input(0)).Compile(NPTypeCode.String);
-            positional.Evaluate(new[] { T() }).ToArray<long>().Should().Equal(0L, 1, 1, 2, 1, 1, 1, 3, 2);
+            positional.Evaluate(new[] { T() }).ToArray<long>().Should().Equal(0L, 1, 2, 2, 1, 1, 1, 3, 2);
         }
 
         /// <summary>
@@ -845,7 +847,7 @@ namespace NumSharp.Tests.Backends.Iterators
             var u = U();
             var age = Age();
             B(np.evaluate(NDExpr.Equal(NDExpr.Add(u, "!"), "a!"))).Should().Equal(Row("FTTFFFFFF"));
-            np.evaluate(NDExpr.StrLen(NDExpr.Add(T(), T()))).ToArray<long>().Should().Equal(0, 2, 3, 4, 2, 2, 2, 6, 4);
+            np.evaluate(NDExpr.StrLen(NDExpr.Add(T(), T()))).ToArray<long>().Should().Equal(0, 2, 4, 4, 2, 2, 2, 6, 4);
             ((long)np.evaluate(NDExpr.ArgMax(NDExpr.Add(u, UR())))).Should().Be(6);
             using var digits = np.array(new[] { "1", "22", "3" });
             np.evaluate(NDExpr.Cast(NDExpr.Add(digits, "0"), NPTypeCode.Int64) * 2).ToArray<long>().Should().Equal(20, 440, 60);

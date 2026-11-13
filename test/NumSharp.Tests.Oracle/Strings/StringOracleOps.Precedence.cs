@@ -60,7 +60,7 @@ namespace NumSharp.Tests.Strings
                     result = Quantile(p, a);
                     return true;
                 case "average_w":
-                    result = np.average(a, NullableInt(p, "axis"), weights: b);
+                    result = (NDArray)np.average(a, NullableInt(p, "axis"), weights: b);
                     return true;
                 case "cov":
                     result = Cov(p, ops);
@@ -105,7 +105,7 @@ namespace NumSharp.Tests.Strings
                     "ptp" => np.ptp(a, axes),
                     "median" => np.median(a, axes),
                     "nanmedian" => np.nanmedian(a, axes),
-                    "average" => np.average(a, axes),
+                    "average" => (NDArray)np.average(a, axes),
                     "percentile" => np.percentile(a, 50.0, axes),
                     "quantile" => np.quantile(a, 0.5, axes),
                     "nanpercentile" => np.nanpercentile(a, 50.0, axes),
@@ -147,7 +147,7 @@ namespace NumSharp.Tests.Strings
                 case "nanargmin": return np.nanargmin(a, axis: axis);
                 case "median": return np.median(a, axis: axis);
                 case "nanmedian": return np.nanmedian(a, axis: axis);
-                case "average": return np.average(a, axis: axis);
+                case "average": return (NDArray)np.average(a, axis: axis);
                 case "any": return np.any(a, axis: axis);
                 case "all": return np.all(a, axis: axis);
                 case "count_nonzero": return axis is { } cn ? np.count_nonzero(a, cn) : NDArray.Scalar(np.count_nonzero(a));

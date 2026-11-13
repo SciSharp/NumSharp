@@ -27,14 +27,21 @@ namespace NumSharp
     public partial class MaskedArrayModule
     {
         /// <summary>
-        ///     The result of <see cref="unique(object,bool,bool)"/> with a return flag: NumPy's
-        ///     <c>(MaskedArray, ndarray[, ndarray])</c> tuple. It converts implicitly to <see cref="NDMaskedArray"/> (the
-        ///     values), deconstructs into the present outputs, and indexes them in NumPy's order.
+        ///     The result of <see cref="unique(object,bool,bool)"/>: NumPy's bare masked array (no flag) or its
+        ///     <c>(MaskedArray, ndarray[, ndarray])</c> tuple (a flag), as one type. It converts implicitly to
+        ///     <see cref="NDMaskedArray"/> (the values), deconstructs into the present outputs, indexes them in NumPy's
+        ///     order, and forwards the masked array's members (data, mask, fill_value, hardmask, shape, dtype, size) to
+        ///     its values, so a flag-less result reads like the masked array it stands for.
         /// </summary>
         /// <remarks>
-        ///     NumPy returns a bare masked array without flags and a tuple with them; C# cannot vary a return type on a
-        ///     runtime flag, so the flag-taking overload always returns this struct and the flag-less
-        ///     <see cref="unique(object)"/> keeps returning the masked array itself.
+        ///     <para>NumPy returns a bare masked array without flags and a tuple with them; C# cannot vary a return type on a
+        ///     runtime flag, so every call returns this struct. Its constructor is internal: only np.ma.unique builds it,
+        ///     so <see cref="values"/> is always the masked result, typed <see cref="NDMaskedArray"/> (a deconstructed
+        ///     <c>var (u, idx) = ...</c> gives the masked array statically).</para>
+        ///     <para>API-parity batch 11: the flag-less <c>NDMaskedArray unique(object ar1)</c> overload went (the owner's
+        ///     reading B: numpy.ma keeps its own typed result rather than sharing np.unique's).</para>
+        ///     <para>Footgun: an extension method of <see cref="NDMaskedArray"/> does not see through the implicit
+        ///     conversion - call it on <see cref="values"/>.</para>
         /// </remarks>
         public readonly struct UniqueResult : INDArrayCarrier
         {
@@ -61,6 +68,29 @@ namespace NumSharp
 
             /// <summary>The number of present outputs (1 plus one per requested flag), NumPy's tuple length.</summary>
             public int Length => 1 + (indices is null ? 0 : 1) + (inverse_indices is null ? 0 : 1);
+
+            // ---- The masked array's members, forwarded to values: a flag-less ma.unique(a) IS that masked array ----
+
+            /// <summary>The values' data: <see cref="NDMaskedArray.data"/> (a view of the underlying array).</summary>
+            public NDArray data => values.data;
+
+            /// <summary>The values' mask: <see cref="NDMaskedArray.mask"/> (<c>np.ma.nomask</c> or a view of the mask).</summary>
+            public NDArray mask => values.mask;
+
+            /// <summary>The values' fill value (<see cref="NDMaskedArray.fill_value"/>; the operand's, converted to the dtype).</summary>
+            public object fill_value => values.fill_value;
+
+            /// <summary>Whether the values' mask is hard (<see cref="NDMaskedArray.hardmask"/>; a hard operand's is).</summary>
+            public bool hardmask => values.hardmask;
+
+            /// <summary>The values' shape (1-D).</summary>
+            public long[] shape => values.shape;
+
+            /// <summary>The values' dtype.</summary>
+            public DType dtype => values.dtype;
+
+            /// <summary>The values' element count (masked slots included).</summary>
+            public long size => values.size;
 
             /// <summary>The <paramref name="index"/>-th present output in NumPy's order: the values, then the indices,
             ///     then the inverse.</summary>
@@ -139,34 +169,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Finds the unique elements of an array (NumPy's <c>ma.unique</c> without flags): the sorted unique values of
-        ///     the flattened operand, where every masked element sorts and compares as ONE value.
-        /// </summary>
-        /// <param name="ar1">Operand (<see cref="NDMaskedArray"/>, <see cref="NDArray"/>, scalar or array-like).</param>
-        /// <returns>The 1-D masked array of unique values; it inherits a masked operand's hard-mask flag and fill value
-        ///     (converted to the dtype).</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="ar1"/> is null.</exception>
-        /// <exception cref="TypeError">A masked <c>StringDType</c> operand with a masked element: the masked sort's argsort
-        ///     refuses it (<c>Unsuitable type StringDType() for calculating minimum.</c>).</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA (an NA object that
-        ///     is neither a string nor NaN-like): NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
-        /// <remarks>
-        ///     NumPy's <c>np.unique(ar1).view(MaskedArray)</c>, whose <c>_unique1d</c> runs with the subclass:
-        ///     <c>ar = ar.flatten()</c>; without a masked element the integer / complex dtypes take the hash path (sorted
-        ///     distinct values); otherwise <c>ar.sort()</c> (masked slots last, keyed by the fill value) and
-        ///     <c>mask[1:] = aux[1:] != aux[:-1]</c> through the masked <c>!=</c>, so all masked slots collapse into the
-        ///     first one in sorted order, and with an unmasked NaN last the NaNs collapse into the first one. The kept
-        ///     masked slot holds that element's data. See the file header for the tie-order divergence.
-        ///     <para>Scoped by hand: the flattened copy, the sort permutation and the keep mask are reclaimed; only the
-        ///     result's data and mask leave.</para>
-        /// </remarks>
-        public NDMaskedArray unique(object ar1)
-        {
-            using var scope = NDScope.Open();
-            return Yield(scope, UniqueCore(ar1, false, false, out _, out _));
-        }
-
-        /// <summary>
         ///     Finds the unique elements of an array, with NumPy's optional index outputs (<c>ma.unique(ar1,
         ///     return_index=False, return_inverse=False)</c>).
         /// </summary>
@@ -175,8 +177,9 @@ namespace NumSharp
         ///     operand (NumPy sorts with the stable 'mergesort' here).</param>
         /// <param name="return_inverse">Also return the indices into the unique values that rebuild the operand, shaped
         ///     like the operand (NumPy 2.x).</param>
-        /// <returns>The <see cref="UniqueResult"/>: the values (see <see cref="unique(object)"/>) and the requested int64
-        ///     index arrays.</returns>
+        /// <returns>The <see cref="UniqueResult"/>: the values - the 1-D masked array of unique values, every masked element
+        ///     sorting and comparing as ONE value; it inherits a masked operand's hard-mask flag and fill value (converted
+        ///     to the dtype) - and the requested int64 index arrays.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ar1"/> is null.</exception>
         /// <exception cref="TypeError">A masked <c>StringDType</c> operand that NumPy argsorts (<paramref name="return_inverse"/>,
         ///     or a masked element): <c>Unsuitable type StringDType() for calculating minimum.</c></exception>
@@ -186,7 +189,15 @@ namespace NumSharp
         ///     With a flag NumPy argsorts instead of sorting in place (<c>perm = ar.argsort(kind='mergesort' if
         ///     return_index else 'quicksort')</c>, <c>aux = ar[perm]</c>), then <c>perm[mask]</c> and <c>inv_idx[perm] =
         ///     cumsum(mask) - 1</c>. Only <c>return_inverse</c> without <c>return_index</c> uses NumPy's unstable kind.
-        ///     <para>Scoped by hand, as <see cref="unique(object)"/>; the index arrays leave with the values.</para>
+        ///     <para>Without a flag NumPy sorts in place: <c>ar = ar.flatten()</c>; without a masked element the integer /
+        ///     complex dtypes take the hash path (sorted distinct values); otherwise <c>ar.sort()</c> (masked slots last,
+        ///     keyed by the fill value) and <c>mask[1:] = aux[1:] != aux[:-1]</c> through the masked <c>!=</c>, so all
+        ///     masked slots collapse into the first one in sorted order. See the file header for the tie-order
+        ///     divergence.</para>
+        ///     <para>Scoped by hand: the flattened copy, the sort permutation and the keep mask are reclaimed; the values'
+        ///     data and mask and the index arrays leave.</para>
+        ///     <para>API-parity batch 11: this is the only overload (the flag-less <c>NDMaskedArray unique(object)</c>
+        ///     went); a flag-less call returns the struct, which converts to the masked array.</para>
         /// </remarks>
         public UniqueResult unique(object ar1, bool return_index = false, bool return_inverse = false)
         {
@@ -388,7 +399,7 @@ namespace NumSharp
         ///     does not apply.
         /// </summary>
         /// <param name="a">The masked operand.</param>
-        /// <returns>The same permutation <see cref="argsort(object,bool,object)"/> returns, or null.</returns>
+        /// <returns>The same permutation <see cref="argsort(object,bool,object,string,object,bool?,bool?)"/> returns, or null.</returns>
         /// <remarks>
         ///     NumPy keys every masked slot of an integer dtype by the dtype MAXIMUM (<c>minimum_fill_value</c>), so a
         ///     stable sort puts the masked slots after every smaller value, in input order. Unless an unmasked value equals
@@ -428,7 +439,7 @@ namespace NumSharp
         /// <exception cref="ValueError">An unmasked <c>StringDType</c> operand of two or more elements holding a None-like
         ///     NA: the sort's NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <remarks>
-        ///     In place, not through <see cref="sort(object,int?,bool,object)"/>: that one sorts a COPY, which NumPy's
+        ///     In place, not through <see cref="sort(object,int?,string,object,bool,object,bool?)"/>: that one sorts a COPY, which NumPy's
         ///     <c>np.array(a, copy=True, subok=True)</c> finalizes (converting a stored text fill to the dtype), while
         ///     <c>ar.sort()</c> keeps the stored fill as it is. The masked setter keeps NumPy's hard-mask rule: on a HARD
         ///     mask the old and the sorted masks are OR-ed and masked slots keep their old data.
@@ -789,7 +800,7 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The sorted unique values of both inputs together (NumPy's <c>ma.union1d</c>): <see cref="unique(object)"/>
+        ///     The sorted unique values of both inputs together (NumPy's <c>ma.union1d</c>): <see cref="unique(object, bool, bool)"/>
         ///     of their flattened concatenation.
         /// </summary>
         /// <param name="ar1">First operand.</param>

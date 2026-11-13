@@ -88,7 +88,7 @@ namespace NumSharp.Tests.Backends.Strings
             NDArray.AsStringArray(np.array(new[] { 'a', 'Z' }).astype("U")).Should().Equal("97", "90");
             np.array(new[] { "65", "7" }).astype(np.@char).ToArray<char>().Should().Equal('A', (char)7);
             Action charOverflow = () => np.array(new[] { "65536" }).astype(np.@char);
-            charOverflow.Should().Throw<OverflowException>().WithMessage("Python integer 65536 out of bounds for uint16");
+            charOverflow.Should().Throw<OverflowError>().WithMessage("Python integer 65536 out of bounds for uint16");
             NDArray.AsStringArray(np.array(new[] { 1.5m, -0.25m }).astype("U")).Should().Equal("1.5", "-0.25");
             np.array(new[] { "1.5", " 2 " }).astype(np.@decimal).ToArray<decimal>().Should().Equal(1.5m, 2m);
         }
@@ -388,23 +388,23 @@ namespace NumSharp.Tests.Backends.Strings
         {
             const string CLong = "Python int too large to convert to C long";
             Action i64Plus = () => U("9223372036854775808").astype(np.int64);
-            i64Plus.Should().Throw<OverflowException>().WithMessage(CLong);
+            i64Plus.Should().Throw<OverflowError>().WithMessage(CLong);
             Action i64Minus = () => U("-9223372036854775809").astype(np.int64);
-            i64Minus.Should().Throw<OverflowException>().WithMessage(CLong);
+            i64Minus.Should().Throw<OverflowError>().WithMessage(CLong);
             using (var min = U("-9223372036854775808").astype(np.int64))
                 min.GetInt64(0).Should().Be(long.MinValue);
             Action u64Minus = () => U("-9223372036854775809").astype(np.uint64);
-            u64Minus.Should().Throw<OverflowException>().WithMessage(CLong);
+            u64Minus.Should().Throw<OverflowError>().WithMessage(CLong);
             Action u64Min = () => U("-9223372036854775808").astype(np.uint64);
-            u64Min.Should().Throw<OverflowException>().WithMessage("Python integer -9223372036854775808 out of bounds for uint64");
+            u64Min.Should().Throw<OverflowError>().WithMessage("Python integer -9223372036854775808 out of bounds for uint64");
             using (var z = U("-0").astype(np.uint64))
                 z.GetUInt64(0).Should().Be(0UL);
             using (var z = U("-0").astype(np.uint32))
                 z.GetUInt32(0).Should().Be(0U);
             Action u32Minus = () => U("-1").astype(np.uint32);
-            u32Minus.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint32");
+            u32Minus.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint32");
             Action i8 = () => U("9223372036854775808").astype(np.int8);
-            i8.Should().Throw<OverflowException>().WithMessage(CLong);
+            i8.Should().Throw<OverflowError>().WithMessage(CLong);
         }
 
         /// <summary>
@@ -484,17 +484,17 @@ namespace NumSharp.Tests.Backends.Strings
             // NumSharp pins the Linux / macOS (LP64) C long: the Windows texts differ ("int too big to convert", and int32
             // reports the C long first) — probed against both.
             Action i8 = () => U("99999999999999999999").astype(np.int64);
-            i8.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            i8.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             Action u8 = () => U("18446744073709551616").astype(np.uint64);
-            u8.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            u8.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             Action u8Negative = () => U("-1").astype(np.uint64);
-            u8Negative.Should().Throw<OverflowException>().WithMessage("Python integer -1 out of bounds for uint64");
+            u8Negative.Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint64");
             Action i4 = () => U("3000000000").astype(np.int32);
-            i4.Should().Throw<OverflowException>().WithMessage("Python integer 3000000000 out of bounds for int32");
+            i4.Should().Throw<OverflowError>().WithMessage("Python integer 3000000000 out of bounds for int32");
             Action u4 = () => U("5000000000").astype(np.uint32);
-            u4.Should().Throw<OverflowException>().WithMessage("Python integer 5000000000 out of bounds for uint32");
+            u4.Should().Throw<OverflowError>().WithMessage("Python integer 5000000000 out of bounds for uint32");
             Action i1 = () => U("300").astype(np.int8);
-            i1.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            i1.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
         }
 
         /// <summary>CPython's 4300-digit limit applies to <c>int()</c> (its ValueError text), not to <c>float()</c>.</summary>
@@ -524,7 +524,7 @@ namespace NumSharp.Tests.Backends.Strings
             hello.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: 'hello'");
             var b = np.zeros(new Shape(2), np.int64);
             Action big = () => b[0] = "99999999999999999999";
-            big.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            big.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
             // np.full / np.full_like copy a str scalar through np.asarray: the array cast, quoting the NumPy scalar.
             Action full = () => np.full(new Shape(2), "x", np.int64);
             full.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: np.str_('x')");
@@ -594,7 +594,7 @@ namespace NumSharp.Tests.Backends.Strings
             NDArray.AsStringArray(np.clip(f, 0, 2, np.zeros(new Shape(2), "U32"))).Should().Equal("1.0", "2.0");
             NDArray.AsStringArray(np.matmul(np.array(new long[,] { { 1, 2 } }), np.array(new long[,] { { 3 }, { 4 } }),
                 np.zeros(new Shape(1, 1), "U3"))).Should().Equal("11");
-            var (frac, whole) = np.modf(f, np.zeros(new Shape(2), "U5"), np.zeros(new Shape(2), "U5"));
+            var (frac, whole) = np.modf(f, (np.zeros(new Shape(2), "U5"), np.zeros(new Shape(2), "U5")));
             NDArray.AsStringArray(frac).Should().Equal("0.0", "0.5");
             NDArray.AsStringArray(whole).Should().Equal("1.0", "2.0");
         }
@@ -673,15 +673,18 @@ namespace NumSharp.Tests.Backends.Strings
             np.cov(U("1", "2", "4"), dtype: np.float64).GetDouble().Should().Be(2.333333333333333);   // NumPy's bits (probed)
         }
 
-        /// <summary>numpy.ma's astype converts the stored fill (at allocation) before the data cast; a masked fill value
-        /// prints with its mask in the conversion error.</summary>
+        /// <summary>numpy.ma's astype converts the stored fill (at allocation) before the data cast, and since NumPy 2.5.4 a
+        /// fill that does not convert to the new dtype is DROPPED (<c>_check_fill_value_or_default</c>) instead of raising,
+        /// so the data cast's own error answers; a fill value given explicitly is still validated, and a masked one
+        /// prints with its mask in that error.</summary>
         [TestMethod]
-        public void MaskedAstype_ConvertsTheFillBeforeTheData()
+        public void MaskedAstype_DropsAnUnconvertibleFill_TheDataCastAnswers()
         {
-            // __array_finalize__ runs at allocation, before the data cast: the fill's error wins.
+            // __array_finalize__ runs at allocation, before the data cast: 'zz' does not parse, so the fill is dropped and
+            // the data's 'ab' fails (NumPy 2.4 raised "Cannot convert fill_value zz to dtype float64" first).
             var m = np.ma.array(U("ab", "1", "2"), mask: new[] { false, true, false }, fill_value: "zz");
             Action fill = () => m.astype(np.float64);
-            fill.Should().Throw<TypeError>().WithMessage("Cannot convert fill_value zz to dtype float64");
+            fill.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('ab')");
             var m2 = np.ma.array(U("ab", "1", "2"), mask: new[] { false, true, false }, fill_value: "3");
             Action data = () => m2.astype(np.float64);
             data.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('ab')");
@@ -863,7 +866,7 @@ namespace NumSharp.Tests.Backends.Strings
             ((double)NDArray.Scalar(Encoding.ASCII.GetBytes("1.5"))).Should().Be(1.5);
             ((ulong)np.array("18446744073709551615")).Should().Be(ulong.MaxValue);
             Action tooBig = () => _ = (ulong)np.array("18446744073709551616");
-            tooBig.Should().Throw<OverflowException>().WithMessage("Python int too large to convert to C long");
+            tooBig.Should().Throw<OverflowError>().WithMessage("Python int too large to convert to C long");
         }
 
         /// <summary>
@@ -877,7 +880,7 @@ namespace NumSharp.Tests.Backends.Strings
             var (q, r) = np.divmod(np.array(new[] { 7 }), np.array(new[] { 2 }), (np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5")));
             NDArray.AsStringArray(q).Should().Equal("3");
             NDArray.AsStringArray(r).Should().Equal("1");
-            var (frac, integral) = np.modf(np.array(new[] { 2.5 }), np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5"));
+            var (frac, integral) = np.modf(np.array(new[] { 2.5 }), (np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5")));
             NDArray.AsStringArray(frac).Should().Equal("0.5");
             NDArray.AsStringArray(integral).Should().Equal("2.0");
             using var clipped = np.clip(np.array(new[] { 1, 2 }), null, null, @out: np.empty(new Shape(2), "U3"));
@@ -929,7 +932,7 @@ namespace NumSharp.Tests.Backends.Strings
                 i0.GetDouble(0).Should().Be(1.0);
                 i0.GetDouble(1).Should().BeApproximately(1.2660658777520082, 1e-15);
             }
-            using (var cp = np.cumprod(np.array(new[] { "2", "3" }), typeCode: np.int64))
+            using (var cp = np.cumprod(np.array(new[] { "2", "3" }), dtype: np.int64))
                 cp.ToArray<long>().Should().Equal(2L, 6L);
             Action fill = () => np.ma.array(np.array(new[] { 1L, 2L }), fill_value: new byte[] { (byte)'x' });
             fill.Should().Throw<TypeError>().WithMessage("Cannot convert fill_value b'x' to dtype int64");
@@ -996,7 +999,7 @@ namespace NumSharp.Tests.Backends.Strings
                 complexText.dtype.str.Should().Be("<U96");
                 NDArray.AsStringArray(complexText).Should().Equal("(1+2j)1.5");
             }
-            var (mantissa, exponent) = np.frexp(np.array(new[] { 4.0 }), np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5"));
+            var (mantissa, exponent) = np.frexp(np.array(new[] { 4.0 }), (np.empty(new Shape(1), "U5"), np.empty(new Shape(1), "U5")));
             NDArray.AsStringArray(mantissa).Should().Equal("0.5");
             NDArray.AsStringArray(exponent).Should().Equal("3");
             using (var text = np.array(new[] { "2", "3" }))

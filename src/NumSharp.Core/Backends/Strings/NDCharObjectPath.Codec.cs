@@ -126,10 +126,12 @@ namespace NumSharp.Backends.Strings
             // _vec_string: the method by a's dtype, before any argument is converted.
             if (loop == NDStringMethods.TextLoop.None)
                 throw new TypeError(NonStringArrayText);
+            // _vec_string's getattr on the element type: CPython marks the error with the method's name and the type object
+            // it looked on (Python's bytes / str classes, whose C# stand-ins are byte[] and string).
             if (encode && loop == NDStringMethods.TextLoop.Bytes)
-                throw new AttributeError(BytesEncodeText);
+                throw new AttributeError(BytesEncodeText, "encode", typeof(byte[]));
             if (!encode && loop != NDStringMethods.TextLoop.Bytes)
-                throw new AttributeError(StrDecodeText);
+                throw new AttributeError(StrDecodeText, "decode", typeof(string));
             // _clean_args: everything from the first None on is dropped (errors without an encoding never reaches CPython).
             if (encoding is null)
                 errors = null;
@@ -505,7 +507,7 @@ namespace NumSharp.Backends.Strings
                         long end = i + 1;
                         while (end < n && p[end] - 0xD800u <= 0x7FFu)
                             end++;
-                        throw NDCodec.EncodeError("utf-8", p, i, end, "surrogates not allowed");
+                        throw NDCodec.EncodeError("utf-8", p, n, i, end, "surrogates not allowed");
                     }
                 }
                 for (long i = 0; i < n; i++)
@@ -1043,7 +1045,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="pe">The encoding element (null without one).</param>
         /// <param name="pr">The errors element (null without one).</param>
         /// <exception cref="TypeError"><c>descriptor 'encode' for 'str' objects doesn't apply to a 'NoneType' object</c>.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+        /// <exception cref="MemoryError">A corrupt cell.</exception>
         /// <exception cref="Exception">Whatever the arguments or the codec raise.</exception>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void EncodeVStringElement(CodecWalk w, byte* pa, byte* pe, byte* pr)
@@ -1051,7 +1053,7 @@ namespace NumSharp.Backends.Strings
             var reader = w.AReader;
             int isNull = reader.Allocator.load(pa, out byte* buf, out long size);
             if (isNull < 0)
-                throw new OutOfMemoryException("Failed to load string");
+                throw new MemoryError("Failed to load string");
             if (w.HasEncoding)
                 w.ReadArgs(pe, pr);
             string naText = null;

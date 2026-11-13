@@ -206,14 +206,21 @@ namespace NumSharp.Tests.Creation
             }
         }
 
+        /// <summary>
+        ///     The allocator keeps a dense F / permuted layout over the whole buffer (the KEEPORDER callers depend on it:
+        ///     <c>new NDArray(dtype, layout)</c>), while NumPy's <c>np.empty(t.shape)</c> lays a new array out from the
+        ///     dimensions alone, C-ordered (API-parity batch 8 fixed gap VS01, where <c>np.empty(t.Shape)</c> kept the view's
+        ///     F layout).
+        /// </summary>
         [TestMethod]
         public void DenseViewLayouts_AreKept()
         {
-            // The KEEPORDER callers depend on this: a dense F / permuted layout over the whole buffer survives allocation.
             using var t = np.zeros(new Shape(5, 4)).T;
-            using var a = np.empty(t.Shape);
+            using var a = new NDArray(np.float64, t.Shape);
             a.Shape.IsFContiguous.Should().BeTrue();
             a.Shape.IsContiguous.Should().BeFalse();
+            using var viaEmpty = np.empty(t.Shape);
+            viaEmpty.Shape.IsContiguous.Should().BeTrue("NumPy's np.empty(t.shape) is C-ordered");
 
             using var p = np.transpose(np.zeros(new Shape(3, 2, 4)), new[] { 1, 0, 2 });
             using var b = new NDArray(np.float64, p.Shape);

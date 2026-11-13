@@ -7,6 +7,18 @@ using Python.Runtime;
 
 namespace NumSharp.Tests.Interop;
 
+/// <summary>
+///     Live NumPy parity of the microGPT port (<c>examples/gist/karpathy/karpathy.MicroGpt.cs</c>) against an independently
+///     expressed NumPy matrix formulation, and against Karpathy's scalar original.
+/// </summary>
+/// <remarks>
+///     They back the parity claims of the answer that closed GitHub #540, "[Goal] Support Andrej Karpathy's microgpt.py"
+///     (https://github.com/SciSharp/NumSharp/issues/540): byte-identical logits, loss and every gradient
+///     (<see cref="CompleteTransformer_LogitsLossAndEveryGradient_ExactNumpy"/>), four Adam updates
+///     (<see cref="AdamFourUpdates_AllWeightsAndBothMoments_ExactNumpy"/>) and 20 samples
+///     (<see cref="TwentySamplesAfterTraining_MatchIndependentAutoregressiveInference"/>), and the original scalar model's
+///     logits within 2.2e-16 (<see cref="OriginalDimensionCausalModel_AgreesWithScalarValueEquations"/>).
+/// </remarks>
 [TestClass]
 public class KarpathyMicroGptLiveTests : InteropTestBase
 {

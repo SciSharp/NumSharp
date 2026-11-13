@@ -24,7 +24,7 @@ namespace NumSharp.Backends
             // new-style DType into the key, so the dispatcher names the classes (pi is the weak _PyFloatDType); a fixed-width
             // x meets the legacy resolver, which names float64.
             if (Backends.Strings.NDStringUfuncs.IsVString(x))
-                throw Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { DTypeRegistry.PyFloat.ToString(), x.dtype.Meta.ToString() });
+                throw Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new object[] { DTypeRegistry.PyFloat, x.dtype.Meta });
             if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", np.float64, x.dtype);
             // NumPy's implicit `asanyarray(None)` failure, given a clear identity here.
             if (x is null)

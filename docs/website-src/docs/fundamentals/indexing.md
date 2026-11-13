@@ -210,7 +210,7 @@ x[np.array([0, 2])] = -1;      // fancy assignment
 
 Two behaviors to keep in mind:
 
-- **Cross-dtype assignment coerces.** Writing a float into an int array truncates; an out-of-range *weak* scalar raises `OverflowException`. Full rules: [Getting & Setting Values → coercion](../getting-and-setting-values.md#value-coercion-on-assignment-nep50).
+- **Cross-dtype assignment coerces.** Writing a float into an int array truncates; an out-of-range *weak* scalar raises `OverflowError`. Full rules: [Getting & Setting Values → coercion](../getting-and-setting-values.md#value-coercion-on-assignment-nep50).
 - **C# `+=` is not in-place.** `x += 1` rebinds `x` to a new array; other references do not see the change. NumPy's "buffered `x[[1,1,3,1]] += 1` increments once" example does not translate directly - in C# write through a slice (`x[":"] = x + 1`) to mutate memory. See [Getting & Setting Values → in-place](../getting-and-setting-values.md#in-place-vs-reassignment).
 
 Duplicate fancy indices follow **last-write-wins** on assignment (`x[np.array([1,1])] = ...` keeps the last), and the iteration order of advanced assignment is otherwise unspecified - do not rely on it when an element is written more than once.
@@ -276,7 +276,7 @@ That's NEP 50 coercion - weak scalars range-check, strong arrays wrap. See [Gett
 
 | Form | Example | Kind | Result |
 |------|---------|------|--------|
-| Integer | `x[1, 3]` | basic | element → 0-d view |
+| Integer | `x[1, 3]` | basic | the element: NumPy's scalar, a read-only copy (`x[1, 3, ...]` is a 0-d view) |
 | Integer (partial) | `x[0]` | basic | sub-array view |
 | Slice string | `x["1:3, :2"]` | basic | view |
 | Ellipsis / newaxis | `x["..., 0]"`, `x[np.newaxis]` | basic | view |

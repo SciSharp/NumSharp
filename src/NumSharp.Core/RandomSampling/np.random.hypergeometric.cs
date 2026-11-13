@@ -48,7 +48,7 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyHypergeometric(ref one, ngood, nbad, nsample));
+                        return NDArray.WritableScalar(LegacyHypergeometric(ref one, ngood, nbad, nsample));
                 }
             }
 
@@ -99,90 +99,6 @@ namespace NumSharp
         ///     below it, building the memo costs more than the values it would speed up.
         /// </summary>
         private const long HypergeometricMemoMinFill = 16;
-
-        /// <summary>
-        ///     Draw samples from a Hypergeometric distribution into a given (non-nullable) output shape.
-        /// </summary>
-        /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
-        /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
-        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
-        /// <param name="size">Output shape; <c>default</c> / <see cref="Shape.Scalar"/> draw a single value (NumPy's
-        ///     <c>None</c>, this class's convention).</param>
-        /// <returns>Drawn samples from the hypergeometric distribution (int64).</returns>
-        /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>)
-        ///     or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     Exists for overload resolution, not behaviour: with the array-parameter
-        ///     <see cref="hypergeometric(NDArray, NDArray, NDArray, Shape)"/> beside the <see cref="System.Nullable{T}"/> form, a call
-        ///     passing integers and a <see cref="Shape"/> was better than each candidate in one argument (the integers bind
-        ///     the scalar form, the <see cref="Shape"/> binds the array form without the nullable wrap) — an ambiguity error.
-        ///     This exact match wins every such call and forwards to the scalar sampler unchanged.
-        /// </remarks>
-        public NDArray hypergeometric(long ngood, long nbad, long nsample, Shape size)
-            => hypergeometric(ngood, nbad, nsample, (Shape?)size);
-
-        /// <summary>
-        ///     Draw samples from a Hypergeometric distribution.
-        /// </summary>
-        /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
-        /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
-        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the hypergeometric distribution.</returns>
-        /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>)
-        ///     or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray hypergeometric(long ngood, long nbad, long nsample, int[] size)
-            => hypergeometric(ngood, nbad, nsample, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a Hypergeometric distribution.
-        /// </summary>
-        /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
-        /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
-        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the hypergeometric distribution.</returns>
-        /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>)
-        ///     or a size dimension is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray hypergeometric(long ngood, long nbad, long nsample, long[] size)
-            => hypergeometric(ngood, nbad, nsample, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a Hypergeometric distribution.
-        /// </summary>
-        /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
-        /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
-        /// <param name="nsample">Number of items sampled. Must be &gt;= 1 and &lt;= ngood + nbad.</param>
-        /// <param name="size">Output shape as a single integer — NumPy's integer <c>size</c>: one npy_intp (int64) dimension.</param>
-        /// <returns>Drawn samples from the hypergeometric distribution.</returns>
-        /// <exception cref="ValueError">A parameter violates its constraint (see <see cref="hypergeometric(long, long, long, Shape?)"/>)
-        ///     or <paramref name="size"/> is negative.</exception>
-        /// <remarks>
-        ///     A source-compatibility shim ranked BELOW the <c>Shape</c> overloads
-        ///     (<c>OverloadResolutionPriority(-1)</c>): an int, an array or a tuple converts to <c>Shape</c> with the same
-        ///     meaning, so a C# 13+ caller always binds the NumPy-shaped overload — and <c>size: default</c> (NumPy's
-        ///     explicit <c>size=None</c>) is no longer ambiguous between the shims (or, for a <c>long</c> shim, silently a
-        ///     zero-length size). Kept so code compiled against it keeps binding.
-        /// </remarks>
-        [OverloadResolutionPriority(-1)]
-        public NDArray hypergeometric(long ngood, long nbad, long nsample, long size)
-            => hypergeometric(ngood, nbad, nsample, new Shape(new long[] { size }, copy: false));
 
         /// <summary>
         ///     Draw a single sample from a Hypergeometric distribution.

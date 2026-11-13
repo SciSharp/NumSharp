@@ -233,11 +233,12 @@ namespace NumSharp.Tests.Creation
             r.shape.Should().BeEquivalentTo(new long[] { 2, 2 });
         }
 
+        /// <summary>An NPTypeCode dtype with shape=(4, 5): the override wins, float64 (shape passed by name, NumPy's order puts order before it).</summary>
         [TestMethod]
         public void NPTypeCode_Overload_WithShapeOverride()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
-            var r = np.empty_like(a, NPTypeCode.Double, new Shape(4, 5));
+            var r = np.empty_like(a, NPTypeCode.Double, shape: new Shape(4, 5));
             r.shape.Should().BeEquivalentTo(new long[] { 4, 5 });
             r.dtype.Should().Be(typeof(double));
         }
@@ -757,12 +758,13 @@ namespace NumSharp.Tests.Creation
             r.dtype.Should().Be(typeof(double));
         }
 
+        /// <summary>NumPy: empty_like(a, dtype='float64', shape=(3, 3, 3)) has shape (3, 3, 3) and dtype float64.</summary>
         [TestMethod]
         public void ShapeOverride_WithDtypeOverride()
         {
             // NumPy: np.empty_like(a, dtype='float64', shape=(3,3,3)) → shape=(3,3,3), dtype=float64
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
-            var r = np.empty_like(a, typeof(double), new Shape(3, 3, 3));
+            var r = np.empty_like(a, typeof(double), shape: new Shape(3, 3, 3));
             r.shape.Should().BeEquivalentTo(new long[] { 3, 3, 3 });
             r.dtype.Should().Be(typeof(double));
         }

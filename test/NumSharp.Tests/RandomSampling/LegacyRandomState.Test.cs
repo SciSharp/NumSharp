@@ -143,8 +143,8 @@ namespace NumSharp.Tests.RandomSampling
                 int colon = expected.IndexOf(": ", StringComparison.Ordinal);
                 string type = expected.Substring(4, colon - 4);
                 string message = expected.Substring(colon + 2);
-                // NumPy's OverflowError is .NET's OverflowException (NumSharp has no OverflowError type).
-                string expectedType = type == "OverflowError" ? nameof(OverflowException) : type;
+                // NumPy's class name IS NumSharp's: the generators raise Python's OverflowError / ValueError by name.
+                string expectedType = type;
                 try
                 {
                     draw();
@@ -1107,9 +1107,12 @@ namespace NumSharp.Tests.RandomSampling
 
         /// <summary>
         ///     Multi-row multinomial fills run with the binomial-setup memo installed (each row cycles through one key per
-        ///     category, on which NumPy's single-entry cache never hits); the rows must still be NumPy's — at inversion keys,
-        ///     at BTPE keys, with zero categories, and after a legacy <c>binomial</c> call has left its own <c>q^n</c> (the
-        ///     legacy <c>exp(n*log(q))</c> spelling, which differs from the modern one at this key) in the shared cache.
+        ///     category, on which NumPy's single-entry cache never hits); the rows must still be NumPy 2.5.4's — at inversion
+        ///     keys, at BTPE keys, with zero categories, and after a legacy <c>binomial</c> call has left its <c>q^n</c> in the
+        ///     shared cache. NumPy 2.5's <c>legacy_random_multinomial</c> draws every category through the legacy binomial,
+        ///     which has no <c>p == 0</c> shortcut, so a zero category consumes draws: the zero-category rows moved (2.4.2's
+        ///     modern sampler skipped them: <c>0, 5, 0, 22, 23, …</c>), and the legacy <c>q^n</c> a <c>binomial</c> leaves is
+        ///     now the one the fill computes itself (2.4.2's modern <c>exp(n*log1p(-p))</c> differed from it at this key).
         /// </summary>
         [TestMethod]
         public void Multinomial_MemoFills_MatchNumPy()
@@ -1122,12 +1125,12 @@ namespace NumSharp.Tests.RandomSampling
                 + "270, 222, 508, 278, 250, 472, 230, 248, 522",
                 "multinomial(1000, [.25,.25,.5], 10) (BTPE keys)");
             AssertValues(np.random.RandomState(3).multinomial(50, new[] { 0.0, 0.1, 0.0, 0.4, 0.5 }, 9),
-                "0, 5, 0, 22, 23, 0, 4, 0, 21, 25, 0, 8, 0, 23, 19, 0, 3, 0, 18, 29, 0, 2, 0, 21, 27, 0, 1, 0, 21, 28, 0, 6, 0, "
-                + "18, 26, 0, 6, 0, 20, 24, 0, 1, 0, 22, 27",
+                "0, 6, 0, 20, 24, 0, 8, 0, 16, 26, 0, 5, 0, 20, 25, 0, 4, 0, 21, 25, 0, 5, 0, 19, 26, 0, 6, 0, 16, 28, 0, 7, 0, "
+                + "17, 26, 0, 8, 0, 20, 22, 0, 7, 0, 15, 28",
                 "multinomial(50, [0,.1,0,.4,.5], 9) (zero categories)");
 
             var rs = np.random.RandomState(7);
-            rs.binomial(20, 0.2); // leaves the LEGACY q^n under key (20, 0.2) — the first category's key below
+            rs.binomial(20, 0.2); // leaves the legacy q^n under key (20, 0.2) — the first category's key below
             AssertValues(rs.multinomial(20, new[] { 0.2, 0.3, 0.5 }, 10),
                 "5, 5, 10, 5, 9, 6, 4, 6, 10, 2, 5, 13, 4, 7, 9, 5, 5, 10, 1, 6, 13, 6, 4, 10, 4, 9, 7, 1, 8, 11",
                 "multinomial after a legacy binomial");

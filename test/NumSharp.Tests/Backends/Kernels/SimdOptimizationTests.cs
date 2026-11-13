@@ -44,7 +44,7 @@ public class SimdOptimizationTests
     public void NonZero_AllZeros()
     {
         // NumPy: np.nonzero(zeros(5)) = [[]]
-        var a = np.zeros<int>(new int[] { 5 });
+        var a = np.zeros(new int[] { 5 }, np.int32);
         var result = np.nonzero(a);
 
         Assert.AreEqual(1, result.Length);
@@ -88,7 +88,7 @@ public class SimdOptimizationTests
     public void NonZero_Large_SparseValues()
     {
         // NumPy: Large array with sparse nonzero values (tests SIMD path)
-        var a = np.zeros<int>(new int[] { 1000 });
+        var a = np.zeros(new int[] { 1000 }, np.int32);
         a[100] = 1;
         a[500] = 2;
         a[999] = 3;
@@ -176,7 +176,7 @@ public class SimdOptimizationTests
     public void NonZero_SparsePattern()
     {
         // From NumPy test_sparse: sparse boolean pattern
-        var c = np.zeros<bool>(new int[] { 200 });
+        var c = np.zeros(new int[] { 200 }, np.@bool);
         for (int i = 0; i < 200; i += 20)
             c[i] = true;
         var result = np.nonzero(c);
@@ -401,7 +401,7 @@ public class SimdOptimizationTests
     public void ArgMax_Large_MaxInMiddle()
     {
         // NumPy: Large array with max in middle
-        var a = np.zeros<double>(new int[] { 10000 });
+        var a = np.zeros(new int[] { 10000 }, np.float64);
         a[5000] = 1.0;
 
         Assert.AreEqual(5000, np.argmax(a));

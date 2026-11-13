@@ -72,7 +72,7 @@ namespace NumSharp.Backends
             NDArray lo = min is not null && min.ndim == 0 && min.GetTypeCode != loop ? CastScalarBound(min, loop) : min;
             NDArray hi = max is not null && max.ndim == 0 && max.GetTypeCode != loop ? CastScalarBound(max, loop) : max;
 
-            NDArray target = @out ?? NewArray(loop, ClipResultLayout(dims, lhs, min, max, where), false);
+            NDArray target = @out ?? NewArray(loop, ClipResultLayout(dims, lhs, min, max, where, loop), false);
 
             // NumPy's const-vs-general float loop, decided from the caller's operands (the decision
             // reads strides, dtypes and overlap of what NumPy would see, not of the casted copies).

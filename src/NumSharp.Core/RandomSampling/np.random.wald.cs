@@ -35,7 +35,7 @@ namespace NumSharp
         ///     RandomState stream). Byte-identical to <c>np.random.RandomState(seed).wald</c>; holds the bit generator's lock
         ///     for the draws.
         /// </remarks>
-        public NDArray wald(double mean, double scale, Shape size)
+        public NDArray wald(double mean, double scale, Shape? size)
         {
             RandomConstraints.Check(mean, "mean", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(scale, "scale", ConstraintType.CONS_POSITIVE);
@@ -43,7 +43,7 @@ namespace NumSharp
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyWaldSetup(mean, scale);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -51,11 +51,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyWald(ref one, in setup));
+                        return NDArray.WritableScalar(LegacyWald(ref one, in setup));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

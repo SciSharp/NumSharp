@@ -47,16 +47,17 @@ np.random.rand(3, 4);                      // np.random.rand(3, 4)
 np.random.randn(100);                      // np.random.randn(100)
 ```
 
-> **Where `(3, 4)` comes from.** NumSharp's `Shape` struct has implicit conversions from `int`, `long`, `int[]`, `long[]`, and value tuples of 2–6 dimensions. So these four calls all produce the same (3, 4) array:
+> **Where `(3, 4)` comes from.** NumSharp's `Shape` struct has implicit conversions from `int`, `long`, `int[]`, `long[]`, and value tuples of 2–6 dimensions, and it is a C# collection type, so a collection expression is NumPy's list shape. These calls all produce the same (3, 4) array:
 >
 > ```csharp
+> np.zeros([3, 4]);              // collection expression → Shape, like NumPy's np.zeros([3, 4])
 > np.zeros((3, 4));              // tuple → Shape
 > np.zeros(new[] {3, 4});        // int[] → Shape
 > np.zeros(new Shape(3, 4));     // explicit Shape
 > np.zeros(new Shape(new[] {3L, 4L}));
 > ```
 >
-> A bare `np.zeros(5)` creates a 1-D length-5 array - it hits the `int shape` overload, not a tuple.
+> A bare `np.zeros(5)` creates a 1-D length-5 array (the int converts to the shape `(5,)`), and `np.zeros([])` is 0-d. A shape enumerates its dimensions, as Python's `for d in a.shape` does: `foreach (long d in a.Shape) ...`.
 
 Scalars (0-d arrays) flow in implicitly:
 
@@ -415,7 +416,7 @@ a.SetAtIndex(99L, 6);                   // flat index
 
 **Rule of thumb:** use `.item<T>()` when porting NumPy code, `GetAtIndex<T>` in a hot loop, and the indexer (`a[i, j]`) when you want NumPy-like ergonomics and don't mind the 0-d NDArray detour.
 
-> `.item()` without arguments works on any size-1 array (0-d, 1-element 1-d, 1×1 2-d) and throws `IncorrectSizeException` otherwise - the NumPy 2.x replacement for the removed `np.asscalar()`.
+> `.item()` without arguments works on any size-1 array (0-d, 1-element 1-d, 1×1 2-d) and throws NumPy's `ValueError` otherwise (`can only convert an array of size 1 to a Python scalar`) - the NumPy 2.x replacement for the removed `np.asscalar()`.
 
 ---
 
@@ -543,7 +544,7 @@ Three ways to get a typed wrapper:
 
 ## Saving, Loading, and Interop
 
-NumSharp reads **and** writes NumPy's `.npy` / `.npz` formats and raw binary. The `.npy`/`.npz` stack is a port of NumPy 2.4.2's format code (NEP-01), so a file written by `np.save` is **byte-for-byte identical** to what NumPy itself writes - data moves between Python and C# in both directions, losslessly. To wrap an existing in-memory byte buffer (file bytes, a network packet, a native pointer) see [`np.frombuffer`](#wrapping-existing-buffers---npfrombuffer) above.
+NumSharp reads **and** writes NumPy's `.npy` / `.npz` formats and raw binary. The `.npy`/`.npz` stack is a port of NumPy 2.5.4's format code (NEP-01), so a file written by `np.save` is **byte-for-byte identical** to what NumPy itself writes - data moves between Python and C# in both directions, losslessly. To wrap an existing in-memory byte buffer (file bytes, a network packet, a native pointer) see [`np.frombuffer`](#wrapping-existing-buffers---npfrombuffer) above.
 
 ```csharp
 // .npy - a single array (byte-identical to NumPy's np.save)
@@ -558,7 +559,7 @@ np.savez_compressed("bundle.npz", w, b);            // same, Deflate-compressed
 using NpzFile npz = np.load_npz("bundle.npz");      // lazy + cached; dispose it (holds the file handle)
 NDArray w1 = npz["w"];                              // "w.npy" also works as a key
 NDArray w2 = npz.f.w;                               // dot access, like NumPy's npz.f
-foreach (string name in npz.Files) { }             // "w", "b" - the ".npy" is stripped
+foreach (string name in npz.files) { }             // "w", "b" - the ".npy" is stripped
 
 // np.load dispatches on the file's magic bytes and returns `object`
 object any = np.load("bundle.npz");                 // NDArray for .npy, NpzFile for .npz
@@ -667,11 +668,11 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 
 | Method | Description |
 |--------|-------------|
-| `astype(type, copy)` | Cast to different dtype (copy by default) |
+| `astype(dtype, order, casting, copy)` | Cast to a different dtype, NumPy's order (`order='K'`, `casting="unsafe"`, a copy by default; `copy: false` hands back the array itself when nothing changes) |
 | `copy()` | Deep copy |
 | `Clone()` | Same as `copy()` (ICloneable) |
 | `reshape(...)` | Reshape (view if possible) |
-| `ravel()` | Flatten to 1-D (view if contiguous) |
+| `ravel(order)` | Flatten to 1-D (view if contiguous; `order='C'` by default) |
 | `flatten()` | Flatten to 1-D (always copy) |
 | `transpose(...)` | Permute axes |
 | `view(dtype)` | Reinterpret bytes as a different dtype (no copy) |
@@ -716,7 +717,7 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 | `np.savez_compressed(path, …)` | `.npz` | - | Same as `savez`, Deflate-compressed |
 | `np.load(path)` | `.npy` / `.npz` | - | Returns `object` (`NDArray` or `NpzFile`); `Stream` / `byte[]` overloads |
 | `np.load_npy(path)` | `.npy` | copy | Typed → `NDArray` |
-| `np.load_npz(path)` | `.npz` | lazy | Typed → `NpzFile` (`IDisposable`; `.Files`, `["w"]` / `.f.w` access) |
+| `np.load_npz(path)` | `.npz` | lazy | Typed → `NpzFile` (`IDisposable`; NumPy's `.files`, `.keys()` / `.values()` / `.items()`, `["w"]` / `.f.w` / `.get("w")` access, `.close()`) |
 | `arr.tofile(path)` | raw | - | Element bytes only, no header |
 | `np.fromfile(path, dtype)` | raw | copy | Pair with `tofile` |
 | `np.frombuffer(byte[], …)` | in-memory | view (pins array) | Endian-prefix dtype strings trigger a copy |

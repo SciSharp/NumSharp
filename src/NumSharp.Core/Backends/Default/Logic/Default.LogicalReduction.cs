@@ -98,8 +98,9 @@ namespace NumSharp.Backends
 
             // Allocate the result in the *reduced* shape (axis dropped), laid out as NumPy's reduce iterator allocates
             // it (LogicalReductionShape: the input's memory order for an F or permuted input, plan api-parameter-parity
-            // X10). keepdims re-inserts the axis at the end with ExpandDimension, which keeps that order — a Reshape
-            // to C dims would copy an F result into C order. The axis kernels assume one fewer output dim than input.
+            // X10). keepdims re-inserts the axis at the end in place (ExpandReducedAxis: the kept axis at its sorted
+            // place, NumPy's keepdims layout) — a Reshape to C dims would copy an F result into C order. The axis
+            // kernels assume one fewer output dim than input.
             var reducedDims = Shape.GetAxis(nd.Shape, axis);
             Shape reducedShape = LogicalReductionShape(reducedDims, nd.Shape, axis);
             NDArray<bool> result = CreateLogicalResult(reducedShape, reduceAll && nd.Shape.dimensions[axis] == 0);
@@ -107,7 +108,7 @@ namespace NumSharp.Backends
             if (result.size == 0 || nd.Shape.dimensions[axis] == 0)
             {
                 if (keepdims)
-                    result.Storage.ExpandDimension(axis);
+                    ExpandReducedAxis(result, nd.Shape, axis);
                 return result;
             }
 
@@ -141,7 +142,7 @@ namespace NumSharp.Backends
             }
 
             if (keepdims)
-                result.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(result, nd.Shape, axis);
 
             return result;
         }
@@ -193,7 +194,7 @@ namespace NumSharp.Backends
             // Taken WITHOUT keepdims: np.evaluate's keepdims form is a reshaped view, where NumPy's reduction owns its result.
             var result = nd.TensorEngine.Evaluate(reduceAll ? NDExpr.All(source, axis) : NDExpr.Any(source, axis));
             if (keepdims)
-                result.Storage.ExpandDimension(axis);
+                ExpandReducedAxis(result, nd.Shape, axis);
             return result.AsGeneric<bool>() ?? throw new InvalidOperationException("np.all/np.any expected a Boolean result.");
         }
 
@@ -297,6 +298,11 @@ namespace NumSharp.Backends
                 chained = ReduceLogicalAxis(current, normalized[i], keepdims: true, reduceAll: reduceAll);
                 current = chained;
             }
+
+            // keepdims: NumPy's one-shot reduction places every kept axis at its sorted place over the ORIGINAL operand;
+            // each chained step placed its own axis over its intermediate, so the kept axes are relabelled at the end.
+            if (keepdims)
+                RelabelKeptAxes(chained, nd.Shape, normalized[0]);
 
             if (!keepdims)
             {

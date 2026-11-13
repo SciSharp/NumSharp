@@ -174,6 +174,8 @@ test('headline metadata retains the published denominator and validates it', () 
 
 test('declared but inapplicable ufunc methods stay searchable with a scoped disclosure', () => {
   const { api, element } = dashboard();
+  // An artifact from before generator 1.17.0 counted a refused call as a gap; the page says so (excludesRows off).
+  api.state.excludesRows = false;
   api.state.rows.push(row('numpy.sin.reduce', 'Universal function objects', { surface: 'ufunc', name: 'sin.reduce', kind: 'method', applicability: 'not_applicable' }));
   api.changeScope();
   assert.match(element('cov-applicability-note').textContent, /1 declared contract whose calls NumPy rejects \(ufunc methods/);
@@ -189,6 +191,7 @@ test('declared but inapplicable ufunc methods stay searchable with a scoped disc
 
 test('a refused Python protocol is disclosed as a protocol, not as a ufunc method', () => {
   const { api, element } = dashboard();
+  api.state.excludesRows = false;  // the pre-1.17 disclosure; the 1.17 one is the test after this one
   api.state.rows.push(row('numpy.ndarray.__delitem__', 'Array protocols', { surface: 'ndarray', name: '__delitem__', kind: 'method', applicability: 'not_applicable', python_protocol: true }));
   api.state.rows.push(row('numpy.sin.reduce', 'Universal function objects', { surface: 'ufunc', name: 'sin.reduce', kind: 'method', applicability: 'not_applicable' }));
   api.changeScope();
@@ -198,6 +201,59 @@ test('a refused Python protocol is disclosed as a protocol, not as a ufunc metho
   assert.equal(api.state.filtered.length, 1);
   assert.match(element('cov-detail').innerHTML, /NumPy rejects every call of this protocol/);
   assert.doesNotMatch(element('cov-detail').innerHTML, /ufunc method/);
+});
+
+test('refused calls and inherited repeats are listed in the API scopes but outside every count (generator 1.17)', () => {
+  const { api, element } = dashboard();
+  api.state.rows.push(
+    row('numpy.sin.reduce', 'Universal function objects', { surface: 'ufunc', name: 'sin.reduce', kind: 'method', applicability: 'not_applicable' }),
+    row('numpy.memmap.sum', 'Memory-mapped arrays', { surface: 'memmap', name: 'sum', kind: 'method', object_type: 'numpy.memmap', inherited_repeat: 'numpy.ndarray' }));
+  api.changeScope();
+  const scoped = api.summarize(api.scopedRows());
+  assert.equal(api.scopedRows().length, 8, 'both rows stay listed');
+  assert.equal(scoped.numpy, 6, 'neither enters the denominator');
+  assert.equal(scoped.coverage, 100 / 3, 'the percentage is the six counted APIs');
+  assert.equal(scoped.missing + scoped.unsupported, 3, 'neither is a gap');
+  assert.deepEqual([scoped.excluded, scoped.excludedRefused, scoped.excludedInherited], [2, 1, 1]);
+  assert.match(element('cov-status-track').innerHTML, /data-status="excluded"/);
+  assert.match(element('cov-metrics').innerHTML, /2 not counted/);
+  assert.match(element('cov-applicability-note').textContent, /2 entries that no percentage or gap count includes: 1 call NumPy itself rejects .* and 1 member inherited unchanged/);
+  element('cov-status').value = 'excluded';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id).sort(), ['numpy.memmap.sum', 'numpy.sin.reduce']);
+  assert.match(element('cov-results').innerHTML, /is-excluded" title="Not counted: inherited unchanged from np\.ndarray/);
+  element('cov-search').value = 'numpy.memmap.sum';
+  api.filterRows();
+  assert.match(element('cov-detail').innerHTML, /Not counted: inherited unchanged from np\.ndarray, whose own row counts it; NumSharp has no type for np\.memmap\./);
+  element('cov-search').value = '';
+  element('cov-status').value = 'gaps';
+  api.filterRows();
+  assert.ok(api.state.filtered.every((item) => !['numpy.memmap.sum', 'numpy.sin.reduce'].includes(item.id)), 'never a gap');
+  const memmap = api.tooltipContent({ dataset: { tooltipGroup: 'surface:memmap' } });
+  assert.match(memmap, /data-tip-tab="gaps">Gaps \(0\)/, 'the tooltip lists no gap');
+  assert.match(memmap, /data-tip-tab="other">Partial \/ NumSharp-only \/ not counted \(1\)/);
+  // An artifact from before generator 1.17.0 counted both rows; the page then counts them as its summary did.
+  api.state.excludesRows = false;
+  assert.equal(api.summarize(api.scopedRows()).numpy, 8);
+});
+
+test('the expanded scope is recounted against a generator 1.17 summary', () => {
+  const { api } = dashboard();
+  api.state.rows.push(row('numpy.sin.reduce', 'Universal function objects', { surface: 'ufunc', name: 'sin.reduce', kind: 'method', applicability: 'not_applicable' }));
+  const data = { numpy_version: '2.x', numsharp_assembly_version: 'test', schema_version: 1,
+    summary: { default_scope: { total: 2, available: 1 }, catalog_rows: 11,
+      api_scope: { total: 6, available: 2, excluded: { total: 1, not_applicable: 1, inherited_repeat: 0 } } } };
+  api.initializeMetadata(data);
+  assert.equal(api.state.excludesRows, true);
+  data.summary.api_scope.excluded.total = 0;
+  assert.throws(() => api.initializeMetadata(data), /expanded summary does not match its row inventory/);
+  data.summary.api_scope.excluded.total = 1;
+  data.summary.api_scope.total = 7;
+  assert.throws(() => api.initializeMetadata(data), /expanded summary does not match its row inventory/);
+  // A pre-1.17 summary has no `excluded`: nothing is recounted and every row counts.
+  delete data.summary.api_scope;
+  api.initializeMetadata(data);
+  assert.equal(api.state.excludesRows, false);
 });
 
 test('large card grids scroll without dropping any surfaces or categories', () => {
@@ -363,7 +419,9 @@ test('detail pane renders contracts, host pins, alias via and the two gap readin
   api.changeScope();
   const show = (id) => { element('cov-search').value = id; api.filterRows(); return element('cov-detail').innerHTML; };
   const sqrt = show('numpy.sqrt');
-  assert.match(sqrt, /<strong>1,200<\/strong> committed NumPy 2\.4\.2 contracts/);
+  // The pane names no NumPy release (the page's NumPy pill names the pinned one, numpy-version.txt), so the text
+  // survives a NumPy bump; the NumPy 2.5.4 bump made it pin-agnostic.
+  assert.match(sqrt, /<strong>1,200<\/strong> committed NumPy oracle contracts replayed against NumSharp in CI/);
   assert.match(sqrt, /2 error-message contracts/);
   assert.match(sqrt, /<code>float32<\/code> <code>float64<\/code> · 26 memory layouts/);
   assert.doesNotMatch(sqrt, /pinned host/);

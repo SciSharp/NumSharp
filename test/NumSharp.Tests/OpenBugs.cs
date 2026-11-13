@@ -1110,7 +1110,7 @@ namespace NumSharp.Tests
         //
         //  SEVERITY: High — the function is non-functional for 2D+.
         //
-        //  NDArray.argsort<T>() throws InvalidOperationException:
+        //  NDArray.argsort() throws InvalidOperationException:
         //  "Failed to compare two elements in the array" for ANY 2D
         //  array, whether broadcast or not. The function works correctly
         //  for 1D arrays.
@@ -1141,7 +1141,7 @@ namespace NumSharp.Tests
             var a = np.array(new int[,] { { 3, 1, 2 }, { 6, 4, 5 } });
 
             NDArray result = null;
-            new Action(() => result = a.argsort<int>())
+            new Action(() => result = a.argsort())
                 .Should().NotThrow(
                     "NumPy: argsort([[3,1,2],[6,4,5]]) returns [[1,2,0],[1,2,0]]. " +
                     "NumSharp throws InvalidOperationException: 'Failed to compare two " +
@@ -1176,7 +1176,7 @@ namespace NumSharp.Tests
             var a = np.array(new double[,] { { 3.0, 1.0, 2.0 } });
 
             NDArray result = null;
-            new Action(() => result = a.argsort<double>())
+            new Action(() => result = a.argsort())
                 .Should().NotThrow(
                     "NumPy: argsort([[3.0,1.0,2.0]]) returns [[1,2,0]]. " +
                     "NumSharp throws InvalidOperationException for any 2D array, " +
@@ -1933,7 +1933,7 @@ namespace NumSharp.Tests
             var a = np.array(new bool[,] { { true, false }, { false, true } });
 
             NDArray result = null;
-            new Action(() => result = np.any(a, 0, false))
+            new Action(() => result = np.any(a, 0, keepdims: false))
                 .Should().NotThrow(
                     "NumPy: np.any([[T,F],[F,T]], axis=0) = [True, True]. " +
                     "NumSharp throws InvalidCastException when trying to cast " +
@@ -1954,7 +1954,7 @@ namespace NumSharp.Tests
             var a = np.array(new bool[,] { { true, false }, { false, false } });
 
             NDArray result = null;
-            new Action(() => result = np.any(a, 1, false))
+            new Action(() => result = np.any(a, 1, keepdims: false))
                 .Should().NotThrow(
                     "NumPy: np.any([[T,F],[F,F]], axis=1) = [True, False].");
 
@@ -2594,10 +2594,10 @@ namespace NumSharp.Tests
         [OpenBugs]
         public void Bug_Astype_SameValueCasting_NumericCastsHaveNoValueCheck()
         {
-            var exact = np.array(new[] { 2.0, 3.0 }).astype(np.int32, true, 'K', "same_value");
+            var exact = np.array(new[] { 2.0, 3.0 }).astype(np.int32, 'K', "same_value");
             exact.ToArray<int>().Should().Equal(2, 3);
 
-            Action lossy = () => np.array(new[] { 1.5 }).astype(np.int32, true, 'K', "same_value");
+            Action lossy = () => np.array(new[] { 1.5 }).astype(np.int32, 'K', "same_value");
             lossy.Should().Throw<ValueError>().WithMessage("could not cast 'same_value' double to *");
         }
 
@@ -2620,21 +2620,88 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     NumPy's <c>np.array("d")</c> is an explicit 0-d ndarray, not a <c>str</c>: <c>isinstance(np.array("d"), str)</c>
-        ///     is False, and <c>np.mintypecode([np.array("d")], typeset="Ud")</c> reads it through <c>asarray(t).dtype.char</c>
-        ///     as <c>'U'</c> (then "substring not found"). NumSharp marks an explicit 0-d array only for an UNMANAGED scalar
-        ///     (<c>np.array&lt;T&gt;(T)</c>, <c>NDArray.MarkExplicitZeroDimArray</c>); <c>np.array(string)</c> returns it
-        ///     unmarked, so the boundary map reads it as a <c>numpy.str_</c> scalar (<c>NDScalarType.PyStr.__instancecheck__</c>
-        ///     is True) and np.mintypecode takes its text. Found by the np.mintypecode port (2026-11-05).
+        ///     Regression pin (fixed 2026-11-13 by API-parity batch 13: <c>np.array(string)</c> marks its 0-d result an
+        ///     explicit array). NumPy's <c>np.array("d")</c> is an explicit 0-d ndarray, not a <c>str</c>:
+        ///     <c>isinstance(np.array("d"), str)</c> is False, and <c>np.mintypecode([np.array("d")], typeset="Ud")</c> reads it
+        ///     through <c>asarray(t).dtype.char</c> as <c>'U'</c> (then "substring not found"). NumSharp marked an explicit 0-d
+        ///     array only for an UNMANAGED scalar (<c>np.array&lt;T&gt;(T)</c>, <c>NDArray.MarkExplicitZeroDimArray</c>);
+        ///     <c>np.array(string)</c> returned it unmarked, so the boundary map read it as a <c>numpy.str_</c> scalar
+        ///     (<c>NDScalarType.PyStr.__instancecheck__</c> was True) and np.mintypecode took its text. Found by the
+        ///     np.mintypecode port (2026-11-05).
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void NpArrayOfString_IsAnExplicitZeroDimArray()
         {
             var explicitZeroDim = np.array("d");
             NDScalarType.PyStr.__instancecheck__(explicitZeroDim).Should().BeFalse("NumPy: isinstance(np.array('d'), str) is False");
             Action act = () => np.mintypecode(new object[] { explicitZeroDim }, "Ud");
             act.Should().Throw<ValueError>().WithMessage("substring not found");
+        }
+
+        /// <summary>
+        ///     Disposing a memory map of a FORTRAN-ordered <c>.npy</c> does not release the mapping: NumPy's
+        ///     <c>del a; gc.collect()</c> closes it, but NumSharp leaves the file mapped after <c>Dispose</c> AND after a full
+        ///     collection with finalizers, so Windows keeps refusing to delete or overwrite it. A C-ordered map is released by
+        ///     its <c>Dispose</c> at once. <c>NpyFormat.OpenMemmap</c> (behind <c>np.load(path, mmap_mode)</c>) returns a
+        ///     Fortran file as a transposed view of an internal mapped array (<c>reshape(shape[::-1]).T</c>), and the mapping
+        ///     goes with that internal array, which nothing disposes. The suite never saw it: <c>MappedFileCleanup</c> swallows
+        ///     the failed delete of its temp folder. Found by KokoroSharp's voice loader (2026-11-09, a test that loads a
+        ///     Fortran-ordered voice and then deletes its folder). Observable on Windows only (Unix unlinks a mapped file).
+        /// </summary>
+        [TestMethod]
+        [OpenBugs]
+        public void Mmap_FortranOrder_DisposeReleasesTheFile()
+        {
+            if (!OperatingSystem.IsWindows())
+                Assert.Inconclusive("A file still mapped is observable as a refused delete on Windows only.");
+
+            string dir = System.IO.Directory.CreateTempSubdirectory("numsharp-fmap-").FullName;
+            try
+            {
+                foreach (bool fortran in new[] { false, true })
+                {
+                    string path = System.IO.Path.Combine(dir, fortran ? "f.npy" : "c.npy");
+                    using (var a = np.arange(6).astype(NPTypeCode.Single).reshape(2, 3))
+                    using (var stored = fortran ? np.asfortranarray(a) : np.ascontiguousarray(a))
+                        np.save(path, stored);
+
+                    using (var mapped = (NDArray)np.load(path, mmap_mode: "r"))
+                        mapped.Shape.IsFContiguous.Should().Be(fortran);
+                    GcQuiescence.CollectFull();   // even a collection must not be needed; it does not help either
+
+                    Action delete = () => System.IO.File.Delete(path);
+                    delete.Should().NotThrow($"the {(fortran ? "Fortran" : "C")}-ordered map was disposed, so the file must be free");
+                }
+            }
+            finally
+            {
+                MappedFileCleanup.DeleteDirectory(dir);
+            }
+        }
+
+        /// <summary>
+        ///     A text → <c>np.longdouble</c> cast runs NumPy's own long-double parser, not Python's <c>float()</c>: every string
+        ///     class (<c>S</c>, <c>U</c>, <c>StringDType</c>) goes through <c>NumPyOS_ascii_strtold</c> and requires the WHOLE
+        ///     text to parse, so surrounding whitespace and digit-group underscores are refused, and a refusal is
+        ///     <c>ValueError: invalid literal for long double: &lt;text&gt;</c> (<c>StringDType</c>'s loop appends
+        ///     <c>strerror(errno)</c>: <c>" (No error)"</c> on Windows). NumSharp's <c>longdouble</c> class shares the float64
+        ///     lane and casts text through the float64 route, so <c>' 1.5 '</c> is 1.5, <c>'1_0'</c> is 10.0 and <c>'abc'</c>
+        ///     raises <c>could not convert string to float</c>. NumPy 2.4.2 and 2.5.4 agree (probed 2026-11-09 during the 2.5.4
+        ///     bump, which found it); not a 2.5 change.
+        /// </summary>
+        [TestMethod]
+        [OpenBugs]
+        public void TextToLongDouble_RunsNumPysStrtoldParser()
+        {
+            var T = np.dtypes.StringDType();
+            Action uAbc = () => np.array(new[] { "abc" }).astype(np.longdouble);
+            uAbc.Should().Throw<ValueError>().WithMessage("invalid literal for long double: abc");
+            Action tAbc = () => np.array(new[] { "abc" }, T).astype(np.longdouble);
+            tAbc.Should().Throw<ValueError>().WithMessage("invalid literal for long double: abc (No error)");
+            Action uSpaced = () => np.array(new[] { " 1.5 " }).astype(np.longdouble);
+            uSpaced.Should().Throw<ValueError>().WithMessage("invalid literal for long double:  1.5 ");
+            Action uGrouped = () => np.array(new[] { "1_0" }).astype(np.longdouble);
+            uGrouped.Should().Throw<ValueError>().WithMessage("invalid literal for long double: 1_0");
         }
     }
 }

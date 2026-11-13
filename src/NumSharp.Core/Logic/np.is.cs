@@ -127,16 +127,19 @@ namespace NumSharp
         /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.
         /// </summary>
-        /// <param name="obj">Any object, null included.</param>
+        /// <param name="element">Any object, null included (NumPy's keyword <c>element</c>).</param>
         /// <returns>True for a C# number (a primitive, a decimal, a <see cref="Complex"/>, a <see cref="Half"/>, a
         ///     <see cref="System.Numerics.BigInteger"/>), a bool, a string, a <see cref="Char8"/>, a <see cref="DateTime64"/>
-        ///     and a 0-d one-element NDArray (NumSharp's stand-in for a NumPy scalar); false for null, any other NDArray, a C#
-        ///     array, a <see cref="Type"/> (NumPy's <c>isscalar(int)</c> is False) and any other object.</returns>
+        ///     and a NumPy scalar - a 0-d NDArray that was not built as an explicit array (<c>a.sum()</c>, <c>a[0]</c>,
+        ///     <c>NDArray.Scalar(1.5)</c>); false for null, an explicit 0-d array (<c>np.array(5)</c>, as in NumPy), any
+        ///     NDArray with dimensions, a C# array, a <see cref="Type"/> (NumPy's <c>isscalar(int)</c> is False) and any other
+        ///     object.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isscalar.html
         ///     <para>NumPy's statement is the array object's (<c>NDArray.isscalar</c>, whose remarks hold the one answer that
-        ///     differs from NumPy's: a 0-d NDArray is a scalar, because it is what a NumPy scalar becomes). The object has no
-        ///     array class to decide, so no class rule applies.</para></remarks>
-        public static bool isscalar(object obj) => NDArray.isscalar(obj);
+        ///     differs from NumPy's: a 0-d array built another way than <c>np.array(x)</c> / <c>np.asarray(x)</c>, such as
+        ///     <c>np.zeros(())</c>, answers True, because NumSharp's scalar is a 0-d array). The object has no array class to
+        ///     decide, so no class rule applies.</para></remarks>
+        public static bool isscalar(object element) => NDArray.isscalar(element);
 
         /// <summary>
         ///     Check whether or not an object can be iterated over. Returns <c>true</c> if

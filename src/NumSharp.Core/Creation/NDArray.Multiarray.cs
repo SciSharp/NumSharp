@@ -44,10 +44,12 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException">An element of <paramref name="arrays"/> is null.</exception>
         /// <exception cref="ArgumentException">An unknown <paramref name="casting"/> name; both <paramref name="out"/> and
         ///     <paramref name="dtype"/>.</exception>
-        /// <exception cref="ValueError">No arrays, or a 0-d array with an axis.</exception>
+        /// <exception cref="ValueError">No arrays, or a 0-d FIRST array with an axis (NumPy checks only the first array's
+        ///     rank there).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for the inputs' rank.</exception>
-        /// <exception cref="IncorrectShapeException">The inputs' ranks or non-axis extents differ, or <paramref name="out"/>
-        ///     has the wrong rank or shape.</exception>
+        /// <exception cref="IncorrectShapeException">The inputs' ranks (a later 0-d array included: NumPy's "all the input
+        ///     arrays must have same number of dimensions" text) or non-axis extents differ, or <paramref name="out"/> has
+        ///     the wrong rank or shape.</exception>
         /// <exception cref="InvalidCastException">An input does not cast to the result dtype under
         ///     <paramref name="casting"/>.</exception>
         /// <remarks>
@@ -82,17 +84,21 @@ namespace NumSharp
                 throw new ArgumentException(
                     "concatenate() only takes `out` or `dtype` as an argument, but both were provided.");
 
-            // 0-D arrays cannot be concatenated along an axis (NumPy: "zero-dimensional arrays cannot be concatenated");
-            // axis=None ravels every input first (PyArray_ConcatenateFlattenedArrays), so a 0-d input is one element there
-            // (np.concatenate((np.array(1), np.array(2)), axis=None) is [1, 2]).
+            // A null operand is refused before anything reads the operands.
             for (int k = 0; k < arrays.Length; k++)
             {
                 if (arrays[k] is null)
                     throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"{nameof(arrays)}[{k}]"));
-                if (arrays[k].ndim == 0 && axis is not null)
-                    throw new ValueError(
-                        "zero-dimensional arrays cannot be concatenated");
             }
+
+            // PyArray_ConcatenateArrays checks the FIRST array's rank only ("zero-dimensional arrays cannot be
+            // concatenated"); a later 0-d array meets the per-array rank check below, NumPy's "all the input arrays must
+            // have same number of dimensions, ... the array at index 1 has 0 dimension(s)". axis=None ravels every input
+            // first (PyArray_ConcatenateFlattenedArrays), so a 0-d input is one element there
+            // (np.concatenate((np.array(1), np.array(2)), axis=None) is [1, 2]).
+            if (arrays.Length > 0 && arrays[0].ndim == 0 && axis is not null)
+                throw new ValueError(
+                    "zero-dimensional arrays cannot be concatenated");
 
             // axis=None: flatten every input to 1-D, then concatenate along axis 0.
             // ravel() allocates a fresh NDArray wrapper per input (even when it returns a
@@ -667,7 +673,7 @@ namespace NumSharp
         /// <exception cref="UnicodeDecodeError">An <c>S</c> input is not ASCII and the result is <c>U</c>.</exception>
         /// <exception cref="ValueError">A text input does not parse into a numeric result (NumPy's <c>int()</c> /
         ///     <c>float()</c> / <c>complex()</c> texts).</exception>
-        /// <exception cref="OverflowException">An integer text input does not fit a numeric result.</exception>
+        /// <exception cref="OverflowError">An integer text input does not fit a numeric result.</exception>
         /// <remarks>
         ///     <b>Order (NumPy's <c>PyArray_ConcatenateArrays</c>).</b> The <paramref name="out"/> shape first; then each input
         ///     in turn through <c>PyArray_AssignArray</c> — its casting rule, then its conversion — so the FIRST input's rule or
@@ -763,7 +769,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>_array_fromobject_generic</c> (<c>multiarraymodule.c</c>) for an ARRAY operand, the body of
-        ///     <see cref="np.asarray(NDArray, DType, char, bool?, NDArray, string)"/> once the class boundaries, the device and
+        ///     <see cref="np.asarray(NDArray, DType, char?, bool?, NDArray, string)"/> once the class boundaries, the device and
         ///     <c>like=</c> were handled: Python's <c>None</c> (a new 0-d array of the dtype's setitem value), a C# literal
         ///     packed as the Python scalar it stands for (<c>PyArray_Pack</c>, with its range checks), then the request - the
         ///     array itself when its dtype and layout satisfy it, a view when the requested descriptor is an equal but
@@ -780,11 +786,13 @@ namespace NumSharp
         ///     builds an object array, which NumSharp has no storage for).</exception>
         /// <exception cref="ArgumentException"><paramref name="copy"/> is false and a copy, a cast or a literal's / None's
         ///     conversion is needed (NumPy's "Unable to avoid copy" ValueError).</exception>
-        /// <exception cref="OverflowException">A C# literal out of an integer <paramref name="dtype"/>'s range.</exception>
+        /// <exception cref="OverflowError">A C# literal out of an integer <paramref name="dtype"/>'s range.</exception>
         /// <exception cref="ValueError">A NaN literal into an integer dtype, or an unknown <paramref name="order"/>.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype, or None into an integer (or decimal) one.</exception>
         /// <remarks>An explicit 0-d array (<see cref="NDArray.IsExplicitZeroDimArray"/>) stays one through the copy, the cast
-        ///     and the view: the mark is per object, so every new object receives it.</remarks>
+        ///     and the view: the mark is per object, so every new object receives it. A NumPy scalar (a read-only 0-d array
+        ///     <see cref="NDArray.IsNumPyScalar"/> calls one) is never returned as itself: NumPy converts the scalar object
+        ///     into a NEW writeable explicit 0-d array, and refuses <paramref name="copy"/> = false for it.</remarks>
         [AsArray]
         internal static NDArray asarray(NDArray a, DType dtype, char order, bool? copy)
         {
@@ -823,6 +831,21 @@ namespace NumSharp
             // A string request is satisfied only by a string array of that class AND width (an unsized 'U' adapts to the
             // array first); the storage lane alone would let a <U4 array pass for 'S' or 'U2'.
             bool typeMatches = dtype == null || Backends.UnmanagedStorage.SatisfiesRequest(a, dtype);
+
+            // A NumPy SCALAR - a read-only 0-d array that is no explicit array: a reduction's result, NDArray.Scalar(...) -
+            // is a Python object to NumPy, not an ndarray, so PyArray_FromAny builds a NEW 0-d ARRAY of it: writeable, an
+            // explicit array (np.isscalar(np.asarray(np.float64(1.5))) is False), never the scalar itself, and copy=False
+            // cannot be satisfied (probed 2.4.2: "Unable to avoid copy"). A writeable 0-d array (np.zeros(()), an out=
+            // operand) is an ndarray here, returned as itself below, so code that writes through np.asarray(out) still
+            // writes into the caller's array.
+            if (a.IsNumPyScalar && !a.Shape.IsWriteable && !a.WasScalarArgument)
+            {
+                if (copy == false)
+                    throw new ArgumentException(UnableToAvoidCopyText, nameof(copy));
+                NDArray fresh = typeMatches ? a.copy() : a.astype(dtype, copy: true);
+                return fresh.MarkExplicitZeroDimArray();
+            }
+
             bool layoutMatches = LayoutAlreadyOK(a.Shape, order);
             bool noCopyNeeded = typeMatches && layoutMatches;
 
@@ -879,7 +902,7 @@ namespace NumSharp
         ///     0-d array), or a new C-contiguous array: the caller must not dispose the result unless it is not
         ///     <paramref name="a"/> (<c>ReferenceEquals</c>), and a view keeps <paramref name="a"/>'s buffer
         ///     alive.</returns>
-        /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
+        /// <exception cref="OverflowError">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
         ///     range (<see cref="asarray"/>'s Python-scalar packing).</exception>
         /// <exception cref="ValueError">A NaN literal into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
@@ -907,7 +930,7 @@ namespace NumSharp
         ///     0-d array), or a new F-contiguous array: the caller must not dispose the result unless it is not
         ///     <paramref name="a"/> (<c>ReferenceEquals</c>), and a view keeps <paramref name="a"/>'s buffer
         ///     alive.</returns>
-        /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
+        /// <exception cref="OverflowError">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s
         ///     range (<see cref="asarray"/>'s Python-scalar packing).</exception>
         /// <exception cref="ValueError">A NaN literal into an integer dtype.</exception>
         /// <exception cref="TypeError">A complex literal into a real dtype.</exception>
@@ -942,7 +965,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A ragged jagged array or object list (NumPy's inhomogeneous-shape text), or a value
         ///     the requested dtype's setitem refuses.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
-        /// <exception cref="OverflowException">A Python int (a C# integer in an object list) outside the requested integer
+        /// <exception cref="OverflowError">A Python int (a C# integer in an object list) outside the requested integer
         ///     dtype.</exception>
         /// <exception cref="TypeError">A value of an object list the requested dtype cannot convert (None into an
         ///     integer dtype, a complex number into a real one).</exception>
@@ -1068,7 +1091,7 @@ namespace NumSharp
         /// <returns>The new array.</returns>
         /// <exception cref="ValueError">A ragged list (NumPy's inhomogeneous-shape text), or a value the requested dtype's
         ///     setitem refuses.</exception>
-        /// <exception cref="OverflowException">A Python int outside the requested integer dtype.</exception>
+        /// <exception cref="OverflowError">A Python int outside the requested integer dtype.</exception>
         /// <exception cref="TypeError">A value the requested dtype cannot convert.</exception>
         /// <exception cref="NotSupportedException">None or a Python int past 64 bits without a request (NumPy's object
         ///     array), or a value of no NumPy type.</exception>
@@ -1116,22 +1139,24 @@ namespace NumSharp
         /// <param name="operand">The matrix or chararray (a subclass operand, <see cref="NDSubclass.IsOperand(NDArray)"/>).</param>
         /// <param name="dtype">The requested dtype, or null to keep the operand's.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <param name="copy">NumPy's copy mode for the plain route (<see cref="asarray(NDArray, DType, char, bool?)"/>):
+        ///     null copies only when needed, true always copies (the copy is then created as the operand's class).</param>
         /// <returns><paramref name="operand"/> itself, or a new array of its class.</returns>
         /// <exception cref="ValueError">A chararray converted to a dtype that is not string data (<c>Can only create a
         ///     chararray from string data.</c>), or a matrix result with more than two axes longer than 1.</exception>
-        /// <exception cref="OverflowException">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s range
+        /// <exception cref="OverflowError">A C# literal's 0-d array out of an integer <paramref name="dtype"/>'s range
         ///     (<see cref="asarray"/>'s Python-scalar packing).</exception>
         /// <remarks>The conversion runs on the operand's plain view (the plain route answers every dtype and layout question
         ///     exactly as for a plain array); the scope reclaims that view and the hidden plain result, which the subclass
         ///     object keeps alive through its own counted reference when it is created from it.</remarks>
-        private static NDArray AsAnyArrayOfSubclass(NDArray operand, DType dtype, char order)
+        private static NDArray AsAnyArrayOfSubclass(NDArray operand, DType dtype, char order, bool? copy = null)
         {
             NDScope scope = NDScope.Open();
             try
             {
                 NDArray plain = NDSubclass.Plain(operand);
                 // A conversion that needs nothing hands the plain view back: that is the caller's operand again.
-                NDArray result = NDSubclass.Unalias(asarray(plain, dtype, order, null), plain, operand);
+                NDArray result = NDSubclass.Unalias(asarray(plain, dtype, order, copy), plain, operand);
                 return scope.Returns(NDSubclass.NewSubtype(result, null, operand, keepRank: false, NewSubtypeZeroDim.Array));
             }
             finally
@@ -1141,10 +1166,65 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     NumPy's copy modes of <c>_array_fromobject_generic</c> with <c>subok</c>, the body of
+        ///     <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/> once the order letter and the device were
+        ///     checked: <c>copy=None</c> is <see cref="asanyarray(object, DType, char)"/>'s conversion, <c>copy=True</c> always
+        ///     returns a new array (<c>PyArray_NewCopy</c> of an array operand, created as its class), and <c>copy=False</c>
+        ///     returns the operand itself or raises NumPy's <c>npy_no_copy_err_msg</c>.
+        /// </summary>
+        /// <param name="a">The value: null is Python's None.</param>
+        /// <param name="dtype">The requested dtype, or null to discover it.</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c> (already a valid letter).</param>
+        /// <param name="copy">Null (if needed), true (always) or false (never).</param>
+        /// <returns><paramref name="a"/> itself when it is an array that satisfies the request and <paramref name="copy"/> is
+        ///     not true, else a new array (of a subclass operand's class).</returns>
+        /// <exception cref="ValueError"><paramref name="copy"/> is false and a copy is needed: always for a non-array
+        ///     <paramref name="a"/>, and for an array whose dtype or layout does not satisfy the request. Plus every refusal of
+        ///     <see cref="asanyarray(object, DType, char)"/>.</exception>
+        /// <exception cref="NotSupportedException">As <see cref="asanyarray(object, DType, char)"/>.</exception>
+        /// <exception cref="TypeError">As <see cref="asanyarray(object, DType, char)"/>.</exception>
+        /// <remarks>The refusal is NumPy's ValueError with its text verbatim (the <see cref="asarray(NDArray, DType, char, bool?)"/>
+        ///     route raises the same text as an ArgumentException naming the parameter, its own older convention). A
+        ///     conversion that allocated before the refusal releases its fresh result first.</remarks>
+        [SubclassAware]
+        internal static NDArray asanyarray(object a, DType dtype, char order, bool? copy)
+        {
+            // copy=None is NPY_COPY_IF_NEEDED: the conversion as it always was.
+            if (copy is null)
+                return asanyarray(a, dtype, order);
+
+            if (a is not NDArray operand)
+            {
+                // PyArray_FromAny_int: a scalar or a (nested) sequence always becomes a NEW array, so NPY_COPY_NEVER refuses
+                // it. NumPy refuses after discovering the shape and dtype; NumSharp's conversion discovers them together with
+                // the items, so the refusal comes first (a ragged list reports it instead of its shape). NPY_COPY_ALWAYS is the
+                // conversion itself.
+                if (copy == false)
+                    throw new ValueError(UnableToAvoidCopyText);
+                return asanyarray(a, dtype, order);
+            }
+
+            if (copy == true)
+                // NPY_COPY_ALWAYS on an array: PyArray_NewCopy in the requested order, cast when the dtype differs; a subclass
+                // operand's copy is created as its class (the subok fast path keeps the type).
+                return NDSubclass.IsOperand(operand)
+                    ? AsAnyArrayOfSubclass(operand, dtype, order, copy: true)
+                    : asarray(operand, dtype, order, true);
+
+            // NPY_COPY_NEVER on an array: the operand itself (or a view of it: an equivalent dtype relabels) when its dtype
+            // and layout satisfy the request; a conversion that had to allocate is refused, its fresh result released first.
+            NDArray result = asanyarray(a, dtype, order);
+            if (ReferenceEquals(result, operand) || np.may_share_memory(result, operand))
+                return result;
+            result.Dispose();
+            throw new ValueError(UnableToAvoidCopyText);
+        }
+
+        /// <summary>
         ///     NumPy's <c>_array_fromobject_generic</c> with <c>subok</c> for any C# value, the body of
-        ///     <see cref="np.asanyarray(in object, DType, char, string)"/> once the device and the class boundaries were
-        ///     checked: the order first (NumPy parses it with the arguments), then Python's <c>None</c>, an array
-        ///     (<see cref="np.asarray(NDArray, DType, char, bool?, NDArray, string)"/>), text arrays and sequences (the text
+        ///     <see cref="np.asanyarray(in object, DType, char?, string, bool?)"/> (through the copy modes) once the device
+        ///     and the class boundaries were checked: the order first (NumPy parses it with the arguments), then Python's <c>None</c>, an array
+        ///     (<see cref="np.asarray(NDArray, DType, char?, bool?, NDArray, string)"/>), text arrays and sequences (the text
         ///     array builder), Python lists - object arrays and grids, tuples and any other enumerable of objects - through
         ///     the coercion of a sequence (<see cref="UnmanagedStorage.FromSequence(object, DType)"/>: a C# int is a Python
         ///     int, int64; with a dtype every item is stored by its setitem), typed C# arrays, a str, typed sequences,
@@ -1160,7 +1240,7 @@ namespace NumSharp
         ///     a dtype (NumPy's object array), or a value of a type this conversion does not read.</exception>
         /// <exception cref="TypeError">None into an integer (or decimal) dtype, or a list item the requested dtype cannot
         ///     convert.</exception>
-        /// <exception cref="OverflowException">A Python int in a list outside the requested integer dtype.</exception>
+        /// <exception cref="OverflowError">A Python int in a list outside the requested integer dtype.</exception>
         /// <remarks>The subclass's own conversion code (<see cref="SubclassAwareAttribute"/>): an array subclass operand
         ///     (<see cref="NDMatrix"/>, <see cref="NDCharArray"/>) passes through as its class - itself when nothing needs
         ///     converting, else the conversion created as the class (<see cref="AsAnyArrayOfSubclass"/>) - so a public
@@ -1207,7 +1287,12 @@ namespace NumSharp
                     ret = new NDArray(array);
                     break;
                 case string str:
-                    ret = str; //implicit cast located in NDArray.Implicit.Array
+                    // Under the character dtype 'c' NumPy's discovery reads a str whose length is not 1 as a sequence of
+                    // its characters (np.asanyarray('ab', dtype='c') is (2,) |S1); any other request converts the 0-d
+                    // text array below.
+                    ret = Backends.UnmanagedStorage.DiscoversStringsAsSequences(dtype)
+                        ? Backends.UnmanagedStorage.FromLoneText(str, dtype)
+                        : str; //implicit cast located in NDArray.Implicit.Array
                     break;
 
                 case IEnumerable<bool> e: ret = np.array(UnmanagedStorage.ToArrayFast(e)); break;
@@ -1231,7 +1316,17 @@ namespace NumSharp
                     //is it a scalar
                     if (type.IsPrimitive || type == typeof(decimal) || type == typeof(Half) || type == typeof(System.Numerics.Complex))
                     {
-                        ret = NDArray.Scalar(a);
+                        // With a dtype, NumPy's PyArray_FromAny stores a PYTHON scalar (a C# bool, integer, float, double or
+                        // Complex in the boundary map) with the dtype's setitem (PyArray_Pack): a Python int is range-checked
+                        // (np.asanyarray(300, np.int8) raises OverflowError, where a cast wraps to 44) and an unsized text
+                        // class takes the width of the value's str() (np.asanyarray(5, np.str_) is <U1). A NumPy scalar
+                        // (Half, NumSharp's char and decimal) is CAST like a 0-d array by the dtype request below. Without a
+                        // dtype, np.asanyarray(5) is an ndarray: a fresh WRITEABLE 0-d array, never the read-only scalar.
+                        bool pythonScalar = a is bool or sbyte or byte or short or ushort or int or uint or long or ulong
+                            or float or double or System.Numerics.Complex;
+                        ret = dtype is not null && pythonScalar
+                            ? Backends.UnmanagedStorage.FromAnyScalar(a, dtype)
+                            : NDArray.WritableScalar(a);
                         break;
                     }
 
@@ -1270,7 +1365,7 @@ namespace NumSharp
             }
 
             if (dtype != null && !Backends.UnmanagedStorage.SatisfiesRequest(ret, dtype))
-                ret = ret.astype(dtype, true);
+                ret = ret.astype(dtype);
 
             // Apply requested order (no-op for scalars / 1-D / already-matching layouts).
             char physical = OrderResolver.Resolve(order, ret.Shape);
@@ -1392,6 +1487,10 @@ namespace NumSharp
         ///     Raised after the dtype check, as in NumPy.</exception>
         /// <exception cref="TypeError">x and y have no common dtype (StringDType beside a number, a Python number beside
         ///     fixed-width text: NumPy's DTypePromotionError), raised before any shape error.</exception>
+        /// <exception cref="OverflowException">A Python-literal x or y (a C# number literal) does not fit the common dtype:
+        ///     NumPy 2.5's setitem text, "Python integer 300 out of bounds for int8" (past the C long, "Python int too large
+        ///     to convert to C long") — raised after the dtype check and before any shape error. NumPy 2.4 truncated the
+        ///     value instead.</exception>
         /// <remarks>The array object's member (the np-layer dtype plan's D1: np.where(cond, x, y) selects by the caller's
         ///     mask, plan section 1); np.where's single-argument form is np.nonzero, the engine's. The engine's own np.where
         ///     calls (the NaN replacement of the nan reductions and scans, StringDType's cell selection) call this member.
@@ -1412,6 +1511,18 @@ namespace NumSharp
             DType descr = text || x.GetTypeCode != y.GetTypeCode || (x.WasPythonLiteral && y.WasPythonLiteral)
                 ? DTypePromotion.ResultType(x.Nep50Operand, y.Nep50Operand)
                 : null;
+            // NumPy 2.5 (gh-30803): a Python-literal x / y is re-made in the common dtype by that dtype's setitem
+            // (npy_update_operand_for_scalar), x first, before the iterator sees any shape — so an int that does not fit
+            // raises OverflowError ("Python integer 300 out of bounds for int8") where NumPy 2.4 truncated it with a cast.
+            // A literal already in the common dtype is exact there (PackForStore returns it as it is).
+            if (!text)
+            {
+                NPTypeCode common = descr is null ? x.GetTypeCode : descr.GetTypeCode();
+                if (x.WasPythonLiteral)
+                    x = PackForStore(x, common, pyArrayPackRoute: false);
+                if (y.WasPythonLiteral)
+                    y = PackForStore(y, common, pyArrayPackRoute: false);
+            }
             long[] dims = BroadcastWhereOperands(condition, x, y);
 
             // Fixed-width strings: the result dtype is a DESCRIPTOR (result_type(x, y): the wider width) and the
@@ -1475,8 +1586,9 @@ namespace NumSharp
             // The K layout resolved above (dense, offset 0; C unless an operand moved the vote). The kernel fast paths
             // below run only for C-contiguous operands, whose vote is C by construction, so they always write a C
             // result linearly; every other layout is written by WhereImpl's iterator, which walks the result's own
-            // strides.
-            var result = np.empty(resultLayout, outType);
+            // strides. Allocated straight from the layout: np.empty lays a new array out from the dimensions and its
+            // order letter alone (NumPy's np.empty(shape)), which would drop the K layout's F / permuted strides.
+            var result = new NDArray(outType, resultLayout, false);
 
             // Handle empty arrays - nothing to iterate
             if (result.size == 0)
@@ -1799,6 +1911,185 @@ namespace NumSharp
                 return self;
             np.copyto(@out, self);
             return @out;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_FromIter</c> (<c>ctors.c</c>), the body of <see cref="np.fromiter"/>: the iterator, the
+        ///     unsized-dtype check, one item at a time until <paramref name="count"/>, each item packed as it is read (a plain
+        ///     item through <see cref="array(Array, DType, int, bool, char)"/>'s list conversion, NumPy's setitem; a sequence
+        ///     item by the target dtype's own answer), then the short-iterator check.
+        /// </summary>
+        /// <param name="iter">The sequence (see <see cref="np.fromiter"/>).</param>
+        /// <param name="dtype">The result dtype; null is float64.</param>
+        /// <param name="count">-1 reads all; a non-negative count at most that many; any other negative count nothing.</param>
+        /// <returns>A new, owning, C-contiguous 1-D array.</returns>
+        /// <exception cref="TypeError">A null or 0-d iterable; an item the dtype's conversion refuses with Python's
+        ///     TypeError.</exception>
+        /// <exception cref="ValueError">An unsized text dtype; a short iterator; an item that does not parse or a sequence
+        ///     item a float / text dtype refuses.</exception>
+        /// <exception cref="OverflowError">An integer the dtype cannot hold.</exception>
+        /// <exception cref="NotSupportedException">A dtype NumSharp has no storage for.</exception>
+        /// <remarks>An array-object home (the np-layer dtype plan's Appendix D): its dtype tests are NumPy's statements, not
+        ///     facade logic, so the facade file holds none (ratchet R1).</remarks>
+        internal static NDArray fromiter(IEnumerable iter, DType dtype, long count)
+        {
+            // dtype=None is PyArray_DescrConverter2's default descriptor: float64, never inferred from the items.
+            dtype ??= np.DefaultTypeDescr;
+
+            // NumPy's first step is PyObject_GetIter(obj): None is not iterable, and a 0-d ndarray's iterator refuses
+            // (NDArray.GetEnumerator raises NumPy's "iteration over a 0-d array" itself) — both before the dtype check.
+            if (iter is null)
+                throw new TypeError("'NoneType' object is not iterable");
+            IEnumerator enumerator = iter.GetEnumerator();
+            try
+            {
+                // PyDataType_ISUNSIZED: a text dtype without a length ('U', 'S') cannot hold an item. StringDType ('T')
+                // has a fixed cell and is fine.
+                if (dtype.Meta is StringDTypeMeta && dtype.itemsize == 0)
+                    throw new ValueError("Must specify length when using variable-size data-type.");
+
+                // NumPy's loop: `for (i = 0; i < count || count == -1; i++)` — count -1 reads to the end, any other
+                // negative count reads nothing, a non-negative one at most that many (the next item is never pulled).
+                long limit = count == -1 ? long.MaxValue : Math.Max(count, 0);
+                bool charTarget = dtype.Meta is not StringDTypeMeta && dtype.GetTypeCode() == NPTypeCode.Char;
+                var items = new List<object>(count > 0 && count <= 4096 ? (int)count : 16);
+                Exception refusal = null;
+                while (items.Count < limit && enumerator.MoveNext())
+                {
+                    object item = enumerator.Current;
+                    // Python has no char: a C# char (from a string or a char-dtype array) is a one-character str. NumSharp's
+                    // own char dtype keeps it as the character it is (NumPy has no char dtype to say otherwise).
+                    if (item is char c && !charTarget)
+                        item = c.ToString();
+                    if (IsFromIterSequence(item, out NDArray arrayItem))
+                    {
+                        if (!TryPackSequenceItem(dtype, item, arrayItem, out object packed, out refusal))
+                            break; // NumPy stops at the first item it cannot pack
+                        item = packed;
+                    }
+                    items.Add(item);
+                }
+
+                // Pack the items read: np.array's list conversion (NDArray.array) is NumPy's setitem per element, in
+                // order, so the first
+                // bad item raises its own error here — ahead of a refused sequence item after it and of a short iterator.
+                NDArray result = array(items.ToArray(), dtype, 0, true, 'C');
+                if (refusal != null)
+                {
+                    result.Dispose();
+                    throw refusal;
+                }
+                if (count > 0 && items.Count < count)
+                {
+                    result.Dispose();
+                    throw new ValueError(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                        $"iterator too short: Expected {count} but iterator had only {items.Count} items."));
+                }
+                return result;
+            }
+            finally
+            {
+                // An iterator method's finally blocks (and its resources) run when the caller stops early, as Python's
+                // generator close does when NumPy drops the iterator.
+                (enumerator as IDisposable)?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Whether an <see cref="fromiter(IEnumerable, DType, long)"/> item is a Python SEQUENCE NumPy's per-item store cannot treat as one value: a
+        ///     C# array or list (a Python list), a tuple (a Python tuple) or an <see cref="NDArray"/> of rank 1 or more. Text
+        ///     (<see cref="string"/>, and <c>byte[]</c>, an <c>S</c> element's stand-in for Python bytes), None and a 0-d
+        ///     array are values.
+        /// </summary>
+        /// <param name="item">The item, after the char-to-str step.</param>
+        /// <param name="arrayItem">The item when it is an array of rank 1 or more, else null.</param>
+        /// <returns>True for a sequence item.</returns>
+        private static bool IsFromIterSequence(object item, out NDArray arrayItem)
+        {
+            arrayItem = null;
+            switch (item)
+            {
+                case null:
+                case string:
+                case byte[]:
+                    return false;
+                case NDArray nd:
+                    if (nd.ndim == 0)
+                        return false;
+                    arrayItem = nd;
+                    return true;
+                case ITuple:
+                case IList:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's per-item store of a SEQUENCE into <paramref name="dtype"/> — each dtype's setitem answer (probed on
+        ///     NumPy 2.4.2): bool stores the truth value (<c>bool(list)</c>; an array only when it has exactly one element),
+        ///     <c>StringDType</c> stores <c>str(item)</c>, every other dtype refuses in its own words.
+        /// </summary>
+        /// <param name="dtype">The target dtype.</param>
+        /// <param name="item">The sequence item.</param>
+        /// <param name="arrayItem">The item when it is an array of rank 1 or more, else null.</param>
+        /// <param name="packed">The value to store when the dtype accepts the item.</param>
+        /// <param name="refusal">NumPy's error when it refuses the item (raised by the caller after the earlier items
+        ///     convert).</param>
+        /// <returns>True when the item is stored as <paramref name="packed"/>.</returns>
+        private static bool TryPackSequenceItem(DType dtype, object item, NDArray arrayItem, out object packed, out Exception refusal)
+        {
+            packed = null;
+            refusal = null;
+            switch (dtype.kind)
+            {
+                case 'b':
+                    // BOOL_setitem: PyObject_IsTrue — a list / tuple is true when non-empty; an ndarray of more (or fewer)
+                    // than one element is the packer's sequence error, a one-element one its element's truth.
+                    if (arrayItem is null)
+                    {
+                        packed = item is ITuple tuple ? tuple.Length > 0 : ((IList)item).Count > 0;
+                        return true;
+                    }
+                    if (arrayItem.size == 1)
+                    {
+                        using var flat = arrayItem.flatten();
+                        using var truth = flat.astype(np.@bool);
+                        packed = truth.GetAtIndex<bool>(0);
+                        return true;
+                    }
+                    refusal = new ValueError("setting an array element with a sequence.");
+                    return false;
+                case 'T':
+                    // StringDType's setitem stores str(obj) of any object: a list as its repr ('[1]').
+                    packed = NDPyObject.Str(item);
+                    return true;
+                case 'i':
+                case 'u':
+                    // The integer setitem calls int(): Python's TypeError names the list / tuple; an ndarray of rank >= 1 is
+                    // the packer's sequence ValueError.
+                    refusal = arrayItem is null
+                        ? new TypeError($"int() argument must be a string, a bytes-like object or a real number, not '{NDPyObject.TypeName(item)}'")
+                        : new ValueError("setting an array element with a sequence.");
+                    return false;
+                case 'c':
+                    // The complex setitem: PyComplex_AsCComplex's "must be real number, not list"; an ndarray of rank >= 1
+                    // fails its scalar conversion.
+                    refusal = arrayItem is null
+                        ? new TypeError($"must be real number, not {NDPyObject.TypeName(item)}")
+                        : new TypeError("only 0-dimensional arrays can be converted to Python scalars");
+                    return false;
+                case 'U':
+                case 'S':
+                    // The fixed-width text setitem refuses a sequence without the float message's period.
+                    refusal = new ValueError("setting an array element with a sequence");
+                    return false;
+                default:
+                    // float16 / float32 / float64 (and decimal, kind 'f'): the float setitem's sequence check.
+                    refusal = new ValueError("setting an array element with a sequence.");
+                    return false;
+            }
         }
     }
 }

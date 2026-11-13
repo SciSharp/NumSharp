@@ -83,7 +83,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="seed">The seed sequence — normally a <see cref="SeedSequence"/>; any <see cref="ISeedSequence"/>
         /// works (NumPy uses it as-is when <c>isinstance(seed, ISeedSequence)</c>); null is NumPy's <c>seed=None</c>: a fresh OS-entropy <see cref="SeedSequence"/> (the parameter name is NumPy's, so <c>seed: sequence</c> ports verbatim).</param>
-        /// <exception cref="NotImplementedException"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="seed"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
         /// <remarks>
         ///     <c>pos</c> is 623, not 624: NumPy's fill loop leaves <c>i = 623</c> behind and stores it, so the first
         ///     draw tempers <c>key[623]</c> before the first twist. That is part of the stream and is kept.
@@ -124,7 +124,7 @@ namespace NumSharp
         /// <summary>NumPy's <c>MT19937.__init__</c> seeding body (and the <c>seed=None</c> branch of legacy seeding).</summary>
         /// <param name="seedSeq">The sequence supplying 624 words.</param>
         /// <param name="setPos">Whether to set <c>pos = 623</c> (the constructor does; <c>_legacy_seeding(None)</c> leaves pos alone).</param>
-        /// <exception cref="NotImplementedException"><paramref name="seedSeq"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
+        /// <exception cref="NotImplementedError"><paramref name="seedSeq"/> is a <see cref="SeedlessSeedSequence"/>.</exception>
         private void SeedFromSequence(ISeedSequence seedSeq, bool setPos = true)
         {
             uint[] val = SeedWords32(seedSeq, N);
@@ -588,7 +588,16 @@ namespace NumSharp
         ///     The MT19937 state — NumPy's <c>{'bit_generator': 'MT19937', 'state': {'key': uint32[624], 'pos': int}}</c>
         ///     with the nested <c>'state'</c> dict flattened.
         /// </summary>
-        public sealed class State : BitGeneratorState
+        /// <remarks>
+        ///     Unsealed, so a subclass engine that adds state of its own derives its snapshot from this class. Its
+        ///     <see cref="MT19937.GetStateCore"/> override returns the derived snapshot, which passes the typed
+        ///     <see cref="MT19937.state"/> getter (a cast to <see cref="State"/>) and <see cref="MT19937.SetStateCore"/> (an
+        ///     <c>is State</c> test); its <see cref="MT19937.SetStateCore"/> override restores its own fields and calls the base for
+        ///     the engine's. Footgun: the <see cref="bit_generator"/> label stays <c>"MT19937"</c> and the base
+        ///     <see cref="MT19937.SetStateCore"/> takes any <see cref="State"/>, where NumPy labels a subclass's state with the
+        ///     subclass's class name and refuses another class's state.
+        /// </remarks>
+        public class State : BitGeneratorState
         {
             /// <summary>Creates an empty state (fill <see cref="key"/> and <see cref="pos"/> before assigning it).</summary>
             public State() { }

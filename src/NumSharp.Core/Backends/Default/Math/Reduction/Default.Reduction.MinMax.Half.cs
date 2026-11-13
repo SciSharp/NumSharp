@@ -374,7 +374,7 @@ namespace NumSharp.Backends
         /// <remarks>
         /// The caller has handled the empty reduction (NumPy's "zero-size array" error) and the 0-d / one-element input; a
         /// reduced axis of extent 1 is served here too (each output is its lone element). The result is fresh: a read-only
-        /// numpy-scalar 0-d for a flat reduction without keepdims (<see cref="NDArray.MarkReductionScalar"/>), else the
+        /// numpy-scalar 0-d for a flat reduction without keepdims (<see cref="NDArray.PyArray_Return"/>), else the
         /// reduced array in NumPy's K order (<see cref="AllocateReductionResult"/>) with keepdims applied.
         /// </remarks>
         /// <param name="arr">A non-empty float16 array (any layout, broadcast included).</param>
@@ -409,7 +409,7 @@ namespace NumSharp.Backends
                     r.Storage.Reshape(new Shape(ks, copy: false));
                 }
 
-                return r.MarkReductionScalar();
+                return r.PyArray_Return();
             }
 
             int ax = NormalizeAxis(axis.Value, nd);
@@ -438,8 +438,8 @@ namespace NumSharp.Backends
             }
 
             if (keepdims)
-                result.Storage.ExpandDimension(ax);
-            return result.MarkReductionScalar();
+                ExpandReducedAxis(result, arr.Shape, ax);
+            return result.PyArray_Return();
         }
     }
 }

@@ -51,16 +51,21 @@ namespace NumSharp
         /// <param name="n_words">Ignored.</param>
         /// <param name="dtype">Ignored.</param>
         /// <returns>Never returns.</returns>
-        /// <exception cref="NotImplementedException">Always (NumPy's <c>NotImplementedError('seedless SeedSequences cannot generate state')</c>).</exception>
+        /// <exception cref="NotImplementedError">Always (NumPy's <c>NotImplementedError('seedless SeedSequences cannot generate state')</c>,
+        ///     type and text).</exception>
         public NDArray generate_state(long n_words, DType dtype = null)
-            => throw new NotImplementedException("seedless SeedSequences cannot generate state");
+            => throw new NotImplementedError("seedless SeedSequences cannot generate state");
 
         /// <summary>Returns this same instance <paramref name="n_children"/> times (NumPy's <c>[self] * n_children</c>).</summary>
-        /// <param name="n_children">The number of "children" (non-positive: none).</param>
+        /// <param name="n_children">The number of "children" (0: none).</param>
         /// <returns>An array whose every element is this instance.</returns>
+        /// <exception cref="ValueError"><paramref name="n_children"/> is negative: NumPy 2.5's <c>n_children must be
+        ///     non-negative</c> (NumPy 2.4 returned an empty list, Python's <c>[self] * -1</c>).</exception>
         public ISpawnableSeedSequence[] spawn(int n_children)
         {
-            var r = new ISpawnableSeedSequence[Math.Max(0, n_children)];
+            if (n_children < 0)
+                throw new ValueError("n_children must be non-negative");
+            var r = new ISpawnableSeedSequence[n_children];
             for (int i = 0; i < r.Length; i++)
                 r[i] = this;
             return r;

@@ -640,7 +640,7 @@ namespace NumSharp.Backends
         /// <param name="values">The text value.</param>
         /// <exception cref="ValueError">A text that does not parse into the destination's dtype (NumPy's <c>int()</c> /
         ///     <c>float()</c> / <c>complex()</c> texts), or the broadcast error NumPy raises first.</exception>
-        /// <exception cref="OverflowException">An integer text outside the destination's dtype.</exception>
+        /// <exception cref="OverflowError">An integer text outside the destination's dtype.</exception>
         /// <exception cref="Exception">The index error NumPy raises first (IndexError, ...).</exception>
         /// <remarks>An array value is converted whole, in NumPy's astype order, so when two of its elements fail the one
         ///     reported can differ from the one NumPy's map iterator meets first; the error kind and text form are the same.</remarks>
@@ -649,7 +649,7 @@ namespace NumSharp.Backends
             if (values.ndim == 0)
             {
                 var packed = NDArray.PackForStore(values, src.typecode, pyArrayPackRoute: false);
-                NDArray numeric = ReferenceEquals(packed, values) ? values.astype(src.dtype, true, 'K', "unsafe") : packed;
+                NDArray numeric = ReferenceEquals(packed, values) ? values.astype(src.dtype) : packed;
                 try
                 {
                     MapIterSet(src, indices, numeric);
@@ -667,7 +667,7 @@ namespace NumSharp.Backends
                 if (!proxy.TensorEngine.Any(proxy))
                     return;
             }
-            using var converted = values.astype(src.dtype, true, 'K', "unsafe");
+            using var converted = values.astype(src.dtype);
             MapIterSet(src, indices, converted);
         }
 
@@ -693,7 +693,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">The value does not broadcast to the selection (NumPy's "shape mismatch: value array
         ///     of shape ... could not be broadcast to indexing result of shape ..." and "could not broadcast input array from
         ///     shape ... into shape ..."), or a text value does not parse into the dtype.</exception>
-        /// <exception cref="OverflowException">A C# integer literal, or an integer text, outside the dtype.</exception>
+        /// <exception cref="OverflowError">A C# integer literal, or an integer text, outside the dtype.</exception>
         /// <exception cref="IndexOutOfRangeException">The memory-safety backstop (a computed offset outside a buffer).</exception>
         /// <exception cref="NotSupportedException">A text lane: a fixed-width or <c>StringDType</c> array has no typed
         ///     store here (the indexers run its index on a unit view or on marks).</exception>
@@ -799,7 +799,7 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException"><paramref name="indices"/> is empty.</exception>
         /// <exception cref="IndexError">Too many index arrays, or an index value out of bounds.</exception>
         /// <exception cref="ValueError">The value does not broadcast to the selection.</exception>
-        /// <exception cref="OverflowException">A C# integer literal outside <typeparamref name="T"/>.</exception>
+        /// <exception cref="OverflowError">A C# integer literal outside <typeparamref name="T"/>.</exception>
         /// <exception cref="IndexOutOfRangeException">The memory-safety backstop.</exception>
         /// <remarks>An EMPTY index array returns before anything is written, but after the value's packing: an empty
         ///     selection stores nothing, and an out-of-range literal still raises, as in NumPy.</remarks>

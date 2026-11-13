@@ -39,12 +39,12 @@ namespace NumSharp
         ///     The output is int64 (NumPy returns C <c>long</c>: int64 on Linux, int32 on Windows; the values agree).
         ///     Holds the bit generator's lock for the draws.
         /// </remarks>
-        public NDArray binomial(long n, double p, Shape size)
+        public NDArray binomial(long n, double p, Shape? size)
         {
             RandomConstraints.Check(p, "p", ConstraintType.CONS_BOUNDED_0_1);
             RandomConstraints.Check(n, "n", ConstraintType.LEGACY_CONS_NON_NEGATIVE_INBOUNDS_LONG);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -52,11 +52,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyBinomial(ref one, p, n));
+                        return NDArray.WritableScalar(LegacyBinomial(ref one, p, n));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Int64, size);
+            var ret = LegacyOutput(NPTypeCode.Int64, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (long*)ret.Address;

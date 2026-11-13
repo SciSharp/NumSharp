@@ -472,7 +472,7 @@ namespace NumSharp
         /// <param name="t">Target dtype.</param>
         /// <param name="dst">Destination (one element of <paramref name="t"/>).</param>
         /// <exception cref="InvalidOperationException">An ndarray of rank ≥ 1 (it has no single value).</exception>
-        /// <exception cref="OverflowException">A Python int that does not fit (see <see cref="WriteWeak"/>).</exception>
+        /// <exception cref="OverflowError">A Python int that does not fit (see <see cref="WriteWeak"/>).</exception>
         public void WriteAs(NPTypeCode t, void* dst)
         {
             if (IsPython)
@@ -502,7 +502,7 @@ namespace NumSharp
         /// <param name="v">The Python value.</param>
         /// <param name="t">Target dtype (already NEP 50-resolved, so never narrower than the value's kind).</param>
         /// <param name="dst">Destination (one element of <paramref name="t"/>).</param>
-        /// <exception cref="OverflowException">An int out of range for an integer <paramref name="t"/>, too large for
+        /// <exception cref="OverflowError">An int out of range for an integer <paramref name="t"/>, too large for
         ///     a float (<c>int too large to convert to float</c>) or for a decimal.</exception>
         public static void WriteWeak(in PyScalar v, NPTypeCode t, void* dst)
         {
@@ -517,7 +517,7 @@ namespace NumSharp
                 if (t == NPTypeCode.Decimal)
                 {
                     if (v.I < s_decimalMin || v.I > s_decimalMax)
-                        throw new OverflowException("Python int too large to convert to a decimal value");
+                        throw new OverflowError("Python int too large to convert to a decimal value");
                     *(decimal*)dst = (decimal)v.I;
                     return;
                 }
@@ -554,7 +554,7 @@ namespace NumSharp
         /// <param name="t">An integer dtype (not bool, not uint64 above int64's range — see
         ///     <see cref="WeakIntToUnsigned64"/>).</param>
         /// <returns>The value (in range for <paramref name="t"/>).</returns>
-        /// <exception cref="OverflowException">NumPy's OverflowError, with its text.</exception>
+        /// <exception cref="OverflowError">NumPy's OverflowError, with its text.</exception>
         public static long WeakIntToInteger(BigInteger v, NPTypeCode t)
         {
             string OutOfBounds() => string.Create(CultureInfo.InvariantCulture, $"Python integer {v} out of bounds for {t.AsNumpyDtypeName()}");
@@ -569,11 +569,11 @@ namespace NumSharp
                 case NPTypeCode.Char:
                 {
                     if (v < LongMin || v > LongMax)
-                        throw new OverflowException("Python int too large to convert to C long");
+                        throw new OverflowError("Python int too large to convert to C long");
                     long x = (long)v;
                     var (lo, hi) = IntegerRange(t);
                     if (x < lo || x > hi)
-                        throw new OverflowException(OutOfBounds());
+                        throw new OverflowError(OutOfBounds());
                     return x;
                 }
                 case NPTypeCode.UInt32:
@@ -583,19 +583,19 @@ namespace NumSharp
                     if (v.Sign >= 0 && v <= s_uintMax)
                         return (long)v;
                     if (v < LongMin || v > LongMax)
-                        throw new OverflowException("Python int too large to convert to C long");
-                    throw new OverflowException(OutOfBounds());
+                        throw new OverflowError("Python int too large to convert to C long");
+                    throw new OverflowError(OutOfBounds());
                 }
                 case NPTypeCode.Int64:
                     if (v < s_longMin || v > s_longMax)
-                        throw new OverflowException("int too big to convert");
+                        throw new OverflowError("int too big to convert");
                     return (long)v;
                 case NPTypeCode.UInt64:
                     // Values above long.MaxValue go through WeakIntToUnsigned64; here v <= long.MaxValue.
                     if (v >= 0) return (long)v;
                     if (v < s_longMin)
-                        throw new OverflowException("int too big to convert");
-                    throw new OverflowException(OutOfBounds());
+                        throw new OverflowError("int too big to convert");
+                    throw new OverflowError(OutOfBounds());
                 default:
                     throw new NotSupportedException($"{t} is not an integer dtype");
             }
@@ -604,11 +604,11 @@ namespace NumSharp
         /// <summary>The uint64 half of <see cref="WeakIntToInteger"/> for a value above <c>long.MaxValue</c>.</summary>
         /// <param name="v">The Python int (&gt; <c>long.MaxValue</c>).</param>
         /// <returns>The value.</returns>
-        /// <exception cref="OverflowException">Beyond 2⁶⁴-1: <c>int too big to convert</c>.</exception>
+        /// <exception cref="OverflowError">Beyond 2⁶⁴-1: <c>int too big to convert</c>.</exception>
         private static ulong WeakIntToUnsigned64(BigInteger v)
         {
             if (v > s_ulongMax)
-                throw new OverflowException("int too big to convert");
+                throw new OverflowError("int too big to convert");
             return (ulong)v;
         }
 
@@ -631,7 +631,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="t">Target dtype.</param>
         /// <returns>The array.</returns>
-        /// <exception cref="OverflowException">A Python int that does not fit <paramref name="t"/>.</exception>
+        /// <exception cref="OverflowError">A Python int that does not fit <paramref name="t"/>.</exception>
         public NDArray AsArrayOf(NPTypeCode t)
         {
             if (Kind == PolyNumberKind.Array && Array.ndim > 0)
@@ -659,8 +659,8 @@ namespace NumSharp
         /// <returns>The result, of NumPy's kind and dtype.</returns>
         /// <exception cref="TypeError">A bool subtraction (NumPy refuses it), or a string array operand the house
         ///     ufunc has no loop for (NumPy's <c>ufunc 'add' did not contain a loop with signature matching types …</c>).</exception>
-        /// <exception cref="DivideByZeroException">Python division by zero (never raised for NumPy values).</exception>
-        /// <exception cref="OverflowException">A Python int that does not fit the loop dtype, or CPython's int/float
+        /// <exception cref="ZeroDivisionError">Python division by zero (never raised for NumPy values).</exception>
+        /// <exception cref="OverflowError">A Python int that does not fit the loop dtype, or CPython's int/float
         ///     overflow.</exception>
         /// <exception cref="IncorrectShapeException">Ndarray operands that do not broadcast.</exception>
         public static PolyNumber Binary(BinaryOp op, in PolyNumber a, in PolyNumber b)
@@ -815,7 +815,7 @@ namespace NumSharp
         /// <param name="a">The base.</param>
         /// <returns><c>a ** 2</c>: a Python value for a Python base, an ndarray for an ndarray of rank ≥ 1, a NumPy
         ///     scalar otherwise.</returns>
-        /// <exception cref="OverflowException">CPython's float or complex overflow (<see cref="PyScalar.PowTwo"/>).</exception>
+        /// <exception cref="OverflowError">CPython's float or complex overflow (<see cref="PyScalar.PowTwo"/>).</exception>
         /// <exception cref="NotSupportedException">A complex64 NumPy scalar (its power runs NumPy's complex64 loop,
         ///     which no caller reaches: only an ufunc result can be one, and every weight squares its argument first).</exception>
         /// <remarks>

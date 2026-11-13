@@ -3,7 +3,7 @@ using System;
 namespace NumSharp.Tests.Indexing
 {
     /// <summary>
-    ///     np.indices / np.indices_sparse as NumPy's <c>numeric.py</c> statements: <c>res = empty((N,) + dimensions,
+    ///     np.indices (dense and sparse) as NumPy's <c>numeric.py</c> statements: <c>res = empty((N,) + dimensions,
     ///     dtype=dtype)</c> before anything else (dense only), then one <c>arange(dim, dtype=dtype)</c> per axis, reshaped to
     ///     broadcast along the others. Every expected value, text and flag is NumPy 2.4.2's, probed on Windows and on Linux
     ///     (the same answers on both).
@@ -36,7 +36,7 @@ namespace NumSharp.Tests.Indexing
             three.Should().Throw<TypeError>().WithMessage(text);
             Action emptyGrid = () => np.indices(new long[] { 0, 3 }, np.bool_);
             emptyGrid.Should().Throw<TypeError>().WithMessage(text);
-            Action sparse = () => np.indices_sparse(new long[] { 3, 2 }, np.bool_);
+            Action sparse = () => np.indices(new long[] { 3, 2 }, np.bool_, sparse: true);
             sparse.Should().Throw<TypeError>().WithMessage(text);
 
             using var g = np.indices(new long[] { 2, 2 }, np.bool_);
@@ -57,7 +57,7 @@ namespace NumSharp.Tests.Indexing
             Action stringDType = () => np.indices(new long[] { 2, 3 }, np.dtypes.StringDType());
             stringDType.Should().Throw<TypeError>()
                 .WithMessage("arange() not supported for inputs with DType <class 'numpy.dtypes.StringDType'>.");
-            Action sparseNegative = () => np.indices_sparse(new long[] { -1 }, np.dtype("U5"));
+            Action sparseNegative = () => np.indices(new long[] { -1 }, np.dtype("U5"), sparse: true);
             sparseNegative.Should().Throw<TypeError>()
                 .WithMessage("arange() not supported for inputs with DType <class 'numpy.dtypes.StrDType'>.");
 
@@ -67,7 +67,7 @@ namespace NumSharp.Tests.Indexing
             using var t = np.indices(new long[0], np.dtypes.StringDType());
             t.dtype.ToString().Should().Be("StringDType()");
             string.Join(",", t.shape).Should().Be("0");
-            np.indices_sparse(new long[0], np.dtype("U5")).Should().BeEmpty();
+            np.indices(new long[0], np.dtype("U5"), sparse: true).ToArray().Should().BeEmpty();
         }
 
         /// <summary>
@@ -77,12 +77,12 @@ namespace NumSharp.Tests.Indexing
         [TestMethod]
         public void Sparse_NegativeDimension_IsAnEmptyAxis()
         {
-            var pair = np.indices_sparse(new long[] { 2, -3 });
+            var pair = np.indices(new long[] { 2, -3 }, sparse: true);
             pair.Length.Should().Be(2);
             string.Join(",", pair[0].shape).Should().Be("2,1");
             pair[0].ToArray<long>().Should().Equal(0L, 1L);
             string.Join(",", pair[1].shape).Should().Be("1,0");
-            var single = np.indices_sparse(new long[] { -1 });
+            var single = np.indices(new long[] { -1 }, sparse: true);
             string.Join(",", single[0].shape).Should().Be("0");
             single[0].dtype.Should().Be(np.int64);
         }
@@ -94,12 +94,12 @@ namespace NumSharp.Tests.Indexing
         [TestMethod]
         public void Sparse_ResultsAreViewsOfTheirAranges()
         {
-            var floats = np.indices_sparse(new long[] { 2, 3 }, np.float64);
+            var floats = np.indices(new long[] { 2, 3 }, np.float64, sparse: true);
             floats[0].dtype.Should().Be(np.float64);
             floats[0].flags.owndata.Should().BeFalse();
             floats[1].flags.owndata.Should().BeFalse();
             floats[1].ToArray<double>().Should().Equal(0.0, 1.0, 2.0);
-            var ints = np.indices_sparse(new long[] { 2, 3 });
+            var ints = np.indices(new long[] { 2, 3 }, sparse: true);
             ints[0].flags.owndata.Should().BeFalse();
             ints[1].flags.owndata.Should().BeFalse();
         }

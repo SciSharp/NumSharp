@@ -22,14 +22,14 @@ namespace NumSharp.Tests.Creation
         public void ZeroStep_IsPythonsDivisionByZero_IntOrFloat()
         {
             // np.r_[0:5:0], np.r_[5::0], np.r_[::0], np.c_[0:5:0] -> ZeroDivisionError: division by zero
-            new Action(() => { var _ = np.r_["0:5:0"]; }).Should().Throw<DivideByZeroException>().WithMessage("division by zero");
-            new Action(() => { var _ = np.r_["5::0"]; }).Should().Throw<DivideByZeroException>().WithMessage("division by zero");
-            new Action(() => { var _ = np.r_["::0"]; }).Should().Throw<DivideByZeroException>().WithMessage("division by zero");
-            new Action(() => { var _ = np.c_["0:5:0"]; }).Should().Throw<DivideByZeroException>().WithMessage("division by zero");
+            new Action(() => { var _ = np.r_["0:5:0"]; }).Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
+            new Action(() => { var _ = np.r_["5::0"]; }).Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
+            new Action(() => { var _ = np.r_["::0"]; }).Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
+            new Action(() => { var _ = np.c_["0:5:0"]; }).Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
             // np.r_[0.0:5:0], np.r_[0:5:0.0] -> ZeroDivisionError: float division by zero
-            new Action(() => { var _ = np.r_["0.0:5:0"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { var _ = np.r_["0.0:5:0"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("float division by zero");
-            new Action(() => { var _ = np.r_["0:5:0.0"]; }).Should().Throw<DivideByZeroException>()
+            new Action(() => { var _ = np.r_["0:5:0.0"]; }).Should().Throw<ZeroDivisionError>()
                 .WithMessage("float division by zero");
         }
 

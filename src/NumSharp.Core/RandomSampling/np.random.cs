@@ -170,7 +170,8 @@ namespace NumSharp
         ///     </para>
         ///     <para>
         ///     After a swap to a non-MT19937 engine, <c>np.random.seed(x)</c> re-seeds that engine the way NumPy's module
-        ///     function does — <c>engine.state = type(engine)(x).state</c>, the cached Gaussian kept (see <see cref="seed(uint)"/>) —
+        ///     function does — <c>set_state(type(engine)(x).state)</c>, the cached Gaussian reset (NumPy 2.5; see
+        ///     <see cref="seed(uint)"/>) —
         ///     while any OTHER RandomState over such an engine refuses re-seeding, NumPy's method behaviour. The legacy
         ///     <see cref="get_state()"/> tuple exists only for MT19937: NumPy warns and returns its dict form, which here is
         ///     <see cref="get_state(bool)"/> with <c>legacy: false</c>. The integer <see cref="Seed"/> bookkeeping is left as
@@ -180,7 +181,7 @@ namespace NumSharp
         public void set_bit_generator(BitGenerator bitgen)
         {
             if (bitgen is null)
-                throw new AttributeError("'NoneType' object has no attribute 'capsule'");
+                throw new AttributeError("'NoneType' object has no attribute 'capsule'", "capsule", null);
             // NumPy resets the Gaussian cache under the NEW engine's lock (self.lock = bit_generator.lock first).
             lock (bitgen.@lock)
             {
@@ -349,7 +350,8 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's MODULE-level <c>np.random.seed(seed)</c> when the singleton's bit generator has been hot-swapped away
-        ///     from MT19937 (<see cref="set_bit_generator"/>): <c>_rand._bit_generator.state = type(_rand._bit_generator)(seed).state</c>.
+        ///     from MT19937 (<see cref="set_bit_generator"/>): <c>_rand.set_state(type(_rand._bit_generator)(seed).state)</c>
+        ///     (NumPy 2.5), which re-seeds the engine and resets the cached Gaussian.
         /// </summary>
         /// <param name="entropy">The seed as NumPy's <see cref="NumSharp.SeedSequence"/> reads it: null for fresh OS entropy (NumPy's
         ///     <c>None</c>), an integer, or an integer array.</param>
@@ -368,9 +370,11 @@ namespace NumSharp
         ///     The fresh engine is built — and the seed validated — before the live one is touched, then its state is copied
         ///     into the live engine (the same object, so a <see cref="NumSharp.Generator"/> sharing it follows the new stream; its
         ///     <see cref="BitGenerator.seed_seq"/> keeps reporting the original sequence, as NumPy's state setter leaves it).
-        ///     NumPy does NOT reset the cached Gaussian on this path, and neither does this: after
-        ///     <c>standard_normal()</c> cached the second value of a pair, the next one returns it even across the re-seed
-        ///     (probed). <see cref="Seed"/> is not updated either (it records legacy MT19937 seeds).
+        ///     NumPy 2.5 routes the copy through <c>RandomState.set_state</c> (gh-32062), which reads <c>has_gauss</c> /
+        ///     <c>gauss</c> from the fresh state dict — a non-MT19937 state carries neither — so the cached Gaussian is
+        ///     RESET: after <c>standard_normal()</c> cached the second value of a pair, the next draw after the re-seed is a
+        ///     fresh pair's first value (probed). NumPy 2.4 assigned the engine's state directly and returned the cached
+        ///     value across the re-seed. <see cref="Seed"/> is not updated (it records legacy MT19937 seeds).
         ///     </para>
         /// </remarks>
         private bool TrySeedSwappedSingleton(object entropy)
@@ -379,7 +383,13 @@ namespace NumSharp
             if (bg is MT19937 || !ReferenceEquals(this, np.random))
                 return false;
             BitGenerator fresh = bg.NewSeeded(entropy is null ? new SeedSequence() : new SeedSequence(entropy));
-            bg.state = fresh.state; // the setter holds bg's lock
+            // set_state's `with self.lock:` (the engine's lock): the Gaussian cache from the dict's absent keys (0 / 0.0),
+            // then the engine's state; the state setter takes the same lock again, which Monitor allows.
+            lock (bg.@lock)
+            {
+                ResetGauss();
+                bg.state = fresh.state;
+            }
             return true;
         }
 

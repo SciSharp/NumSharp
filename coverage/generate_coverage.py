@@ -30,8 +30,10 @@ from object_surfaces import (OBJECT_SURFACE_PATHS, OBJECT_SURFACES, SIGNATURE_UN
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.16.0"
+# The NumPy release the inventory is generated with: the repository's one pin (numpy-version.txt), which the corpus
+# generators (test/oracle/numpy_pin.py), the workflows and the C# tests read too.
+PINNED_NUMPY_VERSION = (ROOT / "numpy-version.txt").read_text(encoding="utf-8").strip()
+GENERATOR_VERSION = "1.18.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -52,7 +54,7 @@ MANIPULATION = {
     "atleast_3d", "block", "broadcast_arrays", "broadcast_to", "column_stack", "concat",
     "concatenate", "delete", "dsplit", "dstack", "expand_dims", "flip", "fliplr", "flipud",
     "hsplit", "hstack", "insert", "matrix_transpose", "moveaxis", "pad", "permute_dims",
-    "ravel", "repeat", "reshape", "resize", "roll", "rollaxis", "rot90", "row_stack",
+    "ravel", "repeat", "reshape", "resize", "roll", "rollaxis", "rot90",
     "split", "squeeze", "stack", "swapaxes", "tile", "transpose", "trim_zeros", "unstack",
     "vsplit", "vstack"
 }
@@ -202,6 +204,9 @@ COMPAT_EXCLUDED_APIS = {
 
 # Catalogued APIs NumPy documents as deprecated as a whole, kept in the catalog on purpose, each with the
 # reason. The deprecation guard (test_catalog) accepts exactly these; every other deprecated row fails it.
+# An entry keeps everything under it too (kept_deprecated), as a COMPAT_EXCLUDED_APIS entry leaves out
+# everything under it: numpy.char.chararray stands for the class and each of its member rows, which NumPy 2.5
+# deprecates together (reaching any of them warns).
 KEPT_DEPRECATED_APIS = {
     "numpy.random.random_integers": ("Deprecated since NumPy 1.11 (use randint), but a numpy.random headline "
                                      "export that NumSharp implements and the oracle verifies; removing it "
@@ -212,6 +217,21 @@ KEPT_DEPRECATED_APIS = {
                                    "(IGNORED_DASHBOARD_ROOTS)."),
     "numpy.testing.suppress_warnings": ("Deprecated in NumPy 2.4; numpy.testing is catalogued but never "
                                         "shown (IGNORED_DASHBOARD_ROOTS)."),
+    "numpy.fix": ("Deprecated in NumPy 2.5 (gh-30644: use numpy.trunc, which rounds the same way), but a "
+                  "headline export NumSharp implements (Math/np.fix.cs); kept as random_integers is, so the "
+                  "NumPy 2.5.4 pin does not move the headline denominator. Owner's call to leave it out."),
+    "numpy.typename": ("Deprecated in NumPy 2.5 (gh-30774: use numpy.dtype.name); a headline export NumSharp "
+                       "implements (Creation/np.typename.cs), kept with numpy.fix."),
+    "numpy.ma.round_": ("Deprecated in NumPy 2.5 (gh-30738: use numpy.ma.round); NumSharp's np.ma.round_ is "
+                        "np.ma.round's other spelling, kept with numpy.fix."),
+    "numpy.char.array": ("Deprecated in NumPy 2.5 (gh-30802: use numpy.array with a string or bytes dtype); "
+                         "NumSharp's np.char.array builds an NDCharArray, kept with numpy.char.chararray."),
+    "numpy.char.asarray": ("Deprecated in NumPy 2.5 (gh-30802: use numpy.asarray with a string or bytes "
+                           "dtype); kept with numpy.char.array."),
+    "numpy.char.chararray": ("Deprecated in NumPy 2.5 (gh-30605: use an ndarray with a string or bytes dtype), "
+                             "but ported whole as NumSharp's NDCharArray; the entry keeps the class and every "
+                             "member row, so the NumPy 2.5.4 pin does not drop the rows it credits. Owner's "
+                             "call to leave it out."),
 }
 
 
@@ -222,6 +242,19 @@ def compat_excluded(api_id: str) -> bool:
     :returns: True when the id is a COMPAT_EXCLUDED_APIS entry or a member of one.
     """
     return any(within_namespace(api_id, excluded) for excluded in COMPAT_EXCLUDED_APIS)
+
+
+def kept_deprecated(api_id: str) -> bool:
+    """Tell whether a catalog id lies in a deprecated NumPy API the catalog keeps on purpose.
+
+    The deprecation guard (test_catalog) reads it: a row NumPy deprecates fails the guard unless an entry of
+    KEPT_DEPRECATED_APIS is the row itself or a namespace above it, so one class entry keeps the member rows its
+    deprecation warns on too.
+
+    :param api_id: a catalog id (``numpy.char.chararray.upper``).
+    :returns: True when the id is a KEPT_DEPRECATED_APIS entry or a member of one.
+    """
+    return any(within_namespace(api_id, kept) for kept in KEPT_DEPRECATED_APIS)
 
 
 _SECTION_UNDERLINE = re.compile(r"^\s*([-=~^])\1{2,}\s*$")
@@ -889,6 +922,13 @@ def extended_surface_rows(
         if not matched and not type_target and name in np_toplevel:
             note += f" NumSharp has a top-level np.{name} (distinct surface/semantics; not credited here)."
         credited = bool(matched or type_target)
+        # The near-miss check of the headline rows (resolve_rows), on this family's facade: a same-surface member
+        # that differs only by case is reported, never credited.
+        twins = [] if credited else sorted({
+            member["target"] for member in members_by_surface.get(surface_for_module(host_module), [])
+            if member["name"].lower() == name.lower() and member["name"] != name})
+        if twins:
+            note += " Case-insensitive near-miss (NOT counted — NumPy parity is case-sensitive): " + ", ".join(twins)
         rows.append({
             "id": row_id, "origin": "numpy", "surface": surface, "name": name, "kind": kind,
             "numpy_signature": numpy_signature(obj, name),
@@ -902,6 +942,7 @@ def extended_surface_rows(
             "numsharp_obsolete": obsolete,
             "numsharp_source_paths": source_paths,
             "numsharp_source_urls": source_urls, "notes": note,
+            **({"case_insensitive_matches": twins} if twins else {}),
         })
 
     for path, surface, category, disposition in EXTENDED_SUBMODULES:
@@ -1116,11 +1157,12 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any],
             source_paths = []
             source_urls = []
 
-        # Case-insensitive near-miss detection: a still-missing in-scope export whose spelling matches
-        # a same-surface NumSharp member only when case is ignored. Reported, never counted — parity
-        # requires the exact NumPy spelling.
+        # Case-insensitive near-miss detection: a still-missing export whose spelling matches a same-surface
+        # NumSharp member only when case is ignored. Reported, never counted — parity requires the exact NumPy
+        # spelling. Every row is checked, not only the headline (the extended, object and class member rows run
+        # the same check in extended_surface_rows and object_surfaces.case_only_twins).
         case_insensitive_matches: list[str] = []
-        if not target and export["in_default_scope"]:
+        if not target:
             case_insensitive_matches = sorted({
                 member["target"]
                 for member in case_folded.get((export["surface"], export["name"].lower()), [])
@@ -1221,7 +1263,8 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any],
     # NumPy's scalar types, then every other public NumPy class: each member at the class that defines
     # it. The class-member pass reads the class rows emitted above (namespace exports, extended families,
     # object surfaces), so it runs last.
-    rows.extend(scalar_type_rows(np, seen_ids, signature=numpy_signature, documentation_url=documentation_url))
+    rows.extend(scalar_type_rows(np, seen_ids, signature=numpy_signature, documentation_url=documentation_url,
+                                 inventory=inventory, root=ROOT, source_base_url=NUMSHARP_SOURCE_BASE_URL))
     enrich_object_classes(rows, inventory, ROOT, NUMSHARP_SOURCE_BASE_URL)
     rows.extend(class_member_rows(
         np, list(rows), seen_ids, inventory, root=ROOT, source_base_url=NUMSHARP_SOURCE_BASE_URL,
@@ -1326,12 +1369,18 @@ def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
     :param rows: the dashboard rows (dashboard_rows output).
     :returns: the headline (``default_scope``) and expanded (``api_scope``) counts with their per-surface and
-        per-category breakdowns, the extended-family and object-surface counts, the ufunc-protocol counts
-        (rows marked ``ufunc_protocol``), the Python-protocol counts (rows marked ``python_protocol``, with
-        how many NumPy refuses), and the row totals.
+        per-category breakdowns, the expanded scope's ``excluded`` counts (catalogued APIs left out of its
+        percentages, by reason: excluded_from_percentages), the extended-family and object-surface counts, the
+        ufunc-protocol counts (rows marked ``ufunc_protocol``), the Python-protocol counts (rows marked
+        ``python_protocol``, counted ones in the status counts, plus how many NumPy refuses and how many repeat an
+        inherited member), and the row totals.
     """
     default_rows = [row for row in rows if row["origin"] == "numpy" and row["in_default_scope"]]
     numpy_rows = [row for row in rows if row["origin"] == "numpy"]
+    # Every NumPy API the catalog lists; the percentages count api_rows, the part excluded_from_percentages keeps.
+    catalogued_rows = [row for row in numpy_rows if is_catalogued_api(row)]
+    catalogued_objects = [row for row in catalogued_rows if row.get("object_surface")]
+    excluded = Counter(reason for row in catalogued_rows if (reason := excluded_from_percentages(row)))
     by_surface = {
         surface: status_counts([row for row in default_rows if row["surface"] == surface])
         for surface in sorted({row["surface"] for row in default_rows})
@@ -1359,24 +1408,32 @@ def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "extended_surfaces": {"total": len(extended_rows), "by_surface": by_extended},
         "api_scope": {
             **status_counts(api_rows),
+            # The catalogued APIs the counts above leave out, by reason; total + excluded is the dashboard's
+            # "All NumPy APIs" list.
+            "excluded": {"total": sum(excluded.values()), "not_applicable": excluded["not_applicable"],
+                         "inherited_repeat": excluded["inherited_repeat"]},
             "by_surface": {surface: status_counts([row for row in api_rows if row["surface"] == surface])
                            for surface in sorted({row["surface"] for row in api_rows})},
             "by_category": {category: status_counts([row for row in api_rows if row["category"] == category])
                             for category in sorted({row["category"] for row in api_rows})},
         },
         "object_surfaces": status_counts(object_rows),
+        # Every ufunc method row, the ones NumPy rejects included (those leave the percentages: is_api_row).
         "ufunc_protocols": {
-            "total": sum(bool(row.get("ufunc_protocol")) for row in object_rows),
+            "total": sum(bool(row.get("ufunc_protocol")) for row in catalogued_objects),
             "conditional": sum(bool(row.get("ufunc_protocol")) and row.get("applicability") == "conditional"
-                               for row in object_rows),
+                               for row in catalogued_objects),
             "not_applicable": sum(bool(row.get("ufunc_protocol")) and row.get("applicability") == "not_applicable"
-                                  for row in object_rows),
+                                  for row in catalogued_objects),
         },
-        # Python protocols ("dunder" members) NumPy defines, on every object surface, scalar type and class.
+        # Python protocols ("dunder" members) NumPy defines, on every object surface, scalar type and class: the
+        # status counts cover the counted ones; not_applicable / inherited_repeat count the ones left out.
         "python_protocols": {
             **status_counts([row for row in object_rows if row.get("python_protocol")]),
             "not_applicable": sum(bool(row.get("python_protocol")) and row.get("applicability") == "not_applicable"
-                                  for row in object_rows),
+                                  for row in catalogued_objects),
+            "inherited_repeat": sum(bool(row.get("python_protocol")) and bool(row.get("inherited_repeat"))
+                                    and row.get("applicability") != "not_applicable" for row in catalogued_objects),
         },
         "all_numpy_exports": len(numpy_rows),
         "numsharp_extensions": sum(row["origin"] == "numsharp" for row in rows),
@@ -1384,10 +1441,51 @@ def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def is_api_row(row: dict[str, Any]) -> bool:
-    """Supporting classes/constants/modules remain catalogued outside API percentages."""
+def is_catalogued_api(row: dict[str, Any]) -> bool:
+    """Tell whether a row is a NumPy API (a callable, method, property or protocol) rather than a supporting row.
+
+    Supporting classes, constants and modules stay catalogued outside every API count. This is the "All NumPy
+    APIs" scope the dashboard lists; is_api_row is the part of it the availability percentages count.
+
+    :param row: a catalog row.
+    :returns: True for a headline row or an extended row of an API kind.
+    """
     return row["origin"] == "numpy" and (row["in_default_scope"] or
         (row.get("extended", False) and row["kind"] not in {"class", "constant", "module"}))
+
+
+def excluded_from_percentages(row: dict[str, Any]) -> str | None:
+    """Name why a catalogued NumPy API is left out of the availability percentages, or None when it counts.
+
+    Two kinds of row describe nothing NumSharp could implement, so counting them as gaps would only measure
+    NumPy's class layout:
+
+    * ``not_applicable``: NumPy itself refuses every call (a unary ufunc's ``reduce``, ``del a[i]``, the ordering
+      of ``ndarray.flags``); the protocol exists only because CPython creates it from a C slot.
+    * ``inherited_repeat``: a member that a class NumSharp has no type for (memmap, recarray, record, MaskedRecords)
+      inherits unchanged from a class the catalog lists itself (numpy.ndarray, numpy.ma.MaskedArray, a scalar
+      type); that class's own row counts the API, and the missing class shows through its class row and its own
+      members (object_surfaces.object_surface_rows).
+
+    Both stay in the artifact and in the dashboard's explorer, marked, with their status.
+
+    :param row: a catalog row.
+    :returns: ``"not_applicable"``, ``"inherited_repeat"``, or None.
+    """
+    if row.get("applicability") == "not_applicable":
+        return "not_applicable"
+    if row.get("inherited_repeat"):
+        return "inherited_repeat"
+    return None
+
+
+def is_api_row(row: dict[str, Any]) -> bool:
+    """Tell whether a row counts in the API availability percentages (and the oracle and signature ones).
+
+    :param row: a catalog row.
+    :returns: True for a catalogued NumPy API (is_catalogued_api) that excluded_from_percentages does not exclude.
+    """
+    return is_catalogued_api(row) and excluded_from_percentages(row) is None
 
 
 def json_text(value: Any) -> str:
@@ -1823,21 +1921,27 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
         f"Expanded API availability (dashboard default): **{all_apis['coverage_percent']:.1f}%** "
         f"({all_apis['available']} of {all_apis['total']} APIs across "
         f"{len(all_apis['by_surface'])} surfaces and {len(all_apis['by_category'])} categories). "
-        f"**{all_apis['missing']} missing**, **{all_apis['partial']} partial**.",
+        f"**{all_apis['missing']} missing**, **{all_apis['partial']} partial**. "
+        f"Another **{all_apis['excluded']['total']}** catalogued APIs are listed but not counted: "
+        f"**{all_apis['excluded']['not_applicable']}** calls NumPy itself refuses, and "
+        f"**{all_apis['excluded']['inherited_repeat']}** members a class NumSharp has no type for (memmap, recarray, "
+        "record, MaskedRecords) inherits unchanged from a class whose own rows count them.",
         "",
         f"The catalog includes **{summary['ufunc_protocols']['total']} per-ufunc protocol methods** "
         "(each public `numpy.ufunc` method on every ufunc export of the compared namespaces, plus the "
         "methods numpy.ma's masked ufunc wrappers implement); "
         f"**{summary['ufunc_protocols']['not_applicable']}** describe methods whose calls NumPy rejects "
-        "for that ufunc. These count as exposed API contracts, not computable operations.",
+        "for that ufunc: they stay listed, outside the percentages.",
         "",
-        f"It also includes **{summary['python_protocols']['total']} Python protocols** NumPy defines on its "
+        f"It also counts **{summary['python_protocols']['total']} Python protocols** NumPy defines on its "
         "classes (operators, subscripting, conversions, iteration, `with`, pickling), each class listing the "
         "protocols it has; NumSharp provides "
         f"**{summary['python_protocols']['available']}**, through a member of the protocol's own name, the C# "
-        "operator, indexer or cast of the same meaning, or a reviewed adapter. "
-        f"**{summary['python_protocols']['not_applicable']}** are slots NumPy fills only to refuse every call "
-        "(`del a[i]`, ordering comparisons on `ndarray.flags`).",
+        "operator, indexer or cast of the same meaning, or a reviewed adapter. Not counted: "
+        f"**{summary['python_protocols']['not_applicable']}** slots NumPy fills only to refuse every call "
+        "(`del a[i]`, ordering comparisons on `ndarray.flags`), and "
+        f"**{summary['python_protocols']['inherited_repeat']}** inherited unchanged by a class NumSharp has no "
+        "type for.",
         "",
         f"Headline API availability: **{headline['coverage_percent']:.1f}%** "
         f"({headline['available']} of {headline['total']} default-scope APIs). "
@@ -1878,17 +1982,19 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
         api = row["id"].replace("numpy.", "np.", 1).replace("np.ndarray.", "ndarray.", 1)
         lines.append(f"| [`{api}`]({row['documentation_url']}) | {row['surface']} | {row['status']} | {row['category']} |")
 
+    # Every NumPy row with a case-only twin, headline or not (generator 1.17.0 checks them all).
     ci_rows = [
         row for row in rows
-        if row["origin"] == "numpy" and row["in_default_scope"] and row.get("case_insensitive_matches")
+        if row["origin"] == "numpy" and row.get("case_insensitive_matches")
     ]
     lines.extend([
         "",
         "## Case-insensitive near-misses",
         "",
         "NumPy's public API is case-sensitive, so a NumSharp member is credited only when the spelling "
-        "matches exactly. The generator additionally folds case to surface near-misses — in-scope NumPy "
-        "APIs left *missing* for which NumSharp exposes a same-surface member differing only by case. "
+        "matches exactly. The generator additionally folds case to surface near-misses — NumPy APIs left "
+        "*missing* for which NumSharp exposes a member differing only by case on the same surface (a module "
+        "facade, or the owner type of an object, class or scalar member). "
         "These are **not** counted as available; rename to the exact NumPy spelling (or record a reviewed "
         "alias) to close them.",
         "",
@@ -1992,11 +2098,11 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
         "methodology": {
             "headline": "Available default-scope APIs divided by all default-scope NumPy APIs.",
             "default_scope": "Top-level NumPy callables; ndarray public methods and properties; callable exports of numpy.random, numpy.linalg, and numpy.fft.",
-            "api_scope": "Dashboard default: headline APIs plus extended public submodule callables and object methods/properties/protocols. Supporting class, constant and module exports are catalogued but excluded from API percentages.",
-            "object_members": "Object members match only their explicit NumSharp owner type. Inherited members and ufunc protocols are catalogued per owner; NumPy's scalar types and the other public classes list each member once, at the class that defines it. A Python protocol is credited by a NumSharp member of its own name, the C# operator, indexer or cast of the same meaning, or a reviewed adapter. Namespace namesakes never confer support. Protocol existence does not imply applicability to every ufunc or object.",
+            "api_scope": "Dashboard default: headline APIs plus extended public submodule callables and object methods/properties/protocols. Supporting class, constant and module exports are catalogued but excluded from API percentages, and so are two kinds of API row that describe nothing to implement (listed, marked, with their status; summary.api_scope.excluded counts them): calls NumPy itself refuses (applicability not_applicable) and members a class NumSharp has no type for inherits unchanged from a class whose own rows count them (inherited_repeat).",
+            "object_members": "Object members match only their explicit NumSharp owner type. Inherited members and ufunc protocols are catalogued per owner; NumPy's scalar types and the other public classes list each member once, at the class that defines it. A NumPy scalar is a read-only 0-d NDArray in NumSharp, so the scalar types' members are credited against NDArray; a class NumSharp builds as another type is credited against that type (numpy.dtypes.StringDType: DType). A protocol NumPy refuses is never credited. A Python protocol is credited by a NumSharp member of its own name, the C# operator, indexer or cast of the same meaning, or a reviewed adapter. Namespace namesakes never confer support. Protocol existence does not imply applicability to every ufunc or object.",
             "availability_note": "Compiled API availability is distinct from fully verified behavioral parity.",
             "case_sensitivity": "NumPy API names are matched case-sensitively for parity. Case-insensitive near-misses are detected and reported (row field 'case_insensitive_matches'; the 'Case-insensitive near-misses' section of summary.md) but never counted as available.",
-            "oracle": "Behavioral parity evidence: committed NumPy 2.4.2 oracle contracts (the differential-fuzz corpus plus the .npy, flags and layout oracles), each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence. Contracts resolve to rows through coverage/oracle_map.json; a row is oracle-verified when it is credited and has direct contracts, an identity alias (same NumPy object, same NumSharp member) or a reviewed pure-delegation alias. Host-pinned contracts are hard-gated only on the pinned host.",
+            "oracle": f"Behavioral parity evidence: committed NumPy {PINNED_NUMPY_VERSION} oracle contracts (the differential-fuzz corpus plus the .npy, flags and layout oracles, and the string oracle's numpy.strings and numpy.char calls; a fuzz key replayed through a C# operator also proves that operator's ndarray protocol), each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence. Contracts resolve to rows through coverage/oracle_map.json; a row is oracle-verified when it is credited and has direct contracts, an identity alias (same NumPy object, same NumSharp member) or a reviewed pure-delegation alias. Host-pinned contracts are hard-gated only on the pinned host.",
             "signature": "Signature parity (row field 'signature', coverage/signature_parity.py + coverage/signature_gap.py): every credited API's NumPy signature against every C# spelling of it, joined from the API diff gap map of tools/api-parameter-parity (docs/plans/API_DIFF_GAP.md), which the generator runs on the tree: a reflection dump of every module facade and exported type, NumPy's runtime signatures completed from its .pyi stubs and numpydoc sections, and a compile probe of NumPy-style calls at C# 12 and C# 14. Identical = no mark. Marks: M a NumPy parameter no overload offers (a rename counts; M-weak: only parameters the parity plan excludes, which is not a difference), X a parameter NumPy does not have, O more than one overload, T a dtype as NPTypeCode / Type or picked by a generic type argument, B a NumPy-style call that does not compile, L null refused where NumPy's default is None (weak: only Shape refuses null and default binds), Q an integer sequence refused where NumPy's stubs allow one, N credited through another name. Spellings: module functions, members, constructors (NumPy's class call), extension methods and the typed NDArray<T>. A credited row the gap map does not compare keeps the inventory's own reflection comparison (source 'inventory', not compile-probed). Python protocols spelled as operators, indexers or casts are not compared.",
         },
         "oracle": oracle,

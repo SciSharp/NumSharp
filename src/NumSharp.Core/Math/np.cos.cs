@@ -42,5 +42,24 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray arccos(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
             => x.TensorEngine.ACos(x, dtype, @out, where);
+
+        /// <summary>
+        ///     Trigonometric inverse cosine, element-wise (NumPy's <c>np.acos</c>,
+        ///     the Array-API name NumPy 2.0 added: <c>np.acos is np.arccos</c>, the
+        ///     same ufunc object, so this forwards to <see cref="arccos"/> and answers bit for bit as it does).
+        /// </summary>
+        /// <param name="x">Input array (a C# scalar converts to a 0-d array marked as the Python scalar it stands for).</param>
+        /// <param name="out">A location into which the result is stored (NumPy ufunc <c>out=</c>); <c>null</c> allocates the
+        ///     result.</param>
+        /// <param name="where">Boolean mask: only mask-true elements are computed / written (NumPy ufunc <c>where=</c>);
+        ///     <c>null</c> is NumPy's <c>where=True</c>.</param>
+        /// <param name="dtype">The loop dtype (NumPy ufunc <c>dtype=</c>); only non-integer dtypes have a loop.</param>
+        /// <returns>The result of <see cref="arccos"/>: <paramref name="out"/> itself when it was given.</returns>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.acos.html
+        ///     <para>One signature, the ufunc form of the original's; the original's own extra overloads (if any) are not
+        ///     copied, so the alias never carries a second overload.</para></remarks>
+        public static NDArray acos(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
+            => arccos(x, @out, where, dtype);
     }
 }

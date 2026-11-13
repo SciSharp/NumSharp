@@ -29,26 +29,14 @@ namespace NumSharp
     {
         #region Conversion and copies
 
-        /// <summary>A copy of the chararray cast to <paramref name="dtype"/>, as a chararray (NumPy's <c>c.astype(dtype)</c>).</summary>
+        /// <summary>A copy of the chararray cast to <paramref name="dtype"/> with a memory order and a casting rule, as a
+        ///     chararray (NumPy's <c>c.astype(dtype, order='K', casting='unsafe', copy=True)</c>).</summary>
         /// <param name="dtype">The target dtype: a string dtype (an unsized <c>"U"</c> / <c>"S"</c> keeps the element width), or
         ///     <c>int8</c> (the one numeric dtype the finalize rule accepts).</param>
-        /// <param name="copy"><c>false</c> returns this chararray ITSELF when it already has the dtype.</param>
-        /// <returns>A new chararray that owns its data, or this chararray.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is <c>null</c>.</exception>
-        /// <exception cref="ValueError">The dtype is not string data (<c>Can only create a chararray from string data.</c>),
-        ///     raised BEFORE any element is converted, as NumPy allocates the subclass result before its cast loop.</exception>
-        /// <exception cref="UnicodeEncodeError">A <c>U</c> → <c>S</c> cast of a non-ASCII character.</exception>
-        /// <exception cref="UnicodeDecodeError">An <c>S</c> → <c>U</c> cast of a byte above 0x7F.</exception>
-        [NDScoped]
-        public new NDCharArray astype(DType dtype, bool copy = true) => astype(dtype, copy, 'K');
-
-        /// <summary>A copy of the chararray cast to <paramref name="dtype"/> with a memory order and a casting rule, as a
-        ///     chararray.</summary>
-        /// <param name="dtype">The target dtype (see <see cref="astype(DType, bool)"/>).</param>
-        /// <param name="copy"><c>false</c> returns this chararray itself when nothing has to change.</param>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
         /// <param name="casting">NumPy's casting rule name (<c>"unsafe"</c>, <c>"same_kind"</c>, <c>"safe"</c>,
         ///     <c>"equiv"</c>, <c>"no"</c>).</param>
+        /// <param name="copy"><c>false</c> returns this chararray itself when nothing has to change.</param>
         /// <returns>A new chararray that owns its data, or this chararray.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is <c>null</c>.</exception>
         /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/> (checked first,
@@ -57,8 +45,14 @@ namespace NumSharp
         ///     any element is converted), or an unknown order / casting name.</exception>
         /// <exception cref="UnicodeEncodeError">A <c>U</c> → <c>S</c> cast of a non-ASCII character.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> → <c>U</c> cast of a byte above 0x7F.</exception>
+        /// <remarks>
+        ///     <para>One signature in NumPy's keyword order (API-parity batch 3, 2026-11-11): it replaces the former
+        ///     <c>astype(dtype, copy)</c> / <c>astype(dtype, copy, order, casting)</c> pair, so <c>a.astype(t, 'F')</c> reads as
+        ///     in NumPy and a <c>copy</c> is written <c>copy: false</c> (a bool in the order slot does not compile).
+        ///     <c>subok</c> stays out (the parity plan's exclusion).</para>
+        /// </remarks>
         [NDScoped]
-        public new NDCharArray astype(DType dtype, bool copy, char order, string casting = "unsafe")
+        public new NDCharArray astype(DType dtype, char order = 'K', string casting = "unsafe", bool copy = true)
         {
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
@@ -80,7 +74,7 @@ namespace NumSharp
                 return this;
             ValidateAstypeCasting(dtype.GetTypeCode(), rule);
             Finalize(dtype);
-            return From(base.astype(dtype, copy, order, casting), this);
+            return From(base.astype(dtype, order, casting, copy: copy), this);
         }
 
         /// <summary>A copy of the chararray, as a chararray (NumPy's <c>c.copy(order)</c>).</summary>
@@ -250,52 +244,51 @@ namespace NumSharp
         [NDScoped]
         public new NDCharArray swapaxes(int axis1, int axis2) => From(base.swapaxes(axis1, axis2), this);
 
-        /// <summary>The elements under another shape, as a chararray (NumPy's <c>c.reshape(shape)</c>).</summary>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
+        /// <summary>The elements under another shape, as a chararray — NumPy's <c>c.reshape(shape, /, *, order='C',
+        ///     copy=None)</c>.</summary>
+        /// <param name="shape">The requested dimensions; one may be -1 (inferred). An int, a tuple, an <c>int[]</c> /
+        ///     <c>long[]</c>, a C# collection expression or a <see cref="Shape"/>. NumPy's name (it was <c>newShape</c> until
+        ///     API-parity batch 9).</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c>: the index order the elements are read and placed in.</param>
+        /// <param name="copy">NumPy's <c>copy</c> keyword (API-parity batch 7): null copies only when needed, true always
+        ///     copies, false raises <c>Unable to avoid creating a copy while reshaping.</c> when no view can express the
+        ///     reshape — <see cref="NDArray.reshape(Shape, char, bool?)"/>'s modes, the result wrapped as a chararray.</param>
         /// <returns>A view when the layout allows it, otherwise a copy.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the chararray's size.</exception>
+        /// <exception cref="ValueError">This chararray holds data that is not string data, 'K', or the refusal of
+        ///     <paramref name="copy"/> false.</exception>
+        /// <remarks>Since API-parity batch 9 this and the loose integers (<see cref="reshape(long[])"/>,
+        ///     <see cref="reshape(ReadOnlySpan{long})"/>) are the chararray method's spellings, as on NDArray: the
+        ///     <c>(Shape)</c>, <c>(ref Shape)</c> and <c>(int[])</c> forms went.</remarks>
+        [NDScoped]
+        public new NDCharArray reshape(Shape shape, char order = 'C', bool? copy = null) => From(base.reshape(shape, order, copy), this);
+
+        /// <summary>The chararray under NumPy's loose integers (<c>c.reshape(2, 3)</c>) when they arrive as a C#
+        ///     <c>long[]</c>; see <see cref="reshape(Shape, char, bool?)"/>.</summary>
+        /// <param name="shape">The requested dimensions; one may be -1.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy, wrapped as a chararray.</returns>
         /// <exception cref="IncorrectShapeException">The requested size differs from the chararray's size.</exception>
         /// <exception cref="ValueError">This chararray holds data that is not string data.</exception>
         [NDScoped]
-        public new NDCharArray reshape(Shape newShape) => From(base.reshape(newShape), this);
-
-        /// <inheritdoc cref="reshape(Shape)" path="/*[not(self::param[@name='newShape'])]"/>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
-        /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c>: the index order the elements are read and placed in.</param>
-        [NDScoped]
-        public new NDCharArray reshape(Shape newShape, char order) => From(base.reshape(newShape, order), this);
-
-        /// <inheritdoc cref="reshape(Shape)" path="/*[not(self::param[@name='newShape'])]"/>
-        /// <param name="newShape">The requested dimensions; one may be -1 (inferred).</param>
-        [NDScoped]
-        public new NDCharArray reshape(ref Shape newShape) => From(base.reshape(ref newShape), this);
-
-        /// <inheritdoc cref="reshape(Shape)"/>
-        /// <param name="shape">The requested dimensions; one may be -1.</param>
-        [NDScoped]
-        public new NDCharArray reshape(int[] shape) => From(base.reshape(shape), this);
-
-        /// <inheritdoc cref="reshape(Shape)"/>
-        /// <param name="shape">The requested dimensions; one may be -1.</param>
-        [NDScoped]
         public new NDCharArray reshape(params long[] shape) => From(base.reshape(shape), this);
 
-        /// <inheritdoc cref="reshape(Shape)"/>
+        /// <summary>The chararray under NumPy's loose integers (<c>c.reshape(2, 3)</c>) as C# 13 passes them (a span on
+        ///     the caller's stack); see <see cref="reshape(Shape, char, bool?)"/>.</summary>
         /// <param name="shape">The requested dimensions; one may be -1.</param>
+        /// <returns>A view when the layout allows it, otherwise a copy, wrapped as a chararray.</returns>
+        /// <exception cref="IncorrectShapeException">The requested size differs from the chararray's size.</exception>
+        /// <exception cref="ValueError">This chararray holds data that is not string data.</exception>
         [NDScoped]
         public new NDCharArray reshape(params ReadOnlySpan<long> shape) => From(base.reshape(shape), this);
 
-        /// <summary>The elements as one axis, as a chararray (NumPy's <c>c.ravel()</c>): a VIEW when the layout allows it,
-        ///     a copy otherwise.</summary>
+        /// <summary>The elements as one axis, as a chararray (NumPy's <c>c.ravel(order='C')</c>): a VIEW when the layout
+        ///     allows it, a copy otherwise. One signature: <c>c.ravel()</c> binds here with the default 'C'.</summary>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
         /// <returns>A 1-d chararray.</returns>
         /// <exception cref="ValueError">This chararray holds data that is not string data.</exception>
-        [NDScoped]
-        public new NDCharArray ravel() => From(base.ravel(), this);
-
-        /// <inheritdoc cref="ravel()"/>
-        /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
         /// <exception cref="ArgumentException">An unknown order.</exception>
         [NDScoped]
-        public new NDCharArray ravel(char order) => From(base.ravel(order), this);
+        public new NDCharArray ravel(char order = 'C') => From(base.ravel(order), this);
 
         /// <summary>A COPY of the elements as one axis, as a chararray (NumPy's <c>c.flatten(order)</c>).</summary>
         /// <param name="order"><c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
@@ -308,15 +301,18 @@ namespace NumSharp
         /// <summary>
         ///     The chararray without its length-1 axes (NumPy's <c>c.squeeze(axis)</c>).
         /// </summary>
-        /// <param name="axis">The axis to remove, or <c>null</c> for every axis of length 1.</param>
+        /// <param name="axis">The axis to remove, a tuple of axes (each of length 1), or <c>null</c> for every axis of
+        ///     length 1.</param>
         /// <returns>This chararray ITSELF when <paramref name="axis"/> is <c>null</c> and no axis has length 1 (as NumPy);
         ///     otherwise a chararray view.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ValueError"><paramref name="axis"/> names an axis longer than 1, or this chararray holds data that
-        ///     is not string data and an axis is removed (NumPy wraps that plain view as an ndarray; the C# type here is a
-        ///     chararray).</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <exception cref="ValueError">An axis longer than 1 is named, a tuple names an axis twice (<c>duplicate value in
+        ///     'axis'</c>), or this chararray holds data that is not string data and an axis is removed (NumPy wraps that
+        ///     plain view as an ndarray; the C# type here is a chararray).</exception>
+        /// <remarks>The axis is an <see cref="NDAxis"/> since API-parity batch 4 (2026-11-12), as
+        ///     <see cref="NDArray.squeeze(NDAxis?)"/>'s; an <c>int?</c> argument converts.</remarks>
         [NDScoped]
-        public new NDCharArray squeeze(int? axis = null)
+        public new NDCharArray squeeze(NDAxis? axis = null)
         {
             if (axis is null)
             {
@@ -330,6 +326,26 @@ namespace NumSharp
 
             return From(base.squeeze(axis), this);
         }
+
+        /// <summary>
+        ///     <see cref="squeeze(NDAxis?)"/> with the axis as one <c>int</c>: the overload a C# integer binds (its
+        ///     identity conversion beats NDAxis' implicit one), forwarding to the NDAxis form, so every answer, error,
+        ///     layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="squeeze(NDAxis?)"/>
+        public new NDCharArray squeeze(int axis)
+            => squeeze((NDAxis?)axis);
+
+        /// <summary>
+        ///     <see cref="squeeze(NDAxis?)"/> with the axes as an <c>int[]</c>: the overload an <c>int[]</c> binds, and
+        ///     a bare <c>null</c> too (null converts to <c>int[]</c> better than to NDAxis), forwarding to the NDAxis
+        ///     form: a null array is NumPy's None, any other array NumPy's tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="squeeze(NDAxis?)"/>
+        public new NDCharArray squeeze(int[] axis)
+            => squeeze((NDAxis?)axis);
 
         #endregion
 
@@ -467,7 +483,7 @@ namespace NumSharp
         ///     a plain text array's np.nanmax names <c>fmax</c>. An element's scalar stand-in is a NumPy scalar, computed as a
         ///     base ndarray.
         /// </summary>
-        /// <param name="axis">The axis to reduce, or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes, or <c>null</c> for every axis.</param>
         /// <param name="out">NumPy's <c>out=</c>, or <c>null</c>.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="initial">NumPy's <c>initial=</c>, or <c>null</c>.</param>
@@ -489,7 +505,7 @@ namespace NumSharp
         ///     call; the cost is nil, as the text case always ends in np.amax's TypeError.</para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
-        protected internal override NDArray NanMax(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMax(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => IsScalarStandIn
                 ? base.NanMax(axis, @out, keepdims, initial, @where)
                 : np.amax(this, axis, @out, keepdims, initial, @where);
@@ -498,7 +514,7 @@ namespace NumSharp
         ///     np.nanmin of a chararray: NumPy's branch for subclasses, which for text (no NaN mask) is
         ///     <c>np.amin(a, axis=axis, out=out, **kwargs)</c> of the chararray itself (see <see cref="NanMax"/>).
         /// </summary>
-        /// <param name="axis">The axis to reduce, or <c>null</c> for every axis.</param>
+        /// <param name="axis">The axis to reduce, a tuple of axes, or <c>null</c> for every axis.</param>
         /// <param name="out">NumPy's <c>out=</c>, or <c>null</c>.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="initial">NumPy's <c>initial=</c>, or <c>null</c>.</param>
@@ -511,7 +527,7 @@ namespace NumSharp
         ///     stay on the stack for the caller audit (the same <see cref="MethodImplAttribute"/>, for the same tail
         ///     jump to <c>np.&lt;amin&gt;subclass</c>).</remarks>
         [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
-        protected internal override NDArray NanMin(int? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
+        protected internal override NDArray NanMin(NDAxis? axis, NDArray @out, bool keepdims, object initial, NDArray @where)
             => IsScalarStandIn
                 ? base.NanMin(axis, @out, keepdims, initial, @where)
                 : np.amin(this, axis, @out, keepdims, initial, @where);

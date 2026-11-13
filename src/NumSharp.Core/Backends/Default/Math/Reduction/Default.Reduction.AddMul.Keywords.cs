@@ -61,7 +61,8 @@ namespace NumSharp.Backends
         ///     <c>add</c> / <c>multiply</c> through NumPy's reduction iterator (see the file header for the statement order).
         /// </summary>
         /// <param name="arr">The array to reduce, any layout.</param>
-        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), a tuple of axes reduced together in ONE pass of
+        ///     the iterator (the empty tuple reduces none), or null for every axis.</param>
         /// <param name="keepdims">Keep the reduced axes as length-1 dimensions.</param>
         /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for NumPy's resolution (file header, step 2).</param>
         /// <param name="out">The array to receive the result (any dtype: the loop's values are cast into it), or null.</param>
@@ -77,17 +78,19 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">A C# scalar as <paramref name="out"/>; NumPy's text refusals; an
         ///     <paramref name="initial"/> of a type the loop cannot take (a complex into a real loop).</exception>
         /// <exception cref="ValueError">A read-only or misshapen out, a mask with more axes than <paramref name="arr"/>; an
-        ///     unconvertible <paramref name="initial"/> (a NaN into an integer loop, a sequence).</exception>
+        ///     unconvertible <paramref name="initial"/> (a NaN into an integer loop, a sequence); a tuple that names an axis
+        ///     twice (<c>duplicate value in 'axis'</c>); a <c>StringDType</c> sum over two axes or more (not
+        ///     reorderable).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> (or an item of a tuple) is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException">The mask or the out does not broadcast against <paramref name="arr"/>.</exception>
-        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop; a decimal result
-        ///     leaves decimal's range.</exception>
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop.</exception>
+        /// <exception cref="OverflowException">A decimal result leaves decimal's range.</exception>
         /// <remarks><see cref="NDAnchoredAttribute"/>: the iterator reads raw addresses of the input, the mask and the out, and
         ///     the engine members reach this method without a scope of their own; the weaver roots the operands until it
         ///     returns, so a caller's temporary operand or mask cannot be collected under the loop.</remarks>
         [NDAnchored]
-        internal unsafe NDArray AddMulNumPy(NDArray arr, int? axis, bool keepdims, DType dtype, NDArray @out, object initial,
+        internal unsafe NDArray AddMulNumPy(NDArray arr, NDAxis? axis, bool keepdims, DType dtype, NDArray @out, object initial,
             NDArray @where, bool multiply)
         {
             if (arr is null)
@@ -96,14 +99,14 @@ namespace NumSharp.Backends
             string ufunc = multiply ? "multiply" : "add";
 
             // 1. The parsed arguments in NumPy's order (an out that is not an array, a read-only out, the mask's dtype), then
-            // the axis.
+            // the axis: an integer, None, or a tuple (each item's bounds, then the repeat).
             ReductionArguments.ValidateParsedArguments(@out, @where);
             bool[] flags = ReductionArguments.AxisFlags(arr.ndim, axis);
 
             // 2 (text). The loop resolution answers for text before the iterator's shape checks: StringDType's add
             // concatenates (initial= packed into its descriptor), every other text loop is NumPy's refusal.
             if (Strings.NDStringUfuncs.IsText(arr) || Strings.NDStringUfuncs.IsText(@out) || Strings.NDStringUfuncs.IsTextRequest(dtype))
-                return AddMulTextNumPy(op, arr, axis, keepdims, dtype, @out, initial, @where);
+                return AddMulTextNumPy(op, arr, axis, flags, keepdims, dtype, @out, initial, @where);
 
             // 2. The loop: dtype=, else promote_types(out, arr) (no NEP 50 widening once out is given), else the accumulator.
             NPTypeCode inT = arr.GetTypeCode;
@@ -165,7 +168,8 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="op">The NumPy function (<c>"sum"</c> or <c>"prod"</c>).</param>
         /// <param name="arr">The array.</param>
-        /// <param name="axis">The axis (already validated), or null.</param>
+        /// <param name="axis">The axis argument (already validated: an integer, a tuple, or null).</param>
+        /// <param name="flags">The reduced-axis flags <paramref name="axis"/> gave (<see cref="ReductionArguments.AxisFlags(int, NDAxis?)"/>).</param>
         /// <param name="keepdims">Keep the reduced axes.</param>
         /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
         /// <param name="out">The out, or null.</param>
@@ -175,22 +179,30 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">NumPy's loop refusal (no text loop for multiply, fixed-width text, an out of another
         ///     class).</exception>
         /// <exception cref="ValueError">A mask without <paramref name="initial"/> over <c>StringDType</c> (its add has no
-        ///     identity), an empty reduction without it, or a text that does not parse into a numeric loop.</exception>
+        ///     identity), an empty reduction without it, a <c>StringDType</c> sum over two axes or more (not reorderable), or
+        ///     a text that does not parse into a numeric loop.</exception>
         /// <exception cref="NotSupportedException">A text OUT under a numeric loop with these keywords: NumPy casts the running
         ///     value through the text at every fill, which the keyword path does not model.</exception>
-        private NDArray AddMulTextNumPy(string op, NDArray arr, int? axis, bool keepdims, DType dtype, NDArray @out,
-            object initial, NDArray @where)
+        private NDArray AddMulTextNumPy(string op, NDArray arr, NDAxis? axis, bool[] flags, bool keepdims, DType dtype,
+            NDArray @out, object initial, NDArray @where)
         {
-            // StringDType's add: its loop resolution, then PyUFunc_ReduceWrapper's checks and the concatenation.
+            // StringDType's add: its loop resolution, then PyUFunc_ReduceWrapper's checks and the concatenation. The empty
+            // tuple of an input with dimensions reduces no axis: each output is its own element (a copy, or initial= + it).
             if (op == "sum" && dtype is null && Strings.NDStringUfuncs.IsVString(arr))
-                return Strings.NDVStringReduction.SumNumPyKeywords(arr, axis, @out, keepdims, initial, @where);
+            {
+                if (IsNoAxisSet(axis, flags))
+                    return VStringReduceOverNoAxis(arr, flags, keepdims, @out, initial, @where, "add",
+                        (lane, mask) => Strings.NDVStringReduction.SumNumPyKeywords(lane, -1, @out, false, initial, mask));
+                return Strings.NDVStringReduction.SumNumPyKeywords(arr, TextAxis(axis, flags), @out, keepdims, initial, @where);
+            }
             // A numeric dtype= over a text input (no text out): NumPy's iterator casts (parses) every element into the loop
-            // before the loop reads it, so the reduction of the parsed array with the same keywords is NumPy's.
+            // before the loop reads it, so the reduction of the parsed array with the same keywords - the tuple included - is
+            // NumPy's.
             if (!Strings.NDStringUfuncs.IsText(@out)
-                && Strings.NDStringUfuncs.ParseForNumericReduce(op, arr, axis, dtype) is { } parsed)
+                && Strings.NDStringUfuncs.ParseForNumericReduce(op, arr, TextAxis(axis, flags), dtype) is { } parsed)
                 return Strings.NDStringUfuncs.ReduceParsed(parsed, p => AddMulNumPy(p, axis, keepdims, dtype, @out, initial, @where, op == "prod"));
             // Everything else is NumPy's refusal, raised with its text (the out joins the resolution).
-            Strings.NDStringUfuncs.ThrowIfReduce(op, arr, axis, @out, dtype);
+            Strings.NDStringUfuncs.ThrowIfReduce(op, arr, TextAxis(axis, flags), @out, dtype);
             throw new NotSupportedException(
                 $"np.{op} with initial= or where= and a text out= is not supported: NumPy round-trips the running value through the out's text at every buffer fill.");
         }
@@ -248,7 +260,7 @@ namespace NumSharp.Backends
                     return @out;
                 var r = result;
                 result = null;   // handed to the caller: not disposed below
-                return r.ndim == 0 ? r.MarkReductionScalar() : r;
+                return r.ndim == 0 ? r.PyArray_Return() : r;
             }
             finally
             {
@@ -570,6 +582,32 @@ namespace NumSharp.Backends
         internal static NumPyReduceIterator.Loop<decimal> Decimal() => new(&DecimalReduce, &DecimalBinary);
 
         /// <summary>
+        ///     FLOAT / DOUBLE_multiply's reduce form for a caller outside the iterator (the exact float product kernels,
+        ///     <c>Default.Reduction.Product.Sequential.cs</c>): <c>acc *= x</c> along one run, the first NaN kept.
+        /// </summary>
+        /// <typeparam name="T"><see cref="float"/> or <see cref="double"/>.</typeparam>
+        /// <param name="acc">The running value (the identity 1 for a fresh product).</param>
+        /// <param name="x">The run's first element.</param>
+        /// <param name="xs">The run's stride in elements.</param>
+        /// <param name="n">The run's element count.</param>
+        /// <returns>The running value after the run.</returns>
+        internal static T ReduceRun<T>(T acc, T* x, long xs, long n) where T : unmanaged, IFloatingPointIeee754<T>
+            => FloatReduce(acc, x, xs, n);
+
+        /// <summary>
+        ///     FLOAT / DOUBLE_multiply's elementwise form for a caller outside the iterator: <c>o[i] = o[i] * x[i]</c>, the
+        ///     second operand's NaN kept when both are NaN.
+        /// </summary>
+        /// <typeparam name="T"><see cref="float"/> or <see cref="double"/>.</typeparam>
+        /// <param name="o">The out run.</param>
+        /// <param name="os">The out stride in elements.</param>
+        /// <param name="x">The input run.</param>
+        /// <param name="xs">The input stride in elements.</param>
+        /// <param name="n">The element count.</param>
+        internal static void BinaryRun<T>(T* o, long os, T* x, long xs, long n) where T : unmanaged, IFloatingPointIeee754<T>
+            => FloatBinary(o, os, x, xs, n);
+
+        /// <summary>
         ///     The reduce form of FLOAT / DOUBLE_multiply (PW = 0: <c>acc = *out; for: acc *= in2; *out = acc</c>), in the
         ///     run's order. Once the running value is a NaN it stays that NaN: NumPy's compiled loop keeps the running value's
         ///     NaN when both operands are NaN (probed 2.4.2), so the first NaN of the sequence, quieted, is the answer.
@@ -581,7 +619,10 @@ namespace NumSharp.Backends
         /// <param name="n">The run's element count.</param>
         /// <returns>The out's new value.</returns>
         /// <remarks>The NaN test is explicit because RyuJIT may swap a commutative multiply's operands, which would let a
-        ///     later NaN's payload replace the running one.</remarks>
+        ///     later NaN's payload replace the running one. [AggressiveOptimization]: the loop is reached through a function
+        ///     pointer (the iterator's Loop), whose call site the tiered JIT did not promote: at tier-0 its generic multiply
+        ///     and NaN test stay calls, 5-8x the optimized loop (np.prod of an F-ordered 1000 x 1000 along axis 0: 5.7 ms).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static T FloatReduce<T>(T acc, T* x, long xs, long n) where T : unmanaged, IFloatingPointIeee754<T>
         {
             for (long i = 0; i < n; i++)
@@ -605,7 +646,9 @@ namespace NumSharp.Backends
         /// <param name="n">The element count.</param>
         /// <remarks>A contiguous call runs a vector loop whose <c>(a &amp; (b == b)) * b</c> leaves the instruction no NaN
         ///     choice; a broadcast input (stride 0) takes the scalar statement, the second operand's NaN in every
-        ///     position.</remarks>
+        ///     position. [AggressiveOptimization]: as <see cref="FloatReduce{T}"/>, a function-pointer target that stayed at
+        ///     tier-0 (a 1000 x 1000 axis-0 product: 2.1 ms against 0.27 ms optimized).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void FloatBinary<T>(T* o, long os, T* x, long xs, long n) where T : unmanaged, IFloatingPointIeee754<T>
         {
             long i = 0;
@@ -635,6 +678,9 @@ namespace NumSharp.Backends
         /// <param name="xs">The run's stride in elements.</param>
         /// <param name="n">The run's element count.</param>
         /// <returns>The out's new value (float16 bits).</returns>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static ushort HalfReduce(ushort acc, ushort* x, long xs, long n)
         {
             float io1 = DirectILKernelGenerator.HalfToFloatScalarExact(acc);
@@ -661,6 +707,7 @@ namespace NumSharp.Backends
         ///     (<see cref="DirectILKernelGenerator.HalfArithRun"/>, which supports that one aliasing); a strided out keeps the
         ///     scalar statement.</remarks>
         [SkipLocalsInit]
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void HalfBinary(ushort* o, long os, ushort* x, long xs, long n)
         {
             if (os == 1 && n > 0)
@@ -690,6 +737,9 @@ namespace NumSharp.Backends
         /// <param name="xs">The run's stride in elements.</param>
         /// <param name="n">The run's element count.</param>
         /// <returns>The out's new value.</returns>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static Complex ComplexReduce(Complex acc, Complex* x, long xs, long n)
         {
             for (long i = 0; i < n; i++)
@@ -704,6 +754,9 @@ namespace NumSharp.Backends
         /// <param name="x">The input run.</param>
         /// <param name="xs">The input stride in elements.</param>
         /// <param name="n">The element count.</param>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void ComplexBinary(Complex* o, long os, Complex* x, long xs, long n)
         {
             for (long i = 0; i < n; i++)
@@ -717,6 +770,9 @@ namespace NumSharp.Backends
         /// <param name="n">The run's element count.</param>
         /// <returns>The out's new value.</returns>
         /// <exception cref="OverflowException">The product leaves decimal's range.</exception>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static decimal DecimalReduce(decimal acc, decimal* x, long xs, long n)
         {
             for (long i = 0; i < n; i++)
@@ -731,6 +787,9 @@ namespace NumSharp.Backends
         /// <param name="xs">The input stride in elements.</param>
         /// <param name="n">The element count.</param>
         /// <exception cref="OverflowException">A product leaves decimal's range.</exception>
+        /// <remarks>[AggressiveOptimization]: a function-pointer target of the iterator's Loop, which the tiered JIT left at tier-0
+        ///     (see <see cref="FloatReduce{T}"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void DecimalBinary(decimal* o, long os, decimal* x, long xs, long n)
         {
             for (long i = 0; i < n; i++)

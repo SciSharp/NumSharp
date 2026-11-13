@@ -32,8 +32,14 @@ paths:
   - `NDArray<T>` overrides the GETTER only, returning `NDArray<T>` (C# lets an override narrow its type only without a
     setter, CS1715); the setter is `NDArray`'s, so through an `NDArray<T>` variable the value must be an `NDArray<T>` or a
     `T` (`implicit operator NDArray<T>(T)`: `typed[0] = 3.14`, `mask[m] = false`); assign an untyped value through an
-    `NDArray` reference or `__setitem__`. There is no scalar indexer: an element is a 0-d view, read with a cast
-    (`(double)typed[0]`) or, in a hot loop, `GetValue<T>(…)` (the view costs about 0.4 µs). Virtual dispatch reaches the
+    `NDArray` reference or `__setitem__`. There is no scalar indexer: an element is NumPy's scalar, a read-only 0-d
+    COPY (`ItemScalar` / the typed `TypedItemScalar`: `array_item`, copied from the element's offset), read with a cast
+    (`(double)typed[0]`) or, in a hot loop, `GetValue<T>(…)` (about 9 ns; the item costs about 0.55 µs disposed and 1.3 µs
+    left to the finalizer, most of it the 0-d allocation). Library code that needs a VIEW of an index that may name every
+    axis calls `BasicIndexView(slices)`, never the indexer (a write into the item would be lost, and an undisposed item
+    leaves a pooled buffer to the finalizer, which the scope gates count). Every key of a read-only NumPy scalar indexes
+    a copy of its value (`gentype_subscript`: `s[...]` is a writeable 0-d array, a refused key is `IndexError: invalid
+    index to scalar variable.`). Virtual dispatch reaches the
     override through an `NDArray` reference too, so a typed array's selection is an `NDArray<T>` at run time. Trap: an
     advanced result is wrapped over its OWN storage object (`new NDArray<T>(result.Storage)`, then the untyped wrapper
     disposed), never `MakeGeneric`: an alias reads as a view, so the gather would lose `flags.owndata`.
@@ -150,7 +156,7 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   overload, which therefore treats null as None). Divergences: `np.pad(constant_values: null)` is the omitted default (C#
   cannot tell an explicit null). Gates: the string oracle's `storenone` section, `Backends/NoneStoreTests.cs`.
 - Kept as casts: `SetValue` / `itemset` (NumSharp's low-level typed setters; `itemset` is gone from NumPy 2.0), an
-  unmarked 0-d array everywhere, and a 0-d view from integer indexing (`a[i] = b[j]`: NumPy's `b[j]` is a NumPy scalar,
+  unmarked 0-d array everywhere, and an item from integer indexing (`a[i] = b[j]`: NumPy's `b[j]` is a NumPy scalar,
   which a SIGNED integer destination would range-check: `[Misaligned]`). Text into a numeric store is parsed like NumPy's
   setitem of a Python `str` (`float64.fill("5.5")` is 5.5, `int32[0] = "hello"` raises `invalid literal for int() with
   base 10: 'hello'`).
@@ -169,7 +175,7 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   check that an array is not empty.``, both before any element check.
 - Integer targets (`char` included): CPython's `int()` of the element as an exact integer (`PythonIntOf`: a float or
   decimal truncated toward zero, a text parsed by `int()`), then a CHECKED fit into the C# type (`ToCheckedInteger`): a
-  float NaN raises `ValueError: cannot convert float NaN to integer`, an infinity `OverflowException: cannot convert float
+  float NaN raises `ValueError: cannot convert float NaN to integer`, an infinity `OverflowError: cannot convert float
   infinity to integer`, and a value the type cannot hold raises with NumPy's LP64 pack texts (`Python integer 3000000000
   out of bounds for int32`; past the 64-bit C long, into anything but uint32 / uint64, `Python int too large to convert
   to C long`). Python's int is unbounded, so the fixed-width C# type is where the range is enforced: nothing wraps
@@ -334,6 +340,14 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   zero entries (is empty).` in every mode, and the errors are ValueError. Its `mode` is NumPy's mode object (a string for
   every axis, a sequence of strings, None: `ClipModes.ConvertClipmodeSequence(object, int)`), and a null coordinate array
   is NumPy's None (`TypeError: only int indices permitted`).
+- The keyword names are NumPy's: `unravel_index(indices, shape, order)` (the scalar `long` form too, which a named
+  `indices: 5L` binds, returning `long[]`), `ravel_multi_index(multi_index, dims, mode, order)` (the scalar `long[]` form
+  and the per-axis `string[] mode` form too; a bare `mode: null` is ambiguous between the two mode forms, so write
+  `(string[])null` or `(string)null`).
+- The shape parameters are `Shape`, so NumPy's idiom `np.unravel_index(np.argmax(a), a.shape)` binds `a.shape`
+  (`long[]`), `a.Shape`, an `int[]` or a tuple; the engines (`TensorEngine.UnravelIndex` / `RavelMultiIndex`) read
+  NumPy's intp dimensions as `long[]` (a `(2**40, 3)` shape unravels), and the dims products detect an overflow exactly
+  (`Math.BigMul`; a divide-back test would throw on `long.MinValue / -1`).
 - Gates: the layout-parity oracle's `unravel` / `ravelmi` families, the string oracle (no layout excuse) and
   `Indexing/IndexSearchLayout.Test.cs`.
 

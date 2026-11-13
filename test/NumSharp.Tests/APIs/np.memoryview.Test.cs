@@ -170,6 +170,32 @@ namespace NumSharp.Tests.APIs
             Assert.AreEqual(0, mv.tobytes().Length);
         }
 
+        /// <summary>
+        ///     NumPy's buffer export recomputes the strides of every contiguous array from its shape
+        ///     (<c>_buffer_info_new</c> in <c>buffer.c</c>), so the memoryview's strides are not always the array's: a
+        ///     zero-size array NumPy allocates has all-zero strides, yet <c>np.empty((0, 3)).data.strides</c> is
+        ///     <c>(24, 8)</c> and <c>np.zeros((2, 0, 3)).data.strides</c> <c>(0, 24, 8)</c> (the zero extents multiplied
+        ///     in); an empty F array is also C-contiguous and reports <c>(24, 8)</c>; a <c>[:, None]</c> column reports
+        ///     <c>(8, 8)</c> whatever its extent-1 axis's stride. A non-contiguous array reports its own strides
+        ///     (<c>arange(12.)[::2]</c>: <c>(16,)</c>). Probed 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Strides_Of_A_Contiguous_Array_Are_Recomputed_From_Its_Shape()
+        {
+            using var e03 = np.empty(new Shape(0, 3));
+            using var e203 = np.zeros(new Shape(2, 0, 3));
+            using var emptyF = np.empty(new Shape(0, 3), order: 'F');
+            using var column = np.arange(4.0)[Slice.All, Slice.NewAxis];
+            using var stepped = np.arange(12.0)["::2"];
+
+            CollectionAssert.AreEqual(new long[] { 0, 0 }, e03.strides);       // the array's own: a fresh empty allocation
+            CollectionAssert.AreEqual(new long[] { 24, 8 }, e03.data.strides);
+            CollectionAssert.AreEqual(new long[] { 0, 24, 8 }, e203.data.strides);
+            CollectionAssert.AreEqual(new long[] { 24, 8 }, emptyF.data.strides);
+            CollectionAssert.AreEqual(new long[] { 8, 8 }, column.data.strides);
+            CollectionAssert.AreEqual(new long[] { 16 }, stepped.data.strides);
+        }
+
         [TestMethod]
         public void Format_Codes_All_Dtypes()
         {

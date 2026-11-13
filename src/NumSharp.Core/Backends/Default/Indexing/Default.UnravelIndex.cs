@@ -26,7 +26,7 @@ namespace NumSharp.Backends
         ///     a counted reference on the buffer, so disposing one leaves the others valid.</para>
         /// </remarks>
         [NDScoped]
-        public override unsafe NDArray<long>[] UnravelIndex(NDArray indices, int[] shape, char order = 'C')
+        public override unsafe NDArray<long>[] UnravelIndex(NDArray indices, long[] shape, char order = 'C')
         {
             if (indices is null) throw new ArgumentNullException(nameof(indices));
             if (shape is null) throw new ArgumentNullException(nameof(shape));
@@ -87,13 +87,13 @@ namespace NumSharp.Backends
             if (idxNdim == 0)
             {
                 // A 0-d index array: NumPy's PyArray_Return turns each 0-d view into a numpy SCALAR, which owns its value
-                // and cannot be written — fresh 0-d arrays with a scalar's flags (MarkReductionScalar: num=263).
+                // and cannot be written — fresh 0-d arrays with a scalar's flags (PyArray_Return: num=263).
                 long* row = (long*)coords.Storage.Address;
                 for (int j = 0; j < ndims; j++)
                 {
                     var scalar = NewArray<long>(Shape.NewScalar(), false);
                     *(long*)scalar.Storage.Address = row[j];
-                    scalar.MarkReductionScalar();
+                    scalar.PyArray_Return();
                     result[j] = scalar;
                 }
                 return result;
@@ -115,7 +115,7 @@ namespace NumSharp.Backends
         }
 
         /// <summary>The one-dimensional unravel shape <c>(1,)</c> that checks an index against <c>shape=()</c>'s bounds.</summary>
-        private static readonly int[] UnitDimension = { 1 };
+        private static readonly long[] UnitDimension = { 1 };
 
         /// <summary>
         ///     Runs the unravel kernel over <paramref name="indices"/> in NumPy's iteration order, writing element k's
@@ -137,7 +137,7 @@ namespace NumSharp.Backends
         ///     cast for uint64 — into that layout first, so the kernel can read it linearly. The copy is released before
         ///     this method returns, exceptions included, and keeps the read pointer valid until the kernel is done.
         /// </remarks>
-        private static unsafe void UnravelInto(NDArray indices, Shape layout, long* @out, int[] shape, long unravelSize, bool cOrder)
+        private static unsafe void UnravelInto(NDArray indices, Shape layout, long* @out, long[] shape, long unravelSize, bool cOrder)
         {
             long count = indices.size;
             NDArray copy = null;
@@ -180,7 +180,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">An index outside <c>[0, unravelSize)</c>, reported with NumPy's text and the
         ///     index's own value.</exception>
         /// <exception cref="NotSupportedException">The IL kernel cannot be emitted.</exception>
-        private static unsafe void RunUnravelKernel(long* idx, long count, int[] shape, long unravelSize, long* @out, bool cOrder)
+        private static unsafe void RunUnravelKernel(long* idx, long count, long[] shape, long unravelSize, long* @out, bool cOrder)
         {
             int ndim = shape.Length;
             long idxStart = cOrder ? ndim - 1 : 0, idxStep = cOrder ? -1 : 1;
@@ -232,7 +232,7 @@ namespace NumSharp.Backends
         /// <exception cref="ValueError">The product overflows int64, or is exactly -1 — NumPy's overflow sentinel, so shape
         ///     <c>(-1,)</c> is refused too (<c>dimensions are too large; arrays and shapes with a total size greater than
         ///     'intp' are not supported.</c>).</exception>
-        internal static long UnravelSize(int[] shape)
+        internal static long UnravelSize(long[] shape)
         {
             // NumPy parity: do NOT pre-reject zero or negative dims. Empty index arrays work against any shape, including
             // (0, 3); a non-empty one against a zero or negative product is refused by the kernel's bounds check
@@ -247,8 +247,10 @@ namespace NumSharp.Backends
                     s = 0;
                     break;
                 }
-                long next = unchecked(s * dim);
-                if (next / dim != s)
+                // npy_mul_with_overflow_intp: the exact 128-bit product must fit a long. (A divide-back test would throw on
+                // long.MinValue / -1, a product an int64 dimension now reaches.)
+                long high = Math.BigMul(s, dim, out long next);
+                if (high != (next >> 63))
                 {
                     overflow = true;
                     break;

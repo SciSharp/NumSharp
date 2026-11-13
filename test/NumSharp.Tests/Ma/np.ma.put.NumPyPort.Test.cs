@@ -212,7 +212,7 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void HardMask_CallerArrayValues_FollowNdarrayResize()
         {
-            const string refcount = "cannot resize an array that references or is referenced\nby another array in this way.\nUse the np.resize function or refcheck=False";
+            const string refcount = "cannot resize an array that references or is referenced\nby another object in this way.\nUse the np.resize function to get a new resized copy or\n set refcheck=False to disable this check";
             Hard1D().Invoking(v => v.put(np.array(new[] { 0, 2, 3 }), np.array(new long[] { 7, 8 })))
                 .Should().Throw<IncorrectShapeException>().Where(e => e.Message == refcount);
             Hard1D().Invoking(v => v.put(np.array(new[] { 0, 2 }), NDArray.Scalar(5L)))
@@ -254,7 +254,7 @@ namespace NumSharp.Tests.Ma
             h.data.flatten().ToArray<sbyte>().Should().Equal(44, 2, 3, 4);
 
             var s = Int8(false);
-            s.Invoking(v => v.put(np.array(new[] { 0 }), 300)).Should().Throw<OverflowException>()
+            s.Invoking(v => v.put(np.array(new[] { 0 }), 300)).Should().Throw<OverflowError>()
                 .WithMessage("Python integer 300 out of bounds for int8");
             s.data.flatten().ToArray<sbyte>().Should().Equal(1, 2, 3, 4);
 

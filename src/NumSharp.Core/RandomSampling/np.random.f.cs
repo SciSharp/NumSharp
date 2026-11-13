@@ -31,7 +31,7 @@ namespace NumSharp
         ///     composition drew every numerator before any denominator, a different stream). Holds the bit generator's lock
         ///     for the draws.
         /// </remarks>
-        public NDArray f(double dfnum, double dfden, Shape size)
+        public NDArray f(double dfnum, double dfden, Shape? size)
         {
             RandomConstraints.Check(dfnum, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.Check(dfden, "dfden", ConstraintType.CONS_POSITIVE);
@@ -39,7 +39,7 @@ namespace NumSharp
             // The per-call setup NumPy recomputes for every value, evaluated once (the same expressions — bit-neutral).
             var setup = new LegacyFSetup(dfnum, dfden);
 
-            if (IsScalarDraw(size))
+            if (IsScalarDraw(size.GetValueOrDefault()))
             {
                 unsafe
                 {
@@ -47,11 +47,11 @@ namespace NumSharp
                     double word;
                     var one = new DrawBufferDouble(randomizer, &word, 1);
                     lock (randomizer.@lock)
-                        return NDArray.Scalar(LegacyF(ref one, in setup));
+                        return NDArray.WritableScalar(LegacyF(ref one, in setup));
                 }
             }
 
-            var ret = LegacyOutput(NPTypeCode.Double, size);
+            var ret = LegacyOutput(NPTypeCode.Double, size.GetValueOrDefault());
             unsafe
             {
                 var dst = (double*)ret.Address;

@@ -101,7 +101,7 @@ namespace NumSharp.Tests.Strings
                     result = Str(p, "name") switch
                     {
                         "union1d" => np.union1d(a, b),
-                        "intersect1d" => ri ? (object)np.intersect1d(a, b, assume_unique: au, return_indices: true) : np.intersect1d(a, b, au),
+                        "intersect1d" => ri ? (object)np.intersect1d(a, b, assume_unique: au, return_indices: true).ToArray() : (NDArray)np.intersect1d(a, b, au),
                         "setxor1d" => np.setxor1d(a, b, au),
                         "setdiff1d" => np.setdiff1d(a, b, au),
                         var n => throw new InvalidOperationException($"the string oracle has no set routine '{n}'"),
@@ -145,12 +145,13 @@ namespace NumSharp.Tests.Strings
                     if (p.TryGetValue("complex_left", out var cl) && cl.GetBoolean())
                     {
                         var l = p["left"].EnumerateArray().Select(x => x.GetDouble()).ToArray();
-                        result = np.interp(a, b, ops[2], (Complex?)new Complex(l[0], l[1]), null, period);
+                        result = np.interp(a, b, ops[2], new Complex(l[0], l[1]), null, period);
                     }
                     else
                     {
-                        double? left = p.TryGetValue("left", out var le) && le.ValueKind == JsonValueKind.Number ? le.GetDouble() : null;
-                        double? right = p.TryGetValue("right", out var ri) && ri.ValueKind == JsonValueKind.Number ? ri.GetDouble() : null;
+                        // A Python float fill is a C# double (NumPy's Python-float operand); None stays null.
+                        NDArray left = p.TryGetValue("left", out var le) && le.ValueKind == JsonValueKind.Number ? le.GetDouble() : null;
+                        NDArray right = p.TryGetValue("right", out var ri) && ri.ValueKind == JsonValueKind.Number ? ri.GetDouble() : null;
                         result = np.interp(a, b, ops[2], left, right, period);
                     }
                     return true;
@@ -217,8 +218,8 @@ namespace NumSharp.Tests.Strings
                 case "any": return flat ? np.any(a) : np.any(a, axis, keepdims: keepdims);
                 case "all": return flat ? np.all(a) : np.all(a, axis, keepdims: keepdims);
                 case "count_nonzero": return flat ? np.count_nonzero(a) : np.count_nonzero(a, axis.Value, keepdims);
-                case "argmax": return flat ? np.argmax(a) : np.argmax(a, axis.Value, keepdims);
-                case "argmin": return flat ? np.argmin(a) : np.argmin(a, axis.Value, keepdims);
+                case "argmax": return flat ? np.argmax(a) : np.argmax(a, axis.Value, keepdims: keepdims);
+                case "argmin": return flat ? np.argmin(a) : np.argmin(a, axis.Value, keepdims: keepdims);
                 case "nanargmax": return np.nanargmax(a, axis, keepdims: keepdims);
                 case "nanargmin": return np.nanargmin(a, axis, keepdims: keepdims);
             }

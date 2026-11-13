@@ -150,19 +150,20 @@ namespace NumSharp.Tests.APIs
             r.ToArray<sbyte>().Should().Equal((sbyte)1, (sbyte)2, (sbyte)1);
         }
 
+        /// <summary>np.put / np.insert of a C# string into a number array run Python's int() / float() on the str itself (NumPy's PyArray_FromAny): an invalid literal raises with the quoted text, ' 1_2 ' parses to 12.</summary>
         [TestMethod]
         public void PutAndInsert_StrIntoNumbers_QuoteThePythonStr()
         {
             // np.put(a, 0, '1.5') / np.insert(a, 0, '1.5'): PyArray_FromAny(str, int64) runs int() on the str itself.
-            Action put = () => np.put(np.zeros(new Shape(2), NPTypeCode.Int64), 0L, (object)"1.5");
+            Action put = () => np.put(np.zeros(new Shape(2), NPTypeCode.Int64), 0, "1.5");
             put.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: '1.5'");
-            Action insert = () => np.insert(np.zeros(new Shape(1), NPTypeCode.Int64), 0, (object)"1.5");
+            Action insert = () => np.insert(np.zeros(new Shape(1), NPTypeCode.Int64), 0, "1.5");
             insert.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: '1.5'");
 
             var a = np.zeros(new Shape(2), NPTypeCode.Int64);
-            np.put(a, 0L, (object)" 1_2 ");
+            np.put(a, 0, " 1_2 ");
             a.ToArray<long>().Should().Equal(12L, 0L);
-            np.insert(np.zeros(new Shape(1), NPTypeCode.Double), 0, (object)"1e3").ToArray<double>().Should().Equal(1000.0, 0.0);
+            np.insert(np.zeros(new Shape(1), NPTypeCode.Double), 0, "1e3").ToArray<double>().Should().Equal(1000.0, 0.0);
         }
     }
 }

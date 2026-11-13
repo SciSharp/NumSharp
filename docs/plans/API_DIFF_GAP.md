@@ -23,6 +23,192 @@ regenerated on 2026-10-17 on branch `strings` after `ffa74606` (the latest chang
 `np.char` padding and partition functions). When the tree changes, the generated files are the truth; regenerate them
 (§10) before acting on a list here.
 
+**Refresh 2026-11-09 (branch `journey5` at `882a66a0`).** The data was regenerated and every finding was checked
+against its ground truth (`validate_findings.py`, §10): the compiler for M and the absent names, NumPy's runtime for M,
+X, Q and L. The validated change list, one patch-style entry per API plus the absent names and the refuted findings, is
+[`API_PARITY_DIFF.md`](API_PARITY_DIFF.md); its counts supersede the per-package counts below, whose name lists date
+from 2026-10-17. Since then only the one-overload collapse of `sum` / `prod` / `mean` / `var` / `std` (`38bcad09`)
+removed marks; the validation refuted 19 findings that the reading of NumPy or of a class's own members got wrong (13 M,
+1 X, 5 Q, §11) and found 2 B marks that were artifacts of the probe file (a missing `using NumSharp.Backends;`, fixed).
+
+**Refresh 2026-11-11 (API-parity batch 1 on `journey5` at `3a615e2d`).** Regenerated on the batch's tree and, for the
+comparison, on its base: 1,293 → 1,306 NumPy names with a C# spelling (13 absent names gained), 719 → 748 with NumPy's
+signature, 574 → 558 to change; O 342 → 340, M 215 → 203, X 90 → 77, L 115 → 108, B 39 → 36, Q 73 and T 24 unchanged,
+absent 96 → 83. The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
+**Refresh 2026-11-11 (API-parity batch 2 on `journey5` at `0c26562b`).** Regenerated on the batch's tree: 748 → 767
+NumPy names with NumPy's signature, 558 → 539 to change; O 340 → 331, M 203 → 195, X 77 → 67, T 24 → 21, B 36 → 35, L
+108, Q 73 and the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 271 → 285.
+Two entries stay on purpose: `np.ma.default_fill_value` keeps its typed `DType` overload (the owner's call) and
+`MaskedArray.clip` still lacks `out=`. The validator now tries a keyword NumPy refuses at its position before it
+confirms an X (`ndarray.conj` / `conjugate` take `out` positionally). The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
+**Refresh 2026-11-11 (API-parity batch 3 on `journey5` at `6e14235c`).** Regenerated on the batch's tree: 767 → 791
+NumPy names with NumPy's signature, 539 → 515 to change; O 331 → 310, M 195 → 184, B 35 → 25, L 108 → 107, X 67, T 21,
+Q 73 and the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 285 → 298. Three
+entries stay on purpose, the owner's calls: `np.repeat` [O2] (the generic scalar form with `NDArray repeats`),
+`np.hstack` / `np.vstack` [O2] (the `params` form beside NumPy's `(tup, dtype, casting)`). The nan reductions keep only
+their Q mark (a tuple axis), which OD1's decision (§8: the `NDAxis` struct) unblocks. The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
+**Refresh 2026-11-12 (API-parity batch 4 on `journey5` at `36040d1e`).** Regenerated on the batch's tree: 791 → 809
+NumPy names with NumPy's signature, 515 → 497 to change; O 310 → 298, L 107 → 94, Q 73 → 61, X 67 → 65, B 25 → 24, M
+184, T 21 and the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 298 → 314.
+OD1's `NDAxis` is implemented and adopted by 19 names (flip, expand_dims, moveaxis, squeeze, all, any, count_nonzero,
+ptp, median, nanmedian, percentile, nanpercentile, quantile, nanquantile, average, average_returned, trim_zeros, size,
+gradient); OD4 is decided (`Shape? size = null`, §8). Entries that stay on purpose: `np.all` / `np.any` [O2] and
+`np.count_nonzero` [O2] (the C# `bool` / `long` of the no-axis call, decision S8), `np.gradient` [O4] (the spacing forms
+of NumPy's `*varargs`), `np.average` [M] (`returned=`, plan B10). The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
+**Refresh 2026-11-12 (API-parity batch 5 on `journey5` at `f9991a52`).** Regenerated on the batch's tree: 809 → 837
+NumPy names with NumPy's signature, 497 → 469 to change; L 94 → 56, Q 61 → 30, O 298 → 297, M 184, X 65, B 24, T 21
+and the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 314 → 336. The
+reductions take NumPy's tuple axis (sum, prod, mean, var, std, max, amax, min, amin and the seven nan reductions, on
+np, ndarray and numpy.matrix), np.roll has one signature (`NDArray shift`, `NDAxis? axis`), np.argmax / np.argmin and
+the ndarray methods one axis signature (`NDAxis?`, a tuple is NumPy's TypeError), and the Generator samplers take
+`Shape? size = null` (OD4). Entries that stay on purpose: `np.argmax` / `np.argmin` [O2] (the C# `long` of the no-axis
+call, decision S8), the Generator samplers' scalar and array forms [O2] (a separate pick); the legacy np.random
+samplers' `size=None` was deferred by the owner (re-offered with a clearer example). The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
+**Refresh 2026-11-12 (API-parity batch 6 on `journey5` at `24b3c761`).** Regenerated on the batch's tree: 837 → 860
+NumPy names with NumPy's signature, 469 → 446 to change; O 297 → 276, L 56 → 17, Q 30 → 29, M 184, X 65, B 24, T 21 and
+the 83 absent names unchanged; the coverage artifact's headline with NumPy's exact signature 336 → 351. The owner kept
+the `int` and `int[]` overloads beside every NumPy-axis member (`int?` for a one-integer axis), after a proof that they
+resolve as designed at C# 12 and 14: the gap map counts such a forward as its NDAxis member's spelling, never as an
+overload (`signature_diff.drop_kept_axis_forwards`, the same structural rule in `coverage/signature_parity.py`), and
+the validator now asks NumPy about a B finding that passes several values to a `(*args, **kwargs)`-only signature
+(np.random.ranf / sample forward to `random_sample(size)`: NumPy's own arity TypeError refutes it). Fixed: np.fft.fftshift
+/ ifftshift, np.linalg.norm / vector_norm and np.apply_over_axes take NumPy's int-or-tuple axis; np.fft.fftfreq /
+rfftfreq one integer n; np.base_repr / binary_repr one Python-int (BigInteger) signature; np.logspace / geomspace one
+count type; np.unwrap one signature in NumPy's order (`NDArray period`); dtype.newbyteorder NumPy's str; the legacy
+np.random samplers and BitGenerator.random_raw `Shape? size = null` (their `int[]` / `long[]` / `long` size shims gone);
+random_sample / random / ranf / sample one size, rand loose dimensions only. Not taken: np.broadcast's params form and
+the permutation pair. Entries that stay on purpose: np.nanargmax / nanargmin [O2] and chararray.argmax / argmin [O2]
+(the S8 `long` of the no-axis call), np.geomspace [O2] (its real / complex pair: NumPy's array_like start / stop is a
+separate item). The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
+**Refresh 2026-11-12 (API-parity batch 7 on `journey5` at `adb80352`).** Regenerated on the batch's tree: 860 → 882
+NumPy names with NumPy's signature, 446 → 428 to change; M 184 → 163, X 65 → 57, O 276 → 273, the absent names 83 →
+76 and the NumPy modules with no facade 15 → 14 (np.lib.stride_tricks has one), L 17, Q 29, B 24 and T 21 unchanged;
+the coverage artifact's headline with NumPy's exact signature 351 → 356. New: np.astype (NumPy 2.1's function form),
+np.fromiter (NumPy's `PyArray_FromIter` order and per-dtype item answers), np.fromfunction, np.little_endian and
+np.lib.stride_tricks.sliding_window_view (NumPy's statements over a Shape of x's own buffer window, read-only by
+default). Fixed: np.reshape and the ndarray / matrix / chararray reshape methods take NumPy's `order='C', copy=None`
+(copy=True copies, copy=False refuses a copy with NumPy's ValueError); finfo gains nmant / iexp / nexp / machep /
+negep and NumPy's minexp, tiny and smallest_normal (gaps SU12 / SU14); np.finfo / np.iinfo take one dtype argument and
+read a string as NumPy does, refusing an array with NumPy's texts (SU11 / SU16); np.tensordot's axes are one pair
+(np.linalg.tensordot also the (int, int) pair); np.linalg.multi_dot has one signature; np.unravel_index /
+ravel_multi_index use NumPy's keyword names; numpy.ma's apply_over_axes axes, angle's deg, the creation keywords
+(zeros / ones / empty / identity / the `*_like` family / copy) and argmax / argmin's out / keepdims. Still listed, for
+a later pick: np.finfo / np.iinfo [O4 T◇] (their NDScalarType, string and generic forms beside DType) and the
+ndarray / matrix / chararray reshape methods [O6] / [O4] (their int[] / long[] / span forms). Tooling: the module table names
+np.lib.stride_tricks, the binding probe imports System.Collections (a non-generic `IEnumerable` parameter), the stale
+numpy.astype alias left `coverage/overrides.json`, and `coverage/oracle_map.json` maps the surface oracle's
+sliding_window_view key. The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
+**Refresh 2026-11-12 (API-parity batch 8 on `journey5` at `1844f704`).** Regenerated on the batch's tree: 882 → 937
+NumPy names with NumPy's signature, 428 → 373 to change; M 163 → 111, Q 29 → 3, B 24 → 16, T 21 → 17, X 57 → 54, O 273
+→ 271, L 17 unchanged; np.ma 127 → 99 and np.ma.MaskedArray 29 → 7 to change; the coverage artifact's headline with
+NumPy's exact signature 356 → 361. Fixed: np.zeros / ones / empty / full have NumPy's one signature (`order`, `device`;
+the int[] / long[] and generic `<T>` forms gone, so OD7 is decided for the creation names: the dtype is an argument),
+and a view's Shape is laid out from its dimensions (gap VS01); np.indices and np.tile take one Shape; np.asanyarray
+NumPy's order / copy; numpy.ma: stack / vstack / hstack dtype / casting, reshape order (and the method's copy),
+squeeze / expand_dims tuple axes and `_convert2ma` keywords, the reductions' NDAxis axes and NumPy's out= branches,
+ma.array's and masked_array's NumPy orders with order / ndmin, out= for cumsum / cumprod / take / choose / compress /
+round / around / dot / trace (round's masked out through NumPy's ufunc wraps; around one `_MaskedUnaryOperation` form;
+MaskedArray.choose is ndarray.choose), make_mask / mask_or copy and dtype, make_mask_none dtype, ma.where(condition),
+several-array atleast_*d and MaskedArray.item(*args). Not taken: the file parameter names (OD3 stays open). Entries
+that stay on purpose: the MemoryView forms of np.asarray / asanyarray / ascontiguousarray / asfortranarray [O2],
+np.indices / np.ma.indices `sparse` [M] (np.indices_sparse is the C# form), ma.stack's `out` [M] (NumPy hands the same
+out to the data and mask joins), ma.vstack / hstack's params forms [O2] (the owner's batch-3 call), masked_array's
+required data [B], ma.where's two forms [O2 B] (C# cannot say "both or neither"), and the batch-1 `obj` renames. Found
+at test time: the removed int[] / long[] creation forms were what C# 12 collection expressions bound
+(`np.indices([2, 3])`), a Shape is not a collection type. The fixes are recorded in
+[`api-parameter-parity.md`](api-parameter-parity.md) §7.
+
+**Refresh 2026-11-12 (API-parity batch 9 on `journey5` at `6044d32f`).** Regenerated on the batch's tree: 937 → 995
+NumPy names with NumPy's signature, 373 → 315 to change; M 111 → 49, X 54 → 48, T 17 → 15, Q 3 → 1, B 16 → 15, O 271 →
+272 (ma.row_stack's kept params form, vstack's precedent), L 17 unchanged; np.ma 99 → 43 and np.ma.MaskedArray 7 → 5 to
+change; the coverage artifact's headline (top-level names) unchanged at 361. Fixed: Shape is a C# collection type, so
+`[2, 3]` is NumPy's list shape on every Shape parameter again (batch 8's found item) and a shape enumerates its
+dimensions; the reshape methods of NDArray / `NDArray<T>` / NDMatrix / NDCharArray keep NumPy's `(shape, order, copy)`
+and the loose ints (`NDArray<T>` gained order / copy); np.isdtype / np.issubdtype lost the NDArray forms; np.can_cast
+refuses a Python number (NEP 50; the typed value overloads gone); OD7 removed the generic finfo / iinfo / can_cast;
+np.insert's object forms name `values`; numpy.ma: the 48 ufunc wrappers take out / where / dtype with NumPy's
+`__array_wrap__` semantics for a masked out, sort / argsort kind / order / stable, clip over the masked operand (every
+operand's mask; out / min / max / fill_value / hardmask / dtype), median out / overwrite_input / tuple axes, amax / amin
+= np.amax / np.amin, row_stack dtype / casting, ndenumerate compressed, arange's keywords, the shifts' `n`. Entries that
+stay on purpose: the loose-int reshape forms beside `(shape, order, copy)` [O3] (NumPy's `a.reshape(2, 3)`),
+ma.row_stack's params form [O2], the no-axis ma.argsort / MaskedArray.argsort [O2] (C#'s `axis=<no value>`), ma.arange's
+three numeric forms [O3 L B]. Still listed for a later pick: np.insert [O12], np.finfo / np.iinfo [O3] (NDScalarType and
+string forms beside DType), np.can_cast [O8 M X T] (`from_`, the NPTypeCode / Type forms), np.isdtype [O13] /
+np.issubdtype [O10]. Found on the way: four batch-8 docs named TypeError for the joins' cast refusal, which raises
+InvalidCastException (the house mapping). The fixes are recorded in [`api-parameter-parity.md`](api-parameter-parity.md)
+§7.
+
+**Refresh 2026-11-13 (API-parity batch 10 on `journey5` at `c2796bd9`).** Regenerated on the batch's tree: 995 → 997
+NumPy names with NumPy's signature, 315 → 313 to change; O 272 → 270, every other mark unchanged; the coverage
+artifact's headline 361 → 363. Fixed: np.require is one signature (`IEnumerable requirements`: a string by character,
+any sequence by name; NumPy's KeyError / AttributeError), np.geomspace takes NumPy's array_like ends (one
+`TensorEngine.Geomspace(NDArray, NDArray, ...)` member). The owner's rule from this round: a one-signature fix keeps
+TYPED parameters - collapsing np.finfo / np.iinfo / np.can_cast / np.issubdtype / np.isdtype / np.dtype into one
+`object` parameter was turned down ("object are not good idea, user will never know what he can send"), so those
+entries wait for a typed design (a carrier like NDAxis, or the typed overloads recorded as staying). Not taken:
+np.result_type's `params object[]`, ma.default_fill_value's object form, ma.fromfunction; deferred: np.strings add /
+multiply, the random choice / dirichlet / multinomial / size-less sampler twins, numpy.matrix's one signatures.
+
+**Refresh 2026-11-13 (API-parity batch 11 on `journey5` at `d752ad27`).** Regenerated on the batch's tree: 997 → 1023
+NumPy names with NumPy's signature, 313 → 287 to change; O 270 → 249, M 49 → 44, every other mark unchanged; the
+coverage artifact's headline 363 → 366. Fixed: np.intersect1d is one signature returning `np.Intersect1dResult`;
+np.ma.unique keeps only its typed `UniqueResult` form; np.ma.mask_rows / mask_cols take NumPy's ignored axis; the
+polynomial facades are typed (`{p}pow(c, int, int?)`, `{p}trim(c, double)`, `trimcoef(c, double)`, `{p}vander(x,
+int)`), their computations keeping NumPy's any-value statements; np.average / np.ma.average gained `returned`
+(`np.AverageResult` / `MaskedArrayModule.AverageResult`) and np.indices `sparse` (`np.IndicesResult`), so
+average_returned and indices_sparse went. The owner's decisions from this round: the dtype functions (np.finfo /
+np.iinfo / np.can_cast / np.issubdtype / np.isdtype / np.dtype / np.result_type) STAY as they are ("Keep as is"), so
+their [O] / [T] entries are on purpose; NumPy's flag-dependent returns become result structs; the polynomial facades
+take typed parameters only. Not taken: np.frombuffer's NPTypeCode / string dtype twins.
+
+**Refresh 2026-11-13 (API-parity batch 12 on `journey5` at `cc8fe6a4`).** Regenerated on the batch's tree: 1310 → 1315
+NumPy names with a C# spelling, 1023 → 1029 with NumPy's signature, 287 → 286 to change; M 44 → 43, B 15 → 13, Q 1 → 3
+(as_strided's and the chararray constructor's `long[] strides`, np.NDIterator's `itershape` / `op_axes` refuse an
+`int[]`), O 249 unchanged (np.interp and np.append went to one signature; np.row_stack [O3] and the chararray
+constructor [O2] joined with their kept forms), X 48, T 15 and L 17 unchanged; the absent names 76 → 69; the coverage
+artifact's headline 366 → 368 (all NumPy APIs 70.1% → 70.3%). Fixed: np.interp's fills are `NDArray` Python objects
+the loops convert as NumPy's do; np.append has one signature and appends a C# number as NumPy's array of the Python
+number (int64 for `np.append(int32_array, 5)`); new np.lib.stride_tricks.as_strided (byte strides, refused outside the
+buffer), np.row_stack, np.vstack / np.row_stack over `NDListArray`, the masked array's `@base` / `device` /
+`to_device` / `getfield` / `setfield`, and NumPy's class constructors for np.NDIndex (`params long[]`), np.NDIterator
+(NumPy's defaults) and NDCharArray (chararray's parameters). The owner's decisions from this round: np.histogram /
+np.histogram_bin_edges keep their four `bins` forms ("C keep four"), so their [O4] entries stay on purpose; the
+`NDListArray` vstack form stays beside vstack's two ("support that too"). Found by the validation and pinned in
+`OpenBugs.ApiParity.cs`: `np.array("x")` is an unmarked 0-d array (a NumPy scalar to NumSharp), and np.concatenate
+reports a later 0-d array with the 0-d text where NumPy reports the rank mismatch.
+
+**Refresh 2026-11-13 (API-parity batch 13 on `journey5` at `dc78dad7`).** Regenerated on the batch's tree: 1315 → 1336
+NumPy names with a C# spelling, 1029 → 1047 with NumPy's signature, 286 → 289 to change (the two new modules bring
+their own entries); O 249 → 250, M 43 → 44, X 48 → 47, L 17 → 16, B 13 → 12, T 15 and Q 3 unchanged; the absent names
+69 → 63; the public modules with no facade 14 → 12 (138 → 115 names: np.lib.array_utils and np.lib.format have theirs).
+The coverage artifact does not move (headline 539 / 560, 368 exact; all NumPy APIs 2742 / 3902, 70.3%): it leaves
+every `numpy.lib` row out by the owner's dashboard rule. Fixed: `np.array(string)` is an explicit array;
+np.concatenate checks the first array for 0-d, then each rank; np.delete / np.insert keep NumPy's Slice and NDArray
+forms plus one `long obj` form (a C# int converts to Slice and NDArray alike, CS0121 without it), insert's values an
+NDArray; `new np.Broadcast(params NDArray[])` is public (NumPy's class call; no operand is the 0-d broadcast), with
+np.broadcast over `NDListArray`; NpzFile carries NumPy's names; new np.lib.array_utils and np.lib.format;
+np.ma.MaskedArray; np.arange's NumPy signature (`NDArray start / stop / step`, `PyArray_ArangeObj` over the arguments'
+own arithmetic) beside the kept overloads, whose float forms are NumPy's float64 (QB02) and which gained `ulong`
+forms; NumPy's repeat / item ValueErrors (QB03, QB04); NDArray.Normalize and AxisOutOfRangeException deleted; Shape
+dims for np.unravel_index / np.ravel_multi_index, long[] in the engines (QB56). The owner's decisions from this round:
+np.arange keeps its existing overloads ("but keep existing overloads"), so its [O14] entry is on purpose; np.broadcast
+takes NDListArray too ("Also NDListArray"); NpzFile's members are NumPy's lower-case names. Not taken: np.where without
+its object forms, np.save without its Array form. Left deliberately in the list: np.delete / np.insert [O3] (the C#
+integer form), np.broadcast [O3], np.lib.format read_array / write_array and NpzFile's `pickle_kwargs` [M] (no Python
+unpickler keywords), np.ma.MaskedArray [B] (masked_array's required data and the excluded `subok` slot). Pinned:
+NumPy's integer setitem range-checks a NumPy scalar element np.arange stores (stage S3).
+
 ---
 
 ## Contents
@@ -223,7 +409,7 @@ int64 -> float64). **Target.** One overload per name with NumPy's signature.
 | pattern | example | collapse to |
 |---|---|---|
 | shape spelled as `int`, `int[]`, `long[]`, `params`, `Shape` | `np.empty` 8, `np.zeros` 8, `np.ones` 8, `reshape` 4–6 | one `Shape` parameter: `Shape` converts implicitly from `int`, `long`, `int[]`, `long[]` and 2- to 6-element tuples |
-| one overload per C# scalar type | `np.arange` 11, `np.linspace` 4, `np.insert` 12, `np.pad` 10 | one overload over `NDArray` / `object` / the widest type; a value's C# type still decides the dtype where NumPy's Python type does (decision OD2) |
+| one overload per C# scalar type | `np.arange` 11, `np.insert` 12, `np.pad` 10 (`np.linspace`'s 4 became one `NDArray` overload plus NumPy's whole `object` signature, plan D3) | one overload over `NDArray` / `object` / the widest type; a value's C# type still decides the dtype where NumPy's Python type does (decision OD2) |
 | one overload per C# input array type | `np.array` 33, `np.asarray` 7, `np.frombuffer` 18 | one array_like parameter (decision OD2) |
 | dtype spelled as `NPTypeCode`, `Type`, `DType`, generic `<T>` | `np.can_cast` 20, `np.isdtype` 15, `np.issubdtype` 11, `np.result_type` 8 | one `DType` (AD6, AD7) |
 | axis spelled as `int`, `int?`, `int[]` | `np.all` 6, `np.any` 6, `np.sum` 7, `np.mean` 5 | one axis type (decision OD1; AD9, AD10) |
@@ -362,9 +548,9 @@ result's shape (it is never broadcast); the result is cast into `out` under NumP
 
 | name | missing | note |
 |---|---|---|
-| `np.linspace` | `retstep`, `axis` | plan D3: one result type for NumPy's array-or-tuple return |
-| `np.average`, `np.ma.average` | `returned` | B10: `np.average_returned` exists as a separate NumSharp name; NumPy's form is one function |
-| `np.indices`, `np.ma.indices` | `sparse` | plan D4: `np.indices_sparse` exists separately |
+| `np.linspace` | (done) | plan D3: `retstep` and `axis` exist; `retstep` binds NumPy's whole signature over `object` ends, which returns `np.LinspaceResult` |
+| `np.average`, `np.ma.average` | (done) | API-parity batch 11: NumPy's `returned`, the result `np.AverageResult` / `MaskedArrayModule.AverageResult` (`average_returned` went) |
+| `np.indices`, `np.ma.indices` | (done for `np.indices`) | API-parity batch 11: NumPy's `sparse`, the result `np.IndicesResult` (`indices_sparse` went); `np.ma.indices` has none (NumPy's own `sparse=True` raises `'tuple' object has no attribute 'view'`) |
 | `np.vectorize` | `doc`, `excluded`, `cache` | H2 |
 | `np.array2string`, `np.printoptions`, `np.set_printoptions` | `formatter`, `legacy` (+ `override_repr` for the last two) | H1 |
 | `np.frompyfunc` | `identity` | read from NumPy's stub |
@@ -487,8 +673,8 @@ values at NumPy's `*args` (`a.transpose(1, 0)`) and the call without a parameter
 - `empty_like`, `full_like`, `ones_like`, `zeros_like`: `order` needs `dtype`. NumPy:
   `empty_like(prototype, /, dtype=None, order='K', subok=True, shape=None, *, device=None)` (plan D2; `subok`
   excluded).
-- `linspace`: the required-only call `np.linspace(start, stop)` does not compile (C# requires `num`). NumPy:
-  `linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0, *, device=None)` (plan D3).
+- `linspace`: fixed by plan D3 (`num` defaults to 50; `np.linspace(start, stop)` compiles). NumPy:
+  `linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0, *, device=None)`.
 - `mean`: `dtype` needs `axis` (B3).
 - `nanmean`, `nanstd`, `nanvar`, `std`, `var`: NumPy's positional `(a, axis, dtype)` fails (C# puts `keepdims` at
   slot 2 or 3). NumPy: `std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=<no value>, *, where=<no value>,
@@ -564,7 +750,8 @@ values at NumPy's `*args` (`a.transpose(1, 0)`) and the call without a parameter
 - `density` (a `bool`): `np.histogram`, `np.histogram2d`, `np.histogramdd`;
 - `stop` (a `double` / `int`): `np.arange`, `np.ma.arange` (with AD8's single overload).
 
-**AD9b: `int?` against `int[]` (L ●, plan G4).** Two overloads take `null` equally well (CS0121): `np.average`,
+**AD9b: `int?` against `int[]` (L ●, plan G4; fixed 2026-11-12 by API-parity batch 4, the `NDAxis` signatures).** Two
+overloads take `null` equally well (CS0121): `np.average`,
 `np.flip`, `np.median`, `np.nanmedian`, `np.percentile`, `np.nanpercentile`, `np.quantile`, `np.nanquantile`,
 `np.ptp`; together with other None values: `np.trim_zeros(a, trim, axis: null)`, `np.linalg.norm(a, ord: null, axis:
 null)`. The fix is one axis parameter type that takes an int, a sequence and `null` (decision OD1), which also closes
@@ -720,13 +907,13 @@ void dtype; [`dtype-system.md`](dtype-system.md)).
 
 ## 7. NumPy modules without a facade
 
-15 public modules (the coverage tool's list, which follows NumPy's `test_public_api.py`) have no `[ModuleName]` type:
+15 public modules (the coverage tool's list, which follows NumPy's `test_public_api.py`) had no `[ModuleName]` type when the map was first drawn; the three marked **Done** have one now:
 
 | module | names | action |
 |---|---|---|
-| `np.lib.stride_tricks` | `as_strided`, `sliding_window_view` | **Implement**: both are views (`Shape` with given strides; a windowed view with a stride-0-free layout); much used |
-| `np.lib.array_utils` | `byte_bounds`, `normalize_axis_index`, `normalize_axis_tuple` | **Expose**: the axis normalization exists internally (the `normalize_axis` port, plan X36); `byte_bounds` from `Shape` |
-| `np.lib.format` | `ARRAY_ALIGN`, `BUFFER_SIZE`, `EXPECTED_KEYS`, `GROWTH_AXIS_MAX_DIGITS`, `MAGIC_LEN`, `MAGIC_PREFIX`, `descr_to_dtype`, `drop_metadata`, `dtype_to_descr`, `header_data_from_array_1_0`, `isfileobj`, `magic`, `open_memmap`, `read_array`, `read_array_header_1_0`, `read_array_header_2_0`, `read_magic`, `write_array`, `write_array_header_1_0`, `write_array_header_2_0` | **Expose**: `IO.NpyFormat` implements them in PascalCase (`ReadArray`, `WriteArray`, `OpenMemmap`, ...; the NumPy-name audit lists them); NumPy's `__all__` is empty, but the module's documented API is these names |
+| `np.lib.stride_tricks` | `as_strided`, `sliding_window_view` | **Done** (`sliding_window_view` in batch 7, `as_strided` in batch 12) |
+| `np.lib.array_utils` | `byte_bounds`, `normalize_axis_index`, `normalize_axis_tuple` | **Done** (API-parity batch 13: `APIs/np.lib.array_utils.cs`, over `Shape`'s axis ports) |
+| `np.lib.format` | `ARRAY_ALIGN`, `BUFFER_SIZE`, `EXPECTED_KEYS`, `GROWTH_AXIS_MAX_DIGITS`, `MAGIC_LEN`, `MAGIC_PREFIX`, `descr_to_dtype`, `drop_metadata`, `dtype_to_descr`, `header_data_from_array_1_0`, `isfileobj`, `magic`, `open_memmap`, `read_array`, `read_array_header_1_0`, `read_array_header_2_0`, `read_magic`, `write_array`, `write_array_header_1_0`, `write_array_header_2_0` | **Done** (API-parity batch 13: `APIs/np.lib.format.cs` over `IO.NpyFormat`); not offered: `open_memmap` (no `np.memmap`) and `isfileobj` (a CPython file-object test) |
 | `np.exceptions` | `AxisError`, `ComplexWarning`, `DTypePromotionError`, `ModuleDeprecationWarning`, `TooHardError`, `VisibleDeprecationWarning` | **Expose** the exceptions that exist (`AxisError`, `TooHardError`, the dtype promotion error); the three warnings: N/A (no warnings model); decision OD9 |
 | `np.version` | `full_version`, `git_revision`, `release`, `short_version`, `version` | **Decide** with `np.__version__` (OD9) |
 | `np.rec` | `array`, `find_duplicate`, `format_parser`, `fromarrays`, `fromfile`, `fromrecords`, `fromstring`, `recarray`, `record` | **Structured** |
@@ -744,13 +931,13 @@ void dtype; [`dtype-system.md`](dtype-system.md)).
 
 | id | question | options | affects |
 |---|---|---|---|
-| **OD1** | The axis parameter type (NumPy: `int`, a tuple of ints, or None) | (a) an axis type with implicit conversions from `int`, `int[]`, C# tuples and `null` (a class so `null` binds; or a `struct?`, probe that `axis: 0` and `axis: null` both bind); (b) `object axis`; (c) keep `int?` and add a second parameter (breaks NumPy's one signature) | AD1 (all axis overloads), AD9b, AD10, plan G4, B1–B8 |
+| **OD1** | The axis parameter type (NumPy: `int`, a tuple of ints, or None) | **DECIDED 2026-11-11 (API-parity batch 3): (a)**, a `readonly struct NDAxis` taken as `NDAxis? axis = null`, with implicit conversions from `int`, `int[]`, `(int, int)` and `(int, int, int)`; probed at C# 12 / net8.0 (`np.sum(a)`, `(a, null)`, `axis: -1`, `(0, 1)`, `new[] {0, 1}`, an `int` and an `int?` variable all bind; a float axis is refused). Rejected: (b) `object axis`; (c) `int?` plus an `int[]` overload. **IMPLEMENTED 2026-11-12 (API-parity batch 4)**: `src/NumSharp.Core/View/NDAxis.cs`, with public constructors beside the conversions (the owner's call), an `int[]` → `NDAxis?` conversion that keeps a null array as None, and `default(NDAxis)` the empty tuple; adopted by flip, expand_dims, moveaxis, squeeze, all / any, count_nonzero, ptp, the median and quantile families, average, trim_zeros, size and gradient (the reductions `sum` … `var` and `roll` follow). | AD1 (all axis overloads), AD9b, AD10, plan G4, B1–B8 |
 | **OD2** | array_like / scalar parameters (NumPy takes lists, tuples, scalars, arrays) | (a) `NDArray` (C# arrays and scalars convert implicitly; Python-style nested lists do not); (b) `object` + NumPy's coercion (the polynomial package's `PolySequence` model: nested `object[]`, `ITuple`, typed collections, NEP 50 kinds); per parameter | AD1 (`np.array` 33, `np.asarray`, `np.arange`, `insert`, `pad`, ...), AD5 kind 2 |
 | **OD3** | file parameters (NumPy takes a path or a file-like object) | one `object file` parameter that dispatches on `string` / `Stream` / `TextReader` / `TextWriter` / `byte[]`; or keep typed overloads as a documented exception | `np.load`, `np.loadtxt`, `np.savetxt`, `np.save`, `np.savez`, `np.savez_compressed`, `np.fromfile`, `ndarray.tofile` |
-| **OD4** | `size=None` of the samplers | (a) keep `Shape size = default` (documented idiom; `null` refused); (b) `Shape? size = null` everywhere (every spelling binds) | AD9d (73 names), AD9e, AD1 for `np.random` |
+| **OD4** | `size=None` of the samplers | **DECIDED 2026-11-12 (API-parity batch 4): (b)** `Shape? size = null` everywhere: probed at C# 12 / net8.0 (scratchpad `probe_od4`), `normal()`, `normal(0, 1, null)`, `size: null`, `size: 5`, a positional `5`, `size: (2, 3)`, `size: new[] {2, 3}`, `int` / `int[]` variables, a `Shape`, `5L` and `new Shape(new long[0])` (NumPy's `size=()`, a 0-d result, distinct from None) all bind. Rejected: (a) the `Shape size = default` idiom. The samplers adopt it in the np.random batch. | AD9d (73 names), AD9e, AD1 for `np.random` |
 | **OD5** | NumSharp-only API (typed accessors, `GetData<T>`, `CopyTo`, `Get*/Set*`, interop overloads, `np.evaluate`, `np.multithreading`, ...) | keep as NumSharp extensions (outside the one-signature rule, which speaks of NumPy functions), rename to make the extension visible, or remove | Appendix C, AD5 kind 2, AD7 |
 | **OD6** | constructors (`new NDArray(...)`, `new NDArray<T>(...)`, `new DType(...)`, engine and `SeedSequence` constructors) | (a) must mirror NumPy's class call (`ndarray(shape, dtype, buffer, offset, strides, order)`, `dtype(dtype, align, copy, metadata)`); (b) the factories (`np.ndarray`, `np.dtype`, `np.random.PCG64`, ...) are the NumPy spelling and the constructors stay C# API | AD2 slots, AD3e, AD8, AD6 |
-| **OD7** | generic typed forms of NumPy names (`np.zeros<T>`, `ndarray.item<T>`, `np.nditer<T>`, `np.ndenumerate<T>`) | remove (the max/min family's precedent) or keep the iterator / accessor forms as NumSharp extensions | AD7, AD1 |
+| **OD7** | generic typed forms of NumPy names (`np.zeros<T>`, `ndarray.item<T>`, `np.nditer<T>`, `np.ndenumerate<T>`) | remove (the max/min family's precedent) or keep the iterator / accessor forms as NumSharp extensions. **DECIDED 2026-11-12 for the creation names (API-parity batch 8): removed** — `np.zeros<T>` / `ones<T>` / `empty<T>` / `full<T>` are gone, the dtype is an argument. **DECIDED 2026-11-12 for `np.finfo<T>` / `np.iinfo<T>` / `np.can_cast<TFrom, TTo>` (API-parity batch 9): removed** — a C# type is one argument away (`np.finfo(typeof(T))`, DType converts from Type). The accessor and iterator forms stay open | AD7, AD1 |
 | **OD8** | the seed parameter (NumPy: None, an int, a sequence of ints, `SeedSequence`, `BitGenerator`) | one `object seed = null` with NumPy's conversion rules (the random-API oracle pins them), or a seed type with implicit conversions | AD9c, AD1 (`np.random`, the engines) |
 | **OD9** | exposing types and constants under NumPy's module paths (`np.exceptions`, `np.linalg.LinAlgError`, `np.ma.MaskedArray` / `MaskError`, `np.random.BitGenerator`, `np.flatiter`, `np.version`, `np.__version__`) | nested types / static members on the facades, or documentation only | §6, §7 |
 | **OD10** | which absent names to implement (§6 Implement / Decide rows: `ufunc` objects, FP error state, DLPack, `memmap`, `fromiter`, stride tricks) | per row | §6, §7 |
@@ -763,7 +950,7 @@ void dtype; [`dtype-system.md`](dtype-system.md)).
    `np.fromfunction` / `np.poly1d` exposure; `np.ma.masked_array()` and `SeedSequence` optional first parameters
    (AD8).
 2. **Creation family**, after OD2 / OD6: `np.empty` / `zeros` / `ones` / `full` and the `*_like` functions (AD1,
-   AD3e, AD8: one signature each, plan D1 / D2), `np.linspace` (plan D3), `np.arange`, `ndarray.astype` (plan G2).
+   AD3e, AD8: one signature each, plan D1 / D2), `np.arange`, `ndarray.astype` (plan G2); `np.linspace` (plan D3) is done.
 3. **Reductions**, after OD1: one signature with NumPy's keywords and tuple axes for `sum`, `prod`, `mean`, `std`,
    `var`, the nan family, `count_nonzero`, the percentile family, `average`, `ptp`, `flip`, `squeeze`, `roll`
    (AD1, AD3b, AD8, AD9b, AD10; plan B1–B11, G4). The largest package; do it as one design with its oracle tiers.
@@ -788,10 +975,24 @@ python -I binding_probe.py <s>/modules_dump.json <s>/types_dump.json \
 python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signature-diff.md \
     ../../docs/plans/numpy-signature-diff.csv ../../docs/plans/numpy-signature-marks.md \
     --types <s>/types_dump.json --probe <s>/probe_results.json
+python -I validate_findings.py <s>/modules_dump.json <s>/types_dump.json \
+    ../../src/NumSharp.Core/bin/Debug/net10.0/NumSharp.dll ../../docs/plans/numpy-signature-diff.csv \
+    <s>/probe_results.json <s>/validation <s>/validation.json
+python -I parity_diff.py <s>/modules_dump.json <s>/types_dump.json ../../docs/plans/numpy-signature-diff.csv \
+    <s>/validation.json ../../docs/plans/API_PARITY_DIFF.md --coverage <coverage dir>/coverage.json --commit <sha>
 ```
 
 - `dump_modules.cs` compiles the working tree (Debug), and the probe references that DLL: run them in this order after
   every change to a public signature. `--no-cache` matters: a file-based app otherwise reuses its cached build.
+- `validate_findings.py` asks each finding's ground truth (about 2 minutes): the compiler compiles every M parameter
+  by name on the name's base call (CS1739 confirms it) and `nameof` of every absent name (CS0117 / CS1061 confirm it),
+  and lists compile-probe failures that are artifacts of the probe file (CS0246 and the like); NumPy is called with
+  `None` placeholders and one keyword (an M keyword must be accepted, an X keyword refused; a control keyword first
+  proves the call reaches NumPy's keyword check) and with real operands for Q (a tuple) and L (None). Its `refuted`
+  lists are what `parity_diff.py` leaves out of the change list; the CSV and the coverage inventory keep the raw marks.
+- `parity_diff.py` writes the change list: one `diff` block per API (`-` what must go, `+` what must come, NumPy's
+  signature and the kept overload as context), the absent names, the modules without a facade, the coverage artifact's
+  census of what else is missing (`--coverage`) and the refuted findings.
 - The last command prints the totals (the `numpy`, `M`, `X`, `O`, `T`, `B`, `L`, `Q`, `no_mark` counts). A fix must
   lower the counts it targets and raise none.
 - A fixed name: its row in `numpy-signature-marks.md` has no mark and an empty *compile probe* cell.
@@ -829,6 +1030,20 @@ python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signatu
 - **NumPy's side** is the documented signature for ndarray methods (their C forwarding accepts some keywords
   positionally that the documentation makes keyword-only), the stubs where the runtime signature forwards
   `(*args, **kwargs)`, and the wrapped callable for numpy.ma's ufunc wrappers.
+- **That reading can be wrong, so `validate_findings.py` checks it against NumPy itself** (refresh of 2026-11-09):
+  NumPy 2.4.2's stubs promise `ndarray.std(correction=...)` / `ndarray.var(correction=...)`, which the methods refuse
+  (`_std() got an unexpected keyword argument 'correction'`; only `np.std` / `np.var` take it); the docstring writes
+  `ndarray.setfield(val, dtype, offset=0)` where the runtime keyword is `value` (so NumSharp's `value` is right, and
+  neither the M nor the X of that name holds); and the stubs promise a tuple `axis` for `np.ma.compress`,
+  `MaskedArray.compress`, `matrix.argmax`, `matrix.argmin` and `matrix.ptp`, which the runtime refuses ("'tuple' object
+  cannot be interpreted as an integer", "unsupported axis").
+- **An own-members group reads only the class's own members.** For `NDMatrix` and `NDArray<T>` the M mark is about
+  the class's own overloads; C# also binds what the class inherits from `NDArray`, so `mx.cumsum(out: o)` compiles and
+  reaches `NDArray.cumsum`, not `NDMatrix.cumsum` (9 NDMatrix names and `NDArray<T>.reshape(order:)`, listed as refuted:
+  the fix is still the class's own member taking the parameter).
+- **The probe file is code too.** Until 2026-11-09 it had no `using NumSharp.Backends;`, so a probe value of type
+  `UnmanagedStorage` (the storage parameter of the `NDMatrix` and `NDCharArray` constructors) failed with CS0246 and
+  read as a B mark; `validate_findings.py` lists any such artifact.
 - **`numpy.testing` and deprecated NumPy 1.x APIs** are out of scope by the coverage policy (§7).
 
 ## Appendix A: counts per group

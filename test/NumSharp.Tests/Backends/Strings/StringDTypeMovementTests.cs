@@ -653,9 +653,11 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>view</c>: the array's own descriptor, or an EQUAL one, is a view that keeps reading through the array's
-        ///     allocator (NumPy 2.4.2 reads an equal instance's cells through that instance's empty allocator, so its arena
-        ///     strings read ''); any other dtype, in either direction, is NumPy's reference refusal.
+        ///     <c>view</c>: only the array's own descriptor object is a view, which keeps reading through the array's
+        ///     allocator — NumPy 2.5's <c>_view_is_safe</c>, where a StringDType view needs the two descriptors to share an
+        ///     allocator, so an EQUAL but separate instance (<c>StringDType()</c>, <c>np.dtype("T")</c>) is refused too (NumPy
+        ///     2.4 viewed it through that instance's empty allocator, so its arena strings read ''); any other dtype, in
+        ///     either direction, is NumPy's reference refusal.
         /// </summary>
         [TestMethod]
         public void View_OwnDescriptorOnly()
@@ -666,8 +668,10 @@ namespace NumSharp.Tests.Backends.Strings
                 np.shares_memory(same, a).Should().BeTrue();
                 V(same).Should().Equal(new object[] { L('a'), "b" });
             }
-            using (var equal = a.view(np.dtypes.StringDType()))
-                V(equal).Should().Equal(new object[] { L('a'), "b" });
+            Action equal = () => a.view(np.dtypes.StringDType());
+            equal.Should().Throw<TypeError>().WithMessage("Cannot change data-type for array of references.");
+            Action fromText = () => a.view(np.dtype("T"));
+            fromText.Should().Throw<TypeError>().WithMessage("Cannot change data-type for array of references.");
             Action otherNA = () => a.view(TN);
             otherNA.Should().Throw<TypeError>().WithMessage("Cannot change data-type for array of references.");
             Action toU = () => a.view(np.dtype("U4"));
@@ -916,8 +920,8 @@ namespace NumSharp.Tests.Backends.Strings
         public void Astype_NoCopy_OnlyForTheSameDescriptor()
         {
             using var t = A("a", L('b'));
-            ReferenceEquals(t.astype(t.dtype, false), t).Should().BeTrue();
-            using var copy = t.astype(T, false);
+            ReferenceEquals(t.astype(t.dtype, copy: false), t).Should().BeTrue();
+            using var copy = t.astype(T, copy: false);
             ReferenceEquals(copy, t).Should().BeFalse();
             copy.Storage.VStringSlice.Allocator.Should().NotBeSameAs(t.Storage.VStringSlice.Allocator);
         }
@@ -952,59 +956,43 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>ndarray.byteswap</c> over <c>StringDType</c> is the identity (owner's decision D14): a cell has no byte order.
-        ///     NumPy 2.4.2 crashes the process on this call (a segmentation fault after its writeable check), so the expected
-        ///     values are NumPy's own steps before the crash: <c>inplace=False</c> is <c>PyArray_NewCopy(self, ANYORDER)</c> —
-        ///     a copy with the same texts and NA values in its own allocator, F-ordered only for an F-contiguous-and-not-C
-        ///     source — and <c>inplace=True</c> passes the writeable check (NumPy's text for a read-only array) and returns the
-        ///     array itself with its cells unchanged.
+        ///     <c>ndarray.byteswap</c> over <c>StringDType</c> is NumPy 2.5.4's TypeError: a cell has no byte order and NumPy
+        ///     leaves the class's <c>copyswapn</c> NULL, so <c>PyArray_Byteswap</c> raises <c>dtype StringDType() does not
+        ///     implement copyswap</c> (the descriptor's <c>str()</c>, NA object included) before it copies anything — for a
+        ///     copy, in place, F-ordered, strided, 0-d or empty alike. In place, NumPy's writeable check comes first, so a
+        ///     read-only array raises its ValueError. NumPy 2.4 crashed the process on every one of these calls, and NumSharp
+        ///     answered the identity swap then (the owner's decision D14).
         /// </summary>
         [TestMethod]
-        public void Byteswap_IsTheIdentity()
+        public void Byteswap_RaisesNumPysMissingCopyswap()
         {
+            const string missing = " does not implement copyswap";
             using var a = np.array(new object[] { "a", L('x'), null, "\U0001F600é" }, TN);
-            using (var copy = a.byteswap())
-            {
-                V(copy).Should().Equal(new object[] { "a", L('x'), null, "\U0001F600é" });
-                copy.dtype.Should().Be(a.dtype);
-                ReferenceEquals(copy, a).Should().BeFalse();
-                // A copy: a store into it leaves the source alone (the arena string was duplicated, not shared).
-                copy[1] = "changed";
-                V(a)[1].Should().Be(L('x'));
-            }
-
-            // inplace: the same instance, every cell as it was (the cells' raw bytes are compared, offsets included).
             var before = a.tobytes();
-            a.byteswap(inplace: true).Should().BeSameAs(a);
-            a.tobytes().Should().Equal(before);
+            foreach (var inplace in new[] { false, true })
+            {
+                Action swap = () => a.byteswap(inplace);
+                swap.Should().Throw<TypeError>().Which.Message.Should().Be("dtype StringDType(na_object=None)" + missing);
+            }
+            a.tobytes().Should().Equal(before, "nothing was swapped or copied");
 
-            // ANYORDER: an F-contiguous-and-not-C source gives an F-ordered copy; a C one, or a strided view, a C copy.
             using var m = np.array(new[,] { { "p", L('q') }, { "r", "s" } }, T);
-            using (var f = m.T.byteswap())
-            {
-                f.Shape.IsFContiguous.Should().BeTrue();
-                f.Shape.IsContiguous.Should().BeFalse();
-                V(f).Should().Equal(new object[] { "p", "r", L('q'), "s" });
-            }
-            using (var s = m[":, ::-1"].byteswap())
-            {
-                s.Shape.IsContiguous.Should().BeTrue();
-                V(s).Should().Equal(new object[] { L('q'), "p", "s", "r" });
-            }
-
-            // A read-only array: the copy is fine, the in-place call raises NumPy's text (its check runs before the swap).
-            using var ro = np.broadcast_to(A("z", L('w')), new Shape(2, 2));
-            using (var c = ro.byteswap())
-            {
-                c.Shape.IsWriteable.Should().BeTrue();
-                V(c).Should().Equal(new object[] { "z", L('w'), "z", L('w') });
-            }
-            Action inplace = () => ro.byteswap(inplace: true);
-            inplace.Should().Throw<ValueError>().WithMessage("array to be byte-swapped is read-only");
-
+            using var mt = m.T;
+            using var stepped = m[":, ::-1"];
+            using var zero = np.array("z", T);
             using var empty = np.array(new string[0], T);
-            using (var e = empty.byteswap())
-                e.size.Should().Be(0);
+            foreach (var x in new[] { m, mt, stepped, zero, empty })
+            {
+                Action swap = () => x.byteswap();
+                swap.Should().Throw<TypeError>().Which.Message.Should().Be("dtype StringDType()" + missing);
+            }
+
+            // A read-only array: in place, NumPy's writeable check runs first; a copy reaches the missing slot.
+            using var ro = np.broadcast_to(A("z", L('w')), new Shape(2, 2));
+            Action inplaceRo = () => ro.byteswap(inplace: true);
+            inplaceRo.Should().Throw<ValueError>().WithMessage("array to be byte-swapped is read-only");
+            Action copyRo = () => ro.byteswap();
+            copyRo.Should().Throw<TypeError>().Which.Message.Should().Be("dtype StringDType()" + missing);
         }
     }
 }

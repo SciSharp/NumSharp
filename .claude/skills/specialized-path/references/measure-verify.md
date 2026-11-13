@@ -326,7 +326,7 @@ error type and text, partial-write behaviour) to the general path on the subset.
    dotnet test --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory"   # the whole suite, CI filter
    dotnet build src/NumSharp.Core -c Release -f net8.0     # both targets; the NDW analyzer runs here
    ```
-   plus a differential sweep vs NumPy 2.4.2 across shapes × dtypes × layouts (contiguous, F-contig,
+   plus a differential sweep vs the pinned NumPy (2.5.4) across shapes × dtypes × layouts (contiguous, F-contig,
    transposed, negative-stride, strided, and the FALLBACK path). Small-K should show `err=0.0`
    (byte-exact); larger machine-eps (tolerance). See the **`oracle`** skill for the corpus + OpRegistry.
 8. **A reorder is only safe if unpinned — VERIFY, don't assume.** If FuzzMatrix goes red, the pinned

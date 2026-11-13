@@ -131,7 +131,7 @@ namespace NumSharp.Backends
             if (Strings.NDStringUfuncs.IsVString(nd))
                 throw decimals == 0 ? Strings.NDStringUfuncs.UnaryError("rint", nd, typeCode)
                     : Strings.NDStringUfuncs.VStringNoLoop(decimals > 0 ? "multiply" : "divide",
-                        new[] { nd.dtype.Meta.ToString(), DTypeRegistry.PyFloat.ToString() });
+                        new object[] { nd.dtype.Meta, DTypeRegistry.PyFloat });
             if (Strings.NDStringUfuncs.IsString(nd))
                 throw decimals == 0 ? Strings.NDStringUfuncs.UnaryError("rint", nd, typeCode)
                     : decimals > 0 ? Strings.NDStringUfuncs.NoLoop("multiply", nd.dtype, np.float64)
@@ -157,8 +157,7 @@ namespace NumSharp.Backends
             // a float64 that fails the same_kind cast back to bool. Reproduced verbatim (probed 2.4.2). A dtype
             // override escapes this (the caller asked for a float/complex loop), so it is gated on !typeCode.
             if (inputType == NPTypeCode.Boolean && !typeCode.HasValue)
-                throw new TypeError(
-                    $"Cannot cast ufunc '{op1Name}' output from dtype('float64') to dtype('bool') with casting rule 'same_kind'");
+                throw new UFuncOutputCastingError(op1Name, 1, "same_kind", DType.Double, DType.Boolean, 2);
 
             // Integer/char with POSITIVE decimals is an IDENTITY (no fractional part to remove, and — unlike the
             // negative branch — no float round-trip, so a huge int64 is returned untouched). Preserves the integer
@@ -225,6 +224,10 @@ namespace NumSharp.Backends
             }
         }
 
+        /// <summary>The exact table of <see cref="PowerOfTen"/> for <c>n &lt; 9</c>: each entry a power of ten that is
+        /// exactly representable in double, as NumPy's <c>p10[]</c>.</summary>
+        private static readonly double[] s_powerOfTen = { 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8 };
+
         /// <summary>
         /// NumPy's <c>power_of_ten</c> (<c>calculation.c</c>): an EXACT small table for <c>n &lt; 9</c> (each entry a
         /// power of ten that is exactly representable in double), else <c>1e9</c> multiplied by ten <c>(n-9)</c> more
@@ -233,10 +236,12 @@ namespace NumSharp.Backends
         /// <c>n ≥ 309</c> (10^309 already overflows double, and this both matches NumPy's eventual infinity AND
         /// avoids a multi-billion-iteration loop when the magnitude is <see cref="int.MaxValue"/>).
         /// </summary>
-        /// <param name="n">A NON-negative magnitude (<c>|decimals|</c>).</param>
+        /// <param name="n">A NON-negative magnitude (<c>|decimals|</c>); a negative one indexes outside the table.</param>
         /// <returns><c>10^n</c> as a double, or <c>+∞</c> once it overflows.</returns>
-        private static readonly double[] s_powerOfTen = { 1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8 };
-        private static double PowerOfTen(int n)
+        /// <exception cref="IndexOutOfRangeException"><paramref name="n"/> is negative.</exception>
+        /// <remarks>Internal since API-parity batch 8: numpy.ma's round family writes <c>10**|decimals|</c> where NumPy's
+        /// divide domain fires in a masked <c>out=</c> (<c>MaskedArrayModule.RoundInto</c>).</remarks>
+        internal static double PowerOfTen(int n)
         {
             if (n < 9)
                 return s_powerOfTen[n];
@@ -270,7 +275,7 @@ namespace NumSharp.Backends
         /// an integer input.</param>
         /// <returns>A fresh, contiguous, writeable array of dtype <paramref name="work"/> holding the rounded values.</returns>
         /// <exception cref="NotSupportedException"><paramref name="work"/> is not a float/complex/decimal dtype.</exception>
-        /// <exception cref="OverflowException">A Decimal magnitude beyond decimal's exact range whose rescaled result
+        /// <exception cref="OverflowError">A Decimal magnitude beyond decimal's exact range whose rescaled result
         /// no longer fits (an edge with no NumPy analog).</exception>
         private unsafe NDArray RoundScaleCore(NDArray nd, int decimals, NPTypeCode work)
         {
@@ -379,7 +384,7 @@ namespace NumSharp.Backends
         /// <param name="x">The value to round.</param>
         /// <param name="decimals">Non-zero decimals.</param>
         /// <returns>The rounded decimal.</returns>
-        /// <exception cref="OverflowException">A negative-decimals rescale whose product exceeds
+        /// <exception cref="OverflowError">A negative-decimals rescale whose product exceeds
         /// <see cref="decimal.MaxValue"/> (an extreme with no NumPy analog).</exception>
         private static decimal RoundDecimalScalar(decimal x, int decimals)
         {

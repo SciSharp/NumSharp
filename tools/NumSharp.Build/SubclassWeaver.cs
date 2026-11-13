@@ -80,6 +80,12 @@ internal static class SubclassWeaver
     private const string NDArrayFullName = "NumSharp.NDArray";
     private const string NDArrayArrayFullName = "NumSharp.NDArray[]";
 
+    /// <summary>NumPy's axis type (<c>NumSharp.NDAxis</c>): an int or a tuple, read by <see cref="EmitAxis"/>.</summary>
+    private const string NDAxisFullName = "NumSharp.NDAxis";
+
+    /// <summary>The <c>NDAxis? axis = null</c> parameter of a function whose NumPy default is <c>axis=None</c>.</summary>
+    private const string NullableNDAxisFullName = "System.Nullable`1<NumSharp.NDAxis>";
+
     /// <summary>The mechanism families a declaration resolves to.</summary>
     private enum Kind
     {
@@ -470,15 +476,23 @@ internal static class SubclassWeaver
         => m.Parameters.Where(p => IsNDArray(p) || p.ParameterType.FullName == NDArrayArrayFullName).ToList();
 
     /// <summary>
-    ///     Whether a parameter carries one NDArray: by value, or by reference (<c>in NDArray x1</c>). A by-reference
-    ///     operand is read through its address everywhere the weaver loads it, and its plain alias is passed back by the
-    ///     address of a local, so the re-call keeps the overload the caller chose.
+    ///     Whether a parameter carries one NDArray INTO the function: by value, or by reference (<c>in NDArray x1</c>,
+    ///     <c>ref NDArray</c>). A by-reference operand is read through its address everywhere the weaver loads it, and its
+    ///     plain alias is passed back by the address of a local, so the re-call keeps the overload the caller chose.
     /// </summary>
     /// <param name="p">The parameter.</param>
-    /// <returns>True for <c>NDArray</c> and <c>NDArray&amp;</c>; false for anything else, NDArray[] included.</returns>
+    /// <returns>True for <c>NDArray</c> and an <c>in</c> / <c>ref</c> <c>NDArray&amp;</c>; false for an <c>out NDArray</c>
+    ///     and anything else, NDArray[] included.</returns>
+    /// <remarks>
+    ///     An <c>out</c> parameter is the function's OUTPUT: it is written, never read, so it is no operand. Testing it would
+    ///     read whatever the caller's variable held before the call - a result struct's <c>Deconstruct(out NDArray values,
+    ///     ...)</c> is the case: the compiler reuses a deconstruction's temporaries, so one can still hold the previous
+    ///     statement's matrix - take the subclass path, write the outputs into that path's alias locals, and leave the
+    ///     caller's variables holding the stale arrays. Without it, a <c>Deconstruct</c> has no operand and is not woven.
+    /// </remarks>
     private static bool IsNDArray(ParameterDefinition p)
         => p.ParameterType.FullName == NDArrayFullName ||
-           p.ParameterType is ByReferenceType br && br.ElementType.FullName == NDArrayFullName;
+           p.ParameterType is ByReferenceType br && br.ElementType.FullName == NDArrayFullName && !p.IsOut;
 
     /// <summary>
     ///     The full name of the value a parameter carries: its type's, or the element type's for a by-reference parameter.
@@ -1659,11 +1673,18 @@ internal static class SubclassWeaver
                 EmitCall(ctx, il, module, result, "AsArray", rt, () => { });
                 break;
             case Kind.ReducesThrough:
-                EmitCall(ctx, il, module, result, "Collapse", rt, () =>
+                // A function that takes NumPy's axis type hands the axis itself to the collapse (CollapseAxes): matrix._collapse
+                // keeps the keepdims=True result for a TUPLE, which the int? of every other function cannot say (a tuple read as
+                // None gave np.nansum(m, (0, 1)) the scalar where NumPy gives the 1 x 1 matrix).
+                bool axisValue = HasNDAxisAxis(m);
+                EmitCall(ctx, il, module, result, axisValue ? "CollapseAxes" : "Collapse", rt, () =>
                 {
                     Load(rule.Out);
                     Load(rule.Self);
-                    EmitAxis(ctx, il, m, map);
+                    if (axisValue)
+                        EmitAxisValue(ctx, il, m, map);
+                    else
+                        EmitAxis(ctx, il, m, map);
                     il.Append(il.Create(rule.SubtypeOthers ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0));
                     il.Append(il.Create(OpCodes.Ldc_I4, rule.ZeroDim));
                 });
@@ -1706,11 +1727,21 @@ internal static class SubclassWeaver
         il.Append(il.Create(OpCodes.Stloc, result));
     }
 
-    /// <summary>Loads the function's <c>axis</c> as an <c>int?</c> (an <c>int</c> axis converted, none as null).</summary>
+    /// <summary>
+    ///     Loads the function's <c>axis</c> as an <c>int?</c> (an <c>int</c> axis converted, none as null; an
+    ///     <c>NDAxis</c> / <c>NDAxis?</c> axis through <c>NDSubclass.AxisArgument</c>, which gives its single axis and null
+    ///     for None and for a tuple).
+    /// </summary>
     /// <param name="ctx">The weave.</param>
     /// <param name="il">The IL.</param>
     /// <param name="m">The function.</param>
     /// <param name="map">The function's parameters to the subclass path's.</param>
+    /// <exception cref="WeaveException">NDSubclass lacks a conversion this method calls (NDW029: weaver and library out of
+    ///     sync).</exception>
+    /// <remarks>A tuple reads as no axis here. The <c>[ReducesThrough]</c> collapse of a function with NumPy's axis type no
+    ///     longer comes this way (it loads the axis itself, <see cref="EmitAxisValue"/>, so a matrix's tuple keeps its
+    ///     keepdims answer); the <c>NDAxis</c> branch converts such an axis for a mechanism that can only take an
+    ///     <c>int?</c>.</remarks>
     private static void EmitAxis(Context ctx, ILProcessor il, MethodDefinition m, Dictionary<ParameterDefinition, ParameterDefinition> map)
     {
         var axis = m.Parameters.FirstOrDefault(p => p.Name == "axis");
@@ -1722,8 +1753,42 @@ internal static class SubclassWeaver
         }
         else if (axis is not null && axis.ParameterType.FullName == "System.Nullable`1<System.Int32>")
             il.Append(il.Create(OpCodes.Ldarg, map[axis]));
+        else if (axis is not null && axis.ParameterType.FullName is NDAxisFullName or NullableNDAxisFullName)
+        {
+            // NumPy's axis type (None, an int or a tuple): the runtime picks the single axis out of it.
+            il.Append(il.Create(OpCodes.Ldarg, map[axis]));
+            il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "AxisArgument", axis.ParameterType.FullName))));
+        }
         else
             il.Append(il.Create(OpCodes.Call, module.ImportReference(Runtime(ctx, "NoAxis"))));
+    }
+
+    /// <summary>
+    ///     Whether the function's <c>axis</c> is NumPy's axis type (<c>NDAxis</c> or <c>NDAxis?</c>), the functions whose
+    ///     collapse is <c>NDSubclass.CollapseAxes</c> (<see cref="EmitAxisValue"/>).
+    /// </summary>
+    /// <param name="m">The function.</param>
+    /// <returns>True when a parameter named <c>axis</c> has one of the two types.</returns>
+    private static bool HasNDAxisAxis(MethodDefinition m)
+        => m.Parameters.FirstOrDefault(p => p.Name == "axis")?.ParameterType.FullName is NDAxisFullName or NullableNDAxisFullName;
+
+    /// <summary>
+    ///     Loads the function's <c>axis</c> as the <c>NDAxis?</c> <c>NDSubclass.CollapseAxes</c> takes: an <c>NDAxis?</c> as it
+    ///     is, an <c>NDAxis</c> through <c>NDSubclass.NullableAxis</c> (the conversion generating <c>Nullable&lt;T&gt;</c>'s
+    ///     constructor in IL would be).
+    /// </summary>
+    /// <param name="ctx">The weave.</param>
+    /// <param name="il">The IL.</param>
+    /// <param name="m">The function (its <c>axis</c> is one of the two types: <see cref="HasNDAxisAxis"/>).</param>
+    /// <param name="map">The function's parameters to the subclass path's.</param>
+    /// <exception cref="WeaveException">NDSubclass lacks <c>NullableAxis</c> (NDW029: weaver and library out of sync).</exception>
+    /// <remarks>Unlike <see cref="EmitAxis"/> a tuple keeps its axes, so the collapse can give NumPy's keepdims result for it.</remarks>
+    private static void EmitAxisValue(Context ctx, ILProcessor il, MethodDefinition m, Dictionary<ParameterDefinition, ParameterDefinition> map)
+    {
+        var axis = m.Parameters.First(p => p.Name == "axis");
+        il.Append(il.Create(OpCodes.Ldarg, map[axis]));
+        if (axis.ParameterType.FullName == NDAxisFullName)
+            il.Append(il.Create(OpCodes.Call, m.Module.ImportReference(Runtime(ctx, "NullableAxis", NDAxisFullName))));
     }
 
     /// <summary>

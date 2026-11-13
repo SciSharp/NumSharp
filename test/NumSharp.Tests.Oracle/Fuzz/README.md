@@ -1,6 +1,6 @@
 # NumPy Differential Fuzzer (Plan A)
 
-Proves every NDIter-backed operation produces **bit-identical** output to NumPy 2.4.2 across the
+Proves every NDIter-backed operation produces **bit-identical** output to NumPy 2.5.4 across the
 full input space — caught systematically, not by hand-picked cases. The motivating failure (the
 cast saturate-vs-wrap bug, latent in `where`/`copyto`/`concatenate`) must be impossible to ship again.
 
@@ -30,7 +30,7 @@ NumPy is the oracle. Python (`test/oracle/`) generates a **committed, bytes-exac
 **replays the operand bytes** and bit-compares — *no Python at test time, none in CI*.
 
 ```
-test/oracle/                         corpus generators (NumPy 2.4.2)
+test/oracle/                         corpus generators (NumPy 2.5.4, numpy-version.txt)
   layout_catalog.py                  the layout builders (single-array, pairwise, where-triple)
   gen_oracle.py                      deterministic matrices (astype/binary/comparison/unary/reduce/where/place);
                                      per-mode dtype axes widened to ALL_DTYPES; Char WOVEN into every tier
@@ -370,7 +370,7 @@ np.flatnonzero, np.unravel_index and np.ravel_multi_index keep the ones they had
 
 **How it is replayed.** `test/oracle/gen_lifetime_oracle.py` writes cases whose operands are RECIPES
 (2–8 MB each, so a kernel lasts long enough for a collection to land inside it; bytes would cost
-~1 GB of corpus) and records NumPy 2.4.2's answer as (`dtype.str`, shape, SHA-256). The replay
+~1 GB of corpus) and records the pinned NumPy's answer as (`dtype.str`, shape, SHA-256). The replay
 (`Fuzz/Lifetime/`) runs the Oracle assembly as a CHILD PROCESS (`LifetimeChildProgram.Main`,
 `--numsharp-lifetime`; the csproj sets `GenerateProgramFile=false`) with `DOTNET_TieredCompilation=0`:
 tier-0 code reports every local live for the whole method, so the window does not exist there, and a
@@ -587,13 +587,14 @@ short window that an edit opens is found within a day.
 
 ```bash
 python test/oracle/gen_oracle.py astype_full      # 13x13 dtypes x 26 layouts (host-sensitive, see above)
+python test/oracle/gen_oracle.py cast_boundary    # float32/float64 -> int8/uint8/int16/uint16/int32 at the integer edges, NaN payloads, inf (zero excuses)
 python test/oracle/gen_oracle.py binary           # add/sub/mul/divide x NEP50 pairs x pairwise layouts
 python test/oracle/gen_oracle.py divmod_power     # floor_divide/mod (bit-exact, F1) + complex power (integer exp bit-exact; non-integer exp Misaligned)
 python test/oracle/gen_oracle.py comparison       # ==,!=,<,>,<=,>=
 python test/oracle/gen_oracle.py unary            # negate/abs/sqrt/trig/exp/log/...
 python test/oracle/gen_oracle.py reduce           # sum/prod/min/max/mean/std/var/argmax/argmin/all/any
 python test/oracle/gen_oracle.py where            # np.where(cond,x,y)
-python test/oracle/gen_oracle.py creation         # deterministic zero-operand creators + Char proxy
+python test/oracle/gen_oracle.py creation         # deterministic creators (+ linspace over array ends) + Char proxy
 python test/oracle/gen_oracle.py conversion       # array/as*/require/frombuffer/fromstring + errors
 python test/oracle/gen_oracle.py multioutput      # full tuple arity + every result slot
 python test/oracle/gen_oracle.py iter             # ndindex/ndenumerate/nditer/broadcast TRACES (order gate)
@@ -651,7 +652,7 @@ The **`fft` tier** (`fft.jsonl`, 2,000 cases) gates the managed pocketfft engine
 + helpers (`fftfreq`/`rfftfreq`/`fftshift`/`ifftshift`), swept over dtype, `n`/`s`
 {default/truncate/zero-pad/prime-13 Bluestein}, `norm` {backward/ortho/forward}, `axis`/`axes`, and the
 memory layouts {C, F, strided, reversed, transposed, broadcast-read}. **float64/complex128/int/bool are
-bit-exact** with NumPy 2.4.2; **float32/float16 are the one documented divergence** (F1 above) —
+bit-exact** with NumPy 2.5.4; **float32/float16 are the one documented divergence** (F1 above) —
 NumSharp has no complex64, so it promotes to double (values = the correctly-rounded double result).
 A generator note that bit: NumPy's 2-D forms default `axes` to `(-2,-1)` but treat an *explicit*
 `axes=None` as all-axes (fftn), so the generator OMITS a `None` `s`/`axes`/`norm` to exercise each op's
@@ -885,7 +886,7 @@ widening that set is C#-oracle work tracked in its own memory topic.
 | complex corrcoef: `cov`'s managed complex GEMM vs zgemm (division itself is now bit-exact) | corrcoef × complex input/result × Value, ≤2 ULP | 1 |
 | complex add/subtract within 2 ULP (FMA contraction) | add/subtract × complex × Value, ≤2 ULP | 0 |
 | complex power, NON-integer/complex exponent ~ULP / gross inf-NaN edge (Complex.Pow vs npy_cpow's host cpow) (F5, ledger L6) — INTEGER exponents are now BIT-EXACT (ComplexPowNumPy ports npy_cpow's exact repeated-multiplication branch), so this is scoped OFF integer exponents | power × complex × non-integer exponent × Value, ≤512 element-magnitude ULP or non-finite | 30 |
-| reduction summation/two-pass precision (algorithm order) — prod's share is the owner's decision (np-layer NL3, D24 2026-11-06: the float32 / float64 product keeps its SIMD lane order, 3.7-16x NumPy; `Math/np.prod.LaneOrder.Test.cs` pins it as `[Misaligned]`); np.var / np.std / ndarray.var / ndarray.std are NumPy's `_var` / `_std` since 2026-10-05 and no longer reach it (the `varstd` tier), and np.mean / ndarray.mean are NumPy's `_mean` since the same day (the `mean_loops` tier, plan X9: it had hidden a broadcast uint64 mean read through a wrapping integer sum); `ma.var` / `ma.std` / `ma.mean` / `ma.anom` are numpy.ma's statements since 2026-10-06 and left it too (`IsMaVarStd` / `IsMaMean` deleted, plan `docs/plans/api-parameter-parity.md` A6) | sum/prod × float-family result (Half/Single/Double/Complex) × Value | 106 (2026-10-06; 358 before A6) |
+| reduction summation/two-pass precision (algorithm order) — np.sum only: np.prod left it on 2026-11-12 (the owner's D25, reversing NL3 / D24 "Keep SIMD lanes": every float product is NumPy's sequential multiply.reduce, `Math/np.prod.SequentialOrder.Test.cs`), so a prod value divergence fails the gate; np.var / np.std / ndarray.var / ndarray.std are NumPy's `_var` / `_std` since 2026-10-05 and no longer reach it (the `varstd` tier), and np.mean / ndarray.mean are NumPy's `_mean` since the same day (the `mean_loops` tier, plan X9: it had hidden a broadcast uint64 mean read through a wrapping integer sum); `ma.var` / `ma.std` / `ma.mean` / `ma.anom` are numpy.ma's statements since 2026-10-06 and left it too (`IsMaVarStd` / `IsMaMean` deleted, plan `docs/plans/api-parameter-parity.md` A6) | sum × float-family result (Half/Single/Double/Complex) × Value | 106 sum + prod (2026-10-06; 358 before A6); prod excluded since 2026-11-12 |
 | complex reduction/scan NaN ordering/propagation differs | reduce+cumsum/cumprod × complex × Value, diffs must contain a NaN token | 35 |
 | decimal std last digit (independent 28-digit sqrts) (ledger L7) — 13 since 2026-10-05: the AXIS std carries 28 digits now (it rounded the variance through a double before, and the oracle replicated that), so it meets the same last-digit difference as the flat one | std × Decimal × Value, ≤1 unit in the 28th significant digit | 13 (2026-10-05) |
 | **S1** expm1 inside `[-ln 2, ln 1.5]`: Sun's `s_expm1` against the UCRT's undocumented in-band polynomial (`NDLog1pExpm1Math`, parity QA-22, 2026-11-05). Outside the band expm1 is the UCRT's own `exp(x) - 1`, bit-exact; log1p left S1 the same day (the UCRT's log1p is Goldberg's correction over its `log`, modelled bit-exact, `UcrtModelExactKernels`), and the absolute ~ulp(1) envelope the old `Exp(x)-1` / `Log(1+x)` compositions needed is gone | expm1 × Value, every diff ≤2 ULP (float32 ≤3) | 20 (before QA-22) |
@@ -903,8 +904,8 @@ widening that set is C#-oracle work tracked in its own memory topic.
 | **P3** precision-loss (known): negative-stride reduction accumulation (sum/mean: 11–32 ULP where NumPy is EXACT on the same reversed view — no hit since the exact flat add.reduce of 2026-10-04) + f32 deep product contraction (inner/tensordot K=2049, 1–2 ULP past the prefer-precise slack vs BLAS sgemm). The f32 var/std accumulation clause (55/26 ULP vs truth where NumPy sits at 3/2) and var/std on the reversed view are gone: np.var / np.std are NumPy's `_var` since 2026-10-05, bit-exact on the precision tier | truth-bearing × Value × (negstride sum/mean, or Single product family), every diff ≤256 ULP-vs-truth | 2 (2026-10-05) |
 
 **Narrowed: the NumPy-ported float kernels are no longer excused.** `NDFloatMath` ports the kernels NumPy
-2.4.2 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32`, `simd_tanh_f32`/`simd_tanh_f64` — and
-`rad2deg`/`deg2rad` now form their constant at float precision like NumPy's macros. Each agrees with NumPy 2.4.2 on
+2.5.4 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32`, `simd_tanh_f32`/`simd_tanh_f64` — and
+`rad2deg`/`deg2rad` now form their constant at float precision like NumPy's macros. Each agrees with NumPy 2.5.4 on
 **all 2³² float32 inputs** (verified by a chunked-checksum sweep over the entire bit space, through both the SIMD and
 scalar paths), so the blanket unary-ULP branch now skips `exp`/`log`/`sin`/`cos`/`tanh`/`rad2deg`/`deg2rad` at a
 float32 result and any divergence there fails the gate. The `numpy_f32_kernels.jsonl` tier (140 cases) feeds each kernel the inputs that
@@ -943,7 +944,7 @@ pre-port `MathF.Tanh` differs from NumPy in 34 of the 512 chunks (the rest of th
 NaN, where libm already agreed), while the ported kernel matches in all 512.
 
 **Host-pinned, like the cast kernels.** The port fuses the quadrant's `mul`+`add` because MSVC 19.44 — the
-compiler of the pinned `numpy==2.4.2` win-amd64 wheel — contracted that intrinsic pair into a `vfmadd`. It is
+compiler of the pinned `numpy==2.5.4` win-amd64 wheel, as of 2.4.2's — contracted that intrinsic pair into a `vfmadd`. It is
 observable at exactly one probed input, `x = 0xc26d0e6c`, where `x·log2(e)` is the exact tie `-85.5`: fused
 rounds the quadrant to -85, unfused to -86, and the results differ by 1 ULP. A NumPy built by a toolchain that
 does not contract there would differ at such ties, so this is a NumSharp regression pin against *this* wheel
@@ -996,8 +997,8 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_varstd` and `gen_nanvarstd` section B, "pinned row longer than the buffer" | 12 cells each: var/std (nanvar/nanstd) with `dtype=` (a cast loop) along the axis that is innermost in memory, `c_contiguous_2d` (8, 25) along axis 1 under `np.setbufsize(16)`. NumPy splits each 25-element row across two buffer fills; np.sum's cast-loop axis route sums it in one pairwise call (9 of the 12 differ by 1 ULP). An np.sum residual both sums of `_var` and of `nanvar` inherit (plan `docs/plans/api-parameter-parity.md` X6) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
 | `gen_mean_loops` section B, "pinned row longer than the buffer" | 5 cells: a cast-loop np.mean along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer, unless order-free (np.sum's X6 residual, as in the varstd tiers) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
 | `gen_nanmean` section B, "pinned row longer than the buffer" | 5 cells: an inexact nanmean with `dtype=` (a cast loop) along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer (np.sum's X6 residual over the K-order copy) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
-| `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 266 cells under 17 gap ids since VF36 (np.fft results laid out in C where NumPy keeps the input's K order) was fixed on 2026-11-06 (parity QA-48) and the same replay found VF37 (np.nanmean keepdims owning its result) and VA03 (np.where reading an offset view) converged; 371 cells under 20 gap ids since VF06, VF07, VF09, VF10, VF32, VF34 and VF38 (fresh results laid out in C where NumPy keeps the K order, or the reverse) were fixed on 2026-11-05 (parity QA-36); 426 cells under 27 gap ids since VF12 (np.array's copy of a permuted / broadcast input) was fixed and VF14 narrowed to np.positive on 2026-11-05 (parity QA-35); 430 under 28 since VF30 (np.nansum / np.nanprod reading an offset view from its owner's start) was fixed on 2026-11-05 (parity QA-15); 438 under 29 since VF17 (np.broadcast_arrays of a read-only operand) was fixed on 2026-11-04; 444 cells under 30 gap ids since VO01 (np.linalg.multi_dot copying into an out= np.dot refuses) was fixed on 2026-10-26; 448 under 31 since VF27 (np.matvec / np.vecmat returning views) and VF01's np.matmul case were fixed the same day; 461 under 32 since VA01 (np.searchsorted's offset keys and sorter) was fixed on 2026-10-25; 465 under 33 after the numpy.char phase 2 of 2026-10-15 (VF31 and VF26's getfield part fixed); 474 under 34 after the strings rebase of 2026-10-12 (VF03, VF05, VF11, VF18, VF23-VF25, VF28, VF33, VF35, VF39 and VF40 fixed; VF01, VF08, VF12, VF26 and VF32 narrowed); 705 cells under 46 gap ids before it (VF15, np.asmatrix returning its operand, was fixed with NDMatrix on 2026-10-09), written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VA02, VA04; VO01 is fixed), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA05 ldexp, VF22 a[:, idx] throws; VA01 searchsorted, VA03 where, VF30 nansum / nanprod, VF39 repeat and VF40 unique + the set routines are fixed). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros, 5 of them still open; a fixed gap's pin stays untagged) |
-| `gen_relayout_oracle._gap_of` (relayout / relayout_host) | 3 cells under 1 gap id since RL02 was found converged on 2026-11-06 (parity QA-48's replay); 20 cells under 2 gap ids since RL01 was fixed on 2026-10-25 (35 under 3 after RL07 was fixed on 2026-10-24; 75 under 4 after the strings rebase of 2026-10-12 fixed RL04, RL05 and RL06; 179 under 7 at delivery), written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin; fixed), RL02 (where, float16 / complex nancumsum / nancumprod; fixed), RL03 (ldexp), RL04 (unique, unique_values, the set routines; fixed), RL05 (repeat of a 0-d offset view; fixed), and the empty-operand early returns RL06 (comparison operators; fixed) and RL07 (logaddexp / logaddexp2; fixed). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros, 3 of them still open) |
+| `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 165 cells under 13 gap ids since VF02 (element access answered with a writeable 0-d view where NumPy returns a scalar copy) was fixed on 2026-11-11 (the scalar plan's element access); 177 cells under 14 gap ids since VF01 (fresh 0-d results NumPy returns as scalars coming back writeable 0-d arrays) was fixed the same day (its return points); 249 cells under 15 gap ids since VF14 (np.positive of a read-only operand staying read-only) and VA05 (np.ldexp reading an offset exponent from its owner's start) were fixed and VF08 narrowed to np.nanmedian on 2026-11-08 (the ufunc result-layout port); 266 cells under 17 gap ids since VF36 (np.fft results laid out in C where NumPy keeps the input's K order) was fixed on 2026-11-06 (parity QA-48) and the same replay found VF37 (np.nanmean keepdims owning its result) and VA03 (np.where reading an offset view) converged; 371 cells under 20 gap ids since VF06, VF07, VF09, VF10, VF32, VF34 and VF38 (fresh results laid out in C where NumPy keeps the K order, or the reverse) were fixed on 2026-11-05 (parity QA-36); 426 cells under 27 gap ids since VF12 (np.array's copy of a permuted / broadcast input) was fixed and VF14 narrowed to np.positive on 2026-11-05 (parity QA-35); 430 under 28 since VF30 (np.nansum / np.nanprod reading an offset view from its owner's start) was fixed on 2026-11-05 (parity QA-15); 438 under 29 since VF17 (np.broadcast_arrays of a read-only operand) was fixed on 2026-11-04; 444 cells under 30 gap ids since VO01 (np.linalg.multi_dot copying into an out= np.dot refuses) was fixed on 2026-10-26; 448 under 31 since VF27 (np.matvec / np.vecmat returning views) and VF01's np.matmul case were fixed the same day; 461 under 32 since VA01 (np.searchsorted's offset keys and sorter) was fixed on 2026-10-25; 465 under 33 after the numpy.char phase 2 of 2026-10-15 (VF31 and VF26's getfield part fixed); 474 under 34 after the strings rebase of 2026-10-12 (VF03, VF05, VF11, VF18, VF23-VF25, VF28, VF33, VF35, VF39 and VF40 fixed; VF01, VF08, VF12, VF26 and VF32 narrowed); 705 cells under 46 gap ids before it (VF15, np.asmatrix returning its operand, was fixed with NDMatrix on 2026-10-09), written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VA02, VA04; VO01 is fixed), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VF22 a[:, idx] throws; VA01 searchsorted, VA03 where, VA05 ldexp, VF30 nansum / nanprod, VF39 repeat and VF40 unique + the set routines are fixed). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros, 3 of them still open; a fixed gap's pin stays untagged) |
+| `gen_relayout_oracle._gap_of` (relayout / relayout_host) | no cell since RL03 (np.ldexp reading an offset mantissa from its owner's start) was fixed on 2026-11-08 (the ufunc result-layout port); 3 cells under 1 gap id since RL02 was found converged on 2026-11-06 (parity QA-48's replay); 20 cells under 2 gap ids since RL01 was fixed on 2026-10-25 (35 under 3 after RL07 was fixed on 2026-10-24; 75 under 4 after the strings rebase of 2026-10-12 fixed RL04, RL05 and RL06; 179 under 7 at delivery), written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin; fixed), RL02 (where, float16 / complex nancumsum / nancumprod; fixed), RL03 (ldexp; fixed), RL04 (unique, unique_values, the set routines; fixed), RL05 (repeat of a 0-d offset view; fixed), and the empty-operand early returns RL06 (comparison operators; fixed) and RL07 (logaddexp / logaddexp2; fixed). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros, none still open) |
 | `gen_surface_oracle._gap_of` (surface) | 192 cells under 14 gap ids since the strings rebase of 2026-10-12 fixed SU1, SU25-SU34, SU40, SU41, SU42 and SU4's 'auto' / 'fd', SU17 (dtype.newbyteorder's explicit byte order) was fixed on 2026-10-14 and the port of NumPy's dragon4.c fixed SU6-SU9, SU18 and SU19 on 2026-10-18 (SU5 found fixed by 287c3e2e the same day; 986 cells under 42 ids before), and the scan accumulator cast fixed SU38 on 2026-10-24 (the same regeneration found SU39 fixed by f44c9579), and np.linalg.cross as np.cross fixed SU2 on 2026-10-26 (the same regeneration found SU3 and SU4 fixed by 98ea7bcf, np.histogram's complex statements), and the merge of journey4 fixed SU35 on 2026-10-31 (the dtype name 'cdouble', read by the whole string as NumPy's typeDict; its finfo.minexp cell is SU12's), written to `corpus/gaps/surface_gaps.jsonl`: error texts and refusals (SU10, SU11, SU15, SU16, SU22), silent wrong values (SU12-SU14 finfo, SU20 broadcast.iters), reporting (SU21, SU23, SU24) and the cumulative_* aliases (SU36 / SU37). Drawn by fixed predicates and models where a bug is not a fixed set (the edgeitems=0 format from the last element), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.Surface_KnownGaps`, `OpenBugs.Surface.cs` (36 public-call repros, 23 of them untagged regression pins) |
 | `gen_ma_surface_oracle._gap_of` (ma_surface) | 6,904 cells under 19 gap ids since the strings rebase of 2026-10-12 fixed MS3, MS6-MS14, MS16, MS25, MS28, MS35 and MS2's column_stack / dstack / diagflat (10,123 cells under 37 ids before; the two set_fill_value / common_fill_value models went with MS12 / MS13), written to `corpus/gaps/ma_surface_gaps.jsonl`: the result FORM (MS1 an all-False result mask dropped to nomask, MS2 the _fromnxfunction wrappers' full mask, MS3 the *_like mask, MS4 a 0-d resize, MS5 apply_over_axes' plain ndarray, MS9 masked_object's kept all-False mask), silent wrong values (MS7 / MS12 / MS13 fill values never converted, MS11 / MS31 unsafe casts in putmask and the hard-masked setitem, MS14 the bool extremum fills, MS17 is_mask, MS34 corrcoef's masked-slot data, MS36 ids of a strided / reversed view, MS37 cov / corrcoef with a 1-D y under rowvar=False), crashes and refusals (MS15, MS26, MS33, MS35; MS22 found fixed by 32bfa4a7, np.frombuffer as NumPy's PyArray_FromBuffer, when the gaps were regenerated after the journey4 merge of 2026-10-31; MS23 found fixed on 2026-11-05 by parity QA-02 (2840e5a5) with NumPy's bool text), NumPy's refusals and texts (MS6, MS8, MS21, MS24, MS25, MS27, MS28, MS30, MS32) and the API shape (MS10, MS16, MS18, MS19, MS20, MS29). Drawn by fixed predicates and two models (NumSharp's raw fill values for set_fill_value / common_fill_value; which ids views re-seat the storage address), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.MaSurface_KnownGaps`, `OpenBugs.MaSurface.cs` (30 public-call repros, 1 of them an untagged regression pin) |
 | `gen_ma_oracle.gen_ma_setops` (`ma_setops`), "tie order" | 221 cases (at generation): numpy.ma arraysetops whose NumPy answer depends on its unstable quicksort's order among equal keys that are not interchangeable (a masked slot tied with an unmasked value equal to the fill key — NaN, the dtype maximum, True for bool — or ±0 / NaN payloads among unmasked values). NumPy's own answer is host-dependent there (x86-simd-sort AVX2 vs AVX-512 networks); NumSharp's sort is stable | inherent, no pin (`ma_setops_reference.py` marks each case SENSITIVE; the generator stops on a drop that is not) |
@@ -1057,7 +1058,7 @@ arithmetic (`S3`) diverges.
 so it never renumbers the shared corpus) is the dedicated NaN oracle. It runs every UNARY op for
 which a NaN output is reachable over the FULL special-value grid — finite / ±0 / ±inf / **BOTH NaN
 signs (+NaN `0x7ff8…` AND −NaN `0xfff8…`)** — as complex128 (the 64-element re×im cross-product) plus
-float16/32/64 lines, recording NumPy 2.4.2's exact output bytes. `CompareArray` applies the
+float16/32/64 lines, recording the pinned NumPy's exact output bytes. `CompareArray` applies the
 NaN-contract policy verbatim:
 
 - **complex128 unary ops** (`ComplexNanContractOps`: sqrt/log/log2/log10/log1p/exp/exp2/expm1/square/
@@ -1083,7 +1084,7 @@ operands wins) left that list on 2026-10-03 and has its own raw-byte tier, `nan_
 `nan_order.jsonl` (`gen_oracle.py nan_order`, 2,796 cases, floor 2,750; 2026-10-03) gates WHICH NaN a
 float add or multiply returns when BOTH operands are NaN. x86 `addpd`/`mulpd` return their FIRST source
 operand's NaN (quieted), and the operations are commutative, so the answer is the operand order the
-compiled loop emits. numpy 2.4.2 win-amd64 (MSVC 19.44), probed on every loop path:
+compiled loop emits. numpy 2.4.2 and 2.5.4 win-amd64 (MSVC 19.44), probed on every loop path:
 
 - add / multiply keep the SECOND operand's NaN: contiguous (scalar, 4×-unrolled body, tail), strided,
   reversed, `out=` (also aliasing an input), `where=`, transposed, buffered 2-D broadcasts, 0-d × 0-d;
@@ -1149,7 +1150,7 @@ bits as `[OpenBugs]` in `NumSharp.Tests/OpenBugs.NaNOperandOrder.cs`, one test p
 
 `reduce_start.jsonl` (`gen_oracle.py reduce_start`, 8,666 cases, floor 8,300) gates how a reduction STARTS.
 That is visible only when the result is zero: the sign of the zero tells whether the loop started from the
-identity or copied the first element. NumPy 2.4.2's rules:
+identity or copied the first element. NumPy 2.5.4's rules:
 
 - `add.reduce` starts from the `+0.0` identity, so a sum of only `-0.0` values is `+0.0`, one element and a
   length-1 axis included. `mean`, `average`, `nansum`, `nanmean`, `trapezoid` and `median` (which is
@@ -1295,7 +1296,7 @@ summation-order or nan-family blankets (`IsIdentitySumSignedZeroFlip`), because 
 ### np.var / np.std as NumPy's `_var` / `_std` (`varstd` tier) — 2026-10-05
 
 `varstd.jsonl` (`gen_oracle.py varstd`, 16,108 cases, floor 15,800) gates `np.var` / `np.std` (and `ndarray.var` /
-`ndarray.std`, the same engine) as NumPy 2.4.2's `_var` / `_std` (`numpy/_core/_methods.py`). `_var` has no special path
+`ndarray.std`, the same engine) as NumPy 2.5.4's `_var` / `_std` (`numpy/_core/_methods.py`). `_var` has no special path
 for any size or keyword, so its bits depend on the reduction schedule, the layouts and every keyword at once:
 
 1. `rcount` is the reduced element count (`_count_reduce_items` normalizes the axis first, so an axis on a 0-d array is
@@ -1353,7 +1354,7 @@ through a double.
 ### np.nanvar / np.nanstd as NumPy's `nanvar` / `nanstd` (`nanvarstd` tier) — 2026-10-05
 
 `nanvarstd.jsonl` (`gen_oracle.py nanvarstd`, 13,382 cases, floor 13,000) gates `np.nanvar` / `np.nanstd` as NumPy
-2.4.2's `nanvar` / `nanstd` (`numpy/lib/_nanfunctions_impl.py`). For an inexact input NumPy runs:
+2.5.4's `nanvar` / `nanstd` (`numpy/lib/_nanfunctions_impl.py`). For an inexact input NumPy runs:
 
 1. `_replace_nan(a, 0)`: a K-order copy (`np.array(a, copy=True)`, positive strides) with its NaNs zeroed, and the mask.
    An input that is not inexact has no mask, and `nanvar` returns `np.var` (the `varstd` tier's rules).
@@ -1401,7 +1402,7 @@ exist. The nanreduce tier hid all of it under the nan-family branches: 841 shape
 ### np.mean as NumPy's `_mean` (`mean_loops` tier) — 2026-10-05
 
 `mean_loops.jsonl` (`gen_oracle.py mean_loops`, 6,590 cases, floor 6,400) gates `np.mean` (and `ndarray.mean`) as
-NumPy 2.4.2's `_methods._mean`:
+NumPy 2.5.4's `_methods._mean`:
 
 1. `rcount = _count_reduce_items(arr, axis)`: the reduced extent as an `np.intp` (a STRONG int64). It normalizes the
    axis itself, so a 0-d input refuses every axis (np.sum would take 0 and -1).
@@ -1446,7 +1447,7 @@ broadcast uint64 case (101.8 for NumPy's 3.69e18) under the unbounded summation 
 
 ### np.nanmean as NumPy's `nanmean` (`nanmean` tier) — 2026-10-05
 
-`nanmean.jsonl` (`gen_oracle.py nanmean`, 5,017 cases, floor 4,900) gates `np.nanmean` as NumPy 2.4.2's `nanmean`
+`nanmean.jsonl` (`gen_oracle.py nanmean`, 5,017 cases, floor 4,900) gates `np.nanmean` as NumPy 2.5.4's `nanmean`
 (`numpy/lib/_nanfunctions_impl.py`):
 
 1. `_replace_nan(a, 0)`: a K-order copy with its NaNs zeroed, and the mask. An input that is not inexact has no mask,
@@ -1698,7 +1699,7 @@ parameter gets the literal's implicit 0-d array (marked `WasPythonLiteral` / `Wa
 the boxed literal, np.copyto its generic overload.
 
 **Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `weak_scalar` op. The generator leaves out four
-classes: a where= comparison of an integer array with a Python int outside its dtype (NumPy 2.4.2 SEGFAULTS there,
+classes: a where= comparison of an integer array with a Python int outside its dtype (NumPy 2.4.2 and 2.5.4 SEGFAULT there,
 probed), a bool array against a Python int past int64 and a store error naming the C `long` ("too large to convert",
 "too big to convert": the text differs by platform; unit tests pin the LP64 texts), and np.copyto's complex64 cast
 text (NumSharp has one complex width).
@@ -1715,7 +1716,7 @@ cases each.
 ### np.power's float loops (`power_fast` tier) — 2026-10-06
 
 `power_fast.jsonl` (`gen_oracle.py power_fast`, 7,902 cases, floor 7,500) gates np.power and np.float_power as NumPy
-2.4.2's float power loops (plan `docs/plans/api-parameter-parity.md` X13, X19, X20):
+2.5.4's float power loops (plan `docs/plans/api-parameter-parity.md` X13, X19, X20):
 - DOUBLE_power / FLOAT_power write `1/x`, `1`, `sqrt(x)`, `x` or `x*x` for an exponent of -1, 0, 0.5, 1 or 2 when the
   exponent's STEP in the inner-loop call is 0, and call pow otherwise;
 - HALF_power is powf on the exactly widened halves, with no fast path;
@@ -1752,7 +1753,7 @@ before section I, two survived (plan finding 27).
 
 ### np.arange as NumPy's `PyArray_ArangeObj` (`arange_full` tier) — 2026-10-29
 
-`arange_full.jsonl` (`gen_oracle.py arange_full`, 475 cases, floor 450) gates np.arange as NumPy 2.4.2's
+`arange_full.jsonl` (`gen_oracle.py arange_full`, 475 cases, floor 450) gates np.arange as NumPy 2.5.4's
 `PyArray_ArangeObj` (`ctors.c`; np-layer dtype plan, P3's D4 fix):
 - the length is `ceil((stop - start) / step)` in Python's arithmetic on the bounds (a float division, or a Python int's
   correctly rounded true division), an underflowed quotient of a nonzero difference counted by its sign, the ceiling
@@ -1798,10 +1799,10 @@ difference can only mean a wrong element was read.
 
 | File | Op key | Gate + carved | Coverage |
 |---|---|---|---|
-| `view_flags.jsonl` | `viewflags` (`params.fn`: 194 APIs) | 7,679 + 225 (7,294 + 610 until 2026-10-12) | V1 reshape / transpose / flip / diagonal views over 21 source layouts (C and F owners, transposed, permuted, stepped, reversed, a C-contiguous view at an offset, read-only owner and view, broadcast, same-shape broadcast, 0-d owner and offset view, 1×1, a unit axis, empty); V2 complex parts; V3 conversions (`asarray` / `array` / `copy` / `require` / `astype` / `view` / `getfield` …, every order and copy flag); V4 a 13-dtype sweep; V5 indexing (basic, integer, fancy, mask); V6 tuple results (`split`, `unstack`, `nonzero`, `meshgrid`, `broadcast_arrays`, `unravel_index`); V7 creators; V8 einsum's view path; V9 the copy family; V10 `tril` / `triu` / `diagflat`, partitions, the nan-reductions, `count_nonzero`, the FFT family, `eye` / `identity` / `tri` / `mgrid` / `ogrid`, the index-tuple generators, ndarray methods; K1–K3 the layout of ufunc and reduction results |
+| `view_flags.jsonl` | `viewflags` (`params.fn`: 194 APIs) | 7,695 + 209 (7,679 + 225 until 2026-11-08; 7,294 + 610 until 2026-10-12) | V1 reshape / transpose / flip / diagonal views over 21 source layouts (C and F owners, transposed, permuted, stepped, reversed, a C-contiguous view at an offset, read-only owner and view, broadcast, same-shape broadcast, 0-d owner and offset view, 1×1, a unit axis, empty); V2 complex parts; V3 conversions (`asarray` / `array` / `copy` / `require` / `astype` / `view` / `getfield` …, every order and copy flag); V4 a 13-dtype sweep; V5 indexing (basic, integer, fancy, mask); V6 tuple results (`split`, `unstack`, `nonzero`, `meshgrid`, `broadcast_arrays`, `unravel_index`); V7 creators; V8 einsum's view path; V9 the copy family; V10 `tril` / `triu` / `diagflat`, partitions, the nan-reductions, `count_nonzero`, the FFT family, `eye` / `identity` / `tri` / `mgrid` / `ogrid`, the index-tuple generators, ndarray methods; K1–K3 the layout of ufunc and reduction results |
 | `out_flags.jsonl` | `outflags` (149 APIs) | 1,072 + 4 | `f(..., out=o)` for every ufunc, reduction, scan, product, FFT transform and ndarray method that takes `out=`, with `o` in six layouts (C and F owners, an offset view, a stepped view, a transposed view, a reversed view): slot 0 is the returned object (its `same` flag says it IS `o`), slot 1 the whole base buffer behind `o` after the call (prefilled with markers, so a write outside the view or a missed slot shows); NumPy's refusals are error cases |
 | `shape_args.jsonl` | `shapearg` (12 APIs) | 567 + 24 (537 + 54 until 2026-10-12) | the same dims in each C# shape form: `Shape`, `long[]`, `int[]`, `int`, and `view:<layout>` (a view's Shape of the same dims, built by `RandomApi/ViewSizeLayouts.cs`) — `zeros` / `ones` / `empty` / `full` / `reshape` / `ndarray.reshape` / `broadcast_to` / `resize` / `tile` / `indices` / `indices_sparse` / `empty_like`, NumPy's refusals included |
-| `array_args.jsonl` | existing op keys (`valueclass` `arrayarg`) | 355 + 17 (335 + 37 until 2026-10-12) | 55 SECONDARY operand positions (indices, condition, `v`, `sorter`, bins, weights, `xp` / `fp`, `b`, `x2`, values, `a_max`, `x` / `y`, the choice lists, `ar2`, `y` of cov …) in up to nine layouts: C, F, transposed, stepped, reversed, offset, read-only, broadcast, 0-d |
+| `array_args.jsonl` | existing op keys (`valueclass` `arrayarg`) | 356 + 16 (355 + 17 until 2026-11-08; 335 + 37 until 2026-10-12) | 55 SECONDARY operand positions (indices, condition, `v`, `sorter`, bins, weights, `xp` / `fp`, `b`, `x2`, values, `a_max`, `x` / `y`, the choice lists, `ar2`, `y` of cov …) in up to nine layouts: C, F, transposed, stepped, reversed, offset, read-only, broadcast, 0-d |
 
 **The carve.** `_gap_of` files every case NumSharp is known to answer differently into `corpus/gaps/<tier>_gaps.jsonl`
 under a gap id (the `GAPS` table in the generator describes each); the gates hold the rest with zero excuses
@@ -1818,6 +1819,25 @@ dropped) and narrowed VF01 (no longer `np.unravel_index` of a 0-d), VF08 (np.med
 (`np.array(copy=True)` only), VF26 (no longer np.resize or an empty np.tile) and VF32 (`np.nan_to_num(copy=True)` only).
 The replay of the gap files named the matching cases (231 moved back into the gates); the redrawn carve is exact again.
 The list below is the one found at delivery.
+
+**Redrawn 2026-11-11** (13 ids and 165 carved cells since; 14 and 177 after the first of the two steps the same day): the
+scalar plan (branch `feat/numpy-scalars`) makes a 0-d NDArray NumPy's scalar unless `np.array` / `np.asarray` built it,
+read-only wherever NumPy hands a scalar out. Its return points (`PyArray_Return`: every ufunc, and clip, round,
+nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) give a fresh 0-d result back as that scalar, so VF01 matches
+NumPy (72 cases moved back: VF01 71, VF02 1); its element access (`array_item` / `PyArray_Scalar`: a full integer index
+reads a read-only 0-d COPY of the element, `z[()]` included, and so does `np.flip` of a 0-d, whose indexer is `z[()]`)
+makes VF02 match too (12 cases moved back). Both rules are dropped and their cases moved back into `view_flags` the
+same way.
+
+**Redrawn 2026-11-08** (15 ids and 249 carved cells since): the ufunc result-layout port (branch `qa/ufunc-keeporder`,
+re-ported onto the 0.80.0 release) gives a fresh elementwise result NumPy's layout — `try_trivial_single_output_loop`'s
+plain C / F allocation when every N-D input is aligned, uncast and C- or F-contiguous alike, NpyIter's K order otherwise
+— so np.positive of a read-only owner or a same-shape broadcast is a fresh writeable array (VF14; its identity loop was a
+storage clone that kept the read-only flag). np.median along an axis takes its mean's layout over the partitioned K-order
+copy, so VF08's np.median half matches (np.nanmedian's numpy.ma chain stays carved), and np.ldexp's operand
+materialization copies a C-contiguous view at a non-zero offset before its kernel reads it (VA05). VF14's and VA05's
+rules are dropped, VF08's is narrowed to np.nanmedian, and their 17 cases (VF14 2 and VF08 14 `view_flags`, VA05 1
+`array_args`) moved back into the tiers the same way; `OpenBugs.ViewFlags.cs`'s VF14 and VA05 pins are untagged.
 
 **Redrawn 2026-11-06** (17 ids and 266 carved cells since): every np.fft transform lays its result out as NumPy's
 `_raw_fft` allocates it, `empty_like(a, shape=..., dtype=...)` in the input's K order (parity QA-48), so VF36 (an F,
@@ -1849,7 +1869,7 @@ matches NumPy. Its rule is dropped and its 8 `view_flags` cases moved back into 
 `OpenBugs.ViewFlags.cs`'s two nansum / nanprod pins are untagged.
 
 **Redrawn 2026-11-04** (29 ids and 438 carved cells since): np.broadcast_arrays returns an operand that already has the
-broadcast shape as itself and keeps a read-only operand's views read-only, as NumPy 2.4.2 does (parity QA-34,
+broadcast shape as itself and keeps a read-only operand's views read-only, as NumPy 2.5.4 does (parity QA-34,
 `f0a00d4a`), so VF17 matches NumPy. Its rule is dropped and its 6 `view_flags` cases moved back into the tier the same
 way; `OpenBugs.ViewFlags.cs`'s broadcast_arrays pin is untagged, and the strings oracle's VF17 layout excuse is gone.
 
@@ -1873,17 +1893,18 @@ regenerated; `OpenBugs.ViewFlags.cs`'s two searchsorted pins are untagged.
 **What it found** (47 ids and 717 carved cells at delivery; 46 and 705 since VF15 was fixed on 2026-10-09):
 - *Silent wrong values* — a C-contiguous view at a non-zero offset (an `np.split` / `np.unstack` / `np.array_split`
   child) is read from its parent's start by `np.searchsorted` (`v`, `sorter`, the method too: VA01), `np.where`
-  (condition, `x`, `y`: VA03, converged by 2026-11-06), `np.ldexp` (`x2`: VA05), `np.nansum` / `np.nanprod` with `axis=None` (VF30),
+  (condition, `x`, `y`: VA03, converged by 2026-11-06), `np.ldexp` (`x2`: VA05, fixed 2026-11-08), `np.nansum` / `np.nanprod` with `axis=None` (VF30),
   `np.repeat` / `ndarray.repeat` (VF39), `np.unique` and the set routines that call it (VF40); `a[:, idx]` on such a
   view throws (VF22). The offset view's owner holds the sentinel 7 outside the window, so an order-free result (a sum,
   a unique set) shows a misread too.
-- *Read-only*: np.positive of a read-only array stays read-only (VF14; np.array's copy is writeable since parity
-  QA-35), a basic index of a read-only broadcast through the
+- *Read-only*: np.positive of a read-only array stays read-only (VF14, fixed 2026-11-08; np.array's copy is writeable
+  since parity QA-35), a basic index of a read-only broadcast through the
   `object[]` indexer is writeable (VF23), `np.broadcast_arrays` hands a read-only broadcast back writeable (VF17),
   `np.median` / `np.nanmedian` of a 0-d with keepdims is read-only (VF29).
 - *View, copy or the operand itself*: VF04, VF13, VF16, VF18, VF26, VF27, VF28, VF35, VF37 (converged by 2026-11-06),
   VA04; NumPy scalars
-  that come back as writeable 0-d arrays (VF01, VF02, VF03 — NumSharp has no scalar type).
+  that came back as writeable 0-d arrays (VF01, VF02, VF03: VF03 fixed by the strings rebase, VF01 and VF02 on
+  2026-11-11 — a fresh 0-d result and an item are NumSharp's scalar, a read-only 0-d array).
 - *Result layout* (C where NumPy keeps the input's K order, or the reverse): VF05–VF11 (VF12 fixed by parity QA-35;
   VF06, VF07, VF09, VF10, VF32, VF34 and VF38 by parity QA-36),
   VF19–VF21, VF31–VF34, VF36 (fixed by parity QA-48),
@@ -1940,10 +1961,10 @@ NumSharp a `byte[]`).
 
 | File | Cases | Replayed by |
 |---|---|---|
-| `relayout.jsonl` | 15,134 variants of 297 op keys from 40 portable tiers (15,117 until RL02's 17 returned on 2026-11-06; 14,964 until the 104 RL04-RL06 cases returned on 2026-10-12, 15,068 until RL07's 40 returned on 2026-10-24, 15,123 until the regeneration of 2026-10-27, which dropped the broadcast-mean rule and met the source tiers changed since 2026-10-25: 43 variants added, 49 cells retired because their own tiers cover them now) | `FuzzCorpusTests.Relayout` (the source tiers' rules) |
+| `relayout.jsonl` | 15,137 variants of 297 op keys from 40 portable tiers (15,134 until RL03's 3 returned on 2026-11-08; 15,117 until RL02's 17 returned on 2026-11-06; 14,964 until the 104 RL04-RL06 cases returned on 2026-10-12, 15,068 until RL07's 40 returned on 2026-10-24, 15,123 until the regeneration of 2026-10-27, which dropped the broadcast-mean rule and met the source tiers changed since 2026-10-25: 43 variants added, 49 cells retired because their own tiers cover them now) | `FuzzCorpusTests.Relayout` (the source tiers' rules) |
 | `relayout_host.jsonl` | 1,728 variants of the host-libm tiers | `FuzzCorpusTests.RelayoutHost` (`RunHostLibmCorpus`) |
-| both | 16,785 compared, 60 skipped (16,632 at delivery) | `FuzzCorpusTests.RelayoutLayoutInvariance` (no excuse table) |
-| `gaps/relayout_gaps.jsonl` | 3 carved under 1 id, RL03 (179 under 7 until 2026-10-12, 75 under 4 until 2026-10-24, 35 under 3 until RL01 was fixed on 2026-10-25, 20 under 2 until RL02 converged on 2026-11-06) | `Relayout_KnownGaps` (`[OpenBugs]`) |
+| both | 16,805 compared, 60 skipped, 0 layout-caused on 2026-11-08 (16,785 until RL02's 17 and RL03's 3 returned; 16,632 at delivery) | `FuzzCorpusTests.RelayoutLayoutInvariance` (no excuse table) |
+| `gaps/relayout_gaps.jsonl` | empty since RL03 was fixed on 2026-11-08 (3 under 1 id, RL03, until then; 179 under 7 until 2026-10-12, 75 under 4 until 2026-10-24, 35 under 3 until RL01 was fixed on 2026-10-25, 20 under 2 until RL02 converged on 2026-11-06) | `Relayout_KnownGaps` (`[OpenBugs]`) |
 
 **Two validation holes closed.** (1) A variant inherits its source tier's excuses, and an unbounded excuse swallows a
 layout misread as readily as the divergence it was written for: the "[known bug]" `repeat` branch excused five 0-d
@@ -1984,12 +2005,18 @@ since parity batch 10 (a KEEPORDER iterator over condition, x and y; the array-o
 and np.nancumsum / np.nancumprod run `_replace_nan`'s statements. Its rule is dropped and its 17 cases moved back the
 same way (3 carved cells under RL03 left); `OpenBugs.Relayout.cs`'s two RL02 pins are untagged.
 
+**Redrawn 2026-11-08:** the ufunc result-layout port (branch `qa/ufunc-keeporder`, re-ported onto the 0.80.0 release)
+made np.ldexp's operand materialization (`DefaultEngine.MaterializeContiguous`) copy a C-contiguous view at a non-zero
+offset instead of passing it through np.ascontiguousarray to a kernel that reads `.Address` without `Shape.offset`, so
+RL03 matches NumPy (the array-object oracle's VA05 with it). Its rule is dropped and its 3 cases moved back the same
+way; `gaps/relayout_gaps.jsonl` is empty, no relayout gap is open, and `OpenBugs.Relayout.cs`'s RL03 pin is untagged.
+
 **What it found** (7 ids, 179 carved cells, every one confirmed through a public call in
 `NumSharp.Tests/OpenBugs.Relayout.cs`, 8 tests with NumPy 2.4.2 literals):
 - *Silent wrong values from a C-contiguous view at an offset* (the class behind VA01 / VA03 / VA05 / VF39 / VF40,
   reached through more ops, dtypes and positions): RL01 np.searchsorted (`v`, `sorter`), np.digitize (`x`), np.isin of
   a complex128 / float16 element; RL02 np.where (condition, an `x` / `y` already of the result dtype, its all-0-d
-  route), np.nancumsum / np.nancumprod of float16 / complex128; RL03 np.ldexp's mantissa too; RL04 np.unique,
+  route), np.nancumsum / np.nancumprod of float16 / complex128; RL03 np.ldexp's mantissa too (fixed 2026-11-08); RL04 np.unique,
   np.unique_values and both operands of the set routines; RL05 ndarray.repeat of a 0-d view at an offset (found only by
   the invariance contract). A cast operand is copied first and read right, which is why the dtype decides. The carve
   rules emulate the misread (`_misread_observable`: NumPy's answer for the window at offset 0), so a misread that cannot
@@ -2227,7 +2254,7 @@ case still open.
 
 ### The matrix tier (`matrix`) — 2026-10-09
 
-`test/oracle/gen_matrix_oracle.py` writes NumPy 2.4.2's answers for `numpy.matrix`, which NumSharp implements as
+`test/oracle/gen_matrix_oracle.py` writes the pinned NumPy's answers for `numpy.matrix`, which NumSharp implements as
 `NDMatrix` (`src/NumSharp.Core/Matrixlib/`). The cases ride the ordinary harness (`FuzzCorpusTests.Matrix`,
 `OpRegistry.Matrix.cs`), with three additions:
 
@@ -2334,7 +2361,7 @@ report every carved case still open.
 
 ### The matrix-operand tier (`matrix_operand` / `matrix_operand_host`) — 2026-10-10
 
-`test/oracle/gen_matrix_operand_oracle.py` writes what NumPy 2.4.2 returns when a public `np.*` function receives a
+`test/oracle/gen_matrix_operand_oracle.py` writes what the pinned NumPy returns when a public `np.*` function receives a
 `numpy.matrix` OPERAND. The matrix tier above holds the matrix CLASS (its members and operators); this tier holds
 the functions, which NumSharp answers at run time through the mechanism declared on each function's computation and
 woven into the function by NumSharp.Build (`src/NumSharp.Core/Backends/Subclass/`): the object's class decides, and
@@ -2409,7 +2436,7 @@ by unit tests with the probed class and shape: `NumSharp.Tests/Matrixlib/NDMatri
 
 **Generator rules worth keeping**:
 
-- NumPy 2.4.2's `np.stack` / `np.dstack` with a matrix operand raise `shape too large to be a matrix.` and CORRUPT
+- NumPy's (2.4.2 and 2.5.4) `np.stack` / `np.dstack` with a matrix operand raise `shape too large to be a matrix.` and CORRUPT
   NumPy's heap. Every matrix call runs in a worker process, which is retired after such an error.
 - A `keepdims=False` of the source case is not passed to NumPy (C# cannot tell an explicit `false` from the
   default, and NumPy's matrix methods refuse the keyword whatever its value).
@@ -2539,7 +2566,7 @@ previously gated only by the interop live-parity suite. **HOST-PINNED exactly li
 `MatmulParityPin` shape), because `NumSharp.Core` ships NO managed LU/QR/SVD/eigensolver: these compute
 ONLY through the opt-in `NumSharp.Interop.OpenBLAS` backend, and the result bytes come out of a specific
 LAPACK build dispatched to a specific CPU kernel. The gate enables that backend before replay and
-`Disable()`s after; a host that cannot load NumPy 2.4.2's pinned scipy-openblas (matched by CONTENT
+`Disable()`s after; a host that cannot load NumPy 2.5.4's pinned scipy-openblas (matched by CONTENT
 sha256, not file name) goes **Inconclusive, never red**. Pinned at **threads=1** — the deterministic
 config the interop suite proves — rather than `matmul_parity`'s ambient max; `gen_linalg_parity()` forces
 single-thread via ctypes so the recorded bytes are threading-independent. NumPy's `linalg` is "lite" (it
@@ -2640,7 +2667,7 @@ failed after allocating an output leaked that output's pooled buffer to the fina
 there).
 
 **The buffered sections (2026-10-14, strings phase 1 package P1.7g).** NumSharp's buffered NDIter is a port of NumPy
-2.4.2's buffering (`NDIterBufferManager.Buffering.cs`), and `gen_oracle.py`'s `_gen_nditer_protocol_buffered` adds
+2.5.4's buffering (`NDIterBufferManager.Buffering.cs`), and `gen_oracle.py`'s `_gen_nditer_protocol_buffered` adds
 1,768 traces of it: `reduce_buf` (the reduce double loop over C / F / permuted 3-D inputs, four `op_axes` maps, plain /
 external loop / multi-index walks, buffer sizes 0 / 3 / 5 / 7 / 13, with and without a float64 cast, allocated and
 given outputs), `reduce2d` (inner and OUTER reductions, cast reduction operands in both directions), `reduce_seek`
@@ -3396,7 +3423,7 @@ of `integers` and `randint`), which the G1 gate keeps equal to reflection.
   `[0, 624]` and a negative Philox `buffer_pos` refused where NumPy stores them and then reads outside the array; a
   string / nested / ndarray `spawn_key` stored as its flattened ints (identical pool; only the repr line differs).
 
-Regenerate: `python test/oracle/gen_random_oracle.py` (NumPy 2.4.2; WSL with Linux NumPy at `~/np242/bin/python` for
+Regenerate: `python test/oracle/gen_random_oracle.py` (the pinned NumPy, 2.5.4; WSL with Linux NumPy at `~/np254/bin/python` for
 the LP64 tier), then rebuild. After a surface change: `NUMSHARP_WRITE_RANDOM_SURFACE=1` on the G1 test first. When the
 member set changes, `python test/oracle/random_api_oracle_map.py` rebuilds the `random_api` key of
 `coverage/oracle_map.json` (the strict coverage join) from the corpus and the coverage catalog.

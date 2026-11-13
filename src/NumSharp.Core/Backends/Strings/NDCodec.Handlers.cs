@@ -161,17 +161,18 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     CPython's <c>UnicodeEncodeError</c> over a str (its text, <see cref="NDStringCodec.EncodeErrorFor(uint, long, long, string, string)"/>):
+        ///     CPython's <c>UnicodeEncodeError</c> over a str (its text, <see cref="NDStringCodec.EncodeErrorFor(string, uint, long, long, string, string)"/>):
         ///     one character prints as <c>'\xNN'</c> / <c>'\uNNNN'</c> / <c>'\UNNNNNNNN'</c>, a longer range by positions.
         /// </summary>
         /// <param name="encoding">The codec name the error quotes.</param>
         /// <param name="s">The str's code points.</param>
+        /// <param name="n">Their number (the error's <c>object</c> is the whole str).</param>
         /// <param name="start">The range's first character.</param>
         /// <param name="end">One past its last.</param>
         /// <param name="reason">CPython's reason text.</param>
-        /// <returns>The exception (not thrown).</returns>
-        internal static UnicodeEncodeError EncodeError(string encoding, uint* s, long start, long end, string reason)
-            => NDStringCodec.EncodeErrorFor(s[start], start, end, encoding, reason);
+        /// <returns>The exception (not thrown), carrying Python's five attributes.</returns>
+        internal static UnicodeEncodeError EncodeError(string encoding, uint* s, long n, long start, long end, string reason)
+            => NDStringCodec.EncodeErrorFor(NDStringCodec.TextOfUcs4(s, n), s[start], start, end, encoding, reason);
 
         /// <summary>
         ///     CPython's <c>UnicodeDecodeError</c> over bytes (<see cref="TextIOCodec.DecodeError"/>): one byte prints as
@@ -234,7 +235,7 @@ namespace NumSharp.Backends.Strings
             switch (errors.Generic)
             {
                 case NDGenericHandler.Strict:
-                    throw EncodeError(encoding, s, start, end, reason);
+                    throw EncodeError(encoding, s, n, start, end, reason);
                 case NDGenericHandler.Ignore:
                     return ReadOnlySpan<byte>.Empty;
                 case NDGenericHandler.Replace:
@@ -312,14 +313,14 @@ namespace NumSharp.Backends.Strings
                 {
                     int bytesPer = StandardEncoding(encoding, out bool big);
                     if (bytesPer == 0)
-                        throw EncodeError(encoding, s, start, end, reason);
+                        throw EncodeError(encoding, s, n, start, end, reason);
                     var r = Replacement((end - start) * bytesPer);
                     int w = 0;
                     for (long i = start; i < end; i++)
                     {
                         uint ch = s[i];
                         if (ch - 0xD800u > 0x7FFu)
-                            throw EncodeError(encoding, s, start, end, reason);   // not a surrogate: the original error
+                            throw EncodeError(encoding, s, n, start, end, reason);   // not a surrogate: the original error
                         switch (bytesPer)
                         {
                             case 3:
@@ -362,7 +363,7 @@ namespace NumSharp.Backends.Strings
                     {
                         uint ch = s[i];
                         if (ch < 0xDC80 || ch > 0xDCFF)
-                            throw EncodeError(encoding, s, start, end, reason);
+                            throw EncodeError(encoding, s, n, start, end, reason);
                         r[w++] = (byte)(ch - 0xDC00);
                     }
                     isBytes = true;

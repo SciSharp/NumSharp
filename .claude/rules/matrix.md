@@ -23,12 +23,15 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   that code for a caller who passed a matrix in. `NDMatrix.Clone()` hides `NDArray.Clone()` rather than overriding it for
   the same reason.
 - The `np.*` functions follow the object. A public function that receives an `NDMatrix` object through its `NDArray`
-  parameter returns the class and shape NumPy 2.4.2 returns for a `numpy.matrix` operand; the result is an `NDMatrix`
+  parameter returns the class and shape NumPy 2.5.4 returns for a `numpy.matrix` operand; the result is an `NDMatrix`
   typed `NDArray` (cast it for the matrix members, no copy). NumPy's mechanism is declared once, on the computation the
   function calls (`Backends/Subclass/NDSubclassAttributes.cs`), and NumSharp.Build weaves it into the function
   (`tools/NumSharp.Build/SubclassWeaver.cs`): a one-branch prologue sends a call with a subclass operand to a generated
   `<name>subclass` path, which calls the function again on PLAIN VIEWS of the operands inside an `NDScope`, gives an
-  operand that comes back to the caller as the caller's own object, and applies the mechanism (`NDSubclass`).
+  operand that comes back to the caller as the caller's own object, and applies the mechanism (`NDSubclass`). An
+  operand is an `NDArray` / `NDArray[]` parameter by value, `in` or `ref` - never an `out NDArray`, which is written and
+  not read: a result struct's `Deconstruct` is not woven (woven, it read the caller's variables, which a reused
+  deconstruction temporary can leave holding the previous statement's matrix, and wrote its own alias locals).
   - Mechanisms: a ufunc-shaped `TensorEngine` member (only `NDArray` inputs, then `dtype`, `out`, `where`) or `[Ufunc]`
     is `__array_wrap__` over the inputs by priority; `[ArrayWrap]` the same for a function that ends in a wrap
     (`np.dot`, `np.linalg.inv`: a 1-d result becomes a 1 × N row, more than two long axes raise
@@ -96,8 +99,14 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
     its frame with `[MethodImpl(NoInlining | NoOptimization)]` (guard `SubclassAuditFrameTests`; optimized code inlines
     and tail-jumps it away otherwise, `char-chararray.md`).
   - Limits (`[Misaligned]`, pinned in `Matrixlib/NDMatrixOperand.Tests.cs`): a function whose C# return type is a typed
-    array cannot return a matrix (`np.isclose`, gap MO01; the typed `np.all` / `np.any` overloads, `np.nonzero` and
-    `np.flatnonzero` are plain in NumPy too); numpy.ma has no `masked_matrix` (NumPy's `ma.array(m).sum(axis=0)`
+    array cannot return a matrix (`np.isclose`, gap MO01; `np.nonzero` and `np.flatnonzero` are plain in NumPy too;
+    np.all / np.any have one `NDArray` signature since API-parity batch 4, so `np.all(m, 0)` is matrix.all's 1 x N
+    matrix, a tuple axis the kept axes as a matrix); the `[ReducesThrough]` collapse reads a tuple (`_collapse(result,
+    NDAxis?)`: the 1 x 1 matrix for a full tuple, the whole matrix for `()`, a row / column for one axis, as NumPy's
+    `_collapse` keeps the keepdims result for every axis but None) but puts a 1-d result along axis 1 back as a column
+    for percentile / quantile too, where NumPy's `_quantile` makes a row (`[OpenBugs]
+    ApiParity_QuantileFamily_MatrixOperand_KeepsNumPysMatrixShape`); np.count_nonzero with an axis computes plain where
+    NumPy's matrix.sum refuses keepdims (`[OpenBugs] ApiParity_CountNonzero_MatrixOperand_IsMatrixSumsKeywordError`); numpy.ma has no `masked_matrix` (NumPy's `ma.array(m).sum(axis=0)`
     is 1 × N); the `numpy.polynomial` package computes plain; a result is always a matrix VIEW of the plain result (no
     `flags.owndata` parity for the functions NumPy allocates as the subclass). Where matrix semantics leak into NumPy's
     own Python code, NumSharp does not reproduce it: gaps MO02 to MO05, `np.linalg.vector_norm(m)` (an array of `|x|` in
@@ -112,6 +121,8 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   `m + 1.5` and `m[mask] = 0` compile and bind the `(NDMatrix, NDMatrix)` operators; `*` with a 0-d operand scales.
   Members whose NumPy result is always a scalar return a 0-d `NDArray` (`m[0, 0]`, `m.sum()`); the general indexer
   (`this[params object[]]`, the one C# form of `matrix.__getitem__`) returns a 0-d `NDMatrix` for a full integer index.
+  Both element forms are NumPy's item: a read-only 0-d COPY of the element (`ElementScalar`, and `GetBasic`'s item
+  branch through `PyArray_Scalar`), unchanged by a later write to the matrix; write an element through the setter.
 - An explicit 0-d ARRAY is not a scalar to `*`. NumPy's `matrix.__mul__` tests `isinstance(other, ndarray)` before
   `isscalar(other)`, so `m * np.array(2)` is `np.dot(m, asmatrix(np.array(2)))`, the product with a 1 × 1 matrix:
   `ValueError: shapes (2,3) and (1,1) not aligned` unless `m` has one column. NumSharp has one 0-d type for both roles,
@@ -189,7 +200,10 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
 ## Divergences and the library rules it relies on
 
 - Divergences: the static typing above; a C# literal keeps its C# type (`matrix(int8) * 2` is int32 where NumPy's Python
-  int gives int64); no tuple axes; the address in `ast` error texts is zero; complex128 scaling by a complex scalar is
+  int gives int64); the matrix methods' axis is NumPy's axis type (`NDAxis?`: sum, prod, mean, var, std, max, min,
+  all, any, squeeze take a tuple and keep the reduced axes with length 1; argmax / argmin refuse one with NumPy's
+  TypeError) - a [NumPyMethod]'s axis must match the np.* function's type, or the woven matrix arm drops; the address
+  in `ast` error texts is zero; complex128 scaling by a complex scalar is
   the ufunc product, which can differ from OpenBLAS `zaxpy` in the last bit.
 - `np.asmatrix` returns a new view, never its operand. `np.dot(1-D, 2-D)` and `np.matmul` with a 1-D operand return an
   owner (the inserted axis is dropped in place); `np.dot(N-D, 1-D)` reports a mismatch in `np.dot`'s words.

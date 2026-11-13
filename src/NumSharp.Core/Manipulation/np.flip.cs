@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace NumSharp
 {
@@ -12,88 +11,70 @@ namespace NumSharp
         private static readonly int[] FlipAxis0 = {0};
 
         /// <summary>
-        ///     Reverse the order of elements in an array along the given axis.
-        ///     The shape of the array is preserved, but the elements are reordered.
+        ///     NumPy's <c>np.flip(m, axis=None)</c>: a view of <paramref name="m"/> with the order of the elements reversed
+        ///     along the given axes (every axis by default). The shape is preserved; only the strides and the start of the
+        ///     view change, so the call is constant time whatever the size.
         /// </summary>
         /// <param name="m">Input array.</param>
         /// <param name="axis">
-        ///     Axis along which to flip over. The default, null, will flip over all of the axes of the
-        ///     input array. If axis is negative it counts from the last to the first axis.
+        ///     NumPy's <c>axis</c>: <c>null</c> (None, the default) flips every axis; one axis (<c>0</c>, <c>-1</c>) flips
+        ///     that axis; a tuple (<c>(0, 2)</c> or <c>new[] { 0, 2 }</c>) flips each of its axes, and the empty tuple flips
+        ///     none (an unreversed view). Negative axes count from the end.
         /// </param>
         /// <returns>
-        ///     A view of <paramref name="m"/> with the entries of axis reversed. Since a view is returned,
-        ///     this operation is done in constant time. A <c>numpy.char.chararray</c> operand gives a chararray view, and a
-        ///     0-d one its element: the read-only stand-in of NumPy's Python <c>str</c> / <c>bytes</c>, stripped.
+        ///     A view of <paramref name="m"/> with the entries of the selected axes reversed: it shares memory with
+        ///     <paramref name="m"/> (a write through it changes <paramref name="m"/>) and is read-only when
+        ///     <paramref name="m"/> is. A <c>numpy.char.chararray</c> operand gives a chararray view, and a 0-d one its
+        ///     element: the read-only stand-in of NumPy's Python <c>str</c> / <c>bytes</c>, stripped.
         /// </returns>
-        /// <exception cref="AxisError">When <paramref name="axis"/> is out of bounds for the array's dimensions.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flip.html</remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        public static NDArray flip(NDArray m, int? axis = null)
+        /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds for <paramref name="m"/> (the first one, reported as
+        ///     given; every axis is range-checked before the repeat check, so <c>(0, 0, 5)</c> reports axis 5). A 0-d
+        ///     <paramref name="m"/> has no axis to name.</exception>
+        /// <exception cref="ValueError">An axis is named twice (<c>repeated axis</c>); a <c>numpy.matrix</c> operand
+        ///     whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a
+        ///     matrix.</c>).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.flip.html. NumPy's statements:
+        ///     <c>axis = normalize_axis_tuple(axis, m.ndim)</c>, then <c>m[indexer]</c> with <c>::-1</c> on those axes.
+        ///     <para>One signature since API-parity batch 4 (2026-11-12): the <c>int?</c> and <c>int[]</c> overloads it
+        ///     replaces made <c>np.flip(m, null)</c> ambiguous (CS0121) and had no tuple literal; both spellings convert to
+        ///     <see cref="NDAxis"/>.</para>
+        /// </remarks>
+        public static NDArray flip(NDArray m, NDAxis? axis = null)
         {
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
-            if (axis == null)
+            // axis=None: every axis reversed (the view builder reverses all axes for a null list).
+            if (axis is null)
                 return NDArray.FlipAxes(m, null);
 
-            // normalize_axis_index: AxisError reports the ORIGINAL axis value.
-            int ndim = m.ndim;
-            int ax = axis.Value;
-            int adjusted = ax >= 0 ? ax : ndim + ax;
-            if (adjusted < 0 || adjusted >= ndim)
-                throw new AxisError(ax, ndim);
-
-            return NDArray.FlipAxes(m, new[] {adjusted});
+            // normalize_axis_tuple(axis, m.ndim): every axis' range first (the AxisError names the axis as given, so
+            // (0, 0, 5) reports 5), then the repeat check; an int axis is the one-element tuple.
+            return NDArray.FlipAxes(m, axis.Value.Normalize(m.ndim));
         }
 
         /// <summary>
-        ///     Reverse the order of elements in an array along the given axes.
-        ///     The shape of the array is preserved, but the elements are reordered.
+        ///     <see cref="flip(NDArray, NDAxis?)"/> with the axis as one <c>int</c>: the overload a C# integer binds
+        ///     (its identity conversion beats NDAxis' implicit one), forwarding to the NDAxis form, so every answer,
+        ///     error, layout and subclass result is that overload's.
         /// </summary>
-        /// <param name="m">Input array.</param>
-        /// <param name="axis">
-        ///     Axes along which to flip over — NumPy's tuple-of-ints form; flipping is performed on all of
-        ///     the specified axes. Negative axes count from the last to the first axis. An empty array
-        ///     flips no axis (returns an unreversed view of the whole array); null flips all axes.
-        /// </param>
-        /// <returns>
-        ///     A view of <paramref name="m"/> with the entries of the given axes reversed. Since a view is
-        ///     returned, this operation is done in constant time. A <c>numpy.char.chararray</c> operand gives a chararray
-        ///     view, and a 0-d one its element: the read-only stand-in of NumPy's Python <c>str</c> / <c>bytes</c>, stripped.
-        /// </returns>
-        /// <exception cref="AxisError">When any axis is out of bounds for the array's dimensions.</exception>
-        /// <exception cref="ValueError">When an axis is repeated ("repeated axis").</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flip.html</remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="flip(NDArray, NDAxis?)"/>
+        public static NDArray flip(NDArray m, int axis)
+            => flip(m, (NDAxis?)axis);
+
+        /// <summary>
+        ///     <see cref="flip(NDArray, NDAxis?)"/> with the axes as an <c>int[]</c>: the overload an <c>int[]</c>
+        ///     binds, and a bare <c>null</c> too (null converts to <c>int[]</c> better than to NDAxis), forwarding to
+        ///     the NDAxis form: a null array is NumPy's None, any other array NumPy's tuple (<c>new int[0]</c> is
+        ///     <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="flip(NDArray, NDAxis?)"/>
         public static NDArray flip(NDArray m, int[] axis)
-        {
-            if (m is null)
-                throw new ArgumentNullException(nameof(m));
-
-            if (axis == null)
-                return NDArray.FlipAxes(m, null);
-
-            int ndim = m.ndim;
-
-            // normalize_axis_tuple: normalize the whole tuple first (AxisError reports the ORIGINAL
-            // axis value), only then reject duplicates — NumPy raises AxisError for (0, 0, 5).
-            var normalized = new int[axis.Length];
-            for (int i = 0; i < axis.Length; i++)
-            {
-                int ax = axis[i];
-                int adjusted = ax >= 0 ? ax : ndim + ax;
-                if (adjusted < 0 || adjusted >= ndim)
-                    throw new AxisError(ax, ndim);
-                normalized[i] = adjusted;
-            }
-
-            var seen = new HashSet<int>();
-            for (int i = 0; i < normalized.Length; i++)
-                if (!seen.Add(normalized[i]))
-                    throw new ValueError("repeated axis");
-
-            return NDArray.FlipAxes(m, normalized);
-        }
+            => flip(m, (NDAxis?)axis);
 
         /// <summary>
         ///     Reverse the order of elements along axis 1 (left/right).

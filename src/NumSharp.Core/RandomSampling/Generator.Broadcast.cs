@@ -38,7 +38,8 @@ namespace NumSharp
         /// <param name="a">Alpha, positive (NaN accepted and sampled). Null is Python's <c>None</c> (NaN on the broadcast
         ///     path; a <see cref="TypeError"/> when every parameter is 0-d).</param>
         /// <param name="b">Beta, positive (NaN accepted). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape; a given size
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape; a given size
         ///     must be that shape or one the parameters broadcast into.</param>
         /// <returns>The float64 draws; a 0-d array when every parameter is 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter's dtype does not cast to float64 under <c>'safe'</c> (complex), or a
@@ -50,7 +51,7 @@ namespace NumSharp
         ///     <br/>NumPy's <c>cont_broadcast_2</c> over the modern <c>random_beta</c>, one call per output position with
         ///     that position's <c>(a, b)</c>: byte-identical to <c>default_rng(seed).beta(a_arr, b_arr, size)</c>.
         /// </remarks>
-        public NDArray beta(NDArray a, NDArray b, Shape size = default)
+        public NDArray beta(NDArray a, NDArray b, Shape? size = null)
         {
             using var pa = RandomParam.Float64(a);
             using var pb = RandomParam.Float64(b);
@@ -59,7 +60,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pa.Array, "a", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pb.Array, "b", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pa.Array, pb.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pa.Array, pb.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -93,7 +94,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="scale">The scale (1/rate); sign bit must be clear (<c>-0.0</c> rejected), NaN propagates. Null is
         ///     NumPy's default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="scale"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref
+        ///     name="scale"/>'s shape.</param>
         /// <returns>The float64 draws; a 0-d array for a 0-d scale and no size.</returns>
         /// <exception cref="TypeError"><paramref name="scale"/> does not cast to float64 under <c>'safe'</c> (complex).</exception>
         /// <exception cref="ValueError">An element is negative (<c>scale &lt; 0</c>), or the size is incompatible.</exception>
@@ -102,14 +104,14 @@ namespace NumSharp
         ///     <br/><c>scale * standard_exponential()</c> per position: the ziggurat exponentials are bulk-filled (one per
         ///     value, whatever the scale) and scaled in place. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray exponential(NDArray scale, Shape size = default)
+        public NDArray exponential(NDArray scale, Shape? size = null)
         {
             using var ps = RandomParam.Float64(scale, 1.0);
             if (ps.IsScalar)
                 return exponential(ps.Scalar(), size);
 
             RandomConstraints.CheckArray(ps.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), ps.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), ps.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -130,10 +132,11 @@ namespace NumSharp
         /// </summary>
         /// <param name="low">Lower boundary (inclusive). Null is NumPy's default, 0.</param>
         /// <param name="high">Upper boundary (exclusive). Null is NumPy's default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the broadcast shape of <c>low</c> and <c>high - low</c>.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the broadcast shape of
+        ///     <c>low</c> and <c>high - low</c>.</param>
         /// <returns>The float64 draws; a 0-d array when both bounds are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A bound does not cast to float64 under <c>'safe'</c> (complex).</exception>
-        /// <exception cref="OverflowException">An element of <c>high - low</c> is infinite or NaN — NumPy's
+        /// <exception cref="OverflowError">An element of <c>high - low</c> is infinite or NaN — NumPy's
         ///     <c>OverflowError('Range exceeds valid bounds')</c> (<c>'high - low range exceeds valid bounds'</c> on the scalar path).</exception>
         /// <exception cref="ValueError">The bounds do not broadcast (NumPy's <c>np.subtract</c> text: <c>operands could not be
         ///     broadcast together with shapes …</c>), an element of <c>high - low</c> has its sign bit set
@@ -144,7 +147,7 @@ namespace NumSharp
         ///     then draws <c>low + range * next_double()</c> per position over the broadcast of <c>low</c> and the range.
         ///     The uniforms are bulk-filled (one per value) and transformed in place. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray uniform(NDArray low, NDArray high = null, Shape size = default)
+        public NDArray uniform(NDArray low, NDArray high = null, Shape? size = null)
         {
             using var pLow = RandomParam.Float64(low, 0.0);
             using var pHigh = RandomParam.Float64(high, 1.0);
@@ -154,9 +157,9 @@ namespace NumSharp
             using var rangeArr = RandomBroadcast.Ufunc(() => np.subtract(pHigh.Array, pLow.Array));
             using var pRange = RandomParam.Float64(rangeArr);
             if (!RandomBroadcast.AllInRange(pRange.Array, -double.MaxValue, double.MaxValue))
-                throw new OverflowException("Range exceeds valid bounds");
+                throw new OverflowError("Range exceeds valid bounds");
             RandomConstraints.CheckArray(pRange.Array, "high - low", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLow.Array, pRange.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pLow.Array, pRange.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -179,7 +182,8 @@ namespace NumSharp
         /// <param name="loc">Mean of the distribution. Null is NumPy's default, 0.</param>
         /// <param name="scale">Standard deviation; sign bit must be clear (<c>-0.0</c> rejected), NaN propagates. Null is
         ///     NumPy's default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c> (complex).</exception>
         /// <exception cref="ValueError">An element of <paramref name="scale"/> is negative, or the shapes do not broadcast /
@@ -189,7 +193,7 @@ namespace NumSharp
         ///     <br/><c>loc + scale * standard_normal()</c> per position: the ziggurat normals are bulk-filled (one per value)
         ///     and transformed in place. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray normal(NDArray loc, NDArray scale = null, Shape size = default)
+        public NDArray normal(NDArray loc, NDArray scale = null, Shape? size = null)
         {
             using var pLoc = RandomParam.Float64(loc, 0.0);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -197,7 +201,7 @@ namespace NumSharp
                 return normal(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLoc.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pLoc.Array, pScale.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -217,7 +221,8 @@ namespace NumSharp
         ///     Draw samples from a standard Gamma distribution with an array-valued, broadcast shape.
         /// </summary>
         /// <param name="shape">The shape parameter; sign bit must be clear, NaN propagates. Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="shape"/>'s shape (or
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref
+        ///     name="shape"/>'s shape (or
         ///     <paramref name="out"/>'s when given).</param>
         /// <param name="dtype">Native <c>float64</c> (default) or <c>float32</c>.</param>
         /// <param name="out">Optional C-contiguous output of the loop dtype; its shape must be one the parameter broadcasts
@@ -236,7 +241,7 @@ namespace NumSharp
         ///     its real part) and the constraint runs on the float32 values, so <c>1e-50</c> becomes a zero shape that draws
         ///     nothing. A zero shape returns 0 without drawing on both paths. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray standard_gamma(NDArray shape, Shape size = default, DType dtype = null, NDArray @out = null)
+        public NDArray standard_gamma(NDArray shape, Shape? size = null, DType dtype = null, NDArray @out = null)
         {
             dtype ??= DType.Double;
             NPTypeCode tc = ResolveFloatDtype(dtype, "standard_gamma");
@@ -250,7 +255,7 @@ namespace NumSharp
                     return standard_gamma(pf.ScalarChecked("shape", ConstraintType.CONS_NON_NEGATIVE), size, dtype, @out);
 
                 RandomConstraints.CheckArray(pf.Array, "shape", ConstraintType.CONS_NON_NEGATIVE);
-                var retF = @out ?? RandomBroadcast.NewOutput(NPTypeCode.Single, size, !IsNoSize(size), pf.Array);
+                var retF = @out ?? RandomBroadcast.NewOutput(NPTypeCode.Single, size.GetValueOrDefault(), !IsNoSize(size), pf.Array);
                 if (@out is not null)
                     RandomBroadcast.OutputDims(@out.Shape, true, pf.Array);
                 unsafe
@@ -272,7 +277,7 @@ namespace NumSharp
                 return standard_gamma(p.ScalarChecked("shape", ConstraintType.CONS_NON_NEGATIVE), size, dtype, @out);
 
             RandomConstraints.CheckArray(p.Array, "shape", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = @out ?? RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
+            var ret = @out ?? RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), p.Array);
             if (@out is not null)
                 RandomBroadcast.OutputDims(@out.Shape, true, p.Array);
             unsafe
@@ -309,7 +314,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">The shape; sign bit must be clear, NaN propagates. Null is Python's <c>None</c>.</param>
         /// <param name="scale">The scale; sign bit must be clear, NaN propagates. Null is NumPy's default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>, or a <c>None</c> reaches
         ///     the scalar path.</exception>
@@ -320,7 +326,7 @@ namespace NumSharp
         ///     <br/><c>scale * standard_gamma(shape)</c> per position (a zero shape returns 0 without drawing).
         ///     Byte-identical to NumPy.
         /// </remarks>
-        public NDArray gamma(NDArray shape, NDArray scale = null, Shape size = default)
+        public NDArray gamma(NDArray shape, NDArray scale = null, Shape? size = null)
         {
             using var pShape = RandomParam.Float64(shape);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -329,7 +335,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pShape.Array, "shape", ConstraintType.CONS_NON_NEGATIVE);
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pShape.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pShape.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -363,7 +369,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="dfnum">Numerator degrees of freedom, positive (NaN accepted). Null is Python's <c>None</c>.</param>
         /// <param name="dfden">Denominator degrees of freedom, positive (NaN accepted). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>, or a <c>None</c> reaches
         ///     the scalar path.</exception>
@@ -373,7 +380,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.f.html
         ///     <br/>NumPy's <c>random_f</c> per position, numerator first. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray f(NDArray dfnum, NDArray dfden, Shape size = default)
+        public NDArray f(NDArray dfnum, NDArray dfden, Shape? size = null)
         {
             using var pNum = RandomParam.Float64(dfnum);
             using var pDen = RandomParam.Float64(dfden);
@@ -382,7 +389,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pNum.Array, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pDen.Array, "dfden", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pNum.Array, pDen.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pNum.Array, pDen.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -421,7 +428,8 @@ namespace NumSharp
         /// <param name="dfnum">Numerator degrees of freedom, positive (NaN accepted). Null is Python's <c>None</c>.</param>
         /// <param name="dfden">Denominator degrees of freedom, positive (NaN accepted). Null is Python's <c>None</c>.</param>
         /// <param name="nonc">Non-centrality, non-negative (<c>-0.0</c> rejected; NaN accepted). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when every parameter is 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>, or a <c>None</c> reaches
         ///     the scalar path.</exception>
@@ -431,7 +439,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.noncentral_f.html
         ///     <br/>NumPy's <c>random_noncentral_f</c> per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray noncentral_f(NDArray dfnum, NDArray dfden, NDArray nonc, Shape size = default)
+        public NDArray noncentral_f(NDArray dfnum, NDArray dfden, NDArray nonc, Shape? size = null)
         {
             using var pNum = RandomParam.Float64(dfnum);
             using var pDen = RandomParam.Float64(dfden);
@@ -444,7 +452,7 @@ namespace NumSharp
             RandomConstraints.CheckArray(pNum.Array, "dfnum", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pDen.Array, "dfden", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pNonc.Array, "nonc", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pNum.Array, pDen.Array, pNonc.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pNum.Array, pDen.Array, pNonc.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -480,7 +488,8 @@ namespace NumSharp
         ///     Draw samples from a chi-square distribution with array-valued, broadcast degrees of freedom.
         /// </summary>
         /// <param name="df">Degrees of freedom, positive (NaN accepted). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="df"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref name="df"/>'s
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array for a 0-d <paramref name="df"/> and no size.</returns>
         /// <exception cref="TypeError"><paramref name="df"/> does not cast to float64 under <c>'safe'</c>, or a <c>None</c>
         ///     reaches the scalar path.</exception>
@@ -489,14 +498,14 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.chisquare.html
         ///     <br/><c>2 * standard_gamma(df / 2)</c> per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray chisquare(NDArray df, Shape size = default)
+        public NDArray chisquare(NDArray df, Shape? size = null)
         {
             using var p = RandomParam.Float64(df);
             if (p.IsScalar)
                 return chisquare(p.ScalarChecked("df", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "df", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), p.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -532,7 +541,8 @@ namespace NumSharp
         /// <param name="df">Degrees of freedom, positive (NaN accepted). Null is Python's <c>None</c>.</param>
         /// <param name="nonc">Non-centrality, non-negative (<c>-0.0</c> rejected; NaN returns NaN without drawing). Null is
         ///     Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>, or a <c>None</c> reaches
         ///     the scalar path.</exception>
@@ -543,7 +553,7 @@ namespace NumSharp
         ///     <br/>The modern <c>random_noncentral_chisquare</c> per position; a NaN non-centrality returns NaN without
         ///     drawing (so an array holding one reads per draw). Byte-identical to NumPy.
         /// </remarks>
-        public NDArray noncentral_chisquare(NDArray df, NDArray nonc, Shape size = default)
+        public NDArray noncentral_chisquare(NDArray df, NDArray nonc, Shape? size = null)
         {
             using var pDf = RandomParam.Float64(df);
             using var pNonc = RandomParam.Float64(nonc);
@@ -553,7 +563,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pDf.Array, "df", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pNonc.Array, "nonc", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pDf.Array, pNonc.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pDf.Array, pNonc.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -609,7 +619,8 @@ namespace NumSharp
         ///     Draw samples from a standard Student's t distribution with array-valued, broadcast degrees of freedom.
         /// </summary>
         /// <param name="df">Degrees of freedom, positive (NaN accepted). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="df"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref name="df"/>'s
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array for a 0-d <paramref name="df"/> and no size.</returns>
         /// <exception cref="TypeError"><paramref name="df"/> does not cast to float64 under <c>'safe'</c>, or a <c>None</c>
         ///     reaches the scalar path.</exception>
@@ -618,14 +629,14 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.standard_t.html
         ///     <br/><c>sqrt(df/2) * N / sqrt(G(df/2))</c> per position, the normal drawn first. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray standard_t(NDArray df, Shape size = default)
+        public NDArray standard_t(NDArray df, Shape? size = null)
         {
             using var p = RandomParam.Float64(df);
             if (p.IsScalar)
                 return standard_t(p.ScalarChecked("df", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "df", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), p.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -660,7 +671,8 @@ namespace NumSharp
         /// <param name="mu">Mode ("center"). Null is Python's <c>None</c>.</param>
         /// <param name="kappa">Concentration, non-negative (<c>-0.0</c> rejected; NaN returns NaN without drawing). Null is
         ///     Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws in <c>[-pi, pi]</c>; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>, or a <c>None</c> reaches
         ///     the scalar path.</exception>
@@ -670,7 +682,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.vonmises.html
         ///     <br/>The modern <c>random_vonmises</c> per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray vonmises(NDArray mu, NDArray kappa, Shape size = default)
+        public NDArray vonmises(NDArray mu, NDArray kappa, Shape? size = null)
         {
             using var pMu = RandomParam.Float64(mu);
             using var pKappa = RandomParam.Float64(kappa);
@@ -678,7 +690,7 @@ namespace NumSharp
                 return vonmises(pMu.Scalar(), pKappa.ScalarChecked("kappa", ConstraintType.CONS_NON_NEGATIVE), size);
 
             RandomConstraints.CheckArray(pKappa.Array, "kappa", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pMu.Array, pKappa.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pMu.Array, pKappa.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -711,7 +723,8 @@ namespace NumSharp
         ///     Draw samples from a Pareto II (Lomax) distribution with an array-valued, broadcast shape.
         /// </summary>
         /// <param name="a">Shape, positive (NaN accepted). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="a"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref name="a"/>'s
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array for a 0-d <paramref name="a"/> and no size.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> does not cast to float64 under <c>'safe'</c>, or a <c>None</c>
         ///     reaches the scalar path.</exception>
@@ -721,14 +734,14 @@ namespace NumSharp
         ///     <br/><c>expm1(E / a)</c> per position over bulk-filled exponentials; the values carry the scalar
         ///     <see cref="pareto(double, Shape)"/>'s documented <c>expm1</c> band difference (see <see cref="Expm1"/>).
         /// </remarks>
-        public NDArray pareto(NDArray a, Shape size = default)
+        public NDArray pareto(NDArray a, Shape? size = null)
         {
             using var p = RandomParam.Float64(a);
             if (p.IsScalar)
                 return pareto(p.ScalarChecked("a", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), p.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -749,7 +762,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Shape, non-negative (<c>-0.0</c> rejected; NaN accepted); 0 returns 0 without drawing. Null is
         ///     Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="a"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref name="a"/>'s
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array for a 0-d <paramref name="a"/> and no size.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> does not cast to float64 under <c>'safe'</c>, or a <c>None</c>
         ///     reaches the scalar path.</exception>
@@ -761,14 +775,14 @@ namespace NumSharp
         ///     an earlier position overwrote, because at most as many positions precede it as draw-free positions exist.
         ///     Byte-identical to NumPy.
         /// </remarks>
-        public NDArray weibull(NDArray a, Shape size = default)
+        public NDArray weibull(NDArray a, Shape? size = null)
         {
             using var p = RandomParam.Float64(a);
             if (p.IsScalar)
                 return weibull(p.ScalarChecked("a", ConstraintType.CONS_NON_NEGATIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), p.Array);
             unsafe
             {
                 long n = ret.size;
@@ -809,7 +823,8 @@ namespace NumSharp
         ///     Draw samples in <c>[0, 1]</c> from a power distribution with an array-valued, broadcast exponent.
         /// </summary>
         /// <param name="a">Parameter, positive (NaN accepted). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="a"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref name="a"/>'s
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array for a 0-d <paramref name="a"/> and no size.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> does not cast to float64 under <c>'safe'</c>, or a <c>None</c>
         ///     reaches the scalar path.</exception>
@@ -819,14 +834,14 @@ namespace NumSharp
         ///     <br/><c>(-expm1(-E))^(1/a)</c> per position over bulk-filled exponentials; the values carry the scalar
         ///     <see cref="power(double, Shape)"/>'s documented <c>expm1</c> band difference.
         /// </remarks>
-        public NDArray power(NDArray a, Shape size = default)
+        public NDArray power(NDArray a, Shape? size = null)
         {
             using var p = RandomParam.Float64(a);
             if (p.IsScalar)
                 return power(p.ScalarChecked("a", ConstraintType.CONS_POSITIVE), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), p.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -848,7 +863,8 @@ namespace NumSharp
         /// <param name="loc">The peak's position. Null is NumPy's default, 0.</param>
         /// <param name="scale">The exponential decay, non-negative (<c>-0.0</c> rejected; NaN accepted). Null is NumPy's
         ///     default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>.</exception>
         /// <exception cref="ValueError">An element of <paramref name="scale"/> is negative, or the shapes do not broadcast /
@@ -857,7 +873,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.laplace.html
         ///     <br/><c>random_laplace</c> per position (one uniform, redrawn only on an exact 0). Byte-identical to NumPy.
         /// </remarks>
-        public NDArray laplace(NDArray loc, NDArray scale = null, Shape size = default)
+        public NDArray laplace(NDArray loc, NDArray scale = null, Shape? size = null)
         {
             using var pLoc = RandomParam.Float64(loc, 0.0);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -865,7 +881,7 @@ namespace NumSharp
                 return laplace(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLoc.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pLoc.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -891,7 +907,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="loc">The mode's location. Null is NumPy's default, 0.</param>
         /// <param name="scale">The scale, non-negative (<c>-0.0</c> rejected; NaN accepted). Null is NumPy's default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>.</exception>
         /// <exception cref="ValueError">An element of <paramref name="scale"/> is negative, or the shapes do not broadcast /
@@ -900,7 +917,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.gumbel.html
         ///     <br/><c>random_gumbel</c> per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray gumbel(NDArray loc, NDArray scale = null, Shape size = default)
+        public NDArray gumbel(NDArray loc, NDArray scale = null, Shape? size = null)
         {
             using var pLoc = RandomParam.Float64(loc, 0.0);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -908,7 +925,7 @@ namespace NumSharp
                 return gumbel(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLoc.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pLoc.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -934,7 +951,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="loc">The mean. Null is NumPy's default, 0.</param>
         /// <param name="scale">The scale, non-negative (<c>-0.0</c> rejected; NaN accepted). Null is NumPy's default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>.</exception>
         /// <exception cref="ValueError">An element of <paramref name="scale"/> is negative, or the shapes do not broadcast /
@@ -943,7 +961,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.logistic.html
         ///     <br/><c>random_logistic</c> per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray logistic(NDArray loc, NDArray scale = null, Shape size = default)
+        public NDArray logistic(NDArray loc, NDArray scale = null, Shape? size = null)
         {
             using var pLoc = RandomParam.Float64(loc, 0.0);
             using var pScale = RandomParam.Float64(scale, 1.0);
@@ -951,7 +969,7 @@ namespace NumSharp
                 return logistic(pLoc.Scalar(), pScale.Scalar(), size);
 
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLoc.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pLoc.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -978,7 +996,8 @@ namespace NumSharp
         /// <param name="mean">Mean of the underlying normal. Null is NumPy's default, 0.</param>
         /// <param name="sigma">Standard deviation of the underlying normal, non-negative (<c>-0.0</c> rejected; NaN
         ///     accepted). Null is NumPy's default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>.</exception>
         /// <exception cref="ValueError">An element of <paramref name="sigma"/> is negative, or the shapes do not broadcast /
@@ -987,7 +1006,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.lognormal.html
         ///     <br/><c>exp(mean + sigma * N)</c> per position over bulk-filled ziggurat normals. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray lognormal(NDArray mean, NDArray sigma = null, Shape size = default)
+        public NDArray lognormal(NDArray mean, NDArray sigma = null, Shape? size = null)
         {
             using var pMean = RandomParam.Float64(mean, 0.0);
             using var pSigma = RandomParam.Float64(sigma, 1.0);
@@ -995,7 +1014,7 @@ namespace NumSharp
                 return lognormal(pMean.Scalar(), pSigma.Scalar(), size);
 
             RandomConstraints.CheckArray(pSigma.Array, "sigma", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pMean.Array, pSigma.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pMean.Array, pSigma.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -1016,7 +1035,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="scale">Scale (also the mode), non-negative (<c>-0.0</c> rejected; NaN accepted). Null is NumPy's
         ///     default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="scale"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref
+        ///     name="scale"/>'s shape.</param>
         /// <returns>The float64 draws; a 0-d array for a 0-d scale and no size.</returns>
         /// <exception cref="TypeError"><paramref name="scale"/> does not cast to float64 under <c>'safe'</c>.</exception>
         /// <exception cref="ValueError">An element is negative (<c>scale &lt; 0</c>), or the size is incompatible.</exception>
@@ -1024,14 +1044,14 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.rayleigh.html
         ///     <br/>The modern <c>mode * sqrt(2 * E)</c> per position over bulk-filled exponentials. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray rayleigh(NDArray scale, Shape size = default)
+        public NDArray rayleigh(NDArray scale, Shape? size = null)
         {
             using var p = RandomParam.Float64(scale, 1.0);
             if (p.IsScalar)
                 return rayleigh(p.Scalar(), size);
 
             RandomConstraints.CheckArray(p.Array, "scale", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), p.Array);
             unsafe
             {
                 lock (_bitGenerator.@lock)
@@ -1052,7 +1072,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="mean">Distribution mean, positive (NaN accepted). Null is Python's <c>None</c>.</param>
         /// <param name="scale">Scale, positive (NaN accepted). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to float64 under <c>'safe'</c>, or a <c>None</c> reaches
         ///     the scalar path.</exception>
@@ -1062,7 +1083,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.wald.html
         ///     <br/>The modern <c>random_wald</c> per position. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray wald(NDArray mean, NDArray scale, Shape size = default)
+        public NDArray wald(NDArray mean, NDArray scale, Shape? size = null)
         {
             using var pMean = RandomParam.Float64(mean);
             using var pScale = RandomParam.Float64(scale);
@@ -1071,7 +1092,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pMean.Array, "mean", ConstraintType.CONS_POSITIVE);
             RandomConstraints.CheckArray(pScale.Array, "scale", ConstraintType.CONS_POSITIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pMean.Array, pScale.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pMean.Array, pScale.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -1098,7 +1119,8 @@ namespace NumSharp
         /// <param name="left">Lower limit. Null is Python's <c>None</c>.</param>
         /// <param name="mode">The peak, <c>left &lt;= mode &lt;= right</c>. Null is Python's <c>None</c>.</param>
         /// <param name="right">Upper limit, greater than <paramref name="left"/>. Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the limits' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the limits' broadcast
+        ///     shape.</param>
         /// <returns>The float64 draws; a 0-d array when every limit is 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A limit does not cast to float64 under <c>'safe'</c>, or a <c>None</c> reaches the
         ///     scalar path (read in NumPy's order: left, right, mode).</exception>
@@ -1111,7 +1133,7 @@ namespace NumSharp
         ///     <c>cont_broadcast_3</c> over <c>random_triangular</c>. A NaN limit passes every comparison and samples NaN.
         ///     Byte-identical to NumPy.
         /// </remarks>
-        public NDArray triangular(NDArray left, NDArray mode, NDArray right, Shape size = default)
+        public NDArray triangular(NDArray left, NDArray mode, NDArray right, Shape? size = null)
         {
             using var pLeft = RandomParam.Float64(left);
             using var pMode = RandomParam.Float64(mode);
@@ -1129,7 +1151,7 @@ namespace NumSharp
                 throw new ValueError("mode > right");
             if (RandomBroadcast.AnyCompare(NDExpr.Equal, pLeft.Array, pRight.Array))
                 throw new ValueError("left == right");
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size, !IsNoSize(size), pLeft.Array, pMode.Array, pRight.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Double, size.GetValueOrDefault(), !IsNoSize(size), pLeft.Array, pMode.Array, pRight.Array);
             unsafe
             {
                 long n = ret.size, i = 0;
@@ -1156,7 +1178,8 @@ namespace NumSharp
         /// <param name="n">Number of trials, a non-negative INTEGER array (a float array is NumPy's safe-cast
         ///     <see cref="TypeError"/>). Null is Python's <c>None</c> (a <see cref="TypeError"/>).</param>
         /// <param name="p">Probability of success, in <c>[0, 1]</c> (NaN rejected). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The int64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError"><paramref name="p"/> (converted first) does not cast to float64 or
         ///     <paramref name="n"/> to int64 under <c>'safe'</c>, or a <c>None</c> reaches a conversion / the scalar path.</exception>
@@ -1168,7 +1191,7 @@ namespace NumSharp
         ///     <br/>NumPy's own broadcast loop over the modern <c>random_binomial</c> with this Generator's setup cache; an
         ///     <c>n == 0</c> or <c>p == 0</c> position returns 0 without drawing. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray binomial(NDArray n, NDArray p, Shape size = default)
+        public NDArray binomial(NDArray n, NDArray p, Shape? size = null)
         {
             using var pp = RandomParam.Float64(p);
             using var pn = RandomParam.Int64(n);
@@ -1177,7 +1200,7 @@ namespace NumSharp
 
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_0_1);
             RandomConstraints.CheckArray(pn.Array, "n", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pp.Array, pn.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !IsNoSize(size), pp.Array, pn.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1222,7 +1245,8 @@ namespace NumSharp
         /// <param name="n">Parameter, positive and not NaN (need not be an integer). Null is Python's <c>None</c> — NumPy
         ///     reads it as NaN here (<c>n must not be NaN</c>), not as a <see cref="TypeError"/>.</param>
         /// <param name="p">Probability of success, in <c>(0, 1]</c>. Null is Python's <c>None</c> (NaN, rejected).</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The int64 draws; a 0-d array when both parameters are 0-d and no size is given.</returns>
         /// <exception cref="TypeError"><paramref name="p"/> (converted first) or <paramref name="n"/> does not cast to
         ///     float64 under <c>'safe'</c>.</exception>
@@ -1234,7 +1258,7 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.negative_binomial.html
         ///     <br/>The modern <c>random_negative_binomial</c> per position: a Poisson of a gamma draw. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray negative_binomial(NDArray n, NDArray p, Shape size = default)
+        public NDArray negative_binomial(NDArray n, NDArray p, Shape? size = null)
         {
             using var pp = RandomParam.Float64(p);
             using var pn = RandomParam.Float64(n);
@@ -1246,7 +1270,7 @@ namespace NumSharp
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_GT_0_1);
             if (NegativeBinomialLamTooLarge(pn.Array, pp.Array))
                 throw new ValueError("n too large or p too small, see Generator.negative_binomial Notes");
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pn.Array, pp.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !IsNoSize(size), pn.Array, pp.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1302,7 +1326,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="lam">Expected number of events, non-negative, not NaN, at most <c>int64 max - 10*sqrt(int64
         ///     max)</c>. Null is NumPy's default, 1.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="lam"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref name="lam"/>'s
+        ///     shape.</param>
         /// <returns>The int64 draws; a 0-d array for a 0-d mean and no size.</returns>
         /// <exception cref="TypeError"><paramref name="lam"/> does not cast to float64 under <c>'safe'</c>.</exception>
         /// <exception cref="ValueError">An element is too large or NaN (<c>lam value too large</c> — the array test runs the
@@ -1312,14 +1337,14 @@ namespace NumSharp
         ///     <br/><c>random_poisson</c> per position (product method below 10, PTRS above, 0 without a draw for
         ///     <c>lam == 0</c>). Byte-identical to NumPy.
         /// </remarks>
-        public NDArray poisson(NDArray lam, Shape size = default)
+        public NDArray poisson(NDArray lam, Shape? size = null)
         {
             using var p = RandomParam.Float64(lam, 1.0);
             if (p.IsScalar)
                 return poisson(p.Scalar(), size);
 
             RandomConstraints.CheckArray(p.Array, "lam", ConstraintType.CONS_POISSON);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !IsNoSize(size), p.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1365,7 +1390,8 @@ namespace NumSharp
         ///     Draw samples from a Zipf distribution with an array-valued, broadcast parameter.
         /// </summary>
         /// <param name="a">Distribution parameter, greater than 1 (NaN rejected). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="a"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref name="a"/>'s
+        ///     shape.</param>
         /// <returns>The int64 draws (<c>&gt;= 1</c>); a 0-d array for a 0-d <paramref name="a"/> and no size.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> does not cast to float64 under <c>'safe'</c>, or a <c>None</c>
         ///     reaches the scalar path.</exception>
@@ -1376,14 +1402,14 @@ namespace NumSharp
         ///     <br/>The modern <c>random_zipf</c> per position; <c>a &gt;= 1025</c> (infinity included) returns 1 without
         ///     drawing. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray zipf(NDArray a, Shape size = default)
+        public NDArray zipf(NDArray a, Shape? size = null)
         {
             using var p = RandomParam.Float64(a);
             if (p.IsScalar)
                 return zipf(p.ScalarChecked("a", ConstraintType.CONS_GT_1), size);
 
             RandomConstraints.CheckArray(p.Array, "a", ConstraintType.CONS_GT_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), p.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !IsNoSize(size), p.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1425,7 +1451,8 @@ namespace NumSharp
         ///     Draw samples from the geometric distribution with an array-valued, broadcast probability.
         /// </summary>
         /// <param name="p">The probability of success of an individual trial, in <c>(0, 1]</c>. Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="p"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref name="p"/>'s
+        ///     shape.</param>
         /// <returns>The int64 draws (<c>&gt;= 1</c>); a 0-d array for a 0-d <paramref name="p"/> and no size.</returns>
         /// <exception cref="TypeError"><paramref name="p"/> does not cast to float64 under <c>'safe'</c>, or a <c>None</c>
         ///     reaches the scalar path.</exception>
@@ -1436,14 +1463,14 @@ namespace NumSharp
         ///     else the inversion over a ziggurat exponential. Both take their draws from one 64-bit read-ahead — a uniform
         ///     is one 64-bit unit — and every value draws, so the read-ahead serves any mix. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray geometric(NDArray p, Shape size = default)
+        public NDArray geometric(NDArray p, Shape? size = null)
         {
             using var pp = RandomParam.Float64(p);
             if (pp.IsScalar)
                 return geometric(pp.ScalarChecked("p", ConstraintType.CONS_BOUNDED_GT_0_1), size);
 
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_GT_0_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pp.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !IsNoSize(size), pp.Array);
             unsafe
             {
                 long count = ret.size, i = 0;
@@ -1512,7 +1539,8 @@ namespace NumSharp
         ///     (a <see cref="TypeError"/>).</param>
         /// <param name="nbad">Bad selections, a non-negative integer array below <c>10^9</c>.</param>
         /// <param name="nsample">Items sampled, <c>0 &lt;= nsample &lt;= ngood + nbad</c> per position.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is the parameters' broadcast shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is the parameters' broadcast
+        ///     shape.</param>
         /// <returns>The int64 draws; a 0-d array when every parameter is 0-d and no size is given.</returns>
         /// <exception cref="TypeError">A parameter does not cast to int64 under <c>'safe'</c> (floats, uint64, complex) or is
         ///     <c>None</c>.</exception>
@@ -1527,7 +1555,7 @@ namespace NumSharp
         ///     positions: all HRUA reads doubles ahead, all drawing urns read words ahead, and any mix — whose 64-bit and
         ///     buffered 32-bit draws interleave — or a draw-free urn position runs per draw. Byte-identical to NumPy.
         /// </remarks>
-        public NDArray hypergeometric(NDArray ngood, NDArray nbad, NDArray nsample, Shape size = default)
+        public NDArray hypergeometric(NDArray ngood, NDArray nbad, NDArray nsample, Shape? size = null)
         {
             const long HypergeomMax = 1000000000;
             using var pg = RandomParam.Int64(ngood);
@@ -1544,7 +1572,7 @@ namespace NumSharp
             RandomConstraints.CheckArray(pg.Array, "ngood", ConstraintType.CONS_NON_NEGATIVE);
             RandomConstraints.CheckArray(pb.Array, "nbad", ConstraintType.CONS_NON_NEGATIVE);
             RandomConstraints.CheckArray(ps.Array, "nsample", ConstraintType.CONS_NON_NEGATIVE);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pg.Array, pb.Array, ps.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !IsNoSize(size), pg.Array, pb.Array, ps.Array);
             unsafe
             {
                 long count = ret.size;
@@ -1640,7 +1668,8 @@ namespace NumSharp
         ///     Draw samples from a logarithmic series distribution with an array-valued, broadcast shape.
         /// </summary>
         /// <param name="p">Shape, in <c>[0, 1)</c> (NaN rejected). Null is Python's <c>None</c>.</param>
-        /// <param name="size">Output shape. Default (NumPy's <c>None</c>) is <paramref name="p"/>'s shape.</param>
+        /// <param name="size">Output shape. <c>null</c> (NumPy's <c>None</c>, the default) is <paramref name="p"/>'s
+        ///     shape.</param>
         /// <returns>The int64 draws (<c>&gt;= 1</c>); a 0-d array for a 0-d <paramref name="p"/> and no size.</returns>
         /// <exception cref="TypeError"><paramref name="p"/> does not cast to float64 under <c>'safe'</c>, or a <c>None</c>
         ///     reaches the scalar path.</exception>
@@ -1651,14 +1680,14 @@ namespace NumSharp
         ///     <br/>The modern <c>random_logseries</c> per position; like the scalar sampler, a count can differ only where
         ///     Windows NumPy's <c>expm1</c> and <see cref="Expm1"/> part by an ulp at a boundary.
         /// </remarks>
-        public NDArray logseries(NDArray p, Shape size = default)
+        public NDArray logseries(NDArray p, Shape? size = null)
         {
             using var pp = RandomParam.Float64(p);
             if (pp.IsScalar)
                 return logseries(pp.ScalarChecked("p", ConstraintType.CONS_BOUNDED_LT_0_1), size);
 
             RandomConstraints.CheckArray(pp.Array, "p", ConstraintType.CONS_BOUNDED_LT_0_1);
-            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size, !IsNoSize(size), pp.Array);
+            var ret = RandomBroadcast.NewOutput(NPTypeCode.Int64, size.GetValueOrDefault(), !IsNoSize(size), pp.Array);
             unsafe
             {
                 long count = ret.size, i = 0;

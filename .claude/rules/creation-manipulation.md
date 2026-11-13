@@ -18,17 +18,38 @@ paths:
 
 `np.arange(start, stop, step, dtype)` is NumPy's `PyArray_ArangeObj` (`ctors.c`: `UnmanagedStorage.ArangeObj`,
 `Backends/Unmanaged/UnmanagedStorage.Ctors.cs`). No ufunc runs, so no TensorEngine member is involved.
+- NumPy's signature is `arange(NDArray start = null, NDArray stop = null, NDArray step = null, DType dtype = null,
+  string device = null)` (`array_arange`: a lone `stop:` becomes the start, neither is `arange() requires stop to be
+  specified.`), over `ArangeObj(NDArray, NDArray, NDArray, DType)`: the dtype is int64 promoted with each argument's own
+  descriptor (a Python int by its value, int64 or uint64; a float32 or float16 scalar or a uint64 value gives float64;
+  a complex complex128; a string discovers a text dtype, then the fill refusal), and `_calc_length`'s arithmetic is the
+  arguments' own: Python numbers run CPython's (`PyScalar`), and once a NumPy scalar or array takes part the operation
+  is NumPy's (NumSharp's operators, NEP 50), so `np.arange(0, 1, np.float32(0.1))` divides in float32 and
+  `np.arange(np.int8(-128), np.int8(127), np.int8(100))` wraps to an empty array. A complex dtype takes the smaller
+  ceiling of the quotient's two parts (`np.arange(1+2j)` is `[0j]`, `np.arange(np.complex128(3))` empty); an argument
+  with dimensions is NumPy's `only 0-dimensional arrays can be converted to Python scalars` (or a truth-value error);
+  any OverflowError of the length is `Maximum allowed size exceeded`.
+- The typed overloads stay beside it and win C#'s overload resolution for plain C# numbers: `int` / `long` (Python
+  ints), `double` (Python floats), `float` (a C# float is a Python float: float64 computed from the exact float32
+  values, as NumPy's `np.arange(np.float32(0), np.float32(1), np.float32(0.1))`), `ulong` (Python ints by value: past
+  int64 the dtype is float64, the length exact), and the dtype forms `(double stop, DType dtype)` /
+  `(double start, double stop, DType)` / `(double start, double stop, double step, DType)`. The kept `(double stop,
+  DType dtype)` form binds `np.arange(5, null)` and `np.arange(5, dtype: null)`, so a null dtype there is NumPy's
+  discovery for a Python float, float64 (`[Misaligned]`; NumPy's int64 needs `np.arange(5)`).
 - The length is `ceil((stop - start) / step)` in Python's arithmetic on the bounds: the `double` overloads are Python
   floats, the `long` / `int` overloads Python ints (exact, with the correctly rounded true division). A quotient that
   underflows to zero counts one element for +0 and none for -0. A ceiling of exactly `2**63` is NumPy's x86 empty array
   (C's cast gives INT64_MIN there; .NET 9+ saturates, so the case is decided explicitly).
 - `start` and `start + step` are stored through the dtype's `setitem` slot (NumPy's errors: `Python integer 130 out of
   bounds for int8`), and the rest is filled by its `fill` slot in the dtype's own arithmetic (bool's fill refuses more
-  than two elements).
+  than two elements). A NumPy SCALAR element is cast where NumPy's integer setitem range-checks it
+  (`np.arange(np.int64(1000), 1002, dtype=np.int8)` is NumPy's OverflowError): the scalar-store stage S3, pinned as
+  `OpenBugs.ApiParity.ApiParity_Arange_NumPyScalarStores_AreRangeChecked`.
 - NumPy's dtype checks run first (a text dtype is NumPy's TypeError "arange() not supported for inputs with DType …"),
-  then Python's ZeroDivisionError for a zero step (`DivideByZeroException`); a NaN length is "arange: cannot compute
+  then Python's `ZeroDivisionError` for a zero step; a NaN length is "arange: cannot compute
   length", a length past int64 "Maximum allowed size exceeded".
-- Gates: the `arange_full` oracle tier (zero excuses) and `Creation/np.arange.NumPyPort.Test.cs`.
+- Gates: the `arange_full` oracle tier (zero excuses), `Creation/np.arange.NumPyPort.Test.cs` and
+  `APIs/NumPyKeywordParity.Batch13.Test.cs` (NumPy's signature over the scalar and complex inputs).
 
 ## `np.ndarray`
 
@@ -78,17 +99,27 @@ paths:
   array cast to float32 keeps strides (16, 32, 4)); the same or an equivalent dtype copies under `'A'` as
   `PyArray_NewCopy(order='A')` (C, F for an F-only array). Parity QA-36; gate `Math/UfuncResultLayout.Test.cs`
   (`AsarrayOrderA_CastCopiesInKOrder`).
+- `np.asanyarray(a, dtype=None, order=None, *, device=None, copy=None)` is `_array_fromobject_generic` with
+  `subok=True` (`NDArray.asanyarray`, `[SubclassAware]`): the order letter (None is K) and the device are checked first;
+  `copy=true` always copies (a subclass stays one), `copy=false` refuses a non-array operand and any conversion that
+  allocates (a dtype or an order the operand lacks) with NumPy's `Unable to avoid copy while creating an
+  array as requested.` text (`may_share_memory` decides), `copy=null` copies only when needed. The `MemoryView` form
+  reads its `obj`; the buffer forms of `asarray` / `ascontiguousarray` / `asfortranarray` name their operand `a`.
 - `asarray_chkfinite(a, dtype=None, order='K')` is `asarray`, then `ValueError("array must not contain infs or NaNs")`
   when a float-family dtype (Half/Single/Double/Complex, NumPy's `typecodes['AllFloat']`; Decimal, integers and bool skip
   the check) holds an inf or NaN. The check is a fused single-pass NaN-poison SIMD reduction
   (`Backends/Kernels/FiniteScan.cs`: `acc += v - v` adds +0 for a finite value and an absorbing NaN otherwise; AVX2
   gather and a reversed-contiguous fast path for strided and negative-stride views). Its statements are
   `NDArray.asarray_chkfinite` (`Manipulation/NDArray.FunctionBase.cs`).
-- `require(a, dtype=None, requirements=None)` parses the C/F/A/W/O/E flags and their aliases (a single string iterates
-  by character like NumPy, so `"F_CONTIGUOUS"` as one string raises), resolves an order, and copies only when a remaining
-  ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED fails after `setflags(align=False)` or over a caller's buffer at
-  a misaligning byte offset; WRITEABLE for broadcast views; OWNDATA for views). Its statements are `NDArray.require`
-  (`Backends/NDArray.CoreAsArray.cs`).
+- `require(a, dtype=None, requirements=None)` is one signature, `requirements` an `IEnumerable` (what NumPy
+  iterates): a string by character (`"CW"` is C + W, so `"F_CONTIGUOUS"` as one string is `KeyError: '_'`), a
+  `string[]` / `List<string>` / any sequence by name. Python's truthiness picks the `asanyarray` branch (null, `""`, an
+  empty collection; a lazy sequence is truthy, like a generator). `{POSSIBLE_FLAGS[x.upper()] for x in requirements}`
+  is ONE pass: an unknown name is NumPy's `KeyError` with the upper-cased name quoted (`'BOGUS'`), a non-string item
+  `AttributeError: 'int' object has no attribute 'upper'`, each at its own position. Then an order, and one copy only
+  when a remaining ALIGNED/WRITEABLE/OWNDATA flag is unsatisfied (ALIGNED fails after `setflags(align=False)` or over a
+  caller's buffer at a misaligning byte offset; WRITEABLE for broadcast views; OWNDATA for views). Its statements are
+  `NDArray.require` (`Backends/NDArray.CoreAsArray.cs`); a C# tuple is not an `IEnumerable` (pass an array).
 - `asmatrix(data, dtype=None)` is `matrix(data, dtype, copy=False)` and returns an `NDMatrix` (`matrix.md`): a new view of
   an array, never the operand itself. 0-D → (1,1), 1-D → (1,N), 2-D unchanged; more than 2-D drops length-1 axes and must
   land on 2-D, else `ValueError("shape too large to be a matrix.")`. It also parses matrix literals (`"1 2; 3 4"`).
@@ -102,7 +133,7 @@ They are NumPy's coercion of a Python list (`NDArray.asanyarray` in `Creation/ND
   or an `NDArray` an ndarray item, `Half` / `char` / `decimal` NumPy scalars.
 - Without a dtype NumPy's dtype is discovered (`[1, 2]` int64, `[1, 2.5]` float64, `[2**64-1, 1]` float64; None or a
   Python int past 64 bits is NumPy's object array, refused). With one, every scalar item is stored by the class's
-  `setitem` (NumPy's `PyArray_Pack`: 300 into int8 raises `OverflowException`, a complex into float64 `TypeError`, None
+  `setitem` (NumPy's `PyArray_Pack`: 300 into int8 raises `OverflowError`, a complex into float64 `TypeError`, None
   NaN or `int()`'s TypeError) and every array item is cast.
 - Two walks serve it. Lists holding text (or under a text request) take the text builder
   (`UnmanagedStorage.Coercion.Text.cs`: discovery through `DiscoverDTypeFromPyObject` / `FindScalarDescriptor` /
@@ -142,6 +173,30 @@ the storage-lane fills `UnmanagedStorage.FullCore` / `FullFillElement` / `OnesCo
 - Gates: the constructors' snapshot (`tools/facade-move/snapshot.cs`) and
   `Creation/np.{eye.NumPyOrder,like.OrderBeforeDevice,full.FillValues}.Test.cs`.
 
+## `np.zeros` / `np.ones` / `np.empty` / `np.full`: one signature each
+
+- NumPy's `zeros(shape, dtype=None, order='C', *, device=None)` (ones and empty alike) and `full(shape, fill_value,
+  dtype=None, order='C', *, device=None)`: ONE `Shape shape` parameter, which an int, a tuple, an `int[]` / `long[]` or a
+  Shape converts to; the dtype is an argument (no generic `<T>` forms). `np.zeros(s, 'F')` does not compile, where NumPy
+  reads that `'F'` as the dtype (complex64): write `order: 'F'`.
+- Shape is a C# collection type (API-parity batch 9): `[CollectionBuilder(typeof(Shape), nameof(Create))]` and a
+  pattern `GetEnumerator` over its dimensions, so a collection expression is NumPy's list shape on EVERY `Shape` /
+  `Shape?` parameter (`np.zeros([2, 3])`, `np.zeros([])` 0-d, `np.tile(a, [2, 2])`, `np.reshape(a, [3, 2])`,
+  `np.random.normal(0, 1, [2, 3])`), and `foreach (long d in a.Shape)` walks the dimensions. C#'s overload rules prefer
+  an array or span parameter over Shape (an `int[]` / `long[]` converts to Shape; a span beats any non-span), so a
+  `[..]` call that binds an array or span overload keeps binding it (proven at C# 12 / net8.0 and C# 14 / net10.0); a new
+  tie would be a CS0121 the build lists. Batch 8's removal of the `int[]` overloads had broken these calls (CS9174): when
+  removing an overload, census the `[..]` callers too, not only `new[] {..}`.
+- `np.CreationLayout` (`Creation/np.empty.cs`) checks in NumPy's argument order: the order letter
+  (`PyArray_OrderConverter`: `order must be one of 'C', 'F', 'A', or 'K' (got 'X')`), the device (`Device not
+  understood. Only "cpu" is allowed, but received: gpu`), the C-or-F switch (`only 'C' or 'F' order is permitted`), then
+  the allocation (`negative dimensions are not allowed`).
+- Only the dimensions are read: a view's Shape (transposed, permuted, stepped) is laid out again in C (or F) order, as
+  NumPy's `np.zeros(x.shape)`. Core code that must keep a KEEPORDER / F layout allocates with `new NDArray(dtype,
+  layout, fillZeros)` (np.where's result does), never through these functions.
+- Gates: `APIs/NumPyKeywordParity.Batch8.Test.cs`, `View/OrderSupport.OpenBugs.Tests.cs` (`Np*_FShape_*`) and the
+  `shape_args` view-flags tier (zero excuses).
+
 ## `np.frombuffer`
 
 NumPy's `PyArray_FromBuffer`, one body for every kind of buffer. The overloads (`Creation/np.frombuffer.cs`) are NumPy's
@@ -163,18 +218,37 @@ a copy) in `Backends/Unmanaged/UnmanagedStorage.Buffer.cs`.
 
 ## `np.linspace` / `np.logspace` / `np.geomspace`
 
-NumPy 2.4.2's `numpy/_core/function_base.py`: `Creation/np.{linspace,logspace,geomspace}.cs` are the facades,
+NumPy 2.5.4's `numpy/_core/function_base.py`: `Creation/np.{linspace,logspace,geomspace}.cs` are the facades,
 `TensorEngine.Linspace` / `Logspace` / `Geomspace` (`Backends/TensorEngine.CoreFunctionBase.cs`) the members,
-DefaultEngine's fills in `Backends/Default/Creation/Default.CoreFunctionBase.cs`. `start`, `stop` and `base` are scalars
-(`double`); array-like values are not supported. Otherwise full parameter parity: `num=50`, `endpoint=true`,
-`base=10.0` (logspace only), `dtype=null`, `axis=0` (int and long `num` overloads).
-- `linspace(start, stop, num, endpoint, dtype, device)` runs NumPy's statements in NumPy's order: the count's ValueError
-  first, then the device, then `arange(num) * step + start` with NumPy's three observable branches (one sample is
+DefaultEngine's fills in `Backends/Default/Creation/Default.CoreFunctionBase.cs`. `linspace` and `geomspace` take
+NumPy's array_like ends (`NDArray`, a C# number converts); `logspace` takes scalar `start`, `stop` and `base`
+(`double`). Otherwise full parameter parity: `num=50`, `endpoint=true`, `base=10.0` (logspace only), `dtype=null`,
+`axis=0`.
+- `linspace` has two overloads that never collide (a compiled C# 12 / 13 binding probe): `NDArray linspace(NDArray start,
+  NDArray stop, long num = 50, bool endpoint = true, DType dtype = null, int axis = 0, string device = null)` for every
+  call, and NumPy's whole signature `LinspaceResult linspace(object start, object stop, ..., bool retstep = false, ...)`,
+  which a call binds only when it names `retstep` (or passes it fifth) or types an end `object` (`NDArray` is the better
+  conversion target). `LinspaceResult` converts to the samples and deconstructs into `(samples, step)`; its step is NumPy's
+  `delta / div` through the public ufuncs (a matrix end gives a matrix step), a weak 0-d NaN without a step.
+- The array member, `TensorEngine.Linspace(NDArray, NDArray, ...)` (`[ArrayWrap("start", "stop")]`: a matrix end gives a
+  matrix, its finalize dropping the length-1 axis), is reached through the start operand's engine. Its dtype is
+  `_array_converter(start, stop).result_type(ensure_inexact=True)` = `DTypePromotion.ResultType(start.Nep50Operand,
+  stop.Nep50Operand, PyFloat)`: a C# number end is a weak Python number (float64 beside another number, the strong end's
+  dtype otherwise), `NDArray.Scalar(0.1f)` / float32 arrays compute in float32 (NumPy's bits, not float64 cast down),
+  float16 in float16, complex in complex128, decimal in decimal, `char` as its uint16 proxy. Two 0-d ends that compute in
+  float64 with `axis` 0 take the scalar member (every C# number call: no ramp arrays); everything else runs NumPy's
+  statements over arrays (`subtract(stop, start, dtype=dt)` raises the broadcast error, the ramp is `ArangeObj(0, num, 1,
+  dt)` reshaped `(num, 1, ...)`, in-place multiply for scalar ends and a new array for array ends, `y += start`,
+  `y[-1, ...] = stop`, `moveaxis`, the integer floor, `astype(dtype, copy=False)`), so OWNDATA matches NumPy (array ends:
+  fresh; a moved axis: an F-contiguous view; scalar ends: the ramp's view).
+- The scalar member, `linspace(start, stop, num, endpoint, dtype, device)` over doubles, runs NumPy's statements in
+  NumPy's order: the count's ValueError first, then the device, then `arange(num) * step + start` with NumPy's three
+  observable branches (one sample is
   `0 * (stop - start) + start`: NaN for an infinite or NaN end, +0.0 for a start of -0.0; a step that underflows to zero
   takes gh-5437's `(i / div) * delta + start`; `y[-1] = stop` for two or more samples). Integer dtypes are FLOORED, a text
   dtype is formatted by `astype` (`dtype='U5'` → `['0.0', '0.25', ...]`), and the result is NumPy's float64 view
   (OWNDATA false) wherever NumPy's in-place ramp is one.
-- `axis` changes no value for scalar inputs (the output is always 1-D) but is validated like NumPy's trailing
+- `axis` changes no value for scalar ends (the output is always 1-D) but is validated like NumPy's trailing
   `moveaxis(y, 0, axis)`: only 0 and -1 are in range, else
   `AxisError("destination: axis {a} is out of bounds for array of dimension 1")`, reporting the original axis.
   geomspace's `axis=-1` returns NumPy's moveaxis view (OWNDATA false) unless the final dtype cast copies. `num < 0` →
@@ -184,14 +258,25 @@ DefaultEngine's fills in `Backends/Default/Creation/Default.CoreFunctionBase.cs`
   real + 0j, not a complex-domain computation. Bit-exact at every dtype (`Math.Pow` is `npy_pow`, and the exponents are
   NumPy's linspace values: `LinspaceValue`, the branches above). A negative base with fractional exponents yields NaN.
   One fused pass (`LogspaceCore`), no intermediate `linspace` array.
-- `geomspace` is ported op for op: `out_sign = sign(start)`, rotate `start`/`stop` onto the positive real axis,
-  `logspace(log10(start), log10(stop), num, endpoint, base=10)`, overwrite the endpoints, `result *= out_sign`. The real
-  path is bit-exact (decreasing, all-negative and mixed-sign inputs included: `geomspace(-1, 1)` → `[-1, nan, nan, 1]`).
+- `geomspace` is ONE signature over `NDArray` ends, `TensorEngine.Geomspace(NDArray, NDArray, ...)` reached through the
+  start operand's engine, ported op for op: `start = asanyarray(start)` (a C# number end is a Python number: bool,
+  int64, float64, complex128 - `GeomspaceEndDType`), the zero check over every element, `dt = result_type(start, stop,
+  float(num), zeros((), dtype))`, `out_sign = sign(start)`, rotate `start`/`stop` onto the positive real axis,
+  `logspace(log10(start), log10(stop), num, endpoint, base=10, dtype=dt)` (the NDArray linspace, then `power(10.0, y)`),
+  overwrite the endpoints (`result[0] = start`, `result[-1] = stop`), `result *= out_sign`, `moveaxis(result, 0, axis)`,
+  `astype(dtype, copy=False)`. Array ends give one progression per broadcast pair (shape `(num, *broadcast)`, the
+  sample axis moved to any in-range `axis`, a moved axis an F-ordered view); float32 / float16 ends with that dtype
+  compute in it (NumPy's bits: `[2.8284270763397217, 3.999999761581421]`), while a C# number end stays float64 even
+  with `dtype=float32`. Two 0-d ends whose `dt` is float64 or complex128 (every C# number pair) keep the fused scalar
+  cores (`GeomspaceRealCore` / `GeomspaceComplexCore`). The real path is bit-exact (decreasing, all-negative and
+  mixed-sign inputs included: `geomspace(-1, 1)` → `[-1, nan, nan, 1]`; a NaN start makes its column NaN). A matrix or
+  masked operand computes on its plain data and gives a plain array (no subclass rule is declared; NumPy's matrix
+  answer is a matrix-product error from `result *= out_sign`).
   Zero endpoints raise `ValueError("Geometric sequence cannot include zero")` first (before `num`, before `axis`); a text
   dtype then fails NumPy's next statements, still before `num` and `axis` (`StringDType`: `result_type(start, stop,
   float(num), zeros((), dtype))`'s `DTypePromotionError`; `S` / `U`: the ends promote to text and `sign(start)` has no
   string loop, NumPy's UFuncTypeError text).
-- A `Complex` start/stop overload and a real input with `dtype=complex128` compute in the complex128 domain (the interior
+- Complex ends and real ends with `dtype=complex128` compute in the complex128 domain (the interior
   differs: `geomspace(1, 8, 4, dtype=complex)[1] == 1.9999999999999998`), through NumSharp's `npy_cpow` port and complex
   log10: accurate within the ≤ 3-ULP complex envelope but not byte-reproducible, so those cases are allclose unit tests
   and stay out of the byte corpus.
@@ -206,11 +291,12 @@ construction. `Manipulation/np.{union1d,intersect1d,setxor1d,setdiff1d}.cs` are 
 `setdiff1d` are the engine members `TensorEngine.Union1d` / `Setxor1d` / `Setdiff1d`
 (`Backends/Default/Manipulation/Default.SetOps.cs`).
 - `union1d(ar1, ar2)` = `unique(concatenate(ravel(ar1), ravel(ar2)))`.
-- `intersect1d` has three overloads that reproduce NumPy's bare-array-or-tuple return: `intersect1d(ar1, ar2)` and
-  `intersect1d(ar1, ar2, assume_unique)` return `NDArray`; `intersect1d(ar1, ar2, assume_unique=false,
-  return_indices=false)` returns `NDArray[]{values, comm1, comm2}` with both keywords optional, so
-  `np.intersect1d(a, b, return_indices: true)` ports verbatim (C# betterness binds the two-argument call to the bare
-  form). The tuple path uses a stable argsort, so the first occurrence in each input wins.
+- `intersect1d(ar1, ar2, assume_unique = false, return_indices = false)` is NumPy's one signature and returns
+  `np.Intersect1dResult` (np.unique's result-struct pattern): `values`, and with `return_indices` `comm1` / `comm2`
+  (null otherwise). It converts implicitly to `NDArray` (NumPy's bare array) and `NDArray[]`, indexes and deconstructs
+  the present outputs (`var (v, i1, i2) = np.intersect1d(a, b, return_indices: true);`; Python's unpacking error
+  without the flag), forwards the array members callers read on the values, and is `IDisposable` and
+  `INDArrayCarrier`. The indices path uses a stable argsort, so the first occurrence in each input wins.
 - `setxor1d` returns the values in exactly one input; `setdiff1d(ar1, ar2, assume_unique=false)` returns ar1's values
   absent from ar2 (built on `isin(..., invert=true)`), keeping ar1's dtype and, under `assume_unique`, its duplicates.
 - Empty inputs give NumPy's float64 empty (from the empty concatenate).
@@ -270,6 +356,21 @@ numpy.matrix / numpy.char.chararray rules and the null checks; `np.apply_over_ax
 plain statements would not apply.
 - `concat` is NumPy 2.0's alias of `concatenate`, with every overload (array form with `axis`/`out`/`dtype`/`casting`,
   tuple-arity forms).
+- `row_stack` is `vstack` under NumPy 2.4's other name, kept on purpose: NumPy 2.0 deprecated it and NumPy 2.5 removed
+  it (`AttributeError`), and NumSharp keeps it with no warning and no `[Obsolete]` (the owner, 2026-11-13: keep it, "no
+  obsoletion"), as it keeps the NumPy 1.x names NumPy 2.0 removed (`np.maximum_sctype`, `np.issctype`, ...: "keep them,
+  document that they are okay"). It has vstack's three forms: the kept `params NDArray[]` form,
+  `(NDArray[] tup, DType dtype, string casting)`, and `(NDListArray[] tup)`. `np.vstack(NDListArray[])` /
+  `np.row_stack(NDListArray[])` stack `np.char.split`'s object arrays
+  of lists (`NDListArray.VStack`): the ids of every part in the FIRST part's heap (`IdsInThisHeap`: the same lists, as
+  NumPy's object pointers; another family's lists appended there once), `np.vstack` of the int64 ids (NumPy's shape rule
+  and texts), a new array sharing the heap. A sequence parameter, not `params`: a second params form would make
+  `np.vstack()` ambiguous.
+- `append(arr, values, axis=None)` has one signature (`NDArray values`; the `object` overload is gone). NumPy's
+  `asanyarray(arr)` / `ravel(values)` build the ARRAY of a Python scalar, so a C# number literal takes the Python
+  number's default dtype (`NDArray.PythonScalarAsArray`: int64, uint64 past int64, float64, complex128) whatever its C#
+  width: `np.append(int32_array, 5)` and `np.append(uint8_array, 300)` are int64. A bool, a string, a Half / char and a
+  decimal keep their arrays' dtypes. Never apply that conversion to an operand NumPy reads as a WEAK scalar.
 - `unstack(x, axis=0)` returns views (write-through), each `x.shape` minus the axis, built by dropping the axis from
   dims/strides and advancing the offset. A 1-D input gives 0-d views; a 0-d input raises
   `ValueError("Input array must be at least 1-d.")`.
@@ -282,6 +383,16 @@ plain statements would not apply.
   `NDArray[]`, 1-D primitive arrays and `IList` are Python lists; `NDArray`, scalars and rank ≥ 2 rectangular arrays are
   leaves; `np.block(x)` at depth 0 returns a copy. A C# scalar leaf keeps its C# type (`10` is int32, a Python int
   int64).
+- `concatenate`'s rank checks are `PyArray_ConcatenateArrays`' order: only the FIRST array's 0-d check (`zero-dimensional
+  arrays cannot be concatenated`), then each array's rank against the first, the first mismatch reported
+  (`IncorrectShapeException` with NumPy's `all the input arrays must have same number of dimensions, but the array at
+  index 0 has 2 dimension(s) and the array at index 1 has 0 dimension(s)`), so a later 0-d array is the rank mismatch.
+- `np.delete(arr, obj, axis)` and `np.insert(arr, obj, values, axis)` take NumPy's two typed obj forms, `Slice` and
+  `NDArray` (a C# `int[]` / `long[]` / `bool[]` converts; a 0-d integer is NumPy's single-index path), plus one `long obj`
+  form, because a C# `int` converts to `Slice` and `NDArray` alike (CS0121 without it); it passes the Python int as a 0-d
+  literal, so every form answers alike. `insert`'s values are an `NDArray` (a C# number is NumPy's Python scalar, a string
+  is parsed, a `(NDArray)null` is None; a C# `List` is passed as `np.array(list)`). A bool scalar obj to `delete` is
+  NumPy's ValueError `boolean array argument obj to delete must be one dimensional and match the axis length of 6`.
 - `concatenate`'s layout vote: F output only when every input is F-contiguous and not all are also C-contiguous (inputs
   that are both, such as `(N,1)` columns, give C, as `PyArray_CreateMultiSortedStridePerm`). When every per-outer slab
   is the same 1/2/4/8/16 bytes (the `(N,1)` column pattern), it interleaves with constant-size loads and stores.
@@ -312,8 +423,9 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
 - `AllocationGuard` (`Exceptions/AllocationGuard.cs`) is the dimension-check block of `PyArray_NewFromDescr_int`. A size
   computed by multiplication cannot be trusted until its overflow is checked, and the failure is silent by construction:
   a wrapped byte count looks like a small allocation, not an error. The running product starts at itemSize (the
-  quantity checked is bytes, so `np.zeros(2^60)` float64 is rejected while the same shape of int8 is merely
-  `OutOfMemoryException`, NumPy's `MemoryError`), and a zero dimension does not short-circuit the scan
+  quantity checked is bytes, so `np.zeros(2^60)` float64 is rejected while the same shape of int8 is merely NumPy's
+  `ArrayMemoryError` when the memory is not there, raised by `UnmanagedStorage.Allocate` around the allocator's
+  `OutOfMemoryException`), and a zero dimension does not short-circuit the scan
   (`np.zeros((0, 2^62))` float64 still reports "array is too big"). Dims are scanned left to right, so the error follows
   NumPy's order (`(-1, 2^62)` is `negative dimensions are not allowed`, `(2^62, -1)` is `array is too big; ...`). There
   are two wrap points, the byte count (`(2^31, 2^31)`) and the element count itself (`(2^62, 2^62)`), so the guard keys
@@ -330,14 +442,32 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   dropped (`reshape(-1,0)` → `(0)`), later ones read `newaxis` (`reshape(0,-1)` → `(0,newaxis)`), and a one-element shape
   closes with `,)` (`reshape(0)` → `(0,)`). The type is `IncorrectShapeException`; the multiple-unknown case is
   `ValueError` ("can only specify one unknown dimension").
+- `np.reshape(a, Shape shape, char order = 'C', bool? copy = null)` is NumPy's one signature: `Shape`'s conversions take
+  an int, a tuple, `int[]` and `long[]`, and the call is NumPy's `_wrapfunc` (`a.reshape(shape, order, copy)`, the
+  `[NewSubtype]` method, so a matrix or chararray operand keeps its class). `NDArray.ReshapeCore` is
+  `_reshape_with_copy_arg` with its three modes: `copy=true` (`NPY_COPY_ALWAYS`) skips the same-dims shortcut and copies
+  in `order` before the relabel; `copy=false` (`NEVER`) runs the view routes and raises `Unable to avoid creating a copy
+  while reshaping.` where the IF_NEEDED mode would copy; the size check comes before either. The method form
+  `reshape(Shape, char order, bool? copy = null)` (ndarray, matrix, chararray) carries the same keyword.
 - `np.expand_dims(a, int)` validates the axis against the output ndim (`a.ndim + 1`) and reports it as given, a 0-d input
   included. The guard lives at the `np.*` boundary, not in `Shape.ExpandDimension`, whose internal callers (keepdims
   reductions, fancy-index shaping, `asmatrix`) are not bound by NumPy's axis contract.
 - Matched, no need to re-prove: the values of `split`/`array_split`/`hsplit`/`vsplit` × {0, negative, empty},
   `repeat`/`tile`/`roll` × {0, negative, empty axis}, `squeeze`, `moveaxis`, `swapaxes`.
 - Text divergences (each typed and texted on both sides): `np.split(a, 0)` raises "number sections must be
-  larger than 0." where NumPy leaks `ZeroDivisionError: integer modulo by zero`; `repeat(-1)` and `tile(-1)` texts
-  differ in wording; `np.broadcast_to(a, (2^62, 6))` builds the view where NumPy refuses with `iterator is too large`.
+  larger than 0." where NumPy leaks `ZeroDivisionError: integer modulo by zero`; the broadcast `repeat(-1)` text differs
+  in wording (NumPy: `negative dimensions are not allowed`; a negative entry of a count ARRAY is NumPy's ValueError
+  `repeats may not contain negative values.`, period included);
+  `np.broadcast_to(a, (2^62, 6))` builds the view where NumPy refuses with `iterator is too large`.
+- The reshape METHOD of NDArray, `NDArray<T>`, NDMatrix and NDCharArray has NumPy's two spellings (batch 9):
+  `reshape(Shape shape, char order = 'C', bool? copy = null)` and the loose integers (`params long[]` + its
+  `params ReadOnlySpan<long>` twin); the `(Shape)`, `(ref Shape)` and `(int[])` forms went (the `int[]` one made
+  `a.reshape([3, 2])` CS0121 against the span). `NDArray<T>`'s order / copy form runs the untyped engine
+  (`ReshapeCore`, NumPy's `_reshape_with_copy_arg`) and re-wraps typed; its loose-int forms keep their alias engine.
+- `np.tile(A, Shape reps)` is one signature: the repetitions are ONE argument (an int, a tuple, an array; the loose
+  `np.tile(a, 2, 2)` is NumPy's TypeError and does not compile; a null `int[]` is the empty tuple, a copy). A negative
+  repetition raises NumPy's `negative dimensions are not allowed` from the repeat allocation while the tile holds
+  elements, else the final reshape's `cannot reshape array of size 0 into shape (0,newaxis)`.
 - `np.broadcast_to` refuses a negative target dimension first, with NumPy's `ValueError: all elements of broadcast shape
   must be non-negative` (`Shape.ValidateBroadcastTo`, behind every overload; parity QA-13): a `Shape` accepts negatives
   (reshape's -1), and the stride-0 view built from one had a negative size. `np.broadcast_shapes` keeps NumPy's
@@ -350,18 +480,56 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   `_broadcast_shape` first (`Shape.BroadcastShape`: PyArray_Broadcast's scan, `shape mismatch: objects cannot be
   broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape (4,).`, past 64 operands
   numbered within each group of 63), then lays the views out through `Shape.Broadcast`; `np.broadcast` is ONE scan over
-  every operand (`Shape.MultiIterShape`; NumSharp takes more than NumPy's 64). Gate:
-  `Creation/np.broadcast.RefusalTexts.Test.cs`.
+  every operand (`Shape.MultiIterShape`; NumSharp takes more than NumPy's 64). NumPy's class IS the function:
+  `new np.Broadcast(params NDArray[] arrays)` is public, and no operand is NumPy's `np.broadcast()` (shape `()`, size 1,
+  one empty step). `np.broadcast(NDListArray[])` / `new np.Broadcast(NDListArray[])` broadcast `np.char.split`'s object
+  arrays of lists over their ids and step through tuples of the lists (`iters` refused: its flat iterators read
+  numbers); a list array and a numeric array do not mix in one object. Gate: `Creation/np.broadcast.RefusalTexts.Test.cs`.
   The axis errors of this family (`split(..., axis=oob)`'s leaked `IndexError`, `squeeze`) are NumPy's
   (`axis-arguments.md`).
 - No `NPY_MAXDIMS` (a documented divergence, `[Misaligned]`): an array may have more than NumPy's 64 dimensions. Where
-  NumPy 2.4.2 refuses the 65th (`maximum supported dimension for an ndarray is currently 64, found 65` from
+  NumPy 2.5.4 refuses the 65th (`maximum supported dimension for an ndarray is currently 64, found 65` from
   `np.zeros` / `np.ones` / `reshape` / `np.expand_dims` / `np.broadcast_to`; `number of dimensions must be within [0, 64],
   indexing result would have 65` from `[np.newaxis]` and a 64-d × 65-d broadcast; `ndmin must be <= ndmax (64)`),
   NumSharp builds the array, and creation, `expand_dims`, new axes, reductions, elementwise ops, indexing, reshape,
   transpose, copy and `broadcast_to` run to about 200,000 dimensions (measured to 300,000), so no path may size a
   `stackalloc` by `ndim`, and no walk may recurse per axis: printing does not (`io-printing.md`, parity QA-50). One limit
   remains: such an array cannot cross to NumPy (the pythonnet bridge refuses 65). Gate: `View/Shape.HighRank.Tests.cs`.
+
+## `np.astype` / `np.fromiter` / `np.fromfunction` / `np.lib.stride_tricks`
+
+- `np.astype(x, dtype, copy = true, device = null)` is NumPy 2.1's function: the input check (`None` is NumPy's
+  TypeError), the device check, then `x.astype(dtype, copy=copy)` (`order='K'`, `casting='unsafe'`). The cast runs in
+  `NDArray.AsTypeComputation`, whose `[NewSubtype("x")]` makes a matrix operand's result a matrix (`subok=True`); NumSharp.Build
+  reads the declaration on the computation the public function calls, never on the public function itself.
+- `np.fromiter(IEnumerable iter, DType dtype, long count = -1)` is `PyArray_FromIter`: the iterator first (null and a 0-d
+  array are NumPy's TypeErrors), the unsized-text check (`'U'` / `'S'` without a length), one item at a time (count -1
+  reads all, any other negative count nothing, a non-negative one never pulls item count + 1), each item packed as it is
+  read, then `iterator too short`. Plain items convert through `np.array(object[], dtype)` (NumPy's setitem per element:
+  the range OverflowErrors, `int()` / `float()` texts, None as NaN); a C# `char` is a one-character str (a string
+  iterates its characters), except into the char dtype. A SEQUENCE item (a C# array or list, a tuple, an array of rank
+  >= 1) is answered by the target dtype as NumPy's setitem answers: integers `int() ... not 'list'`, floats and decimal
+  `setting an array element with a sequence.`, text the same without the period, complex `must be real number, not
+  list` / `only 0-dimensional arrays can be converted to Python scalars`, bool its truth value, StringDType its `str()`;
+  the items before it convert first.
+- `np.fromfunction(Func<NDArray[], NDArray> function, Shape shape, DType dtype = null)`: one call with the
+  `np.indices(shape, dtype ?? float64)` grids as an array (`ix => ix[0] + ix[1]` is NumPy's `lambda i, j: i + j` at any
+  rank); the result is the function's, as is (a grid returned verbatim is kept; the other grids are released). NumPy's
+  `**kwargs` are captured values. [Misaligned]: an int shape converts to `(n,)` (NumPy's TypeError) and a number the
+  function returns arrives as a 0-d array.
+- `np.lib.stride_tricks.sliding_window_view(x, Shape window_shape, NDAxis? axis = null, bool writeable = false)` (+ the
+  kept int / int[] axis forms) is NumPy's statements over a `Shape` of `x`'s own buffer window (its offset and buffer
+  size): the window checks, `normalize_axis_tuple(..., allow_duplicate: true)`, `x.strides + x.strides[axes]`, the
+  trimmed shape; read-only unless `writeable: true` (and never more writeable than `x`). A plain array (`subok=False`).
+- `np.lib.stride_tricks.as_strided(x, Shape? shape = null, long[] strides = null, bool subok = false, bool writeable =
+  true)`: NumPy's BYTE strides over `x`'s buffer window, the computation `NDArray.as_strided`
+  (`Manipulation/NDArray.StrideTricks.cs`, `[SubclassAware]`: `subok` reads the caller's class, which a woven function
+  would turn into a plain view). The array interface's defaults: `x`'s shape, and `x`'s strides unless `x` is
+  C-contiguous (then the C strides of the given shape). NumPy's order: `mismatch in length of strides and shape` before
+  `negative dimensions are not allowed`. The view is as writeable as `x` even with a zero stride (NumPy protects only
+  `broadcast_to` / `broadcast_arrays`; NumSharp's `Shape` computes a zero-stride layout read-only, so the bit is set back,
+  and `Alias` clears it for a read-only `x`). [Misaligned] by design: a stride that is not a multiple of the item size,
+  and a view reaching outside the buffer, are `ValueError`s where NumPy reads arbitrary memory.
 
 ## `np.copyto`
 
@@ -396,6 +564,6 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   for a multi-axis destination or an opposite-direction 1-D one; otherwise NumPy's raw 1-D order
   (`DirectILKernelGenerator.AssignRaw1D`), which reads its own writes when the strides differ (`a[3:19:2] = a[6:14]`).
 - Divergences (house conventions): the exception types (TypeError → `ArgumentException` for the mask,
-  `InvalidCastException` for casts; OverflowError → `OverflowException`); a 0-d non-bool mask always raises (NumPy takes
+  `InvalidCastException` for casts); a 0-d non-bool mask always raises (NumPy takes
   `where=1`); LP64 texts for a Python int past int64; one complex width.
 - Gates: `copyto_full.jsonl` (zero excuses) and `Manipulation/np.copyto.NumPyPort.Test.cs`.

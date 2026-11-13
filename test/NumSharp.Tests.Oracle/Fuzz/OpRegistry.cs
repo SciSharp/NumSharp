@@ -14,6 +14,17 @@ namespace NumSharp.Tests.Fuzz
     /// </summary>
     public static partial class OpRegistry
     {
+        /// <summary>
+        ///     Runs the NumSharp side of one corpus case: the call the op key names (the twin of gen_oracle.py's NumPy
+        ///     call), with the case's params and operands. Namespaced keys go to their surfaces' dispatchers; a key this
+        ///     switch does not know falls through to <c>ApplyExtended</c>.
+        /// </summary>
+        /// <param name="op">The corpus op key (<c>add</c>, <c>round_</c>, <c>ndarray.sum</c>, ...).</param>
+        /// <param name="p">The case's params, as the generator wrote them.</param>
+        /// <param name="ops">The case's operands, rebuilt from their descriptors (layouts included).</param>
+        /// <returns>The single-array result the corpus compares against NumPy's.</returns>
+        /// <exception cref="NotSupportedException">The op key (or one of its params, such as an rnd distribution) is not
+        ///     wired in the registry.</exception>
         public static NDArray Apply(string op, IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
             // Namespaced surfaces route to their own dispatchers (OpRegistry.Instance.cs): the
@@ -232,7 +243,7 @@ namespace NumSharp.Tests.Fuzz
                     int unwAxis = p.TryGetValue("axis", out var pua) ? pua.GetInt32() : -1;
                     bool unwPeriodIsInt = p.TryGetValue("period_is_int", out var pupi) && pupi.GetBoolean();
                     if (unwPeriodIsInt)
-                        return np.unwrap(ops[0], p["period"].GetInt64(), unwDiscont, unwAxis);
+                        return np.unwrap(ops[0], unwDiscont, unwAxis, period: p["period"].GetInt64());
                     if (p.TryGetValue("period", out var pup))
                         return np.unwrap(ops[0], unwDiscont, unwAxis, pup.GetDouble());
                     return np.unwrap(ops[0], unwDiscont, unwAxis);
@@ -274,8 +285,8 @@ namespace NumSharp.Tests.Fuzz
                         : np.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "average":
                     return p.ContainsKey("axes")
-                        ? np.average(ops[0], ParseIntArray(p["axes"]), null, ParseKeepdims(p))
-                        : np.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                        ? (NDArray)np.average(ops[0], ParseIntArray(p["axes"]), null, keepdims: ParseKeepdims(p))
+                        : (NDArray)np.average(ops[0], ParseAxis(p), null, keepdims: ParseKeepdims(p));
                 case "ptp": return np.ptp(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "count_nonzero": return np.count_nonzero(ops[0], ParseAxis(p).Value, ParseKeepdims(p));
                 case "percentile": return np.percentile(ops[0], p["q"].GetDouble(), ParseAxis(p),
@@ -293,8 +304,9 @@ namespace NumSharp.Tests.Fuzz
                                    p.TryGetValue("dtype", out var cpd) ? (DType)FuzzCorpus.DtypeToTC(cpd.GetString()) : null);
                 case "interp":
                 {
-                    double? left = p.TryGetValue("left", out var pil) ? pil.GetDouble() : (double?)null;
-                    double? right = p.TryGetValue("right", out var pir) ? pir.GetDouble() : (double?)null;
+                    // The fills are Python floats in the corpus: a C# double converts to NumPy's Python-float operand.
+                    NDArray left = p.TryGetValue("left", out var pil) ? pil.GetDouble() : null;
+                    NDArray right = p.TryGetValue("right", out var pir) ? pir.GetDouble() : null;
                     double? period = p.TryGetValue("period", out var pip2) ? pip2.GetDouble() : (double?)null;
                     return np.interp(ops[0], ops[1], ops[2], left, right, period);
                 }
@@ -409,9 +421,16 @@ namespace NumSharp.Tests.Fuzz
                 case "power_fast":
                     return ApplyPowerFast(p, ops);
 
-                // Sorting / searching (T14).
-                case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
-                case "sort": return np.sort(ops[0], p["axis"].GetInt32());          // Group A B2: value sort
+                // Sorting / searching (T14). NumPy 2.5's keyword-only stable= / descending= (gen_sort_descending's cases)
+                // take the keyword entry points, an axis of JSON null the flattening; every other case keeps its call.
+                case "argsort":
+                    return p.ContainsKey("descending") || p.ContainsKey("stable")
+                        ? np.argsort(ops[0], ParseAxis(p), stable: VfOptBool(p, "stable"), descending: VfOptBool(p, "descending"))
+                        : ApplyArgsort(ops[0], p["axis"].GetInt32());
+                case "sort":                                                        // Group A B2: value sort
+                    return p.ContainsKey("descending") || p.ContainsKey("stable")
+                        ? np.sort(ops[0], ParseAxis(p), stable: VfOptBool(p, "stable"), descending: VfOptBool(p, "descending"))
+                        : np.sort(ops[0], p["axis"].GetInt32());
                 case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString(),
                                                              ops.Length >= 3 ? ops[2] : null);   // ops[2] = optional sorter
                 case "digitize": return np.digitize(ops[0], ops[1], p["right"].GetBoolean()); // searchsorted + monotonicity
@@ -521,7 +540,7 @@ namespace NumSharp.Tests.Fuzz
                     invert: p.ContainsKey("invert") && p["invert"].GetBoolean(),
                     kind: p.TryGetValue("kind", out var isinKind) ? isinKind.GetString() : null);
                 case "union1d": return np.union1d(ops[0], ops[1]);
-                case "intersect1d": return np.intersect1d(ops[0], ops[1],
+                case "intersect1d": return (NDArray)np.intersect1d(ops[0], ops[1],
                     p.ContainsKey("assume_unique") && p["assume_unique"].GetBoolean());
                 case "setxor1d": return np.setxor1d(ops[0], ops[1],
                     p.ContainsKey("assume_unique") && p["assume_unique"].GetBoolean());
@@ -552,7 +571,7 @@ namespace NumSharp.Tests.Fuzz
                 case "vecmat": return np.vecmat(ops[0], ops[1]);
                 case "tensordot":
                     return p.ContainsKey("axesA")
-                        ? np.tensordot(ops[0], ops[1], ParseIntArray(p["axesA"]), ParseIntArray(p["axesB"]))
+                        ? np.tensordot(ops[0], ops[1], (ParseIntArray(p["axesA"]), ParseIntArray(p["axesB"])))
                         : np.tensordot(ops[0], ops[1], p["axes"].GetInt32());
                 case "multi_dot": return np.linalg.multi_dot(ops);
                 case "matrix_power": return np.linalg.matrix_power(ops[0], p["n"].GetInt32());
@@ -678,6 +697,18 @@ namespace NumSharp.Tests.Fuzz
                 case "linspace": return np.linspace(p["start"].GetDouble(), p["stop"].GetDouble(),
                     p["num"].GetInt32(), p["endpoint"].GetBoolean(),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                // np.linspace over array_like ends (each end an operand, 0-d for a NumPy scalar: strong).
+                case "linspace_arrays":
+                    return np.linspace(ops[0], ops[1], p["num"].GetInt64(), p["endpoint"].GetBoolean(),
+                        LinspaceDtype(p), p["axis"].GetInt32());
+                // A weak Python-float start against an array stop: the harness holds the C# number's 0-d array (the
+                // implicit conversion NumPy's Python float stands for) so the leak gate sees only the library's arrays.
+                case "linspace_weak":
+                {
+                    using NDArray start = p["start"].GetDouble();
+                    return np.linspace(start, ops[0], p["num"].GetInt64(), p["endpoint"].GetBoolean(),
+                        LinspaceDtype(p), p["axis"].GetInt32());
+                }
                 case "logspace": return np.logspace(p["start"].GetDouble(), p["stop"].GetDouble(),
                     p["num"].GetInt32(), p["endpoint"].GetBoolean(), p["base"].GetDouble(),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
@@ -710,7 +741,7 @@ namespace NumSharp.Tests.Fuzz
                     result.fill(0);
                     return result;
                 }
-                case "indices": return np.indices(ParseIntArray(p["dimensions"]),
+                case "indices": return (NDArray)np.indices(ParseIntArray(p["dimensions"]),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
                 // np.ndarray(shape, dtype, buffer, offset, strides, order): OpRegistry.Ndarray.cs.
                 case "ndarray": return NdarrayCtor(p, ops);
@@ -855,7 +886,7 @@ namespace NumSharp.Tests.Fuzz
                 }
 
                 // Group A: rounding + flattened diff + nan order-statistics.
-                case "round_": return np.round_(ops[0], p["decimals"].GetInt32());
+                case "round_": return np.round(ops[0], p["decimals"].GetInt32());
                 case "ediff1d": return np.ediff1d(ops[0]);
                 case "nanpercentile": return np.nanpercentile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "nanquantile": return np.nanquantile(ops[0], p["q"].GetDouble(), ParseAxis(p), keepdims: ParseKeepdims(p));
@@ -963,23 +994,29 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        /// <summary>The argsort op over every numeric dtype and char (np.argsort, NumPy's one signature): an unlisted dtype
+        ///     is refused, so a new dtype has to be wired here on purpose.</summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="axis">The axis.</param>
+        /// <returns>The int64 indices.</returns>
+        /// <exception cref="NotSupportedException">A dtype the switch does not list.</exception>
         private static NDArray ApplyArgsort(NDArray a, int axis) => a.typecode switch
         {
-            NPTypeCode.Byte => np.argsort<byte>(a, axis),
-            NPTypeCode.SByte => np.argsort<sbyte>(a, axis),
-            NPTypeCode.Int16 => np.argsort<short>(a, axis),
-            NPTypeCode.UInt16 => np.argsort<ushort>(a, axis),
-            NPTypeCode.Int32 => np.argsort<int>(a, axis),
-            NPTypeCode.UInt32 => np.argsort<uint>(a, axis),
-            NPTypeCode.Int64 => np.argsort<long>(a, axis),
-            NPTypeCode.UInt64 => np.argsort<ulong>(a, axis),
-            NPTypeCode.Char => np.argsort<char>(a, axis),
-            NPTypeCode.Single => np.argsort<float>(a, axis),
-            NPTypeCode.Double => np.argsort<double>(a, axis),
-            NPTypeCode.Half => np.argsort<Half>(a, axis),
-            NPTypeCode.Boolean => np.argsort<bool>(a, axis),
-            NPTypeCode.Decimal => np.argsort<decimal>(a, axis),
-            NPTypeCode.Complex => np.argsort<System.Numerics.Complex>(a, axis),
+            NPTypeCode.Byte => np.argsort(a, axis),
+            NPTypeCode.SByte => np.argsort(a, axis),
+            NPTypeCode.Int16 => np.argsort(a, axis),
+            NPTypeCode.UInt16 => np.argsort(a, axis),
+            NPTypeCode.Int32 => np.argsort(a, axis),
+            NPTypeCode.UInt32 => np.argsort(a, axis),
+            NPTypeCode.Int64 => np.argsort(a, axis),
+            NPTypeCode.UInt64 => np.argsort(a, axis),
+            NPTypeCode.Char => np.argsort(a, axis),
+            NPTypeCode.Single => np.argsort(a, axis),
+            NPTypeCode.Double => np.argsort(a, axis),
+            NPTypeCode.Half => np.argsort(a, axis),
+            NPTypeCode.Boolean => np.argsort(a, axis),
+            NPTypeCode.Decimal => np.argsort(a, axis),
+            NPTypeCode.Complex => np.argsort(a, axis),
             _ => throw new NotSupportedException($"argsort<{a.typecode}> not wired in OpRegistry")
         };
 
@@ -1035,6 +1072,15 @@ namespace NumSharp.Tests.Fuzz
                 throw;
             }
         }
+
+        /// <summary>
+        ///     The <c>dtype</c> of a linspace row (gen_oracle.py's <c>gen_creation</c> array-end block): JSON <c>null</c> is
+        ///     NumPy's <c>dtype=None</c> (the computation dtype), a name is that dtype.
+        /// </summary>
+        /// <param name="p">The row's params.</param>
+        /// <returns>The requested dtype, or null for none.</returns>
+        internal static DType LinspaceDtype(IReadOnlyDictionary<string, JsonElement> p)
+            => p["dtype"].ValueKind == JsonValueKind.Null ? null : FuzzCorpus.DtypeToTC(p["dtype"].GetString());
 
         private static int[] ParseIntArray(JsonElement arr)
         {
@@ -1100,7 +1146,8 @@ namespace NumSharp.Tests.Fuzz
             {
                 // ---- portable: pure MT19937 bits + exactly-rounded arithmetic ----
                 case "uniform": return random.uniform(A(0), A(1), S());
-                case "rand": return random.rand(S());
+                // NumPy's rand(*dims) is random_sample(dims): the same stream; rand itself takes loose dimensions only.
+                case "rand": return random.random_sample(S());
                 case "random_sample": return random.random_sample(SL());
                 case "randint": return random.randint((long)A(0), (long)A(1), S());
                 case "permutation": return random.permutation((int)A(0));
@@ -1241,8 +1288,8 @@ namespace NumSharp.Tests.Fuzz
                     ? (DType)FuzzCorpus.DtypeToTC(vd.GetString())
                     : null;
                 return op == "nanvar"
-                    ? np.nanvar(a, ParseAxis(p), ParseKeepdims(p), ddof, loop)
-                    : np.nanstd(a, ParseAxis(p), ParseKeepdims(p), ddof, loop);
+                    ? np.nanvar(a, ParseAxis(p), keepdims: ParseKeepdims(p), ddof: ddof, dtype: loop)
+                    : np.nanstd(a, ParseAxis(p), keepdims: ParseKeepdims(p), ddof: ddof, dtype: loop);
             }
             // mean_loops.jsonl: np.mean with dtype= (a NumPy dtype name or null) — NumPy's _mean (plan
             // api-parameter-parity X9). No np.mean overload carries dtype= without an axis yet (plan item B3), so the flat
@@ -1263,13 +1310,21 @@ namespace NumSharp.Tests.Fuzz
                 DType loop = p["dtype"].ValueKind != JsonValueKind.Null
                     ? (DType)FuzzCorpus.DtypeToTC(p["dtype"].GetString())
                     : null;
-                return np.nanmean(a, ParseAxis(p), ParseKeepdims(p), loop);
+                return np.nanmean(a, ParseAxis(p), keepdims: ParseKeepdims(p), dtype: loop);
             }
             if (op == "sum" && p.TryGetValue("dtype", out var sumDtype))
                 return np.sum(a, ParseAxis(p), keepdims: ParseKeepdims(p), dtype: (DType)FuzzCorpus.DtypeToTC(sumDtype.GetString()));
             return ApplyReduce(op, ParseAxis(p), ParseKeepdims(p), a);
         }
 
+        /// <summary>The reductions without their own keyword route, by the corpus op name: one np.* call each with the case's
+        ///     axis and keepdims (named, so NumPy's positional order - dtype / out before keepdims - cannot rebind it).</summary>
+        /// <param name="op">The corpus op name (sum, prod, min, max, mean, std, var, argmax, argmin, all, any, the nan family).</param>
+        /// <param name="axis">The case's axis, or null for every axis.</param>
+        /// <param name="keepdims">The case's keepdims.</param>
+        /// <param name="a">The operand.</param>
+        /// <returns>The reduction.</returns>
+        /// <exception cref="NotSupportedException">An op name the switch does not list.</exception>
         private static NDArray ApplyReduce(string op, int? axis, bool keepdims, NDArray a)
         {
             switch (op)
@@ -1284,21 +1339,21 @@ namespace NumSharp.Tests.Fuzz
                 // axis=None (keepdims=False only — the flat long form has no keepdims): wraps the
                 // scalar back to the 0-d int64 NumPy returns. G13: this is the path whose Decimal
                 // IL compare was silently wrong and whose Char case threw — now oracle-gated.
-                case "argmax": return axis.HasValue ? np.argmax(a, axis.Value, keepdims) : NDArray.Scalar(np.argmax(a));
-                case "argmin": return axis.HasValue ? np.argmin(a, axis.Value, keepdims) : NDArray.Scalar(np.argmin(a));
+                case "argmax": return axis.HasValue ? np.argmax(a, axis.Value, keepdims: keepdims) : NDArray.Scalar(np.argmax(a));
+                case "argmin": return axis.HasValue ? np.argmin(a, axis.Value, keepdims: keepdims) : NDArray.Scalar(np.argmin(a));
                 case "all": return np.all(a, axis, null, keepdims);
                 case "any": return np.any(a, axis, null, keepdims);
-                case "nansum": return np.nansum(a, axis, keepdims);
-                case "nanprod": return np.nanprod(a, axis, keepdims);
+                case "nansum": return np.nansum(a, axis, keepdims: keepdims);
+                case "nanprod": return np.nanprod(a, axis, keepdims: keepdims);
                 case "nanmax": return np.nanmax(a, axis, keepdims: keepdims);
                 case "nanmin": return np.nanmin(a, axis, keepdims: keepdims);
                 // keepdims by NAME: positional slot 3 is now `out=` (an implicit bool->NDArray
                 // conversion exists, so a positional bool would silently bind the out parameter).
                 case "nanargmax": return np.nanargmax(a, axis, keepdims: keepdims);
                 case "nanargmin": return np.nanargmin(a, axis, keepdims: keepdims);
-                case "nanmean": return np.nanmean(a, axis, keepdims);
-                case "nanstd": return np.nanstd(a, axis, keepdims);
-                case "nanvar": return np.nanvar(a, axis, keepdims);
+                case "nanmean": return np.nanmean(a, axis, keepdims: keepdims);
+                case "nanstd": return np.nanstd(a, axis, keepdims: keepdims);
+                case "nanvar": return np.nanvar(a, axis, keepdims: keepdims);
                 case "nanmedian": return np.nanmedian(a, axis, keepdims: keepdims);
                 default: throw new NotSupportedException(op);
             }

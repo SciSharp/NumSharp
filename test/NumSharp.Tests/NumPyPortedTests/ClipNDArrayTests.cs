@@ -462,7 +462,7 @@ namespace NumSharp.Tests.NumPyPortedTests
             // with casting rule 'same_kind'". NumSharp used to truncate silently instead.
             var arr = np.arange(10.0) + 0.5; // 0.5, 1.5, ..., 9.5
 
-            var e = Assert.ThrowsExactly<TypeError>(() => np.clip(arr, min: 3.0, dtype: NPTypeCode.Int32));
+            var e = Assert.ThrowsExactly<UFuncInputCastingError>(() => np.clip(arr, min: 3.0, dtype: NPTypeCode.Int32));
             Assert.AreEqual(
                 "Cannot cast ufunc 'maximum' input 0 from dtype('float64') to dtype('int32') with casting rule 'same_kind'",
                 e.Message);
@@ -536,7 +536,7 @@ namespace NumSharp.Tests.NumPyPortedTests
             var src = np.arange(10.0) + 0.5;
             var out_int = np.empty(new Shape(10), NPTypeCode.Int32);
 
-            Assert.ThrowsExactly<TypeError>(() => np.clip(src, 1.5, 7.5, @out: out_int));
+            Assert.ThrowsExactly<UFuncOutputCastingError>(() => np.clip(src, 1.5, 7.5, @out: out_int));
         }
 
         [TestMethod]

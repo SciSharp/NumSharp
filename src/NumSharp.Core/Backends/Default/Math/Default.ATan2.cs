@@ -69,7 +69,10 @@ namespace NumSharp.Backends
             // Execute using IL kernel infrastructure
             // ATan2 is a binary operation: atan2(y, x). NumPy's ufunc output layout (parity QA-36): the route writes C,
             // so a permuted or F operand is computed in its K order and relabelled.
-            return KOrderBinary(y, x, (engine: this, typeCode), static (s, a, b) => s.engine.ExecuteATan2Op(a, b, s.typeCode));
+            // An input of another dtype than the loop's is cast, which keeps an N-D input off NumPy's trivial loop.
+            var atanLoop = typeCode ?? PromoteATan2Binary(y, x);
+            return KOrderBinary(y, x, (engine: this, typeCode), static (s, a, b) => s.engine.ExecuteATan2Op(a, b, s.typeCode),
+                y.GetTypeCode != atanLoop, x.GetTypeCode != atanLoop);
         }
 
         /// <summary>
@@ -94,7 +97,8 @@ namespace NumSharp.Backends
             // Handle scalar x scalar case
             if (y.Shape.IsScalar && x.Shape.IsScalar)
             {
-                return ExecuteATan2ScalarScalar(y, x, yType, xType, resultType);
+                // Two 0-d operands give NumPy's scalar (the ufunc's PyArray_Return; this route runs without out=).
+                return ExecuteATan2ScalarScalar(y, x, yType, xType, resultType).PyArray_Return();
             }
 
             // Broadcast shapes

@@ -93,17 +93,19 @@ namespace NumSharp
             => new NDArray<T>(shape, fillZeros, this);
 
         /// <summary>
-        ///     <see cref="NDArray.Scalar{T}(T)"/> bound to this engine: the 0-d value an engine member returns (a flat
-        ///     reduction, a 0-d operation) or computes with stays on the engine that made it.
+        ///     <see cref="NDArray.WritableScalar{T}(T)"/> bound to this engine: the 0-d value an engine member returns (a
+        ///     flat reduction, a 0-d operation) or computes with stays on the engine that made it.
         /// </summary>
         /// <typeparam name="T">The element type; its <see cref="NPTypeCode"/> is the dtype.</typeparam>
         /// <param name="value">The value.</param>
-        /// <returns>A new writeable 0-d array holding <paramref name="value"/>, bound to this engine.</returns>
+        /// <returns>A new writeable 0-d array holding <paramref name="value"/>, bound to this engine: an engine exit that
+        ///     hands it out as NumPy's scalar calls <see cref="NDArray.PyArray_Return"/> (a keepdims exit reshapes it into
+        ///     an array first, which must stay writeable).</returns>
         protected internal NDArray NewScalar<T>(T value) where T : unmanaged
-            => Bind(NDArray.Scalar(value));
+            => Bind(NDArray.WritableScalar(value));
 
         /// <summary>
-        ///     <see cref="NDArray.Scalar{T}(object)"/> bound to this engine: <paramref name="value"/> converted to
+        ///     <see cref="NDArray.WritableScalar{T}(object)"/> bound to this engine: <paramref name="value"/> converted to
         ///     <typeparamref name="T"/> first.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
@@ -112,19 +114,19 @@ namespace NumSharp
         /// <returns>A new writeable 0-d array, bound to this engine.</returns>
         /// <exception cref="InvalidCastException"><paramref name="value"/> does not convert to <typeparamref name="T"/>.</exception>
         protected internal NDArray NewScalar<T>(object value) where T : unmanaged
-            => Bind(NDArray.Scalar<T>(value));
+            => Bind(NDArray.WritableScalar<T>(value));
 
         /// <summary>
-        ///     <see cref="NDArray.Scalar(object)"/> bound to this engine: the dtype is the value's own (its C# type).
+        ///     <see cref="NDArray.WritableScalar(object)"/> bound to this engine: the dtype is the value's own (its C# type).
         /// </summary>
         /// <param name="value">The value.</param>
         /// <returns>A new writeable 0-d array, bound to this engine.</returns>
         /// <exception cref="NotSupportedException"><paramref name="value"/>'s type is no NumSharp dtype.</exception>
         protected internal NDArray NewScalar(object value)
-            => Bind(NDArray.Scalar(value));
+            => Bind(NDArray.WritableScalar(value));
 
         /// <summary>
-        ///     <see cref="NDArray.Scalar(object, DType)"/> bound to this engine: <paramref name="value"/> stored as
+        ///     <see cref="NDArray.WritableScalar(object, DType)"/> bound to this engine: <paramref name="value"/> stored as
         ///     <paramref name="dtype"/>.
         /// </summary>
         /// <param name="value">The value (converted when it is not of <paramref name="dtype"/>).</param>
@@ -133,7 +135,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="ValueError">A non-text value into a <c>coerce=False</c> <c>StringDType</c>.</exception>
         protected internal NDArray NewScalar(object value, DType dtype)
-            => Bind(NDArray.Scalar(value, dtype));
+            => Bind(NDArray.WritableScalar(value, dtype));
 
         /// <summary>
         ///     Moves a fresh array the engine made by another route (a scalar, a conversion) onto this engine, and returns it.

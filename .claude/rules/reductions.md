@@ -23,6 +23,14 @@ reduced axis of `out=` must be 1 long, and an `out=` axis of length 1 cannot bro
 or `where=` is given), the max/min family and the sum family's keyword paths run it. Gates: the `reduce_kwargs` tier
 (zero excuses) and `Logic/np.all_any.tuple_out_where.Test.cs`.
 
+A keepdims result is NumPy's allocation, not a reshape: the reduction iterator sorts the kept axes AND the length-1
+reduced axes into memory order, so each reduced axis returns at its sorted place with the running stride
+(`DefaultEngine.ExpandReducedAxis` / `RelabelKeptAxes`, the keepdims form of `Shape.ReductionOutputShape`; an
+F (2, 3, 4) float64 input's `sum(axis=1, keepdims=True)` has NumPy's byte strides (8, 16, 16)).
+Every engine reduction that re-inserts axes goes through them (sum / prod / mean / var / std, the max / min family, the
+NaN-aware forms, any / all / count_nonzero, the empty-input handlers); a zero-size result has all-zero strides
+(`memory-views.md`).
+
 ## `np.sum` / `np.prod` / `np.mean` / `np.var` / `np.std`: one signature, NumPy's keywords
 
 One overload each, NumPy's whole signature, and the `ndarray` methods likewise (`var` / `std` without `correction`,
@@ -48,14 +56,22 @@ which NumPy's methods refuse). A positional third argument is `dtype` and a four
   NumPy's three forms (a complex `x` squared into its `real` view, which the last sum reads at stride 2), the masked last
   sum into `out`, `max(count - ddof, 0)` per output (`CountsMinusDdof`), `_std`'s sqrt.
 - A numpy.matrix operand takes the matrix method's rules (`matrix.md`).
-- `[Misaligned]` by decision (NL3, 2026-11-06: "Keep SIMD lanes"): the plain float32 / float64 `np.prod` (flat, along an
-  axis, and the `out=` route) multiplies in SIMD lane order, NumPy's reduce in sequence: the last bits differ, and an
-  overflow before a zero is NaN in NumPy and 0 here. The lanes are 3.7-16x NumPy; `initial=` or `where=` run NumPy's
-  sequential loop bit for bit (`Math/np.prod.LaneOrder.Test.cs`). NumPy's `initial=None` (copy each output's first
-  element) has no C# spelling.
-- Gates: `Math/ReductionKeywords.NumPyPort.Test.cs` and the `reduce_kwargs` tier's sum / prod / mean / var / std cells
-  (sections A–E with I `initial=`, D `dtype=`, M `mean=` / `ddof` / `correction=`; the NL12 mask cells and np.prod's
-  plain inexact cells are not generated).
+- The float32 / float64 `np.prod` is NumPy's sequential `FLOAT` / `DOUBLE_multiply` reduce on every route (the owner,
+  2026-11-12, reversing NL3 / D24 "Keep SIMD lanes"): each output starts at 1 and multiplies its elements in NumPy's
+  iterator order (a contiguous array over every axis in MEMORY order, so an F array column by column; a reversed view in
+  its INDEX order, which NumPy does not flip; an axis product in increasing reduced index). A C- or F-contiguous
+  product (flat or along an axis; F as the C array of its reversed axes) takes `Default.Reduction.Product.Sequential.cs` (rows: eight independent chains at
+  once; an outer axis: NumPy's elementwise form with vectors, the second operand's NaN kept; a run that ends in NaN is
+  computed again by NumPy's loop for its NaN bits); every other layout and every cast loop takes `AddMulNumPy`. A flat
+  product is NumPy's dependent chain, at NumPy's own speed (1M float64: 1.39 ms, NumPy 1.50; the lanes it replaced took
+  0.23 ms); axis products stay fast (a (100000, 8) along axis 1: 0.27 ms, NumPy 1.84). `initial=` / `where=` give the
+  same bits as the plain call. NumPy's `initial=None` (copy each output's first element) has no C# spelling. TRAP:
+  NumPy's multiply loops (`NumPyMultiplyLoops`) are function-pointer targets the tiered JIT left at tier-0 (5-8x slow);
+  they carry `[MethodImpl(AggressiveOptimization)]`.
+- Gates: `Math/ReductionKeywords.NumPyPort.Test.cs`, `Math/np.prod.SequentialOrder.Test.cs` (NumPy's bits flat, reversed,
+  float32 and along both axes; an overflow before a zero is NaN) and the `reduce_kwargs` tier's sum / prod / mean / var /
+  std cells (sections A–E with I `initial=`, D `dtype=`, M `mean=` / `ddof` / `correction=`; the NL12 mask cells and
+  np.prod's plain inexact cells are not generated); the fuzz tier's prod cells are strict (no order excuse).
 
 ## `np.prod` / `np.cumprod`: the complex128 and float16 loops
 
@@ -92,7 +108,9 @@ makes is part of the answer:
   bool → int64 cast of a bool input is laid out as NumPy's ufunc would lay out the bool operand
   (`DefaultEngine.CastInUfuncLayout`: NumPy casts in the iterator's buffers, which never vote, so a broadcast bool input
   still accumulates into C, where astype's K copy would rank its stride-0 axes innermost). The NaN scans inherit the
-  layout from NumPy's `_replace_nan` statements (a K copy, then a masked copyto of the fill).
+  layout from NumPy's `_replace_nan` statements (a K copy, then a masked copyto of the fill). A length-1 scan axis
+  copies the input into that layout at the accumulator dtype (`LengthOneAxisScan`, cumsum and cumprod), not astype's K
+  copy, which keeps a plain F array's strides on the extent-1 axis.
 - The row route (`Default.Reduction.ScanRows.cs`, `TryScanRows`): a scan axis that is not innermost in memory, over an
   operand dense in the output's memory order and of the accumulator's own dtype (the eight integer widths, float32,
   float64), runs by whole rows: the first block copied (accumulate copies element 0: a -0.0 or a signalling NaN arrives as
@@ -246,31 +264,65 @@ engine's exact pieces:
 - Gates: `mean_loops.jsonl` (zero excuses), `Math/np.mean.NumPyPort.Test.cs`, the tightness tests
   `Mean_NoDivergenceIsExcused` / `Mean_ReversedAndBroadcastLayouts_AreNotExcused`.
 
+## Tuple axes: one reduction over the axis set
+
+sum, prod, mean, var, std, max / amax, min / amin and the nan family (nansum, nanprod,
+nanmean, nanvar, nanstd, nanmax, nanmin) take NumPy's axis type on np, ndarray and numpy.matrix, and so do the 14
+engine members behind them (`ReduceAdd`, `ReduceProduct`, `ReduceMean`, `ReduceVar`, `ReduceStd`, `ReduceAMax`,
+`ReduceAMin`, `NanSum` ... `NanStd`: a breaking change for an engine implementer). A tuple of one axis or of every axis
+takes the integer / None route (`ReductionArguments.TryIntegerForm`); any other set is NumPy's statements over the WHOLE
+set, never a chain of single-axis reductions (two float32 sums over `(0, 2)` of a (3, 50, 7) array differ from the chain
+in 34 of 50 outputs): sum / prod through `AddMulNumPy` (the reduction iterator from the identity, every loop), max / min
+/ nanmax / nanmin through `MaxMinNumPy` (its seeded exact engines only for one axis or every axis), mean through
+`MeanWhereNumPy` (the count is the product of the reduced extents, `ReduceItemCount`), var / std through
+`VarStdKeywordsNumPy`, the nan family through its keyword statements (`NanReplacedReduceKeywords`, `NanMeanKeywords`,
+`NanVarStdKeywords`). The empty tuple reduces nothing: identity + each element (`np.sum(-0.0, ())` is +0.0, the prod
+keeps -0.0), a copy for max / min, and an empty reduced set needs no identity (`np.max(zeros((0, 3)), ())` is the
+empty result). Text under a set: StringDType's add / maximum / minimum are not reorderable (two axes or more is NumPy's
+"at most one axis may be specified", the None route's answer), its empty tuple computes through an appended axis of
+length 1 (`VStringReduceOverNoAxis`), and every loop refusal is the axis-free one.
+
 ## `np.any` / `np.all` / `np.count_nonzero` along an axis
 
 Laid out like NumPy's reduction: NumPy allocates the result with `npyiter_new_temp_array` over the reduce iterator, so an
 F input gives an F result and a permuted one keeps its memory order. The logical reductions allocate with
 `Shape.ReductionOutputShape` (`DefaultEngine.LogicalReductionShape`), `NDAxisIter.ReduceBool` writes each output through
-the result's own strides, keepdims re-inserts the axis with `ExpandDimension`, and the tuple-axis chain drops its kept
+the result's own strides, keepdims re-inserts the axis at its sorted place (`ExpandReducedAxis`; the tuple-axis chain's
+result is relabelled once, `RelabelKeptAxes`), and the tuple-axis chain drops its kept
 axes with their strides. `np.count_nonzero(a, axis)` is NumPy's own `a.astype(bool, copy=False).sum(axis, dtype=intp)`;
 np.sum's bool count route (`TryCountBoolAxisSum`) returns an owning result (never np.evaluate's reshaped keepdims view).
+A tuple (`TensorEngine.CountNonZero(a, NDAxis?, keepdims)`) is ONE add.reduce over the axis set in the intp loop
+(`ReduceAddOverAxes(truth, axes, keepdims, Int64)`: np.sum's routes for one axis and every axis, the reduction iterator's
+`NumPyAddLoops.Int64` for any other set, so an F operand gives an F result); `axis=None` without keepdims is the flat
+count as NumPy's scalar, with keepdims a (1, ..., 1) array. A known gap: a 0-d operand's tuple `(0,)` is accepted by
+np.all / np.any's tuple route (NumPy: AxisError; `[OpenBugs] ApiParity_AllAny_ZeroDOperand_TupleAxis_IsAxisError`).
 A bool C/F operand of at least 16K elements reduced to rank >= 1 runs np.evaluate's Any / All axis stream
 (`TryStreamLogicalAxis`; long contiguous rows of 4096 or more stay on the engine's per-row scan). Floor: the "read every
 element" F-slab cells at 1M stream from L2 on both sides. Gate: `Logic/np.all_any.ResultLayout.Test.cs` (probed strides
 for bool / int32 / U inputs, F, permuted, stepped, tuple axes) and the string oracle's `strcomp` section.
 
-## `np.average` / `np.average_returned`: NumPy's statements
+## `np.average`: NumPy's statements
 
 `TensorEngine.Average` (`TensorEngine.FunctionBase.cs`), whose `DefaultEngine` override holds NumPy's
-`numpy/lib/_function_base_impl.py` statements (`Backends/Default/Statistics/Default.Average.cs`); the facades keep the
-null check, and their woven subclass path answers for a numpy.matrix operand (`NDSubclassRules.Average`).
+`numpy/lib/_function_base_impl.py` statements (`Backends/Default/Statistics/Default.Average.cs`); the facade keeps the
+null check, and its woven subclass path answers for a numpy.matrix operand (`NDSubclassRules.Average`, a rule over the
+result struct).
+- `np.average(a, axis, weights, returned, keepdims)` returns `np.AverageResult` (`Statistics/np.average.cs`): the average
+  (`values`) and, with NumPy's `returned`, `sum_of_weights` (null otherwise). It converts implicitly to `NDArray` and
+  `NDArray[]`, deconstructs (`var (avg, sum_of_weights) = np.average(a, returned: true);`, Python's unpacking error
+  without `returned`), forwards the array members callers read on an average (shape, dtype, flags, the typed getters,
+  `ToArray<T>`, `reshape`, `astype`), declares the explicit scalar casts of every dtype an average can have
+  (`(double)np.average(a)`: C# applies one user-defined conversion, so `(int)` needs `.values`), and is `IDisposable`
+  and `INDArrayCarrier`. One computation (`NDArray.average`) serves both NumPy returns and releases a sum of weights
+  nobody asked for. `np.ma.average` returns `MaskedArrayModule.AverageResult` the same way (`values` typed
+  `NDMaskedArray`).
 - `_weights_are_valid`: weights of another shape raise `TypeError("Axis must be specified when shapes of a and weights
   differ.")` without an axis and `ValueError("Shape of weights must be consistent with shape of a along specified
   axis.")` along one; weights along the axes are transposed and reshaped into the operand's frame. `result_dtype` is
   `np.result_type` over the descriptors (`'f8'` joins for an integer / bool operand), so text weights meet NumPy's
   refusals in the weight sum. Without weights `avg = a.mean(axis)` and the count is `avg.dtype.type(a.size / avg.size)`:
   NumPy's scalar beside a 0-d mean, the broadcast copy beside one with dimensions. With weights `scl = wgt.sum(axis,
-  dtype=result_dtype)`, the zero check (`DivideByZeroException` "Weights sum to zero, can't be normalized"),
+  dtype=result_dtype)`, the zero check (`ZeroDivisionError` "Weights sum to zero, can't be normalized"),
   `np.multiply(a, wgt, dtype=result_dtype).sum(axis) / scl` (`SumOfProducts`, `Quotient`), and `returned` broadcasts and
   copies `scl` when its shape differs.
 - Axis tuples: one axis is np.mean's / np.sum's axis route (tested first, so a 1-D operand's `(0,)` takes the one-output
@@ -436,7 +488,7 @@ index (`DONT_NEGATE_STRIDES`: a reversed run is visited from its high address do
   edges are NumPy's.
 - Errors: `ValueError` (`m has more than 2 dimensions`, `{f,a}weights cannot be negative`), `TypeError`
   (`fweights must be integer`), `RuntimeError` (`cannot handle multidimensional {f,a}weights`, `incompatible numbers of
-  samples and {f,a}weights`); weights summing to zero raise `DivideByZeroException` (NumPy's `ZeroDivisionError`).
+  samples and {f,a}weights`); weights summing to zero raise NumPy's `ZeroDivisionError`.
 - Two NumPy details ported on purpose: `X -= avg[:, None]` runs in the operand's dtype (so `dtype=float32` without
   weights keeps float32), and for complex input `fact` is complex128, so NumPy's `.../w_sum` is Smith's
   `numer*(1/w_sum)`, reproduced as a reciprocal multiply (it rounds 1 ULP off real division and decides finite versus inf
@@ -450,7 +502,7 @@ index (`DONT_NEGATE_STRIDES`: a reversed run is visited from its high address do
 
 ### `np.nanmax` / `np.nanmin`: `np.fmax.reduce` / `np.fmin.reduce`
 
-The ±0 sign of a tie and which NaN an all-NaN slice returns (payload intact, never canonical) match NumPy 2.4.2 on every
+The ±0 sign of a tie and which NaN an all-NaN slice returns (payload intact, never canonical) match NumPy 2.5.4 on every
 non-broadcast float layout (np.evaluate's `NanMax`/`NanMin` too). A numpy.matrix operand is not a base ndarray, so it
 takes NumPy's other branch through its class's override of the virtual `NDArray.NanMax` / `NanMin` (`_replace_nan`, the
 matrix's own `max` / `min`, `np.nan` written back into an all-NaN slice; `matrix.md`), whose bits are maximum's /

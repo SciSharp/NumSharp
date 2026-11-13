@@ -62,18 +62,18 @@ namespace NumSharp.Tests.Backends
             ///     <see cref="TensorEngine.Sum"/> no longer sees them).
             /// </summary>
             /// <param name="arr">The operand.</param>
-            /// <param name="axis_">The axis, or null for every axis.</param>
+            /// <param name="axis">The axis, a tuple of axes, or null for every axis.</param>
             /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
             /// <param name="dtype">The accumulator dtype, or null.</param>
             /// <param name="out">The output, or null.</param>
             /// <param name="initial">The start value, or null.</param>
             /// <param name="where">The mask, or null.</param>
             /// <returns>The sum.</returns>
-            public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null,
+            public override NDArray ReduceAdd(NDArray arr, NDAxis? axis, bool keepdims = false, DType dtype = null, NDArray @out = null,
                 object initial = null, NDArray @where = null)
             {
                 Sums++;
-                return base.ReduceAdd(arr, axis_, keepdims, dtype, @out, initial, @where);
+                return base.ReduceAdd(arr, axis, keepdims, dtype, @out, initial, @where);
             }
         }
 

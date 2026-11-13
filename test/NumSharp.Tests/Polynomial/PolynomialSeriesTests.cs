@@ -318,23 +318,20 @@ namespace NumSharp.Tests.Polynomial
         [TestMethod]
         public void TrimCoef_ToleranceTyping_WeakVsStrong()
         {
-            // float16 series: both a Python float and np.float64(1.0001) keep [1, 1.001]
+            // float16 series: a Python float tol (C#'s double, weak under NEP 50) keeps [1, 1.001]. NumPy's strong
+            // np.float64(1.0001) gives the same answer; it has no C# spelling since API-parity batch 11 typed tol as a
+            // double.
             var c = np.array(new[] { (Half)1.0, (Half)1.0009765625 });
             AssertBytes(PU.trimcoef(c, 1.0001), "float16", new long[] { 2 }, "003c013c");
-            AssertBytes(PU.trimcoef(c, NDArray.Scalar(1.0001)), "float16", new long[] { 2 }, "003c013c");
         }
 
         [TestMethod]
         public void TrimCoef_Errors()
         {
+            // NumPy's errors for a complex, None or huge-int tol have no C# call since API-parity batch 11: tol is a
+            // double, so the compiler refuses those arguments.
             Action neg = () => PU.trimcoef(new[] { 1.0 }, -1);
             neg.Should().Throw<ValueError>().WithMessage("tol must be non-negative");
-            Action cplx = () => PU.trimcoef(new[] { 1.0 }, new Complex(1, 0));
-            cplx.Should().Throw<TypeError>().WithMessage("'<' not supported between instances of 'complex' and 'int'");
-            Action none = () => PU.trimcoef(new[] { 1.0 }, null);
-            none.Should().Throw<TypeError>().WithMessage("'<' not supported between instances of 'NoneType' and 'int'");
-            Action big = () => PU.trimcoef(new[] { 1.0, 2.0 }, BigInteger.Pow(2, 1030));
-            big.Should().Throw<OverflowException>().WithMessage("int too large to convert to float");
         }
 
         [TestMethod]
@@ -653,9 +650,9 @@ namespace NumSharp.Tests.Polynomial
             Bits(((Complex)s3).Imaginary).Should().Be(0x8000000000000000UL);
             // a zero-length Python domain is Python's ZeroDivisionError
             Action zero = () => PU.mapparms((1, 1), (0, 1));
-            zero.Should().Throw<DivideByZeroException>().WithMessage("division by zero");
+            zero.Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
             Action zeroF = () => PU.mapparms(new object[] { 1.0, 1.0 }, new object[] { 0, 1 });
-            zeroF.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            zeroF.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
         }
 
         [TestMethod]
@@ -755,7 +752,7 @@ namespace NumSharp.Tests.Polynomial
             // new[1] - new[0] is a Python complex; oldlen an np.float64 0.0: `pycomplex / np.float64` is CPython's
             // complex division (complex accepts a float subclass) -> ZeroDivisionError, where NumPy's would give inf.
             Action a = () => PU.mapparms(np.array(new[] { 2.0, 2.0 }), (new Complex(0, 1), 2));
-            a.Should().Throw<DivideByZeroException>().WithMessage("complex division by zero");
+            a.Should().Throw<ZeroDivisionError>().WithMessage("complex division by zero");
         }
 
         [TestMethod]
@@ -774,11 +771,11 @@ namespace NumSharp.Tests.Polynomial
             Action b = () => PU.mapparms(np.array(new[] { false, true }), (0, 1));
             b.Should().Throw<TypeError>().WithMessage("numpy boolean subtract, the `-` operator, is not supported, use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
             Action ov = () => PU.mapparms(np.array(new sbyte[] { 0, 1 }), (0, 300));
-            ov.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            ov.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
             Action ov2 = () => PU.mapparms(np.array(new long[] { 0, 1 }), (0, new BigInteger(ulong.MaxValue) + 1));
-            ov2.Should().Throw<OverflowException>().WithMessage("int too big to convert");
+            ov2.Should().Throw<OverflowError>().WithMessage("int too big to convert");
             Action ov3 = () => PU.mapparms((0, 1), (0, BigInteger.Pow(10, 400)));
-            ov3.Should().Throw<OverflowException>().WithMessage("integer division result too large for a float");
+            ov3.Should().Throw<OverflowError>().WithMessage("integer division result too large for a float");
         }
 
         [TestMethod]
@@ -810,13 +807,13 @@ namespace NumSharp.Tests.Polynomial
             Bits((double)s6).Should().Be(0xc02203af9ee75569UL);
             // the two ZeroDivisionError texts: int/int vs anything with a float (-0.0 is a zero divisor)
             Action mixed = () => PU.mapparms((1, 1.0), (0, 1));
-            mixed.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            mixed.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
             Action negZero = () => PU.mapparms((0.0, -0.0), (0, 1));
-            negZero.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            negZero.Should().Throw<ZeroDivisionError>().WithMessage("float division by zero");
             Action boolInt = () => PU.mapparms((true, 1), (0, 1));
-            boolInt.Should().Throw<DivideByZeroException>().WithMessage("division by zero");
+            boolInt.Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
             Action bigInt = () => PU.mapparms((1L << 62, 1L << 62), (1L << 62, 1));
-            bigInt.Should().Throw<DivideByZeroException>().WithMessage("division by zero");
+            bigInt.Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
         }
 
         [TestMethod]
@@ -1186,7 +1183,7 @@ namespace NumSharp.Tests.Polynomial
         public void Line_Errors()
         {
             Action ov = () => LA.lagline(NDArray.Scalar((sbyte)1), 300);
-            ov.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            ov.Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
             Action neg = () => LA.lagline(NDArray.Scalar(true), NDArray.Scalar(true));
             neg.Should().Throw<TypeError>().WithMessage("The numpy boolean negative, the `-` operator, is not supported, use the `~` operator or the logical_not function instead.");
             Action arr = () => P.polyline(1, np.array(new long[] { 1, 2 }));
@@ -1194,7 +1191,7 @@ namespace NumSharp.Tests.Polynomial
             Action inh = () => P.polyline(1, np.array(new long[] { 2 }));
             inh.Should().Throw<ValueError>().WithMessage("setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. The detected shape was (2,) + inhomogeneous part.");
             Action big = () => H.hermline(1, BigInteger.Pow(2, 1030));
-            big.Should().Throw<OverflowException>().WithMessage("integer division result too large for a float");
+            big.Should().Throw<OverflowError>().WithMessage("integer division result too large for a float");
             Action obj = () => P.polyline(BigInteger.Pow(2, 70), 1);
             obj.Should().Throw<NotSupportedException>("NumPy builds an object array, a dtype NumSharp does not have");
         }
@@ -1212,7 +1209,7 @@ namespace NumSharp.Tests.Polynomial
             Bits(PyScalar.IntTrueDivide(BigInteger.Pow(2, 1100), BigInteger.Pow(2, 80))).Should().Be(Bits(System.Math.ScaleB(1.0, 1020)));
             Bits(PyScalar.IntTrueDivide(0, -5)).Should().Be(0x8000000000000000UL, "0 / -5 is -0.0");
             Action z = () => PyScalar.IntTrueDivide(1, 0);
-            z.Should().Throw<DivideByZeroException>().WithMessage("division by zero");
+            z.Should().Throw<ZeroDivisionError>().WithMessage("division by zero");
         }
 
         [TestMethod]
@@ -1262,7 +1259,7 @@ namespace NumSharp.Tests.Polynomial
             var nan = PyScalar.ComplexQuotient(new Complex(1, 1), new Complex(double.PositiveInfinity, double.PositiveInfinity));
             double.IsNaN(nan.Real).Should().BeTrue();
             Action z = () => PyScalar.ComplexQuotient(1, Complex.Zero);
-            z.Should().Throw<DivideByZeroException>().WithMessage("complex division by zero");
+            z.Should().Throw<ZeroDivisionError>().WithMessage("complex division by zero");
         }
     }
 }

@@ -520,7 +520,17 @@ namespace NumSharp
             // NEW chararray view (chararray.__array_wrap__).
             if (@out is not null && ReferenceEquals(result, @out))
                 return KindOf(@out) == NDSubclassKind.None ? @out : @out.__array_wrap__(@out);
-            return WrapBy(result, FindWrap(x1, x2, x3));
+            var wrapper = FindWrap(x1, x2, x3);
+            // npy_apply_wrap converts a 0-d result into NumPy's scalar only when NO subclass wraps it: a subclass's
+            // __array_wrap__ receives the ARRAY (chararray's views a text one as a 0-d chararray). The engine's ufuncs already
+            // made a fresh 0-d result NumSharp's scalar (PyArray_Return; they cannot know a wrap follows), so a result about to
+            // be wrapped is made an array again (NumPy's out=...) - only a FRESH one: it owns its buffer and is none of the
+            // operands, so no caller's scalar or view of one is ever made writeable here.
+            if (wrapper is not null && result.ndim == 0 && result.IsNumPyScalar && !result.Shape.IsWriteable
+                && result.Storage.OwnsData && !ReferenceEquals(result, x1) && !ReferenceEquals(result, x2)
+                && !ReferenceEquals(result, x3) && KindOf(result) == NDSubclassKind.None)
+                result.AsArrayResult();
+            return WrapBy(result, wrapper);
         }
 
         /// <summary>
@@ -874,6 +884,56 @@ namespace NumSharp
             => subtypeOthers ? NewSubtype(result, self) : result;
 
         /// <summary>
+        ///     <see cref="Collapse(NDArray, NDArray, NDArray, int?, bool, NewSubtypeZeroDim)"/> for a function that takes NumPy's
+        ///     axis type: the axis reaches the class's <c>_collapse</c> as given, so a TUPLE keeps NumPy's answer -
+        ///     <c>matrix._collapse(axis)</c> hands back the <c>keepdims=True</c> result for every axis but <c>None</c>
+        ///     (<c>np.nansum(m, (0, 1))</c> is the 1 x 1 matrix, <c>np.nansum(m, ())</c> the matrix of every element; probed
+        ///     2.4.2).
+        /// </summary>
+        /// <param name="result">The plain reduction (keepdims=False), unaliased.</param>
+        /// <param name="out">The caller's <c>out=</c>, or <c>null</c> (handed to the other classes' subtype creation).</param>
+        /// <param name="self">The operand.</param>
+        /// <param name="axis">The caller's axis: <c>null</c> for None, an int, or a tuple.</param>
+        /// <param name="subtypeOthers">Whether a non-matrix subclass operand gets the subtype creation (see
+        ///     <see cref="Collapse(NDArray, NDArray, NDArray, int?, bool, NewSubtypeZeroDim)"/>).</param>
+        /// <param name="zeroDim">The 0-d form of that subtype creation.</param>
+        /// <returns>The 0-d result, a matrix view of it laid back into the matrix's axes, the other class's result, or
+        ///     <paramref name="result"/>.</returns>
+        /// <exception cref="ValueError">A matrix result with more than two axes longer than 1; a chararray result whose dtype
+        ///     is not string data.</exception>
+        /// <remarks>The woven code of a <c>[ReducesThrough]</c> function whose <c>axis</c> is <see cref="NDAxis"/> or
+        ///     <see cref="Nullable{T}"/> of it calls this member (the weaver's <c>EmitAxisValue</c>); every other function keeps
+        ///     the <c>int?</c> form.</remarks>
+        internal static NDArray CollapseAxes(NDArray result, NDArray @out, NDArray self, NDAxis? axis, bool subtypeOthers,
+                                             NewSubtypeZeroDim zeroDim)
+        {
+            if (KindOf(self) == NDSubclassKind.None)
+                return result;
+            // The class's _collapse with the axis as given (numpy.matrix's keeps a tuple's kept-dims result), else the class
+            // NumPy's body creates its result as, or the plain result - as the int? form answers.
+            return self._collapse(result, axis)
+                   ?? (subtypeOthers ? NewSubtype(result, @out, self, false, zeroDim) : result);
+        }
+
+        /// <summary>
+        ///     <see cref="CollapseAxes(NDArray, NDArray, NDArray, NDAxis?, bool, NewSubtypeZeroDim)"/> for a function that returns
+        ///     a C# number: a number is the scalar of every axis, so only the subtype creation of the other classes applies (as
+        ///     in <see cref="Collapse(long, NDArray, NDArray, int?, bool, NewSubtypeZeroDim)"/>).
+        /// </summary>
+        /// <param name="result">The computed number.</param>
+        /// <param name="out">Unused (a number has no <c>out=</c>); kept for the woven call's uniform shape.</param>
+        /// <param name="self">The operand.</param>
+        /// <param name="axis">Unused: a number is the scalar of every axis.</param>
+        /// <param name="subtypeOthers">Whether a non-matrix subclass operand gets the subtype creation.</param>
+        /// <param name="zeroDim">Unused for a number.</param>
+        /// <returns><paramref name="result"/>.</returns>
+        /// <exception cref="ValueError"><paramref name="self"/> is a chararray and <paramref name="subtypeOthers"/> is set
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
+        internal static long CollapseAxes(long result, NDArray @out, NDArray self, NDAxis? axis, bool subtypeOthers,
+                                          NewSubtypeZeroDim zeroDim)
+            => subtypeOthers ? NewSubtype(result, self) : result;
+
+        /// <summary>
         ///     NumPy's error for a keyword a subclass method does not take (<c>np.sum(m, keepdims=True)</c>).
         /// </summary>
         /// <param name="pyClass">The subclass's Python name (<c>matrix</c>, <c>chararray</c>).</param>
@@ -911,6 +971,36 @@ namespace NumSharp
         ///     argument).</summary>
         /// <returns><c>null</c>.</returns>
         internal static int? NoAxis() => null;
+
+        /// <summary>
+        ///     The <c>int?</c> a <c>[ReducesThrough]</c> collapse takes for a function's <see cref="NDAxis"/> axis (the woven
+        ///     code's conversion, <c>EmitAxis</c>): the single axis as given, null for None AND for a tuple.
+        /// </summary>
+        /// <param name="axis">The function's axis: None, an int, or a tuple.</param>
+        /// <returns>The single axis, or null.</returns>
+        /// <remarks>A tuple reads as no axis - the answer the <c>int[]</c>-axis overloads gave before the functions took
+        ///     <see cref="NDAxis"/> (API-parity batch 4), whose axis the woven code could not read: a matrix's collapse decides
+        ///     row or column only for a single axis, so every former call keeps its class answer.</remarks>
+        internal static int? AxisArgument(NDAxis? axis) => axis is { IsTuple: false } single ? single[0] : null;
+
+        /// <summary>
+        ///     <see cref="AxisArgument(NDAxis?)"/> for a function whose axis has no None (a non-nullable
+        ///     <see cref="NDAxis"/>).
+        /// </summary>
+        /// <param name="axis">The function's axis: an int or a tuple.</param>
+        /// <returns>The single axis, or null for a tuple.</returns>
+        internal static int? AxisArgument(NDAxis axis) => axis.IsTuple ? null : axis[0];
+
+        /// <summary>
+        ///     A function's non-nullable <see cref="NDAxis"/> as the <c>NDAxis?</c>
+        ///     <see cref="CollapseAxes(NDArray, NDArray, NDArray, NDAxis?, bool, NewSubtypeZeroDim)"/> takes (the woven code's
+        ///     conversion: generating <c>Nullable&lt;NDAxis&gt;</c>'s constructor in IL is avoided).
+        /// </summary>
+        /// <param name="axis">The function's axis: an int or a tuple.</param>
+        /// <returns>The same axis, as a nullable.</returns>
+        /// <remarks>Not named <c>Axis</c>: the weaver finds <c>Axis</c> by name for the <c>int</c> conversion, and a second
+        ///     one-parameter <c>Axis</c> would be picked in its place.</remarks>
+        internal static NDAxis? NullableAxis(NDAxis axis) => axis;
 
         #endregion
 

@@ -50,9 +50,10 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="ValueError"><paramref name="dst"/> is read-only, a text does not parse into a numeric
         ///     destination, or an NA element meets a numeric destination.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="src"/> does not broadcast to <paramref name="dst"/>.</exception>
-        /// <exception cref="OverflowException">An integer text outside the destination (NumPy's StringDType texts).</exception>
-        /// <exception cref="TypeError">A <c>U</c> source holds an invalid code point (<c>Invalid unicode code point found</c>).</exception>
-        /// <exception cref="UnicodeDecodeError">An <c>S</c> source element is not UTF-8.</exception>
+        /// <exception cref="OverflowError">An integer text outside the destination (NumPy's StringDType texts).</exception>
+        /// <exception cref="TypeError">A <c>U</c> source holds an invalid code point (<c>Invalid unicode code point found</c>),
+        ///     or an <c>S</c> source element is not UTF-8 (NumPy 2.5's <c>Invalid UTF-8 bytes found, cannot convert to
+        ///     StringDType</c>).</exception>
         /// <exception cref="UnicodeEncodeError">A text is not ASCII and the destination is <c>S</c>.</exception>
         /// <exception cref="RuntimeError">A bool source byte is neither 0 nor 1 (<c>invalid value encountered in bool to
         ///     string cast</c>).</exception>
@@ -213,7 +214,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="allocator">The destination's allocator (locked).</param>
         /// <param name="scratch">Room for one element's UTF-8 form.</param>
         /// <exception cref="TypeError"><c>Invalid unicode code point found</c>.</exception>
-        /// <exception cref="OutOfMemoryException"><c>Failed to allocate string in unicode to string cast</c>.</exception>
+        /// <exception cref="MemoryError"><c>Failed to allocate string in unicode to string cast</c>.</exception>
         private static void UnicodeRun(byte* s, long ss, int chars, byte* d, long ds, long n, VStringAllocator allocator, byte[] scratch)
         {
             fixed (byte* buf = scratch)
@@ -237,7 +238,7 @@ namespace NumSharp.Backends.Strings
                     for (int k = 0; k < len; k++)
                         w += EncodeCodePoint(u[k], buf + w);
                     if (allocator.pack(d, buf, size) < 0)
-                        throw new OutOfMemoryException("Failed to allocate string in unicode to string cast");
+                        throw new MemoryError("Failed to allocate string in unicode to string cast");
                 }
             }
         }
@@ -257,17 +258,28 @@ namespace NumSharp.Backends.Strings
         ///     reserved the arena: a medium / long text is then appended at the bump pointer
         ///     (<see cref="VStringAllocator.AppendFresh"/>) and copied once, the bytes <c>NpyString_pack</c> gives a fresh
         ///     cell. False for any other destination: every element is packed (its old text freed first).</param>
-        /// <exception cref="UnicodeDecodeError">CPython's text for the element's first bad UTF-8 sequence.</exception>
-        /// <exception cref="OutOfMemoryException"><c>Failed to allocate string in bytes to string cast</c>.</exception>
-        /// <remarks>The bump pointer declines when the reservation is used up or while a test schedules an allocation failure;
-        ///     <c>pack</c> then grows the arena NumPy's way (or fails at the scheduled allocation), so the elements still
-        ///     allocate in the walk's order.</remarks>
+        /// <exception cref="TypeError">An element that is not valid UTF-8 (an invalid or truncated sequence, an overlong
+        ///     form, a surrogate, a code point past U+10FFFF): NumPy 2.5's <c>Invalid UTF-8 bytes found, cannot convert to
+        ///     StringDType</c>.</exception>
+        /// <exception cref="MemoryError"><c>Failed to allocate string in bytes to string cast</c>.</exception>
+        /// <remarks>
+        ///     NumPy 2.5's <c>bytes_to_string</c> sizes each element with <c>utf8_buffer_size</c> and rejects non-UTF-8
+        ///     input in the cast (gh-32296: "readers of the stored bytes assume validity"); NumPy 2.4 copied the bytes
+        ///     unchecked and failed on a later read, where NumSharp raised CPython's <c>UnicodeDecodeError</c> at the cast.
+        ///     <see cref="System.Text.Unicode.Utf8.IsValid"/> accepts exactly the strict UTF-8 that NumPy's decoder DFA
+        ///     accepts.
+        ///     <para>The bump pointer declines when the reservation is used up or while a test schedules an allocation
+        ///     failure; <c>pack</c> then grows the arena NumPy's way (or fails at the scheduled allocation), so the elements
+        ///     still allocate in the walk's order.</para>
+        /// </remarks>
         private static void BytesRun(byte* s, long ss, int chars, byte* d, long ds, long n, VStringAllocator allocator, bool freshDestination)
         {
             for (long i = 0; i < n; i++, s += ss, d += ds)
             {
                 int len = TrimmedByteLength(s, chars);
-                NDUtf8.ThrowIfInvalid(new ReadOnlySpan<byte>(s, len));
+                // utf8_buffer_size(in, max_in_size) < 0: the element is refused before anything of it is packed.
+                if (!System.Text.Unicode.Utf8.IsValid(new ReadOnlySpan<byte>(s, len)))
+                    throw new TypeError("Invalid UTF-8 bytes found, cannot convert to StringDType");
                 if (freshDestination && len > VStringAllocator.NPY_SHORT_STRING_MAX_SIZE)
                 {
                     byte* slot = allocator.AppendFresh(d, len);
@@ -278,7 +290,7 @@ namespace NumSharp.Backends.Strings
                     }
                 }
                 if (allocator.pack(d, s, len) < 0)
-                    throw new OutOfMemoryException("Failed to allocate string in bytes to string cast");
+                    throw new MemoryError("Failed to allocate string in bytes to string cast");
             }
         }
 
@@ -290,7 +302,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="n">The number of elements.</param>
         /// <param name="allocator">The destination's allocator (locked).</param>
         /// <exception cref="RuntimeError"><c>invalid value encountered in bool to string cast</c>.</exception>
-        /// <exception cref="OutOfMemoryException"><c>Failed to pack string in bool to string cast</c>.</exception>
+        /// <exception cref="MemoryError"><c>Failed to pack string in bool to string cast</c>.</exception>
         private static void BoolRun(byte* s, long ss, byte* d, long ds, long n, VStringAllocator allocator)
         {
             byte* text = stackalloc byte[5];
@@ -312,7 +324,7 @@ namespace NumSharp.Backends.Strings
                     throw new RuntimeError("invalid value encountered in bool to string cast");
                 }
                 if (allocator.pack(d, text, size) < 0)
-                    throw new OutOfMemoryException("Failed to pack string in bool to string cast");
+                    throw new MemoryError("Failed to pack string in bool to string cast");
             }
         }
 
@@ -329,7 +341,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="n">The number of elements.</param>
         /// <param name="allocator">The destination's allocator (locked).</param>
         /// <param name="nanToNA">True when a NaN is stored as an NA element (a float64 source, a NaN NA object).</param>
-        /// <exception cref="OutOfMemoryException">NumPy's string <c>MemoryError</c> texts.</exception>
+        /// <exception cref="MemoryError">NumPy's string <c>MemoryError</c> texts.</exception>
         private static void NumberRun(byte* s, long ss, NPTypeCode from, byte* d, long ds, long n, VStringAllocator allocator, bool nanToNA)
         {
             var kind = NDTextFormat.KindOf(from);
@@ -363,14 +375,14 @@ namespace NumSharp.Backends.Strings
                     if (nanToNA && double.IsNaN(*(double*)values))
                     {
                         if (allocator.pack_null(cell) < 0)
-                            throw new OutOfMemoryException("Failed to pack null string during float to string cast");
+                            throw new MemoryError("Failed to pack null string during float to string cast");
                         continue;
                     }
                     int len = NDTextFormat.Format(kind, values, chars);
                     for (int c = 0; c < len; c++)
                         text[c] = (byte)chars[c]; // every number's str() is ASCII
                     if (allocator.pack(cell, text, len) < 0)
-                        throw new OutOfMemoryException("Failed to pack string while converting from python string");
+                        throw new MemoryError("Failed to pack string while converting from python string");
                 }
             }
         }
@@ -432,12 +444,12 @@ namespace NumSharp.Backends.Strings
         /// <param name="size">Receives its size.</param>
         /// <param name="context">The operation NumPy names (<c>in string to unicode cast</c>).</param>
         /// <returns>True for an NA element.</returns>
-        /// <exception cref="OutOfMemoryException"><c>Failed to load string in {context}</c>.</exception>
+        /// <exception cref="MemoryError"><c>Failed to load string in {context}</c>.</exception>
         private static bool Load(byte* cell, VStringAllocator allocator, out byte* buf, out long size, string context)
         {
             int isNull = allocator.load(cell, out buf, out size);
             if (isNull < 0)
-                throw new OutOfMemoryException($"Failed to load string in {context}");
+                throw new MemoryError($"Failed to load string in {context}");
             return isNull == 1;
         }
 
@@ -453,7 +465,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="chars">The destination width in code points.</param>
         /// <param name="allocator">The source's allocator (locked).</param>
         /// <param name="naText">The UTF-8 text an NA element reads as.</param>
-        /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+        /// <exception cref="MemoryError">A corrupt cell.</exception>
         private static void ToUnicodeRun(byte* s, long ss, byte* d, long ds, long n, int chars, VStringAllocator allocator, byte[] naText)
         {
             fixed (byte* na = naText)
@@ -499,7 +511,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="allocator">The source's allocator (locked).</param>
         /// <param name="naText">The UTF-8 text an NA element reads as.</param>
         /// <exception cref="UnicodeEncodeError">A text that is not ASCII.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+        /// <exception cref="MemoryError">A corrupt cell.</exception>
         private static void ToBytesRun(byte* s, long ss, byte* d, long ds, long n, int chars, VStringAllocator allocator, byte[] naText)
         {
             fixed (byte* na = naText)
@@ -520,7 +532,7 @@ namespace NumSharp.Backends.Strings
                             // NumPy raises UnicodeEncodeError(ascii, str, i, i + 1): every byte before i is ASCII, so the byte
                             // index is also the code-point index of the character CPython quotes.
                             System.Text.Rune.DecodeFromUtf8(new ReadOnlySpan<byte>(buf + b, (int)Math.Min(size - b, 4)), out var rune, out _);
-                            throw NDStringCodec.EncodeErrorFor((uint)rune.Value, b, b + 1);
+                            throw NDStringCodec.EncodeErrorFor(System.Text.Encoding.UTF8.GetString(buf, checked((int)size)), (uint)rune.Value, b, b + 1);
                         }
                     }
                     long copy = Math.Min(size, chars);
@@ -548,7 +560,7 @@ namespace NumSharp.Backends.Strings
         ///     corrupt cell, which no NumSharp operation produces): an allocator without an arena is scanned for one
         ///     (<see cref="NDVStringCells.AnyArenaCell"/>), and a run that holds one takes NumPy's per-element loop.
         /// </remarks>
-        /// <exception cref="OutOfMemoryException">A corrupt cell: <c>Failed to load string in string to bool cast</c>.</exception>
+        /// <exception cref="MemoryError">A corrupt cell: <c>Failed to load string in string to bool cast</c>.</exception>
         private static void ToBoolRun(byte* s, long ss, byte* d, long ds, long n, VStringAllocator allocator, byte naTruth)
         {
             // NpyString_load fails only for an arena cell of an allocator without an arena: only such an allocator is
@@ -587,8 +599,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="to">The numeric destination dtype.</param>
         /// <param name="allocator">The source's allocator (locked).</param>
         /// <exception cref="ValueError">An NA element, or a text that is not a number of the destination's kind.</exception>
-        /// <exception cref="OverflowException">An integer text outside the destination.</exception>
-        /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+        /// <exception cref="OverflowError">An integer text outside the destination.</exception>
+        /// <exception cref="MemoryError">A corrupt cell.</exception>
         private static void ToNumberRun(byte* s, long ss, byte* d, long ds, long n, NPTypeCode to, VStringAllocator allocator)
         {
             var canonType = NDTextParse.CanonicalType(NDTextParse.FamilyOf(to));
@@ -601,7 +613,7 @@ namespace NumSharp.Backends.Strings
                 // missing-data ValueError.
                 int isNull = allocator.load(s, out byte* buf, out long size);
                 if (isNull < 0)
-                    throw new OutOfMemoryException("Failed to load string for conversion to a non-nullable type");
+                    throw new MemoryError("Failed to load string for conversion to a non-nullable type");
                 if (isNull == 1)
                     throw new ValueError(MissingDataText);
                 if (size > int.MaxValue)

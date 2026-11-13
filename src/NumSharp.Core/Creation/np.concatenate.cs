@@ -17,7 +17,8 @@ namespace NumSharp
         /// <param name="axis">
         ///     The axis along which the arrays will be joined. If
         ///     <c>null</c>, arrays are flattened before use — a 0-d array included, which joins as one element (an axis
-        ///     refuses it: "zero-dimensional arrays cannot be concatenated"). Default is 0.
+        ///     refuses a 0-d FIRST array: "zero-dimensional arrays cannot be concatenated"; a later one fails NumPy's rank
+        ///     check). Default is 0.
         ///     Negative axes are normalized against the input ndim.
         /// </param>
         /// <param name="out">
@@ -38,12 +39,14 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="arrays"/> or one of its elements is null.</exception>
         /// <exception cref="ArgumentException">An unknown <paramref name="casting"/> name; both <paramref name="out"/> and
         ///     <paramref name="dtype"/>.</exception>
-        /// <exception cref="ValueError">No arrays (<c>need at least one array to concatenate</c>); a 0-d array with an axis
-        ///     (<c>zero-dimensional arrays cannot be concatenated</c>; NumPy's ValueError — <c>axis=None</c> ravels it into one
-        ///     element instead).</exception>
+        /// <exception cref="ValueError">No arrays (<c>need at least one array to concatenate</c>); a 0-d FIRST array with an
+        ///     axis (<c>zero-dimensional arrays cannot be concatenated</c>; NumPy's ValueError — <c>axis=None</c> ravels it
+        ///     into one element instead).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for the inputs' rank.</exception>
-        /// <exception cref="IncorrectShapeException">The inputs' ranks or non-axis dimensions differ, or
-        ///     <paramref name="out"/> has the wrong rank or shape (NumPy's ValueError texts).</exception>
+        /// <exception cref="IncorrectShapeException">The inputs' ranks or non-axis dimensions differ - a later 0-d array
+        ///     included (<c>all the input arrays must have same number of dimensions, but the array at index 0 has 2
+        ///     dimension(s) and the array at index 1 has 0 dimension(s)</c>, as NumPy reports it) - or <paramref name="out"/>
+        ///     has the wrong rank or shape (NumPy's ValueError texts).</exception>
         /// <exception cref="InvalidCastException">An input does not cast to the result dtype under
         ///     <paramref name="casting"/> (NumPy's TypeError text).</exception>
         /// <exception cref="ValueError">Numbers joined into a numeric <paramref name="dtype"/> with text that does not parse

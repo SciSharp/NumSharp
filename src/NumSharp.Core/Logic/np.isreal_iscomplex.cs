@@ -7,13 +7,14 @@ namespace NumSharp
         /// <summary>
         /// Returns a bool array, where True if input element is real.
         /// </summary>
-        /// <param name="a">Input array.</param>
+        /// <param name="x">Input array (NumPy's keyword <c>x</c>).</param>
         /// <returns>Boolean array of same shape, True where element has no imaginary part.</returns>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.isreal.html
         ///
         /// For non-complex arrays, all elements are considered real.
         /// For complex arrays, elements with zero imaginary part are real.
+        /// <para>[NDScoped] reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.equal.</para>
         /// </remarks>
         /// <example>
         /// <code>
@@ -22,24 +23,25 @@ namespace NumSharp
         /// </code>
         /// </example>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-        [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.equal
-        public static NDArray isreal(NDArray a)
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        [NDScoped]
+        public static NDArray isreal(NDArray x)
         {
-            if (a is null) throw new ArgumentNullException(nameof(a));
-            return a.TensorEngine.Isreal(a);
+            if (x is null) throw new ArgumentNullException(nameof(x));
+            return x.TensorEngine.Isreal(x);
         }
 
         /// <summary>
         /// Returns a bool array, where True if input element is complex.
         /// </summary>
-        /// <param name="a">Input array.</param>
+        /// <param name="x">Input array (NumPy's keyword <c>x</c>).</param>
         /// <returns>Boolean array of same shape, True where element has non-zero imaginary part.</returns>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.iscomplex.html
         ///
         /// For non-complex arrays, all elements are considered not complex.
         /// For complex arrays, elements with non-zero imaginary part are complex.
+        /// <para>[NDScoped] reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.not_equal.</para>
         /// </remarks>
         /// <example>
         /// <code>
@@ -48,19 +50,20 @@ namespace NumSharp
         /// </code>
         /// </example>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-        [NDScoped] // reclaims the np.imag view and the Scalar(0) temp the complex branch hands to np.not_equal
-        public static NDArray iscomplex(NDArray a)
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        [NDScoped]
+        public static NDArray iscomplex(NDArray x)
         {
-            if (a is null) throw new ArgumentNullException(nameof(a));
-            return a.TensorEngine.Iscomplex(a);
+            if (x is null) throw new ArgumentNullException(nameof(x));
+            return x.TensorEngine.Iscomplex(x);
         }
 
         /// <summary>
         /// Return True if x is a not complex type or an array of complex numbers.
         /// </summary>
-        /// <param name="a">Input array or scalar.</param>
+        /// <param name="x">Input array or scalar (NumPy's keyword <c>x</c>; a C# scalar converts to a 0-d array).</param>
         /// <returns>True if the array's dtype is not complex.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.isrealobj.html
         ///
@@ -73,19 +76,20 @@ namespace NumSharp
         /// np.isrealobj(a)  // True (dtype is int, not complex)
         /// </code>
         /// </example>
-        public static bool isrealobj(NDArray a)
+        public static bool isrealobj(NDArray x)
         {
-            if (a is null)
-                throw new ArgumentNullException(nameof(a));
+            if (x is null)
+                throw new ArgumentNullException(nameof(x));
 
-            return a.GetTypeCode != NPTypeCode.Complex;
+            return x.GetTypeCode != NPTypeCode.Complex;
         }
 
         /// <summary>
         /// Return True if x is a complex type or an array of complex numbers.
         /// </summary>
-        /// <param name="a">Input array or scalar.</param>
+        /// <param name="x">Input array or scalar (NumPy's keyword <c>x</c>; a C# scalar converts to a 0-d array).</param>
         /// <returns>True if the array's dtype is complex.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.iscomplexobj.html
         ///
@@ -97,12 +101,12 @@ namespace NumSharp
         /// np.iscomplexobj(a)  // False (dtype is int, not complex)
         /// </code>
         /// </example>
-        public static bool iscomplexobj(NDArray a)
+        public static bool iscomplexobj(NDArray x)
         {
-            if (a is null)
-                throw new ArgumentNullException(nameof(a));
+            if (x is null)
+                throw new ArgumentNullException(nameof(x));
 
-            return a.GetTypeCode == NPTypeCode.Complex;
+            return x.GetTypeCode == NPTypeCode.Complex;
         }
     }
 }

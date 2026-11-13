@@ -22,7 +22,7 @@ namespace NumSharp.Backends
         {
             // NumPy's norm converts a non-inexact input with x.astype(float): a text array is parsed (each element by
             // float(), the first failing one raising NumPy's text), and the norm runs on the float64 numbers.
-            using var parsed = Backends.Strings.NDStringUfuncs.IsText(x) ? x.astype(np.float64, true, 'K', "unsafe") : null;
+            using var parsed = Backends.Strings.NDStringUfuncs.IsText(x) ? x.astype(np.float64) : null;
             if (parsed is not null)
                 x = parsed;
             var a = ToFloating(x);
@@ -337,15 +337,15 @@ namespace NumSharp.Backends
             switch (ret.typecode)
             {
                 case NPTypeCode.Double:
-                    return NDArray.Scalar(Math.Pow(ret.GetDouble(), recip.GetDouble())).MarkReductionScalar();
+                    return NDArray.Scalar(Math.Pow(ret.GetDouble(), recip.GetDouble())).PyArray_Return();
                 case NPTypeCode.Single:
-                    return NDArray.Scalar(MathF.Pow(ret.GetSingle(), recip.GetSingle())).MarkReductionScalar();
+                    return NDArray.Scalar(MathF.Pow(ret.GetSingle(), recip.GetSingle())).PyArray_Return();
                 default:
                     // float16, the one other dtype |x| reduces to here (a complex operand's |x| is float64, decimal never
                     // arrives): the house casts are npy_half_to_float and npy_float_to_half bit for bit.
                     float b = ret.astype(np.float32).GetSingle();
                     float e = recip.astype(np.float32).GetSingle();
-                    return NDArray.Scalar(MathF.Pow(b, e)).astype(np.float16).MarkReductionScalar();
+                    return NDArray.Scalar(MathF.Pow(b, e)).astype(np.float16).PyArray_Return();
             }
         }
 
@@ -533,7 +533,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     NumPy's <c>add.reduce</c> over two axes of a C-contiguous array of squares, in the order its reduction
-        ///     iterator adds them, built from one-axis sums - the member <see cref="np.sum(NDArray, int?, DType, NDArray, bool, object, NDArray)"/> dispatches to
+        ///     iterator adds them, built from one-axis sums - the member <see cref="np.sum(NDArray, NDAxis?, DType, NDArray, bool, object, NDArray)"/> dispatches to
         ///     (each NumPy's own add.reduce over one axis, bit for bit).
         /// </summary>
         /// <param name="s">The squares: C-contiguous, non-empty, a float dtype or decimal.</param>
@@ -759,21 +759,6 @@ namespace NumSharp.Backends
         /// <returns>The non-negative axis.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         private static int NormalizeAxis(int axis, int nd) => Shape.check_and_adjust_axis(nd, axis);
-
-        /// <summary>
-        ///     Python's <c>x.shape[axis]</c>: the tuple index np.linalg.cross reads BEFORE it normalizes anything, so an
-        ///     axis out of range is the IndexError Python raises there, not an AxisError.
-        /// </summary>
-        /// <param name="axis">The axis; negative values count from the end.</param>
-        /// <param name="nd">The operand's rank.</param>
-        /// <returns>The non-negative axis.</returns>
-        /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range").</exception>
-        private static int ShapeIndex(int axis, int nd)
-        {
-            if (axis < -nd || axis >= nd)
-                throw new IndexError("tuple index out of range");
-            return axis < 0 ? axis + nd : axis;
-        }
 
         /// <summary>Whether an order is a name (a C# string: NumPy's str order).</summary>
         /// <param name="ord">The order argument.</param>

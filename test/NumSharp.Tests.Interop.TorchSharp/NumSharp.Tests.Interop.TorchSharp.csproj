@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Platforms>AnyCPU</Platforms>
+    <!-- Strong-naming is set repo-wide in ../../Directory.Build.props. Signed because NumSharp.Interop.TorchSharp grants
+         it InternalsVisibleTo, which names a PublicKey. -->
+    <Configurations>Debug;Release;Publish</Configurations>
+    <!-- The lifetime tests stage collections: tier-0 code reports every local live for the whole method, so a window the
+         tests need to observe never opens under tiering (the ONNX and ML.NET suites' setting, for the same reason). -->
+    <TieredCompilation>false</TieredCompilation>
+    <RootNamespace>NumSharp.Tests.Interop.TorchSharp</RootNamespace>
+    <AssemblyName>NumSharp.Tests.Interop.TorchSharp</AssemblyName>
+
+    <!-- Which TorchSharp the suite runs against. The default is the package FLOOR (0.100.0: the version the package compiles
+         against, and the one NuGet resolves for a bare consumer); the current release is the second CI leg:
+             dotnet test -p:TorchSharpVersion=0.107.0 -p:LibTorchVersion=2.10.0
+         The suite is RECOMPILED per version, so its own TorchSharp calls (t.to(...), whose overloads changed) always bind to
+         the version under test, while the package keeps its floor binary: the leg against 0.107.0 is the binary-compatibility
+         gate. -->
+    <TorchSharpVersion Condition="'$(TorchSharpVersion)' == ''">0.100.0</TorchSharpVersion>
+    <LibTorchVersion Condition="'$(LibTorchVersion)' == ''">2.0.1.1</LibTorchVersion>
+
+    <!-- The CPU libtorch for THIS machine only, instead of TorchSharp-cpu (which restores the Windows, Linux and macOS natives,
+         about 1.2 GB unpacked per version, whatever the machine). macOS arm64 natives exist from libtorch 2.2 (TorchSharp
+         0.102) on, so a Mac runs the current leg only; Windows on Arm from 0.107.0. -->
+    <LibTorchPackage Condition="$([MSBuild]::IsOSPlatform('Windows'))">libtorch-cpu-win-x64</LibTorchPackage>
+    <LibTorchPackage Condition="$([MSBuild]::IsOSPlatform('Linux'))">libtorch-cpu-linux-x64</LibTorchPackage>
+    <LibTorchPackage Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">libtorch-cpu-osx-arm64</LibTorchPackage>
+    <LibTorchPackage Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">libtorch-cpu-osx-x64</LibTorchPackage>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
+    <DocumentationFile />
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="3.8.3" />
+    <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
+    <!-- The suite is a TorchSharp consumer: the managed package at the version under test (NuGet unifies the package's floor
+         reference upward to it), plus the CPU libtorch that version ships with. -->
+    <PackageReference Include="TorchSharp" Version="$(TorchSharpVersion)" />
+    <PackageReference Include="$(LibTorchPackage)" Version="$(LibTorchVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The pinned NumPy's (numpy-version.txt) and PyTorch's answers for every array / tensor state the StateMatrix*Tests
+         cross, written by test/oracle/gen_torch_interop_states.py and committed (no Python at test time). -->
+    <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The repository's one NumPy pin (../../numpy-version.txt), compiled in as assembly metadata "NumPyVersion" exactly as
+       NumSharp.Tests.csproj does, and read by NumSharp.Tests' Utilities/NumPyPin.cs, linked below. The fixture-version
+       gate (StateCatalogSyncTests.Fixture_IsThePinnedNumPy) compares the fixture's recorded NumPy against it, so a NumPy
+       bump that leaves this fixture unregenerated fails the gate instead of a literal silently agreeing with the old
+       fixture. A missing or empty pin file fails the build (the Error below), never a test run with an empty version. -->
+  <PropertyGroup>
+    <NumPyPinFile>$(MSBuildThisFileDirectory)..\..\numpy-version.txt</NumPyPinFile>
+    <NumPyVersion Condition="Exists('$(NumPyPinFile)')">$([System.IO.File]::ReadAllText('$(NumPyPinFile)').Trim())</NumPyVersion>
+  </PropertyGroup>
+  <Target Name="CheckNumPyPin" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(NumPyVersion)' == ''" Text="The NumPy pin $(NumPyPinFile) is missing or empty: the fixture-version gate needs the pinned release." />
+  </Target>
+  <ItemGroup>
+    <AssemblyMetadata Include="NumPyVersion" Value="$(NumPyVersion)" />
+    <Compile Include="..\NumSharp.Tests\Utilities\NumPyPin.cs" Link="Utilities\NumPyPin.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
+    <ProjectReference Include="..\..\src\NumSharp.Interop.TorchSharp\NumSharp.Interop.TorchSharp.csproj" />
+  </ItemGroup>
+
+</Project>

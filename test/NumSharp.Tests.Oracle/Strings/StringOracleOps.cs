@@ -52,7 +52,9 @@ namespace NumSharp.Tests.Strings
                     var dt = Dt(p, "dtype");
                     if (v is string s)
                         return dt is null ? np.array(s) : np.array(s, dt);
-                    return dt is null ? NDArray.Scalar(v) : NDArray.Scalar(v, dt);
+                    // NumPy's np.array(value, dtype) is a writeable 0-d ARRAY: the value is built as NumSharp's scalar
+                    // (NDArray.Scalar's conversion), then copied into the array np.array returns.
+                    return np.array(dt is null ? NDArray.Scalar(v) : NDArray.Scalar(v, dt));
                 }
                 case "zeros": return np.zeros(ShapeOf(p, "shape"), Dt(p, "dtype"));
                 case "empty": return np.empty(ShapeOf(p, "shape"), Dt(p, "dtype"));
@@ -69,8 +71,8 @@ namespace NumSharp.Tests.Strings
                     return np.frombuffer(Convert.FromHexString(Str(p, "buffer")), np.dtype(Str(p, "dtype")),
                                          p["count"].GetInt64(), p["offset"].GetInt64());
                 case "frombuffer_str":
-                    // The dtype-STRING overload: its own parser must route every string spelling ('c', 'a3', '|S2') to the
-                    // descriptor route, exactly as np.dtype reads it.
+                    // The dtype-STRING overload: its own parser must route every string spelling ('c', '|S2') to the
+                    // descriptor route, exactly as np.dtype reads it (and refuse 'a3' as np.dtype does since NumPy 2.5).
                     return np.frombuffer(Convert.FromHexString(Str(p, "buffer")), Str(p, "dtype"),
                                          p["count"].GetInt64(), p["offset"].GetInt64());
                 case "ndarray":
@@ -85,7 +87,7 @@ namespace NumSharp.Tests.Strings
 
                 // ---- casts ----
                 case "astype":
-                    return a.astype(Dt(p, "dtype"), p["copy"].GetBoolean(), Str(p, "order")[0], Str(p, "casting"));
+                    return a.astype(Dt(p, "dtype"), Str(p, "order")[0], Str(p, "casting"), p["copy"].GetBoolean());
 
                 // ---- views ----
                 case "transpose": return np.transpose(a);
@@ -442,7 +444,7 @@ namespace NumSharp.Tests.Strings
                 case "cumsum": return np.cumsum(x);
                 case "cumprod": return np.cumprod(x);
                 case "median": return np.median(x);
-                case "average": return np.average(x);
+                case "average": return (NDArray)np.average(x);
                 case "nansum": return np.nansum(x);
                 case "nanprod": return np.nanprod(x);
                 case "nanmean": return np.nanmean(x);
@@ -480,7 +482,7 @@ namespace NumSharp.Tests.Strings
                 case "i0": return np.i0(x);
                 case "unwrap": return np.unwrap(x);
                 case "vander": return np.vander(x, 2);
-                case "round": return np.round_(x);
+                case "round": return np.round(x);
                 case "around": return np.around(x);
                 // NumPy's x[0] is a SCALAR (np.str_), whose descriptor is its own text length: NDArray.Scalar of the element.
                 case "clip": return np.clip(x, NDArray.Scalar(x.item(0)), NDArray.Scalar(x.item(1)));
@@ -498,7 +500,7 @@ namespace NumSharp.Tests.Strings
                 case "argpartition": return np.argpartition(x, 1);
                 case "isin": return np.isin(x, other[":2"]);
                 case "union1d": return np.union1d(x, other);
-                case "intersect1d": return np.intersect1d(x, other);
+                case "intersect1d": return (NDArray)np.intersect1d(x, other);
                 case "setdiff1d": return np.setdiff1d(x, other[":2"]);
                 case "setxor1d": return np.setxor1d(x, other[":2"]);
                 case "array_equal": return np.array_equal(x, other);

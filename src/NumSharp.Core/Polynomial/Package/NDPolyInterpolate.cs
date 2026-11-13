@@ -85,7 +85,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">np.dot's alignment errors, where NumSharp's product raises them as ArgumentException.</exception>
         /// <exception cref="NotSupportedException">A func result NumPy computes with as Python objects, or a deg past the
         ///     integer dtypes (see the file header).</exception>
-        /// <exception cref="OutOfMemoryException">A degree whose matrix the machine cannot hold (NumPy's MemoryError).</exception>
+        /// <exception cref="MemoryError">A degree whose matrix the machine cannot hold (NumPy's MemoryError).</exception>
         /// <remarks>Every exception <paramref name="func"/> throws propagates unchanged.</remarks>
         public static NDArray ChebInterpolate(Func<NDArray, object[], object> func, object deg, object args)
         {
@@ -118,12 +118,14 @@ namespace NumSharp
             using (var plainY = NDSubclass.LeasePlainView(y))
                 c = np.dot(m.T, plainY.Array);
 
-            // c[0] /= order; c[1:] /= 0.5 * order — in place through views. The divisors' VALUES are what NumPy divides by:
-            // the integer converted to the loop dtype (exact for any order a matrix of order**2 elements can have), and the
-            // product 0.5 * order computed in double (a Python float times a NumPy integer is float64).
+            // c[0] /= order; c[1:] /= 0.5 * order. The divisors' VALUES are what NumPy divides by: the integer converted to
+            // the loop dtype (exact for any order a matrix of order**2 elements can have), and the product 0.5 * order
+            // computed in double (a Python float times a NumPy integer is float64).
             double d0 = (double)order;
-            NDArray head = c[0];
-            np.divide(head, NDArray.Scalar(d0), @out: head);
+            // Python's `c[0] /= order` is `c[0] = c[0] / order`: for a 1-D c the item is NumPy's scalar (a read-only copy),
+            // for a 2-D c a row view divided in place; computing the quotient and storing it back through setitem gives the
+            // same elements in both cases.
+            c[0] = np.divide(c[0], NDArray.Scalar(d0));
             NDArray tail = c[new Slice(1, null)];
             np.divide(tail, NDArray.Scalar(0.5 * d0), @out: tail);
             return c;

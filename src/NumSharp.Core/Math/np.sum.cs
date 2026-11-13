@@ -24,7 +24,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Elements to sum (any dtype; <c>StringDType</c> concatenates, fixed-width text is refused).</param>
         /// <param name="axis">The axis to sum over (negative counts from the end); <c>null</c> sums every element. A 0-d
-        ///     array accepts 0 and -1 as every axis (ufunc.reduce's rule).</param>
+        ///     array accepts 0 and -1 as every axis (ufunc.reduce's rule). A tuple (<c>(0, 2)</c>) reduces every axis
+        ///     it names together, in one pass (NumPy's tuple axis; the empty tuple reduces none, and a tuple item gets
+        ///     no 0-d allowance).</param>
         /// <param name="dtype">The accumulator and result dtype (a C# <see cref="System.Type"/>, an <see cref="NPTypeCode"/> or
         ///     a NumPy dtype string converts implicitly): every element is cast to it before it is added. <c>null</c> is
         ///     NumPy's default, NEP 50's accumulator — int64 for bool and the signed integers narrower than 64 bits, uint64
@@ -55,12 +57,12 @@ namespace NumSharp
         ///     <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c>).</exception>
         /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>; a mask with more axes than
         ///     <paramref name="a"/>; an unconvertible <paramref name="initial"/> (a float NaN into an integer loop, a
-        ///     sequence).</exception>
+        ///     sequence). Also a tuple that names an axis twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast
         ///     against <paramref name="a"/>.</exception>
-        /// <exception cref="OverflowException"><paramref name="initial"/> does not fit an integer loop ("Python integer 1000
+        /// <exception cref="OverflowError"><paramref name="initial"/> does not fit an integer loop ("Python integer 1000
         ///     out of bounds for int8").</exception>
         /// <exception cref="AttributeError">A <c>numpy.matrix</c> operand with a plain (non-matrix) <paramref name="out"/>:
         ///     NumPy's matrix method computes into it and then calls <c>out._collapse</c>.</exception>
@@ -71,7 +73,7 @@ namespace NumSharp
         ///     <paramref name="where"/> the call runs NumPy's reduction iterator itself; without them the engine's own
         ///     schedules, which give the same bits.
         /// </remarks>
-        public static NDArray sum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
+        public static NDArray sum(NDArray a, NDAxis? axis = null, DType dtype = null, NDArray @out = null, bool keepdims = false,
             object initial = null, NDArray @where = null)
         {
             if (a is null)
@@ -80,5 +82,26 @@ namespace NumSharp
             // The whole call is the engine's: TensorEngine.ReduceAdd of a's engine takes every keyword.
             return a.TensorEngine.ReduceAdd(a, axis, keepdims, dtype, @out, initial, @where);
         }
+
+        /// <summary>
+        ///     <see cref="sum(NDArray, NDAxis?, DType, NDArray, bool, object, NDArray)"/> with the axis as one
+        ///     <c>int</c>: the overload a C# integer binds (its identity conversion beats NDAxis' implicit one),
+        ///     forwarding to the NDAxis form, so every answer, error, layout and subclass result is that overload's.
+        /// </summary>
+        /// <param name="axis">The axis (NumPy's <c>axis=k</c>; a negative value counts from the end).</param>
+        /// <inheritdoc cref="sum(NDArray, NDAxis?, DType, NDArray, bool, object, NDArray)"/>
+        public static NDArray sum(NDArray a, int axis, DType dtype = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => sum(a, (NDAxis?)axis, dtype, @out, keepdims, initial, @where);
+
+        /// <summary>
+        ///     <see cref="sum(NDArray, NDAxis?, DType, NDArray, bool, object, NDArray)"/> with the axes as an
+        ///     <c>int[]</c>: the overload an <c>int[]</c> binds, and a bare <c>null</c> too (null converts to
+        ///     <c>int[]</c> better than to NDAxis), forwarding to the NDAxis form: a null array is NumPy's None, any
+        ///     other array NumPy's tuple (<c>new int[0]</c> is <c>()</c>).
+        /// </summary>
+        /// <param name="axis">The axes as NumPy's tuple, or <c>null</c> for None.</param>
+        /// <inheritdoc cref="sum(NDArray, NDAxis?, DType, NDArray, bool, object, NDArray)"/>
+        public static NDArray sum(NDArray a, int[] axis, DType dtype = null, NDArray @out = null, bool keepdims = false, object initial = null, NDArray @where = null)
+            => sum(a, (NDAxis?)axis, dtype, @out, keepdims, initial, @where);
     }
 }

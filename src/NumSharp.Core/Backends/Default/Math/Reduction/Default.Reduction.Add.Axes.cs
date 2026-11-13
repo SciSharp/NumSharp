@@ -44,18 +44,20 @@ namespace NumSharp.Backends
         ///     axis is np.sum's own axis route, every axis its flat route, and any other set (two or more axes, or none)
         ///     NumPy's reduction iterator over all of them at once (see the file header).
         /// </summary>
-        /// <param name="arr">The numeric operand (any layout; text is the caller's: np.average answers it first).</param>
+        /// <param name="arr">The numeric operand (any layout; text is the caller's: np.average answers it first, and
+        ///     np.count_nonzero hands in the truth values).</param>
         /// <param name="axes">The reduced axes, normalized and distinct (NumPy's <c>normalize_axis_tuple</c> ran), in any
         ///     order; empty for none.</param>
         /// <param name="keepdims">Keep the reduced axes with length 1.</param>
         /// <param name="loop">The loop dtype: every element is cast to it before it is added. float16, float32, float64,
-        ///     complex128 or decimal for a set of two axes or more, or none (np.average's loops); any loop np.sum takes for
-        ///     one axis or every axis.</param>
+        ///     complex128 or decimal (np.average's loops) or int64 (np.count_nonzero's intp loop) for a set of two axes or
+        ///     more, or none; any loop np.sum takes for one axis or every axis.</param>
         /// <returns>The sum in <paramref name="loop"/>: a fresh array laid out as NumPy's iterator allocates it (the input's
         ///     axis order), owning its data; a read-only 0-d scalar (NumPy's scalar) when every axis is reduced without
         ///     keepdims.</returns>
-        /// <exception cref="NotSupportedException">A set of two axes or more, or none, in a loop other than the five above
-        ///     (an integer, bool or char loop: none of np.average's statements reaches one).</exception>
+        /// <exception cref="NotSupportedException">A set of two axes or more, or none, in a loop other than the six above
+        ///     (another integer, a bool or a char loop: none of np.average's or np.count_nonzero's statements reaches
+        ///     one).</exception>
         /// <exception cref="OverflowException">A decimal sum leaves decimal's range.</exception>
         /// <remarks>
         ///     NumPy's statement order matters only through the iterator: the order of <paramref name="axes"/> never does
@@ -143,7 +145,7 @@ namespace NumSharp.Backends
             double* p = (double*)nan.Address;
             for (long i = 0; i < nan.size; i++)
                 p[i] = double.NaN;
-            return dims.Length == 0 ? nan.MarkReductionScalar() : nan;
+            return dims.Length == 0 ? nan.PyArray_Return() : nan;
         }
 
         /// <summary>
@@ -164,9 +166,9 @@ namespace NumSharp.Backends
         {
             // The loop must exist before anything is allocated: the caller never sees a half-built result.
             if (loop != NPTypeCode.Double && loop != NPTypeCode.Single && loop != NPTypeCode.Half
-                && loop != NPTypeCode.Complex && loop != NPTypeCode.Decimal)
+                && loop != NPTypeCode.Complex && loop != NPTypeCode.Decimal && loop != NPTypeCode.Int64)
                 throw new NotSupportedException(
-                    $"add.reduce over an axis tuple has no {loop} loop here (np.average reaches float16, float32, float64, complex128 and decimal).");
+                    $"add.reduce over an axis tuple has no {loop} loop here (np.average reaches float16, float32, float64, complex128 and decimal; np.count_nonzero int64).");
 
             // NumPy's buffer size (np.getbufsize(), thread-local) cuts a cast input's pairwise calls into fills.
             var it = NumPyReduceIterator.Build(arr.Shape, flags, keepdims, null, null, false, arr.GetTypeCode != loop,
@@ -187,6 +189,7 @@ namespace NumSharp.Backends
                     case NPTypeCode.Single: it.Run(o, loop, x, xT, null, loop, 0, NumPyAddLoops.Single()); break;
                     case NPTypeCode.Half: it.Run(o, loop, x, xT, null, loop, 0, NumPyAddLoops.Half()); break;
                     case NPTypeCode.Complex: it.Run(o, loop, x, xT, null, loop, 0, NumPyAddLoops.Complex()); break;
+                    case NPTypeCode.Int64: it.Run(o, loop, x, xT, null, loop, 0, NumPyAddLoops.Int64()); break;
                     default: it.Run(o, loop, x, xT, null, loop, 0, NumPyAddLoops.Decimal()); break;
                 }
             }
@@ -199,7 +202,7 @@ namespace NumSharp.Backends
 
             // A reduction over every axis without keepdims (np.sum's flat sum of a broadcast operand) is NumPy's scalar;
             // anything with a dimension left is an array.
-            return result.ndim == 0 ? result.MarkReductionScalar() : result;
+            return result.ndim == 0 ? result.PyArray_Return() : result;
         }
     }
 
@@ -239,6 +242,37 @@ namespace NumSharp.Backends
         /// <summary>NumSharp's decimal add (no NumPy dtype): sequential decimal sums.</summary>
         /// <returns>The loop.</returns>
         internal static NumPyReduceIterator.Loop<decimal> Decimal() => new(&DecimalReduce, &DecimalBinary);
+
+        /// <summary>LONG_add's two forms (int64, wrapping as C's integer add): the intp loop of
+        ///     <c>np.count_nonzero</c>'s <c>a_bool.sum(axis=tuple, dtype=intp)</c>. Integer addition is associative, so the
+        ///     iterator's call schedule never changes the result, only the layout it allocates.</summary>
+        /// <returns>The loop.</returns>
+        internal static NumPyReduceIterator.Loop<long> Int64() => new(&Int64Reduce, &Int64Binary);
+
+        /// <summary>LONG_add's reduce form: <c>*acc += x[i]</c> over the run, in order, wrapping on overflow.</summary>
+        /// <param name="acc">The out's running value.</param>
+        /// <param name="x">The run's first element.</param>
+        /// <param name="stride">The run's stride in elements (0 for a broadcast axis: one value added n times).</param>
+        /// <param name="n">The run's element count.</param>
+        /// <returns>The out's new value.</returns>
+        private static long Int64Reduce(long acc, long* x, long stride, long n)
+        {
+            for (long i = 0; i < n; i++)
+                acc = unchecked(acc + x[i * stride]);
+            return acc;
+        }
+
+        /// <summary>LONG_add's elementwise form, <c>o[i] = o[i] + x[i]</c>, wrapping on overflow.</summary>
+        /// <param name="o">The out run.</param>
+        /// <param name="os">The out stride in elements.</param>
+        /// <param name="x">The input run.</param>
+        /// <param name="xs">The input stride in elements.</param>
+        /// <param name="n">The element count.</param>
+        private static void Int64Binary(long* o, long os, long* x, long xs, long n)
+        {
+            for (long i = 0; i < n; i++)
+                o[i * os] = unchecked(o[i * os] + x[i * xs]);
+        }
 
         /// <summary>DOUBLE_add's reduce form: <c>*acc += DOUBLE_pairwise_sum(run)</c>, through the SIMD fold when the host
         ///     has one, else the scalar port (the same bits).</summary>

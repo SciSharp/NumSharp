@@ -172,7 +172,9 @@ namespace NumSharp.Interop.OnnxRuntime
                 int i = 0;
                 foreach (KeyValuePair<string, NDArray> input in inputs)
                 {
-                    handles[i] = PrepareInput(session, input.Key, input.Value, rule, casting, mode);
+                    // Transient: ORT reads these during the synchronous run below and the finally disposes them on this
+                    // thread; the collectors read only the handles, never their values (see OrtTensor's constructor).
+                    handles[i] = PrepareInput(session, input.Key, input.Value, rule, casting, mode, transient: true);
                     names[i] = input.Key;
                     values[i] = handles[i].Value;
                     i++;
@@ -261,9 +263,11 @@ namespace NumSharp.Interop.OnnxRuntime
             try
             {
                 int i = 0;
+                // Transient handles: this call creates them, ORT reads them during the synchronous run below, and the
+                // finally disposes them on this thread - no caller ever sees one (see OrtTensor's constructor).
                 foreach (KeyValuePair<string, NDArray> input in inputs)
                 {
-                    inHandles[i] = PrepareInput(session, input.Key, input.Value, rule, casting, mode);
+                    inHandles[i] = PrepareInput(session, input.Key, input.Value, rule, casting, mode, transient: true);
                     inNames[i] = input.Key;
                     i++;
                 }
@@ -271,7 +275,7 @@ namespace NumSharp.Interop.OnnxRuntime
                 int j = 0;
                 foreach (KeyValuePair<string, NDArray> output in outputs)
                 {
-                    outHandles[j] = PrepareOutput(session, output.Key, output.Value);
+                    outHandles[j] = PrepareOutput(session, output.Key, output.Value, transient: true);
                     outNames[j] = output.Key;
                     outValues[j] = outHandles[j].Value;
                     j++;
@@ -279,7 +283,7 @@ namespace NumSharp.Interop.OnnxRuntime
 
                 // Decided on the memory ORT will really read and write (the handles' ranges), so an input that is
                 // already fed as a temporary copy never counts as an overlap.
-                SeparateInputsFromOutputs(inNames, inHandles, outNames, outHandles, mode, nameof(RunInto));
+                SeparateInputsFromOutputs(inNames, inHandles, outNames, outHandles, mode, nameof(RunInto), transient: true);
                 for (int k = 0; k < inHandles.Length; k++)
                     inValues[k] = inHandles[k].Value;
                 // After the overlap pass, which may have replaced an input handle: the source of an output that is a
@@ -412,11 +416,14 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="outHandles">The prepared outputs (always views of the caller's arrays).</param>
         /// <param name="mode">The input mode of the run.</param>
         /// <param name="verb">The public verb that runs (<c>RunInto</c> or <c>RunIntoAsync</c>), named in the refusal.</param>
+        /// <param name="transient">Whether the replacement copy handle is transient: <c>true</c> for the synchronous
+        /// <c>RunInto</c>, whose handles never leave the call (see <see cref="PrepareInput"/>); <c>false</c> for
+        /// <c>RunIntoAsync</c>, which disposes its handles on a continuation.</param>
         /// <exception cref="ArgumentException">Two outputs overlap in memory.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and an input overlaps an output.</exception>
         /// <exception cref="ObjectDisposedException">An overlapped input's buffer was released before it could be copied.</exception>
         private static void SeparateInputsFromOutputs(string[] inNames, OrtTensor[] inHandles, string[] outNames, OrtTensor[] outHandles, OnnxCodecMode mode,
-            string verb)
+            string verb, bool transient)
         {
             for (int j = 0; j < outHandles.Length; j++)
             {
@@ -440,7 +447,7 @@ namespace NumSharp.Interop.OnnxRuntime
                     // The handle reads the caller's own memory (a temporary cannot overlap a caller's array). Feed a copy
                     // of that array instead; the new handle owns the copy. The old handle is disposed only once the copy
                     // exists, so a failure leaves every slot holding a handle the caller's finally can dispose.
-                    OrtTensor copy = NDArrayOnnxInterop.AsOrtValueCore(inHandles[i].Source, ownsSource: false, OnnxCodecMode.Copy);
+                    OrtTensor copy = NDArrayOnnxInterop.AsOrtValueCore(inHandles[i].Source, ownsSource: false, OnnxCodecMode.Copy, transient);
                     inHandles[i].Dispose();
                     inHandles[i] = copy;
                 }
@@ -624,6 +631,10 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="rule">The parsed casting rule a dtype coercion must satisfy.</param>
         /// <param name="casting">The rule as the caller wrote it, for messages.</param>
         /// <param name="mode">View, copy, or view-when-possible (already validated).</param>
+        /// <param name="transient"><c>true</c> when the caller is a synchronous verb that disposes the handle on this thread
+        /// before it returns and never hands it out (<see cref="Run(InferenceSession, IReadOnlyDictionary{string, NDArray}, IReadOnlyCollection{string}, RunOptions, string, bool, OnnxCodecMode)"/>,
+        /// <see cref="RunInto"/>): the handle skips the ARC token and the owner and disposed-value tables (see
+        /// <see cref="OrtTensor"/>). <c>false</c> for the asynchronous verbs, which dispose on a continuation.</param>
         /// <returns>A handle over the memory ORT reads; it owns any temporary it was given.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="array"/> is null.</exception>
         /// <exception cref="ArgumentException">The model has no input named <paramref name="name"/>, or the array's shape contradicts the declared one.</exception>
@@ -631,7 +642,8 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <exception cref="InvalidCastException">The array's dtype does not cast to the declared one under <paramref name="rule"/>, or one of the two is text and the other is not.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/> and the array needs a conversion or a C-order copy, or is text.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
-        internal static OrtTensor PrepareInput(InferenceSession session, string name, NDArray array, NPY_CASTING rule, string casting, OnnxCodecMode mode)
+        internal static OrtTensor PrepareInput(InferenceSession session, string name, NDArray array, NPY_CASTING rule, string casting, OnnxCodecMode mode,
+            bool transient = false)
         {
             if (name is null)
                 throw new ArgumentNullException(nameof(name));
@@ -652,7 +664,7 @@ namespace NumSharp.Interop.OnnxRuntime
             // text array (U or S, under every casting rule: it is the same text in another encoding) and nothing else,
             // and a text array goes into a string input only.
             if (have == NPTypeCode.String || want == NPTypeCode.String)
-                return PrepareTextInput(name, array, meta, have, want, mode);
+                return PrepareTextInput(name, array, meta, have, want, mode, transient);
 
             if (have != want && !np.can_cast(have, want, rule))
                 throw new InvalidCastException(
@@ -699,7 +711,8 @@ namespace NumSharp.Interop.OnnxRuntime
                 // second copy of it would serve nothing, also under Copy. The caller's own array is shared, or copied when
                 // the caller asked for a copy of every input. View for the share: the core must not copy silently, so a
                 // broken precondition here throws instead of feeding an unintended temporary.
-                OrtTensor handle = NDArrayOnnxInterop.AsOrtValueCore(fed, ownsSource: owned, owned || mode != OnnxCodecMode.Copy ? OnnxCodecMode.View : OnnxCodecMode.Copy);
+                OrtTensor handle = NDArrayOnnxInterop.AsOrtValueCore(fed, ownsSource: owned, owned || mode != OnnxCodecMode.Copy ? OnnxCodecMode.View : OnnxCodecMode.Copy,
+                    transient);
                 owned = false;   // the handle owns the temporary now
                 return handle;
             }
@@ -720,13 +733,15 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="have">The array's storage type code.</param>
         /// <param name="want">The declared storage type code.</param>
         /// <param name="mode">The input mode; <see cref="OnnxCodecMode.View"/> refuses text.</param>
+        /// <param name="transient">Passed on from <see cref="PrepareInput"/>: a synchronous run's own handle that never leaves the call.</param>
         /// <returns>A handle owning the string tensor.</returns>
         /// <exception cref="InvalidCastException">One side is text and the other is not: the bridge does not cast between text and numbers (convert with <c>astype</c> first).</exception>
         /// <exception cref="ArgumentException">The array's shape contradicts the declared one.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="mode"/> is <see cref="OnnxCodecMode.View"/>: text is always a copy.</exception>
         /// <exception cref="NotSupportedException">The array is a <c>StringDType</c> array fed to a string input, or it holds more strings than ORT's string tensor API can index.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
-        private static OrtTensor PrepareTextInput(string name, NDArray array, NodeMetadata meta, NPTypeCode have, NPTypeCode want, OnnxCodecMode mode)
+        private static OrtTensor PrepareTextInput(string name, NDArray array, NodeMetadata meta, NPTypeCode have, NPTypeCode want, OnnxCodecMode mode,
+            bool transient)
         {
             if (have != want)
                 throw new InvalidCastException(
@@ -746,7 +761,7 @@ namespace NumSharp.Interop.OnnxRuntime
                     $"Run(mode: OnnxCodecMode.View): input '{name}' cannot be fed as a view: it is text, and ONNX Runtime keeps every string as a " +
                     "separate object in its own memory. Pass OnnxCodecMode.Auto.");
             // Auto and Copy do the same for text: the string tensor is a copy either way.
-            return NDArrayOnnxInterop.AsOrtValueCore(array, ownsSource: false, mode);
+            return NDArrayOnnxInterop.AsOrtValueCore(array, ownsSource: false, mode, transient);
         }
 
         /// <summary>
@@ -757,13 +772,15 @@ namespace NumSharp.Interop.OnnxRuntime
         /// <param name="session">The session whose metadata declares the output.</param>
         /// <param name="name">The model output's name.</param>
         /// <param name="array">The array ORT writes the output into.</param>
+        /// <param name="transient"><c>true</c> for <see cref="RunInto"/>, which disposes the handle on this thread before it
+        /// returns (see <see cref="PrepareInput"/>); <c>false</c> for the asynchronous verbs.</param>
         /// <returns>A handle that shares the array's memory with ORT.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="array"/> is null.</exception>
         /// <exception cref="ArgumentException">The model has no output named <paramref name="name"/>, or the array's shape contradicts the declared one.</exception>
         /// <exception cref="NotSupportedException">The output is not a tensor.</exception>
         /// <exception cref="InvalidOperationException">The array is not of the declared dtype, is read-only, or is not C-contiguous; or the output (or the array) is text.</exception>
         /// <exception cref="ObjectDisposedException">The array's buffer has already been released.</exception>
-        internal static OrtTensor PrepareOutput(InferenceSession session, string name, NDArray array)
+        internal static OrtTensor PrepareOutput(InferenceSession session, string name, NDArray array, bool transient = false)
         {
             if (name is null)
                 throw new ArgumentNullException(nameof(name));
@@ -796,7 +813,7 @@ namespace NumSharp.Interop.OnnxRuntime
                     "copy its result into this view with np.copyto(view, result).");
             ValidateShape(name, "output", meta, array.Shape);
             // View, never Auto: ORT must write the caller's own memory, and a copy would absorb the result silently.
-            return NDArrayOnnxInterop.AsOrtValueCore(array, ownsSource: false, OnnxCodecMode.View);
+            return NDArrayOnnxInterop.AsOrtValueCore(array, ownsSource: false, OnnxCodecMode.View, transient);
         }
 
         /// <summary>
@@ -869,7 +886,10 @@ namespace NumSharp.Interop.OnnxRuntime
         /// </exception>
         internal static void RequireEveryInput(InferenceSession session, IEnumerable<string> fed)
         {
-            var given = new List<string>(fed);
+            // The verbs pass a dictionary's key collection, whose Contains is the dictionary's own O(1) lookup; a plain
+            // sequence is copied into a list as before. The copy and its linear Contains made this check O(inputs x fed):
+            // 27 x 27 string compares per step of a GPT-2 decoder, 130 x 130 for a 64-layer one.
+            ICollection<string> given = fed as ICollection<string> ?? new List<string>(fed);
             // A name the model does not have is the more specific mistake - a misspelled input also leaves the real one
             // missing - so it is reported first, with the message every other name lookup of this tier gives. A null
             // name is left to the preparation of the inputs, which refuses it with ArgumentNullException.

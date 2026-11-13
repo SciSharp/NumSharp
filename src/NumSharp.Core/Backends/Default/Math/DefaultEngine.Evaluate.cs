@@ -1276,7 +1276,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Host-delegated reductions (plan P2 M4-tail + M4c): the value kinds <c>Ptp</c> / <c>NanMin</c> /
         /// <c>NanMax</c> and the int64 index kinds <c>ArgMax</c> / <c>ArgMin</c> — each answered by the
-        /// corresponding public engine reduction (<see cref="np.ptp(NDArray,int?,NDArray,bool)"/> /
+        /// corresponding public engine reduction (<see cref="np.ptp(NDArray,NDAxis?,NDArray,bool)"/> /
         /// <see cref="np.nanmin(NDArray,int?,NDArray,bool,object,NDArray)"/> / <see cref="np.nanmax(NDArray,int?,NDArray,bool,object,NDArray)"/> /
         /// <see cref="np.argmax(NDArray,int,bool)"/> / <see cref="np.argmin(NDArray,int,bool)"/>) over the child's
         /// values. How the child reaches it decides which BITS come back, so the routes differ per kind:
@@ -1603,7 +1603,7 @@ namespace NumSharp.Backends
             {
                 num.Dispose();
                 den.Dispose();
-                throw new DivideByZeroException("Weights sum to zero, can't be normalized");
+                throw new ZeroDivisionError("Weights sum to zero, can't be normalized");
             }
 
             NDArray computed = num / den;                      // rt/rt → rt (complex divide is bit-exact)

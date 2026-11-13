@@ -499,6 +499,68 @@ namespace NumSharp
         public NDListArray diagonal(int offset = 0, int axis1 = 0, int axis2 = 1) => Derive(a => a.diagonal(offset, axis1, axis2));
 
         // =============================================================================================================
+        // Joining (np.vstack / np.row_stack)
+        // =============================================================================================================
+
+        /// <summary>
+        ///     NumPy's <c>np.vstack(tup)</c> (and <c>np.row_stack</c>, its other name, which NumSharp keeps after NumPy 2.5
+        ///     removed it) over object arrays of lists:
+        ///     <c>atleast_2d</c> of every array (a 0-d one is <c>(1, 1)</c>, a 1-d one a row), then a concatenation along the
+        ///     first axis. Like NumPy's, it moves POINTERS: the result's elements are the same lists (a list of the first
+        ///     array keeps its identity), in a new array that owns its pointers.
+        /// </summary>
+        /// <param name="tup">The arrays (NumPy's sequence), the same shape along all but the first axis after
+        ///     <c>atleast_2d</c>.</param>
+        /// <returns>The stacked object array of lists, at least 2-D.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="tup"/> or one of its arrays is null.</exception>
+        /// <exception cref="ValueError">No array (<c>need at least one array to concatenate</c>); arrays whose other axes
+        ///     differ (np.concatenate's <c>all the input array dimensions except for the concatenation axis must match
+        ///     exactly, ...</c>).</exception>
+        /// <exception cref="NotSupportedException">A non-empty list of the other piece class (a bytes list beside str
+        ///     lists): NumPy's object array mixes them, NumSharp's lists hold one class per family.</exception>
+        /// <exception cref="ObjectDisposedException">One of the arrays was disposed.</exception>
+        /// <remarks>
+        ///     The lists of the first array's family are shared as they are; another family's lists are appended to that
+        ///     family once each (its heap is append-only, so no other array sees a change). NumPy's <c>dtype</c> /
+        ///     <c>casting</c> keywords are not offered here: over lists they only raise or turn the lists into truth values.
+        ///     API-parity batch 12 (the owner: "support that too" beside np.row_stack).
+        /// </remarks>
+        internal static NDListArray VStack(NDListArray[] tup)
+        {
+            if (tup is null)
+                throw new ArgumentNullException(nameof(tup));
+            // NumPy's concatenate refuses an empty sequence before it reads anything.
+            if (tup.Length == 0)
+                throw new ValueError("need at least one array to concatenate");
+            var home = tup[0] ?? throw new ArgumentNullException(nameof(tup), "tup holds a null array");
+            home.ThrowIfDisposed();
+
+            // Every array's ids in the first array's lists (its own ids when it shares them, else a new id array over the
+            // lists appended there), then np.vstack of the ids: atleast_2d + concatenate on int64 pointers, so the shape
+            // rule, the error texts and the fresh, owning result are NumPy's for the object array.
+            var ids = new NDArray[tup.Length];
+            var owned = new bool[tup.Length];
+            try
+            {
+                for (int i = 0; i < tup.Length; i++)
+                {
+                    var part = tup[i] ?? throw new ArgumentNullException(nameof(tup), "tup holds a null array");
+                    part.ThrowIfDisposed();
+                    ids[i] = home.IdsInThisHeap(part, out owned[i]);
+                }
+                var stacked = np.vstack(ids);
+                return new NDListArray(stacked, home.Heap.Share());
+            }
+            finally
+            {
+                // The mapped id arrays were this call's own (a family's own ids are the caller's, never released here).
+                for (int i = 0; i < ids.Length; i++)
+                    if (owned[i])
+                        ids[i]?.Dispose();
+            }
+        }
+
+        // =============================================================================================================
         // Internals
         // =============================================================================================================
 
