@@ -120,7 +120,7 @@
        still gives a local pre-release pack, now consistent across assembly and package.
        ==================================================================================== -->
   <PropertyGroup>
-    <VersionPrefix Condition="'$(VersionPrefix)' == ''">0.80.0</VersionPrefix>
+    <VersionPrefix Condition="'$(VersionPrefix)' == ''">0.81.0</VersionPrefix>
   </PropertyGroup>
 
   <!-- ====================================================================================
