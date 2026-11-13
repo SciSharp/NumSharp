@@ -228,6 +228,7 @@
     "numpy.char.upper": {"via": "numpy.strings.upper", "reason": "numpy.char.upper is the very object numpy.strings.upper (numpy.char re-exports it); NumSharp's np.char.upper forwards to np.strings.upper once np.char's TextOperand has coerced the array_like operand. np.char.add has direct contracts (the strchar section) and needs none."},
     "numpy.char.zfill": {"via": "numpy.strings.zfill", "reason": "numpy.char.zfill is the very object numpy.strings.zfill (numpy.char re-exports it); NumSharp's np.char.zfill forwards to np.strings.zfill once np.char's TextOperand has coerced the array_like operand. np.char.add has direct contracts (the strchar section) and needs none."},
     "numsharp.np.common_type_code": {"via": "numpy.common_type", "reason": "NumSharp-only NPTypeCode twin of np.common_type."},
+    "numsharp.np.row_stack": {"via": "numpy.vstack", "reason": "NumPy 2.4's row_stack is vstack plus a DeprecationWarning, and NumPy 2.5 removed it; NumSharp keeps np.row_stack on purpose (the owner, 2026-11-13: keep it, no obsoletion) and forwards it to vstack's statements, so it borrows np.vstack's contracts."},
     "numsharp.ndarray.array_equal": {"via": "numpy.array_equal", "reason": "NumSharp-only instance convenience over np.array_equal."},
     "numsharp.ndarray.convolve": {"via": "numpy.convolve", "reason": "NumSharp-only instance convenience over np.convolve."},
     "numsharp.ndarray.correlate": {"via": "numpy.correlate", "reason": "NumSharp-only instance convenience over np.correlate."},
