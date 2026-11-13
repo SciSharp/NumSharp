@@ -419,7 +419,9 @@ test('detail pane renders contracts, host pins, alias via and the two gap readin
   api.changeScope();
   const show = (id) => { element('cov-search').value = id; api.filterRows(); return element('cov-detail').innerHTML; };
   const sqrt = show('numpy.sqrt');
-  assert.match(sqrt, /<strong>1,200<\/strong> committed NumPy 2\.4\.2 contracts/);
+  // The pane names no NumPy release (the page's NumPy pill names the pinned one, numpy-version.txt), so the text
+  // survives a NumPy bump; the NumPy 2.5.4 bump made it pin-agnostic.
+  assert.match(sqrt, /<strong>1,200<\/strong> committed NumPy oracle contracts replayed against NumSharp in CI/);
   assert.match(sqrt, /2 error-message contracts/);
   assert.match(sqrt, /<code>float32<\/code> <code>float64<\/code> · 26 memory layouts/);
   assert.doesNotMatch(sqrt, /pinned host/);
