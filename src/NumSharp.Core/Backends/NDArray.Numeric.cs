@@ -567,7 +567,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.indices</c> (<c>numeric.py</c>) with <c>sparse=False</c>, the body of
-        ///     <see cref="np.indices(Shape, DType)"/> once the dimensions were read: a single dense array of
+        ///     <see cref="np.indices(Shape, DType, bool)"/> once the dimensions were read: a single dense array of
         ///     shape <c>(len(dimensions), *dimensions)</c> whose d-th sub-array holds each position's d-th coordinate.
         /// </summary>
         /// <param name="dimensions">The grid's sizes. An empty array gives NumPy's <c>(0,)</c> result. Never mutated.</param>
@@ -639,7 +639,7 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.indices</c> (<c>numeric.py</c>) with <c>sparse=True</c>, the body of
-        ///     <see cref="np.indices_sparse(long[], DType)"/> once the dimensions were checked for null: one array per
+        ///     <see cref="np.indices(Shape, DType, bool)"/> (<c>sparse: true</c>) once the dimensions were checked for null: one array per
         ///     dimension, of shape <c>(1, …, 1, dimensions[d], 1, …, 1)</c>, that broadcasts against the others.
         /// </summary>
         /// <param name="dimensions">The grid's sizes. An empty array gives an empty tuple. Never mutated.</param>

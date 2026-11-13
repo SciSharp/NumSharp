@@ -65,7 +65,9 @@ the text classes included. The masked reductions' statistics (`ma.mean` / `ma.va
   `copy: true`, as NumPy's `_comparison` does); `where(condition)` alone is `nonzero(condition)`;
   `atleast_1d` / `2d` / `3d(params object[] arys)` return one masked array per operand (a lone `object[]` is the operand
   list, `[Misaligned]`); `MaskedArray.item(params long[] args)` is `ndarray.item` over the data — a masked element's
-  STORED value.
+  STORED value; `mask_rows` / `mask_cols(a, int? axis = null)` take NumPy's deprecated axis and ignore it, as NumPy
+  does (without its DeprecationWarning); `average(a, axis, weights, returned, keepdims)` returns
+  `MaskedArrayModule.AverageResult` (the masked average typed `NDMaskedArray`, the sum of weights with `returned`).
 - The reductions `sum` / `prod` / `product` / `mean(a, axis, dtype, out, keepdims)`, `var` / `std(a, axis, dtype, out,
   ddof, keepdims, mean)`, `min` / `max` / `ptp(a, axis, out, fill_value, keepdims)`, `all` / `any(a, axis, out,
   keepdims)` and `count(a, axis, keepdims)` take `NDAxis` (a tuple of axes; ufunc's `duplicate value in 'axis'`) beside the
@@ -157,11 +159,13 @@ Stored as NumPy stores it, for every dtype (`Ma/NDMaskedArray.cs`; `_fill_value`
 
 ## The set routines
 
-numpy.ma's arraysetops are NumPy's statements (`Ma/NDMaskedArray.SetOps.cs`): `unique` (with NumPy's `return_index` /
-`return_inverse`, a `MaskedArrayModule.UniqueResult` tuple), `in1d`, `isin`, `intersect1d`, `setxor1d`, `union1d`,
+numpy.ma's arraysetops are NumPy's statements (`Ma/NDMaskedArray.SetOps.cs`): `unique` (one signature with NumPy's
+`return_index` / `return_inverse`, always a `MaskedArrayModule.UniqueResult`: `values` typed `NDMaskedArray`, the masked
+array's members forwarded to it, an implicit conversion to `NDMaskedArray`; an object-typed np.ma function receives the
+struct boxed, so pass `values` or an `NDMaskedArray` variable), `in1d`, `isin`, `intersect1d`, `setxor1d`, `union1d`,
 `setdiff1d` replay `numpy/ma/extras.py` over `_unique1d`, `ma.concatenate` (with `axis=None`), the masked sort / argsort
-(masked slots keyed by NaN for a floating dtype, the dtype maximum otherwise) and the masked `==` / `!=` (two masked slots
-equal, a masked slot unequal to every value, every comparison that reads a masked slot masked).
+(masked slots keyed by NaN for a floating dtype, the dtype maximum otherwise) and the masked `==` / `!=` (two masked
+slots equal, a masked slot unequal to every value, every comparison that reads a masked slot masked).
 - So a flag whose sorted neighbour is masked is masked (`ma.in1d([3, 5], ma.array([3, 9], mask=[0, 1]))` is
   `[True, --]`), NaNs collapse only behind an UNMASKED last NaN, a masked bool slot sorts among the unmasked Trues, a hard
   mask ORs into `ma.unique`'s in-place sort, and setxor1d compares FILLED values (999999 equals a masked int slot).

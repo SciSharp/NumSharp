@@ -521,7 +521,7 @@ public class IndexConversionTests
     [TestMethod]
     public void Indices_Sparse_2D()
     {
-        var s = np.indices_sparse(new[] { 2, 3 });
+        var s = np.indices(new[] { 2, 3 }, sparse: true);
         s.Length.Should().Be(2);
         s[0].shape.Should().Equal(2, 1);
         s[1].shape.Should().Equal(1, 3);

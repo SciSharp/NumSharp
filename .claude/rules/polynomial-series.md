@@ -140,7 +140,10 @@ object/str refusal (Q), `mapdomain` result layouts with a "strides" facet (R)), 
   and for a Python sequence the same KIND (`trimseq(object[])` is the list itself or a new list of the kept items, an
   `NDArray[]` staying one; a tuple itself or a new ValueTuple; any other enumerable itself or an `object[]`; zero-ness is
   Python's `item != 0`, an array item by its truth value with NumPy's ValueError past one element; None or a number is
-  `len()`'s TypeError). `trimcoef` checks `tol < 0` before converting. `{p}line` is `np.array` DISCOVERY
+  `len()`'s TypeError). `trimcoef(object c, double tol = 0)` and `{p}trim` are one typed signature (a Python float
+  tolerance; NumPy compares a weak int one alike) over `NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(object))`,
+  which keeps NumPy's `tol < 0` over any value for the series class's `trim` and the corpus (`OpRegistry.PolySeries.cs`
+  `PolyTrim`); `trimcoef` checks `tol < 0` before converting. `{p}line` is `np.array` DISCOVERY
   (`polyline(1, 2)` is int64). `mapdomain` converts x only when it is not an int/float/complex/`np.generic` (a bool x
   becomes a 0-d array). The constants are ONE shared, writeable, scope-detached instance each (NumPy's module attributes:
   a write persists), holding an extra ARC reference so a caller's `Dispose()` cannot free them; their corpus cases vary

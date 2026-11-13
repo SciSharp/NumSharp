@@ -285,8 +285,8 @@ namespace NumSharp.Tests.Fuzz
                         : np.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "average":
                     return p.ContainsKey("axes")
-                        ? np.average(ops[0], ParseIntArray(p["axes"]), null, ParseKeepdims(p))
-                        : np.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                        ? (NDArray)np.average(ops[0], ParseIntArray(p["axes"]), null, keepdims: ParseKeepdims(p))
+                        : (NDArray)np.average(ops[0], ParseAxis(p), null, keepdims: ParseKeepdims(p));
                 case "ptp": return np.ptp(ops[0], ParseAxis(p), null, ParseKeepdims(p));
                 case "count_nonzero": return np.count_nonzero(ops[0], ParseAxis(p).Value, ParseKeepdims(p));
                 case "percentile": return np.percentile(ops[0], p["q"].GetDouble(), ParseAxis(p),
@@ -532,7 +532,7 @@ namespace NumSharp.Tests.Fuzz
                     invert: p.ContainsKey("invert") && p["invert"].GetBoolean(),
                     kind: p.TryGetValue("kind", out var isinKind) ? isinKind.GetString() : null);
                 case "union1d": return np.union1d(ops[0], ops[1]);
-                case "intersect1d": return np.intersect1d(ops[0], ops[1],
+                case "intersect1d": return (NDArray)np.intersect1d(ops[0], ops[1],
                     p.ContainsKey("assume_unique") && p["assume_unique"].GetBoolean());
                 case "setxor1d": return np.setxor1d(ops[0], ops[1],
                     p.ContainsKey("assume_unique") && p["assume_unique"].GetBoolean());
@@ -733,7 +733,7 @@ namespace NumSharp.Tests.Fuzz
                     result.fill(0);
                     return result;
                 }
-                case "indices": return np.indices(ParseIntArray(p["dimensions"]),
+                case "indices": return (NDArray)np.indices(ParseIntArray(p["dimensions"]),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
                 // np.ndarray(shape, dtype, buffer, offset, strides, order): OpRegistry.Ndarray.cs.
                 case "ndarray": return NdarrayCtor(p, ops);

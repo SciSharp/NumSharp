@@ -146,7 +146,7 @@ namespace NumSharp.Tests.Backends.Iterators
 
             // NumPy 2.4.2: np.average(np.zeros((11, 0, 14)), axis=2, weights=np.ones((11, 0, 14)), returned=True) is a pair
             // of empty (11, 0) float64 arrays; axis 0 gives (0, 14); the tuple (0, 2) gives (0,).
-            var (avg, scl) = np.average_returned(a, 2, w);
+            var (avg, scl) = np.average(a, 2, w, returned: true);
             using (avg)
             using (scl)
             {
@@ -155,7 +155,7 @@ namespace NumSharp.Tests.Backends.Iterators
                 avg.dtype.Should().Be(np.float64);
             }
 
-            var (avg0, scl0) = np.average_returned(a, 0, w);
+            var (avg0, scl0) = np.average(a, 0, w, returned: true);
             using (avg0)
             using (scl0)
                 avg0.shape.Should().Equal(0, 14);

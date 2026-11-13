@@ -1,5 +1,6 @@
 using System;
 using NumSharp;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Tests.Fuzz
 {
@@ -14,20 +15,30 @@ namespace NumSharp.Tests.Fuzz
     public static partial class OpRegistry
     {
         /// <summary>
-        ///     <c>{p}vander(x, deg)</c> through the overload a C# caller binds: a Python int that fits <see cref="int"/> takes the
-        ///     typed <c>(object x, int deg)</c> overload (what <c>polyvander(x, 3)</c> compiles to); every other degree kind — a
-        ///     wider or huge int, bool, float, complex, str, None, a list / tuple, an operand array — the <c>object</c> overload,
-        ///     whose <c>operator.index</c> port decides it. Both overloads are thereby replayed against NumPy.
+        ///     <c>{p}vander(x, deg)</c> the way C# source can spell it. The facade's one signature, <c>(object x, int deg)</c>
+        ///     (API-parity batch 11, the owner's decision 2: typed parameters only), takes a Python int that fits
+        ///     <see cref="int"/> (what <c>polyvander(x, 3)</c> compiles to). Every other degree kind - a wider or huge int,
+        ///     bool, float, complex, str, None, a list / tuple, an operand array - has no C# spelling since then, so the case
+        ///     replays through the computation the removed object facade called
+        ///     (<see cref="NDPolyVander.Vander(PolyBasis, object, object)"/>, whose <c>operator.index</c> port decides it, the
+        ///     machinery vander2d / vander3d's per-axis degrees still reach). The corpus stays whole.
         /// </summary>
         /// <param name="a">The case's argument decoder (x decoded first, then deg — the generator's order).</param>
-        /// <param name="viaInt">The basis's <c>(object, int)</c> overload.</param>
-        /// <param name="viaObject">The basis's <c>(object, object)</c> overload.</param>
-        /// <returns>The facade's result.</returns>
-        private static NDArray PolyVander1(PolyArgs a, Func<object, int, NDArray> viaInt, Func<object, object, NDArray> viaObject)
+        /// <param name="basis">The case's basis (the computation's first argument).</param>
+        /// <param name="viaInt">The basis's <c>(object, int)</c> facade.</param>
+        /// <returns>The facade's or the computation's result.</returns>
+        private static NDArray PolyVander1(PolyArgs a, PolyBasis basis, Func<object, int, NDArray> viaInt)
         {
             object x = a.Get("x");
             object deg = a.Get("deg");
-            return deg is long l && l >= int.MinValue && l <= int.MaxValue ? viaInt(x, (int)l) : viaObject(x, deg);
+            if (deg is long l && l >= int.MinValue && l <= int.MaxValue)
+                return viaInt(x, (int)l);
+            // The removed object facade was [NDScoped]: the scope reclaims the computation's intermediates (the scope-audit
+            // sweep replays through this registry) and hands the matrix back.
+            using var scope = NDScope.Open();
+            var result = NDPolyVander.Vander(basis, x, deg);
+            scope.Returns(result);
+            return result;
         }
     }
 }

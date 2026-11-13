@@ -490,9 +490,10 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     The argument errors, NumPy's type and text verbatim: the empty ZeroDivisionError, pow's ValueError /
-        ///     OverflowError from <c>int(pow)</c> and its two range checks, fromroots' <c>len()</c> TypeErrors (a Python
-        ///     float, a 0-d array), and as_series' texts.
+        ///     The argument errors, NumPy's type and text verbatim: the empty ZeroDivisionError, pow's two range checks,
+        ///     fromroots' <c>len()</c> TypeErrors (a Python float, a 0-d array), and as_series' texts. NumPy's errors for a
+        ///     float power (<c>2.5</c>, <c>nan</c>, <c>inf</c>) have no C# call since API-parity batch 11: <c>{p}pow</c>
+        ///     takes an <see cref="int"/> power, so the compiler refuses a double one.
         /// </summary>
         [TestMethod]
         public void Errors_AreNumPys()
@@ -504,9 +505,6 @@ namespace NumSharp.Tests.Polynomial
 
             Raises<ZeroDivisionError>(() => P.polynomial.polydiv(one, new object[] { 0.0 }), "", "polydiv by [0.]");
             Raises<ValueError>(() => P.polynomial.polypow(one, -1), "Power must be a non-negative integer.", "polypow(c, -1)");
-            Raises<ValueError>(() => P.polynomial.polypow(one, 2.5), "Power must be a non-negative integer.", "polypow(c, 2.5)");
-            Raises<ValueError>(() => P.polynomial.polypow(one, double.NaN), "cannot convert float NaN to integer", "polypow(c, nan)");
-            Raises<OverflowError>(() => P.polynomial.polypow(one, double.PositiveInfinity), "cannot convert float infinity to integer", "polypow(c, inf)");
             Raises<ValueError>(() => P.chebyshev.chebpow(one, 17), "Power is too large", "chebpow(c, 17) at the default maxpower 16");
             Raises<ValueError>(() => P.chebyshev.chebpow(one, 3, maxpower: 2), "Power is too large", "chebpow(c, 3, maxpower=2)");
             Raises<TypeError>(() => P.polynomial.polyfromroots(2.5), "object of type 'float' has no len()", "polyfromroots(2.5)");
@@ -521,9 +519,9 @@ namespace NumSharp.Tests.Polynomial
         // =========================================================================================================
 
         /// <summary>
-        ///     The C# spellings of <c>{p}pow</c>: an <see cref="int"/> binds the int overload, a <see cref="double"/> the
-        ///     double overload (NumPy's float pow), and a <see cref="long"/> — which converts implicitly to double, never
-        ///     to int — the double overload too, with the same answer; <c>maxpower</c> is optional, named, and
+        ///     The C# spelling of <c>{p}pow</c>: one signature, <c>(c, int pow, int? maxpower)</c> (API-parity batch 11
+        ///     removed the double and object forms - a <see cref="double"/> or <see cref="long"/> power is a compile-time
+        ///     refusal now, as C# converts neither to int implicitly); <c>maxpower</c> is optional, named, and
         ///     <c>null</c> is NumPy's <c>None</c> (no limit) for every basis.
         /// </summary>
         [TestMethod]
@@ -533,8 +531,7 @@ namespace NumSharp.Tests.Polynomial
             var c = np.array(new[] { 1.0, 2.0 });
             var expected = new[] { 1.0, 4.0, 4.0 };
             P.polynomial.polypow(c, 2).ToArray<double>().Should().Equal(expected, "int");
-            P.polynomial.polypow(c, 2.0).ToArray<double>().Should().Equal(expected, "double");
-            P.polynomial.polypow(c, 2L).ToArray<double>().Should().Equal(expected, "long binds the double overload");
+            typeof(NumSharp.PowerSeriesModule).GetMethods().Where(m => m.Name == "polypow").Should().ContainSingle("one signature");
             P.chebyshev.chebpow(c, 17, maxpower: null).size.Should().Be(18, "maxpower=None lifts chebpow's default limit of 16");
             P.legendre.legpow(c, 3, maxpower: 3).size.Should().Be(4, "maxpower bounds the power inclusively");
             ((Action)(() => P.legendre.legpow(c, 17))).Should().Throw<ValueError>().WithMessage("Power is too large");

@@ -163,8 +163,8 @@ np.indices(other.shape);       // feed an array's own long[] shape directly
 // [[[0 0 0] [1 1 1] [2 2 2]],
 //  [[0 1 2] [0 1 2] [0 1 2]]]
 
-// The sparse form returns one broadcast-shaped array per dimension:
-np.indices_sparse((3, 3));     // shapes (3,1) and (1,3)
+// sparse: true is NumPy's tuple of one broadcast-shaped array per dimension:
+var (rows, cols) = np.indices((3, 3), sparse: true);   // shapes (3,1) and (1,3)
 ```
 
 Coordinate grids also come from `np.meshgrid`, `np.mgrid`, and `np.ogrid` (open mesh). See the [API reference](../../api/index.md).

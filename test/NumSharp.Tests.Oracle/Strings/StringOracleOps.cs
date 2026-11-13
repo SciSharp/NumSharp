@@ -444,7 +444,7 @@ namespace NumSharp.Tests.Strings
                 case "cumsum": return np.cumsum(x);
                 case "cumprod": return np.cumprod(x);
                 case "median": return np.median(x);
-                case "average": return np.average(x);
+                case "average": return (NDArray)np.average(x);
                 case "nansum": return np.nansum(x);
                 case "nanprod": return np.nanprod(x);
                 case "nanmean": return np.nanmean(x);
@@ -500,7 +500,7 @@ namespace NumSharp.Tests.Strings
                 case "argpartition": return np.argpartition(x, 1);
                 case "isin": return np.isin(x, other[":2"]);
                 case "union1d": return np.union1d(x, other);
-                case "intersect1d": return np.intersect1d(x, other);
+                case "intersect1d": return (NDArray)np.intersect1d(x, other);
                 case "setdiff1d": return np.setdiff1d(x, other[":2"]);
                 case "setxor1d": return np.setxor1d(x, other[":2"]);
                 case "array_equal": return np.array_equal(x, other);

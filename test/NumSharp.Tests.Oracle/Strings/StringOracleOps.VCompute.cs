@@ -124,7 +124,7 @@ namespace NumSharp.Tests.Strings
                         return np.mean(a, axis ?? throw new InvalidOperationException("np.mean's dtype= needs an axis"), dt, keepdims: keepdims);
                     return axis is { } m ? np.mean(a, m, keepdims: keepdims) : np.mean(a, keepdims: keepdims);
                 case "average":
-                    return np.average(a, axis, weights, keepdims);
+                    return (NDArray)np.average(a, axis, weights, keepdims: keepdims);
                 case "nanmean":
                     return np.nanmean(a, axis, keepdims: keepdims, dtype: dt);
                 case "var":

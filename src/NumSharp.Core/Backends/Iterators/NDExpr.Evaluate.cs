@@ -594,7 +594,7 @@ namespace NumSharp.Backends.Iteration
         /// weights)</c>) — so an integer average is always at least float64, and the product/sums run at
         /// that dtype (no integer wrap). A NaN in either tree PROPAGATES to NaN. Weights that sum to zero
         /// (an empty input included) raise <see cref="DivideByZeroException"/> "Weights sum to zero, can't
-        /// be normalized", exactly as <see cref="np.average(NDArray, NDAxis?, NDArray, bool)"/> does. A
+        /// be normalized", exactly as <see cref="np.average(NDArray, NDAxis?, NDArray, bool, bool)"/> does. A
         /// float16 or decimal result dtype is rejected with a directed <see cref="NotSupportedException"/>
         /// (a bit-exact reduction there needs a pairwise sum kernel that dtype lacks).
         /// </summary>

@@ -101,7 +101,7 @@ namespace NumSharp.Tests.Strings
                     result = Str(p, "name") switch
                     {
                         "union1d" => np.union1d(a, b),
-                        "intersect1d" => ri ? (object)np.intersect1d(a, b, assume_unique: au, return_indices: true) : np.intersect1d(a, b, au),
+                        "intersect1d" => ri ? (object)np.intersect1d(a, b, assume_unique: au, return_indices: true).ToArray() : (NDArray)np.intersect1d(a, b, au),
                         "setxor1d" => np.setxor1d(a, b, au),
                         "setdiff1d" => np.setdiff1d(a, b, au),
                         var n => throw new InvalidOperationException($"the string oracle has no set routine '{n}'"),

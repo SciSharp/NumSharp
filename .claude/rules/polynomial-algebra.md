@@ -88,9 +88,11 @@ bases.
   sides; unit-pinned, kept out of the corpus because NumPy's order on a longer line depends on the CPU). A NaN root is not
   a divergence: the sort turns it into the positive quiet NaN and `-r` negates it, as in NumPy.
 - Argument kinds:
-  - `{p}pow(object c, object pow)` (the default limit: 16, None for polypow) and `{p}pow(object c, object pow, object
-    maxpower)` (null is None), ported in `Polynomial/Package/NDPolyPowerArgument.cs` from NumPy's three statements.
-    `power = int(pow)` is CPython's `int()`: bool 0/1, np.float16 (Half) / decimal truncate, a str parses (`"3"`, `" 3 "`,
+  - The facade is one typed signature, `{p}pow(object c, int pow, int? maxpower = 16)` (polypow's limit defaults to
+    None): NumPy's integer power and limit, so a double / object power or limit is a compile-time refusal. The
+    computation underneath, `NDPolyAlgebra.Pow(basis, object c, object pow, object maxpower)` (null is None), keeps
+    NumPy's three statements over ANY value (`Polynomial/Package/NDPolyPowerArgument.cs`) for the series class's `**`
+    and the corpus. `power = int(pow)` is CPython's `int()`: bool 0/1, np.float16 (Half) / decimal truncate, a str parses (`"3"`, `" 3 "`,
     `"3_0"`) and then fails `power != pow`, NaN / inf / complex / None / list / tuple raise CPython's texts, an ndarray of
     one or more dims raises `only 0-dimensional arrays can be converted to Python scalars` whatever its size, a 0-d one
     converts its element. `power > maxpower` is exact for Python numbers (NaN never exceeds, -inf always), decimal, char,
@@ -98,9 +100,8 @@ bases.
     double first (`int too large to convert to float` at 2**1024), then to the dtype (2049 rounds to float16 2048: not
     exceeded; float32 double-rounds), complex compares by NumPy's CGT, bool in int64 (`int too big to convert` past
     int64); an ndarray's result must have exactly one element (NumPy's two truth-value texts), its conversion error
-    first. C# binds `pow` to the int / double overloads first (a `long`/`ulong` converts to double), so only kinds they
-    cannot take reach the object overloads; the corpus replays them as C# source would bind them
-    (`OpRegistry.PolyAlgebra.cs` `PolyPow`).
+    first. The corpus replays a Python int within int's range with a plain limit through the facade and every other
+    power or limit through that computation (`OpRegistry.PolyAlgebra.cs` `PolyPow`).
   - A None / str series: `polyutils.as_series` converts every argument, checks sizes and dims, and only THEN meets the
     common type: a str array (a list holding a str) fails it (`Coefficient arrays have no common type`), an object array
     (None, a non-numeric object, an oversized int) makes NumPy compute with Python objects. So
@@ -147,6 +148,9 @@ Bit-exact with NumPy 2.4.2: `polyvander.jsonl` (zero excused), `Polynomial/Polyn
     empty stack's reshape error;
   - the result is always a VIEW (OWNDATA false): F-contiguous for 1-D points, both C and F for a scalar / degree 0 /
     empty, neither for N-D points.
+- `{p}vander(object x, int deg)` is the facade's one typed signature (a non-int degree is a compile-time refusal);
+  `NDPolyVander.Vander(basis, object x, object deg)` keeps `_as_int` over any value for vander2d / vander3d's per-axis
+  degrees and the corpus (`OpRegistry.PolyVander.cs` `PolyVander1` replays a non-int degree through it).
 - The degree text is `format(deg, '')`, not `str()` (`PolyIndexArgument` in `NDPolyIndexArgument.cs`): a 0-d array formats
   through its scalar (`np.float16(1000)` → `1000.0`), an ndim ≥ 1 array through `array_str`, a list/tuple through its
   items' REPR (`[np.float16(1e+03), array([1.5]), (2,)]`). `operator.index` takes bool, every integer width,

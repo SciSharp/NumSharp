@@ -98,37 +98,26 @@ namespace NumSharp
         public object trimseq(object seq) => NDPolySeries.TrimSeqAny(seq);
 
         /// <summary>
-        ///     Removes the trailing coefficients whose magnitude does not exceed <c>tol = 0</c> — i.e. the trailing
-        ///     exact zeros — and returns the rest as a fresh copy of the coefficient dtype; an all-zero series
-        ///     becomes <c>c[:1]*0</c>. See <see cref="trimcoef(object, object)"/>.
-        /// </summary>
-        /// <param name="c">The series (1-D).</param>
-        /// <returns>The trimmed copy.</returns>
-        /// <exception cref="ValueError">An empty or non-1-d series, or no common type (bool).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.trimcoef.html</remarks>
-        [NDScoped]
-        public NDArray trimcoef(object c) => NDPolySeries.TrimCoef(c, PolyNumber.FromPython(PyScalar.Int(0)));
-
-        /// <summary>
         ///     Removes the trailing coefficients whose magnitude is at most <paramref name="tol"/>
         ///     (<c>np.abs(c) &gt; tol</c> decides what stays) and returns the rest as a fresh copy of the coefficient
         ///     dtype; when nothing exceeds the tolerance the result is <c>c[:1]*0</c> (a zero that keeps -0.0 and
         ///     NaN the way NumPy's multiply does). A complex series is judged by its float64 magnitude.
         /// </summary>
         /// <param name="c">The series (1-D).</param>
-        /// <param name="tol">The tolerance: a Python number (C# primitive — adopts the coefficients' precision, so a
-        ///     float16 series compares against the float16-rounded tolerance) or a NumPy scalar / 0-d array (strong:
-        ///     the comparison runs in the promoted dtype). A NaN tolerance trims everything.</param>
+        /// <param name="tol">The non-negative tolerance, NumPy's Python number (0, the default, trims only the trailing
+        ///     exact zeros): it adopts the coefficients' precision, so a float16 series compares against the
+        ///     float16-rounded tolerance; a NaN tolerance trims everything.</param>
         /// <returns>The trimmed copy.</returns>
-        /// <exception cref="ValueError"><c>tol must be non-negative</c>; an empty or non-1-d series; no common type;
-        ///     a tolerance array of several elements (NumPy's truth-value error).</exception>
-        /// <exception cref="TypeError">A Python complex tolerance (<c>'&lt;' not supported between instances of
-        ///     'complex' and 'int'</c>), or a null one.</exception>
-        /// <exception cref="OverflowError">A Python int tolerance too large to convert (<c>int too large to convert
-        ///     to float</c>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.trimcoef.html</remarks>
+        /// <exception cref="ValueError"><c>tol must be non-negative</c>; an empty or non-1-d series; no common type
+        ///     (bool).</exception>
+        /// <remarks>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.trimcoef.html</para>
+        ///     <para>API-parity batch 11 (the owner's decision 2, typed parameters only): one signature with NumPy's
+        ///     default; the <c>(object c)</c> and <c>(object c, object tol)</c> forms went, so a NumPy scalar or a 0-d
+        ///     array tolerance (strong: compared in the promoted dtype) is no longer a C# spelling - pass the number.</para>
+        /// </remarks>
         [NDScoped]
-        public NDArray trimcoef(object c, object tol) => NDPolySeries.TrimCoef(c, Tolerance(tol));
+        public NDArray trimcoef(object c, double tol = 0) => NDPolySeries.TrimCoef(c, Tolerance(tol));
 
         /// <summary>
         ///     The smallest domain containing the points: <c>[x.min(), x.max()]</c> of the points converted to their

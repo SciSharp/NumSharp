@@ -194,7 +194,7 @@ namespace NumSharp.Tests.Strings
                 case "ediff1d": return ma.ediff1d(x);
                 case "sort": return ma.sort(x);
                 case "argsort": return ma.argsort(x);
-                case "unique": return ma.unique(x);
+                case "unique": return (NDMaskedArray)ma.unique(x);
                 case "harden_mask": return ma.harden_mask(x);
                 case "soften_mask": return ma.soften_mask(x);
                 case "shrink_mask": return x.shrink_mask();
@@ -283,11 +283,11 @@ namespace NumSharp.Tests.Strings
                 case "putmask_masked":
                     ma.putmask(x, Bools(x, true), ma.array(np.full(new Shape(x.shape), "y"), mask: true));
                     return x;
-                case "average_textw": return ma.average(np.ones(new Shape(x.shape)), weights: x);
-                case "average_numw": return ma.average(x, weights: np.ones(new Shape(x.shape)));
-                case "average_short": return ma.average(x, weights: np.ones(new Shape(1L)));
-                case "average_ax0": return ma.average(x, axis: 0, weights: np.ones(new Shape((long)first)));
-                case "average_ax5": return ma.average(x, axis: 5);
+                case "average_textw": return (NDMaskedArray)ma.average(np.ones(new Shape(x.shape)), weights: x);
+                case "average_numw": return (NDMaskedArray)ma.average(x, weights: np.ones(new Shape(x.shape)));
+                case "average_short": return (NDMaskedArray)ma.average(x, weights: np.ones(new Shape(1L)));
+                case "average_ax0": return (NDMaskedArray)ma.average(x, axis: 0, weights: np.ones(new Shape((long)first)));
+                case "average_ax5": return (NDMaskedArray)ma.average(x, axis: 5);
                 case "masked_where_self": return ma.masked_where(x, np.zeros(new Shape(x.shape)));
                 case "masked_where_short": return ma.masked_where(np.array(new[] { true, false }), x);
                 case "masked_where_0d": return ma.masked_where(np.array(true), x);
@@ -425,7 +425,7 @@ namespace NumSharp.Tests.Strings
                 "masked_object" => ma.masked_object(x, y),
                 "compress" => ma.compress(x, y),
                 "filled" => ma.filled(x, y),
-                "average" => ma.average(x, weights: y),
+                "average" => (NDMaskedArray)ma.average(x, weights: y),
                 _ => throw new InvalidOperationException($"strma ma2 has no function '{name}'"),
             };
         }

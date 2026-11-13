@@ -198,8 +198,8 @@ namespace NumSharp
         ///     that computed (a wiring error inside NumSharp).</exception>
         /// <remarks>
         ///     NumPy writes average in Python; DefaultEngine's override runs its statements in NumPy's order.
-        ///     <c>np.average</c> and <c>np.average_returned</c> call it after the numpy.matrix rule and the null check; an
-        ///     override replaces both for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE);
+        ///     <c>np.average</c> (both of its return shapes, <c>returned</c> or not) calls it after the numpy.matrix rule and
+        ///     the null check; an override replaces it for every array whose engine it is. New in 0.80.0 (the np-layer dtype plan, phase PE);
         ///     it was the internal class <c>AverageEngine</c>.
         /// </remarks>
         public abstract (NDArray avg, NDArray sumOfWeights) Average(NDArray a, int[] axis = null, NDArray weights = null,

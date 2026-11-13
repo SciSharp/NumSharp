@@ -5,8 +5,8 @@ namespace NumSharp.Tests.Statistics
     /// <summary>
     ///     np.average's statements against NumPy 2.4.2 (<c>numpy/lib/_function_base_impl.py</c>, <c>average</c> and
     ///     <c>_weights_are_valid</c>), one test per D4 fix of the np-layer dtype plan's P2 family: NumPy's exception types,
-    ///     NumPy's promotion of text weights and the refusals that follow it, the count np.average_returned gives without
-    ///     weights (a scalar beside a scalar mean).
+    ///     NumPy's promotion of text weights and the refusals that follow it, the count np.average(returned: true) gives
+    ///     without weights (a scalar beside a scalar mean).
     /// </summary>
     [TestClass]
     public class np_average_NumPyPort_Tests
@@ -51,11 +51,11 @@ namespace NumSharp.Tests.Statistics
             // None or as a tuple of them), a fresh array (np.broadcast_to(scl, avg.shape).copy()) beside a mean with
             // dimensions. It was a writeable 0-d array beside a scalar mean.
             using var x = np.arange(6.0).reshape(2, 3);
-            foreach (var (label, call) in new (string, Func<(NDArray, NDArray)>)[]
+            foreach (var (label, call) in new (string, Func<np.AverageResult>)[]
                      {
-                         ("axis=None", () => np.average_returned(x)),
-                         ("axis=(0, 1)", () => np.average_returned(x, new[] { 0, 1 })),
-                         ("an int32 operand", () => np.average_returned(np.arange(6).reshape(2, 3))),
+                         ("axis=None", () => np.average(x, returned: true)),
+                         ("axis=(0, 1)", () => np.average(x, new[] { 0, 1 }, returned: true)),
+                         ("an int32 operand", () => np.average(np.arange(6).reshape(2, 3), returned: true)),
                      })
             {
                 var (avg, scl) = call();
@@ -70,7 +70,7 @@ namespace NumSharp.Tests.Statistics
                 }
             }
 
-            var (avg0, scl0) = np.average_returned(x, 0);
+            var (avg0, scl0) = np.average(x, 0, returned: true);
             using (avg0)
             using (scl0)
             {
@@ -80,7 +80,7 @@ namespace NumSharp.Tests.Statistics
                 scl0.ToArray<double>().Should().Equal(2.0, 2.0, 2.0);
             }
 
-            var (avgK, sclK) = np.average_returned(x, keepdims: true);
+            var (avgK, sclK) = np.average(x, keepdims: true, returned: true);
             using (avgK)
             using (sclK)
             {
@@ -90,7 +90,7 @@ namespace NumSharp.Tests.Statistics
             }
 
             // The mean's dtype: a complex128 mean gives a complex128 count, a float16 mean a float16 one.
-            var (avgC, sclC) = np.average_returned(np.ones(new Shape(2, 2), np.complex128));
+            var (avgC, sclC) = np.average(np.ones(new Shape(2, 2), np.complex128), returned: true);
             using (avgC)
             using (sclC)
             {
@@ -105,7 +105,7 @@ namespace NumSharp.Tests.Statistics
             // A NaN-like NA sum is the one StringDType mean that returns (np.float64(nan)); NumPy's count beside it is
             // np.float64(3.0), a scalar.
             using var a = np.array(new object[] { "a", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
-            var (avg, scl) = np.average_returned(a);
+            var (avg, scl) = np.average(a, returned: true);
             using (avg)
             using (scl)
             {

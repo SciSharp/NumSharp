@@ -97,7 +97,7 @@ namespace NumSharp.Tests.Fuzz
                 case "nanpercentile": return tuple ? np.nanpercentile(a, 50, axt) : np.nanpercentile(a, 50, ax);
                 case "quantile": return tuple ? np.quantile(a, 0.5, axt) : np.quantile(a, 0.5, ax);
                 case "nanquantile": return tuple ? np.nanquantile(a, 0.5, axt) : np.nanquantile(a, 0.5, ax);
-                case "average": return tuple ? np.average(a, axt) : np.average(a, ax);
+                case "average": return (NDArray)(tuple ? np.average(a, axt) : np.average(a, ax));
                 case "count_nonzero": return np.count_nonzero(a, ax);
 
                 // ---- sorting, selection, the per-axis manipulation functions ----

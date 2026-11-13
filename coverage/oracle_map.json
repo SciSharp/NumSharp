@@ -61,7 +61,7 @@
       "hermite.Hermite._repr_latex_": {"ids": ["numpy.polynomial.hermite.Hermite"], "note": "numpy.polynomial.hermite.Hermite._repr_latex_() (polyclass tier): the LaTeX text IPython displays, NumPy's scalars in \\text{} with the print options. The underscore name has no catalog row of its own (only public names and dunder protocols are listed), so its contracts credit the class row."},
       "hermite_e.HermiteE._repr_latex_": {"ids": ["numpy.polynomial.hermite_e.HermiteE"], "note": "numpy.polynomial.hermite_e.HermiteE._repr_latex_() (polyclass tier): the LaTeX text IPython displays, NumPy's scalars in \\text{} with the print options. The underscore name has no catalog row of its own (only public names and dunder protocols are listed), so its contracts credit the class row."},
       "set_default_printstyle": {"ids": ["numpy.polynomial.set_default_printstyle"], "note": "numpy.polynomial.set_default_printstyle(style) (polyprint tier): the class flag ABCPolyBase._use_unicode after the call, over styles of every kind (the two accepted texts, near misses, Python numbers / None / lists / tuples, NumPy scalars, arrays: the truth value of their comparison with a str), or NumPy's ValueError. A key of the numpy.polynomial package itself, which no prefix rule names (polynomial.* is numpy.polynomial.polynomial)."},
-      "average_returned": {"ids": ["numpy.average", "numsharp.np.average_returned"], "note": "np.average(..., returned=True); NumSharp spells the tuple-returning form average_returned."},
+      "average_returned": {"ids": ["numpy.average"], "note": "np.average(..., returned=True): NumSharp's np.average(..., returned: true) returns np.AverageResult (the corpus keeps the op name of the NumSharp-only average_returned that API-parity batch 11 folded into it)."},
       "broadcast_shape": {"ids": ["numpy.broadcast", "numpy.broadcast.shape"], "note": "np.broadcast(*arrays).shape."},
       "broadcast_values": {"ids": ["numpy.broadcast"], "note": "The broadcast object's element stream."},
       "byteswap": {"ids": ["numpy.ndarray.byteswap"], "note": "a.byteswap() - an ndarray method keyed without the ndarray. prefix."},
@@ -104,7 +104,7 @@
         },
         "note": "PCG64 Generator streams (np.random.default_rng(seed).<method>); random_integers and rs_bytes replay the legacy RandomState helpers on a fresh seeded RandomState."
       },
-      "indices_sparse": {"ids": ["numpy.indices", "numsharp.np.indices_sparse"], "note": "np.indices(..., sparse=True); NumSharp spells the tuple-returning form indices_sparse."},
+      "indices_sparse": {"ids": ["numpy.indices"], "note": "np.indices(..., sparse=True): NumSharp's np.indices(..., sparse: true) returns np.IndicesResult (the corpus keeps the op name of the NumSharp-only indices_sparse that API-parity batch 11 folded into it)."},
       "ma.flatten": {"ids": ["numpy.ma.MaskedArray.flatten", "numsharp.ma.flatten"], "note": "NumPy m.flatten() replayed through NumSharp's np.ma.flatten(m)."},
       "ma.fill": {"ids": ["numpy.ma.MaskedArray.fill_value", "numpy.ma.MaskedArray.filled", "numpy.ma.set_fill_value", "numpy.ma.common_fill_value", "numpy.ma.MaskedArray.astype", "numpy.ma.MaskedArray.view", "numpy.ma.MaskedArray.byteswap"], "note": "ma_fill tier: call-history scripts over a masked array's fill value as NumPy stores it - the constructor's conversion and TypeErrors, the getter's materialized default, the setter writing into a stored fill (also through ma.set_fill_value), inheritance by every derive kind (shared through _update_from, a converted copy through __array_finalize__ in astype / view / byteswap), filled(), the repr's fill_value= line, common_fill_value."},
       "ma.masked_array": {"ids": ["numpy.ma.MaskedArray", "numpy.ma.masked_array"], "note": "NumPy's ma.masked_array IS the MaskedArray class, catalogued under both spellings; NumSharp exposes the constructor as np.ma.masked_array, which credits the numpy.ma.masked_array row."},
@@ -253,7 +253,6 @@
     "numpy.ma.innerproduct": {"via": "numpy.ma.inner", "reason": "np.ma.innerproduct is np.ma.inner."},
     "numpy.ma.outerproduct": {"via": "numpy.ma.outer", "reason": "np.ma.outerproduct is np.ma.outer."},
     "numpy.ma.asanyarray": {"via": "numpy.ma.asarray", "reason": "np.ma.asanyarray shares np.ma.asarray's value path."},
-    "numsharp.ma.average_returned": {"via": "numpy.ma.average", "reason": "NumSharp-only tuple form of np.ma.average(returned=True)."},
     "numpy.linalg.matmul": {"via": "numpy.matmul", "reason": "np.linalg.matmul(x1, x2) is _core_matmul in NumPy and np.matmul in NumSharp."},
     "numpy.linalg.tensordot": {"via": "numpy.tensordot", "reason": "np.linalg.tensordot delegates to np.tensordot in both libraries."},
     "numpy.linalg.matrix_transpose": {"via": "numpy.matrix_transpose", "reason": "np.linalg.matrix_transpose delegates to np.matrix_transpose in both libraries."}

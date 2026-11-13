@@ -705,9 +705,11 @@ namespace NumSharp
         {
             using var scope = NDScope.Open();
             // An omitted argument arrives as Missing (the [Optional] parameter's marker), an explicit null as None.
+            // pu.trimcoef's statements: the module function takes a typed tolerance since API-parity batch 11, the class
+            // method keeps NumPy's any-object tolerance (a Python number, a NumPy scalar, an array, None's TypeError).
             NDArray c = tol is System.Reflection.Missing
-                ? np.polynomial.polyutils.trimcoef(Coef)
-                : np.polynomial.polyutils.trimcoef(Coef, tol);
+                ? NDPolySeries.TrimCoef(Coef, PolyNumber.FromPython(PyScalar.Int(0)))
+                : NDPolySeries.TrimCoef(Coef, PolyUtilsModule.Tolerance(tol));
             return Derive(c, fresh: true);
         }
 

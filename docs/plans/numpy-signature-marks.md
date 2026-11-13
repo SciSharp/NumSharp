@@ -46,7 +46,7 @@ lists what failed, with the compiler's reason.
 
 | group | names with a NumPy counterpart | M ● | M ◦ only | X | O | T ● | T ◇ | B ● | B ◐ | L ● | L ◐ | L ◦ | Q | no mark | not compared | NumSharp-only names | of them O | of them T | NumPy names NumSharp lacks |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `np` | 382 | 10 | 126 | 16 | 96 | 5 | 2 | 2 | 0 | 1 | 0 | 0 | 0 | 173 | 0 | 17 | 8 | 8 | 30 |
+| `np` | 382 | 8 | 126 | 16 | 95 | 5 | 2 | 2 | 0 | 1 | 0 | 0 | 0 | 176 | 0 | 15 | 7 | 8 | 30 |
 | `ndarray` | 57 | 4 | 1 | 4 | 13 | 1 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 38 | 0 | 83 | 45 | 15 | 3 |
 | `np.char` | 53 | 0 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 42 | 0 | 1 | 0 | 0 | 0 |
 | `np.dtypes` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -54,15 +54,15 @@ lists what failed, with the compiler's reason.
 | `np.fft` | 18 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 18 | 0 | 0 | 0 | 0 | 0 |
 | `np.lib.stride_tricks` | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
 | `np.linalg` | 31 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 30 | 0 | 0 | 0 | 0 | 1 |
-| `np.ma` | 211 | 30 | 61 | 24 | 13 | 0 | 0 | 4 | 0 | 1 | 0 | 0 | 1 | 109 | 0 | 4 | 0 | 0 | 6 |
+| `np.ma` | 211 | 27 | 61 | 24 | 12 | 0 | 0 | 4 | 0 | 1 | 0 | 0 | 1 | 113 | 0 | 3 | 0 | 0 | 6 |
 | `np.polynomial` | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 | 0 | 0 | 0 | 0 | 0 |
-| `np.polynomial.chebyshev` | 30 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 1 | 0 | 0 | 0 |
-| `np.polynomial.hermite` | 27 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 24 | 0 | 1 | 0 | 0 | 0 |
-| `np.polynomial.hermite_e` | 27 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 24 | 0 | 1 | 0 | 0 | 0 |
-| `np.polynomial.laguerre` | 27 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 24 | 0 | 1 | 0 | 0 | 0 |
-| `np.polynomial.legendre` | 27 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 24 | 0 | 1 | 0 | 0 | 0 |
-| `np.polynomial.polynomial` | 24 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 21 | 0 | 1 | 0 | 0 | 0 |
-| `np.polynomial.polyutils` | 7 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `np.polynomial.chebyshev` | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 30 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.hermite` | 27 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.hermite_e` | 27 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.laguerre` | 27 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.legendre` | 27 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.polynomial` | 24 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 24 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.polyutils` | 7 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `np.random` | 61 | 0 | 0 | 1 | 50 | 0 | 1 | 3 | 0 | 0 | 9 | 0 | 0 | 9 | 0 | 3 | 2 | 0 | 1 |
 | `np.random.Generator` | 45 | 0 | 0 | 0 | 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 9 | 0 | 1 | 0 | 0 | 0 |
 | `np.strings` | 46 | 0 | 17 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 0 | 0 | 0 | 0 |
@@ -89,7 +89,7 @@ lists what failed, with the compiler's reason.
 | `np.random.PCG64DXSM` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 |
 | `np.random.Philox` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 |
 | `np.random.SFC64` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 10 | 0 | 0 | 0 |
-| **total** | 1310 | 61 | 220 | 51 | 270 | 9 | 7 | 17 | 0 | 2 | 15 | 0 | 4 | 782 | 0 | 239 | 61 | 26 | 76 |
+| **total** | 1310 | 56 | 220 | 51 | 249 | 9 | 7 | 17 | 0 | 2 | 15 | 0 | 4 | 808 | 0 | 236 | 60 | 26 | 76 |
 
 *no mark*: no M (● or ◦), X, O, T, B, L or Q: the name matches NumPy in every respect the table checks.
 
@@ -149,7 +149,7 @@ lists what failed, with the compiler's reason.
 | `atleast_1d` |  |  | 4 |  |  |  |  | `atleast_1d(*arys)` |  |  |  |  |
 | `atleast_2d` |  |  | 4 |  |  |  |  | `atleast_2d(*arys)` |  |  |  |  |
 | `atleast_3d` |  |  | 4 |  |  |  |  | `atleast_3d(*arys)` |  |  |  |  |
-| `average` | ● |  |  |  |  |  |  | `average(a, axis=None, weights=None, returned=False, *, keepdims=<no value>)` | `returned` |  |  |  |
+| `average` |  |  |  |  |  |  |  | `average(a, axis=None, weights=None, returned=False, *, keepdims=<no value>)` |  |  |  |  |
 | `bartlett` |  |  |  |  |  |  |  | `bartlett(M)` |  |  |  |  |
 | `base_repr` |  |  |  |  |  |  |  | `base_repr(number, base=2, padding=0)` |  |  |  |  |
 | `binary_repr` |  |  |  |  |  |  |  | `binary_repr(num, width=None)` |  |  |  |  |
@@ -271,11 +271,11 @@ lists what failed, with the compiler's reason.
 | `identity` | ◦ |  |  |  |  |  |  | `identity(n, dtype=None, *, like=None)` | excluded: `like` |  |  |  |
 | `iinfo` |  |  | 3 |  |  |  |  | `iinfo(int_type)` |  |  |  |  |
 | `imag` |  |  |  |  |  |  |  | `imag(val)` |  |  |  |  |
-| `indices` | ● |  |  |  |  |  |  | `indices(dimensions, dtype=<class 'int'>, sparse=False)` | `sparse` |  |  |  |
+| `indices` |  |  |  |  |  |  |  | `indices(dimensions, dtype=<class 'int'>, sparse=False)` |  |  |  |  |
 | `inner` |  |  |  |  |  |  |  | `inner(a, b, /)` |  |  |  |  |
 | `insert` |  |  | 12 |  |  |  |  | `insert(arr, obj, values, axis=None)` |  |  |  |  |
 | `interp` |  |  | 2 |  |  |  |  | `interp(x, xp, fp, left=None, right=None, period=None)` |  |  |  |  |
-| `intersect1d` |  |  | 3 |  |  |  |  | `intersect1d(ar1, ar2, assume_unique=False, return_indices=False)` |  |  |  |  |
+| `intersect1d` |  |  |  |  |  |  |  | `intersect1d(ar1, ar2, assume_unique=False, return_indices=False)` |  |  |  |  |
 | `invert` | ◦ |  |  |  |  |  |  | `invert(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `isclose` |  |  |  |  |  |  |  | `isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False)` |  |  |  |  |
 | `iscomplex` |  |  |  |  |  |  |  | `iscomplex(x)` |  |  |  |  |
@@ -482,18 +482,16 @@ lists what failed, with the compiler's reason.
 | `zeros` | ◦ |  |  |  |  |  |  | `zeros(shape, dtype=None, order='C', *, device=None, like=None)` | excluded: `like` |  |  |  |
 | `zeros_like` | ◦ |  |  |  |  |  |  | `zeros_like(a, dtype=None, order='K', subok=True, shape=None, *, device=None)` | excluded: `subok` |  |  |  |
 
-### Names NumPy does not have (17)
+### Names NumPy does not have (15)
 
 | name | O | T | NPTypeCode / Type |
 |---|---|---|---|
 | `are_broadcastable` | 5 |  |  |
 | `asscalar` | 6 | ◇ | `<T>(NDArray nd)`, `<T>(Array arr)`, `<T>(IArraySlice arr)` |
-| `average_returned` |  |  |  |
 | `common_type_code` | 2 | ● | `NPTypeCode[] types`, returns `NPTypeCode` |
 | `evaluate` |  |  |  |
 | `find_common_type` | 9 | ● | `NPTypeCode[] array_types`, `NPTypeCode[] scalar_types`, `Type[] array_types`, `Type[] scalar_types` |
 | `flat` | 2 | ◇ | `<T>(NDArray a, bool writeable)` |
-| `indices_sparse` | 3 |  |  |
 | `issctype` |  |  |  |
 | `issubsctype` |  | ● | `NPTypeCode arg1`, `NPTypeCode arg2` |
 | `load_npy` | 3 |  |  |
@@ -877,7 +875,7 @@ lists what failed, with the compiler's reason.
 | `atleast_1d` |  |  | 2 |  |  |  |  | `atleast_1d(*arys)` |  |  |  |  |
 | `atleast_2d` |  |  | 2 |  |  |  |  | `atleast_2d(*arys)` |  |  |  |  |
 | `atleast_3d` |  |  | 2 |  |  |  |  | `atleast_3d(*arys)` |  |  |  |  |
-| `average` | ● |  |  |  |  |  |  | `average(a, axis=None, weights=None, returned=False, *, keepdims=<no value>)` | `returned` |  |  |  |
+| `average` |  |  |  |  |  |  |  | `average(a, axis=None, weights=None, returned=False, *, keepdims=<no value>)` |  |  |  |  |
 | `bitwise_and` | ◦ |  |  |  |  |  |  | `bitwise_and(a, b, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `bitwise_or` | ◦ |  |  |  |  |  |  | `bitwise_or(a, b, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `bitwise_xor` | ◦ |  |  |  |  |  |  | `bitwise_xor(a, b, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
@@ -967,10 +965,10 @@ lists what failed, with the compiler's reason.
 | `make_mask` |  |  |  |  |  |  |  | `make_mask(m, copy=False, shrink=True, dtype=<class 'numpy.bool'>)` |  |  |  |  |
 | `make_mask_descr` | ● | ● |  |  |  |  |  | `make_mask_descr(ndtype)` | `ndtype (C#: dtype)` | `dtype` |  |  |
 | `make_mask_none` |  |  |  |  |  |  |  | `make_mask_none(newshape, dtype=None)` |  |  |  |  |
-| `mask_cols` | ● |  |  |  |  |  |  | `mask_cols(a, axis=<no value>)` | `axis` |  |  |  |
+| `mask_cols` |  |  |  |  |  |  |  | `mask_cols(a, axis=<no value>)` |  |  |  |  |
 | `mask_or` |  |  |  |  |  |  |  | `mask_or(m1, m2, copy=False, shrink=True)` |  |  |  |  |
 | `mask_rowcols` |  |  |  |  |  |  |  | `mask_rowcols(a, axis=None)` |  |  |  |  |
-| `mask_rows` | ● |  |  |  |  |  |  | `mask_rows(a, axis=<no value>)` | `axis` |  |  |  |
+| `mask_rows` |  |  |  |  |  |  |  | `mask_rows(a, axis=<no value>)` |  |  |  |  |
 | `masked_all` |  |  |  |  |  |  |  | `masked_all(shape, dtype=<class 'float'>)` |  |  |  |  |
 | `masked_all_like` | ● | ● |  |  |  |  |  | `masked_all_like(arr)` | `arr (C#: a)` | `a` |  |  |
 | `masked_array` | ◦ |  |  |  | ● |  |  | `masked_array(data=None, mask=np.False_, dtype=None, copy=False, subok=True, ndmin=0, fill_value=None, keep_mask=True, hard_mask=None, shrink=True, order=None)` | excluded: `subok` |  |  | required parameters only: needs `data` — `np.ma.masked_array()` |
@@ -1047,7 +1045,7 @@ lists what failed, with the compiler's reason.
 | `transpose` |  |  |  |  |  |  |  | `transpose(a, axes=None)` |  |  |  |  |
 | `true_divide` | ◦ |  |  |  |  |  |  | `true_divide(a, b, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `union1d` |  |  |  |  |  |  |  | `union1d(ar1, ar2)` |  |  |  |  |
-| `unique` |  |  | 2 |  |  |  |  | `unique(ar1, return_index=False, return_inverse=False)` |  |  |  |  |
+| `unique` |  |  |  |  |  |  |  | `unique(ar1, return_index=False, return_inverse=False)` |  |  |  |  |
 | `vander` |  |  |  |  |  |  |  | `vander(x, n=None)` |  |  |  |  |
 | `var` |  |  |  |  |  |  |  | `var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=<no value>, mean=<no value>)` |  |  |  |  |
 | `vstack` |  |  | 2 |  |  |  |  | `vstack(tup, *, dtype=None, casting='same_kind')` |  |  |  |  |
@@ -1055,11 +1053,10 @@ lists what failed, with the compiler's reason.
 | `zeros` | ◦ |  |  |  |  |  |  | `zeros(shape, dtype=None, order='C', *, device=None, like=None, fill_value=None, hardmask=False)` | excluded: `like` |  |  |  |
 | `zeros_like` | ◦ |  |  |  |  |  |  | `zeros_like(a, dtype=None, order='K', subok=True, shape=None, *, device=None)` | excluded: `subok` |  |  |  |
 
-### Names NumPy does not have (4)
+### Names NumPy does not have (3)
 
 | name | O | T | NPTypeCode / Type |
 |---|---|---|---|
-| `average_returned` |  |  |  |
 | `flatten` |  |  |  |
 | `moveaxis` |  |  |  |
 | `shrink_mask` |  |  |  |
@@ -1104,16 +1101,16 @@ lists what failed, with the compiler's reason.
 | `chebline` |  |  |  |  |  |  |  | `chebline(off, scl)` |  |  |  |  |
 | `chebmul` |  |  |  |  |  |  |  | `chebmul(c1, c2)` |  |  |  |  |
 | `chebmulx` |  |  |  |  |  |  |  | `chebmulx(c)` |  |  |  |  |
-| `chebpow` |  |  | 4 |  |  |  |  | `chebpow(c, pow, maxpower=16)` |  |  |  |  |
+| `chebpow` |  |  |  |  |  |  |  | `chebpow(c, pow, maxpower=16)` |  |  |  |  |
 | `chebpts1` |  |  |  |  |  |  |  | `chebpts1(npts)` |  |  |  |  |
 | `chebpts2` |  |  |  |  |  |  |  | `chebpts2(npts)` |  |  |  |  |
 | `chebroots` |  |  |  |  |  |  |  | `chebroots(c)` |  |  |  |  |
 | `chebsub` |  |  |  |  |  |  |  | `chebsub(c1, c2)` |  |  |  |  |
-| `chebtrim` |  |  | 2 |  |  |  |  | `chebtrim(c, tol=0)` |  |  |  |  |
+| `chebtrim` |  |  |  |  |  |  |  | `chebtrim(c, tol=0)` |  |  |  |  |
 | `chebval` |  |  |  |  |  |  |  | `chebval(x, c, tensor=True)` |  |  |  |  |
 | `chebval2d` |  |  |  |  |  |  |  | `chebval2d(x, y, c)` |  |  |  |  |
 | `chebval3d` |  |  |  |  |  |  |  | `chebval3d(x, y, z, c)` |  |  |  |  |
-| `chebvander` |  |  | 2 |  |  |  |  | `chebvander(x, deg)` |  |  |  |  |
+| `chebvander` |  |  |  |  |  |  |  | `chebvander(x, deg)` |  |  |  |  |
 | `chebvander2d` |  |  |  |  |  |  |  | `chebvander2d(x, y, deg)` |  |  |  |  |
 | `chebvander3d` |  |  |  |  |  |  |  | `chebvander3d(x, y, z, deg)` |  |  |  |  |
 | `chebweight` |  |  |  |  |  |  |  | `chebweight(x)` |  |  |  |  |
@@ -1146,14 +1143,14 @@ lists what failed, with the compiler's reason.
 | `hermline` |  |  |  |  |  |  |  | `hermline(off, scl)` |  |  |  |  |
 | `hermmul` |  |  |  |  |  |  |  | `hermmul(c1, c2)` |  |  |  |  |
 | `hermmulx` |  |  |  |  |  |  |  | `hermmulx(c)` |  |  |  |  |
-| `hermpow` |  |  | 4 |  |  |  |  | `hermpow(c, pow, maxpower=16)` |  |  |  |  |
+| `hermpow` |  |  |  |  |  |  |  | `hermpow(c, pow, maxpower=16)` |  |  |  |  |
 | `hermroots` |  |  |  |  |  |  |  | `hermroots(c)` |  |  |  |  |
 | `hermsub` |  |  |  |  |  |  |  | `hermsub(c1, c2)` |  |  |  |  |
-| `hermtrim` |  |  | 2 |  |  |  |  | `hermtrim(c, tol=0)` |  |  |  |  |
+| `hermtrim` |  |  |  |  |  |  |  | `hermtrim(c, tol=0)` |  |  |  |  |
 | `hermval` |  |  |  |  |  |  |  | `hermval(x, c, tensor=True)` |  |  |  |  |
 | `hermval2d` |  |  |  |  |  |  |  | `hermval2d(x, y, c)` |  |  |  |  |
 | `hermval3d` |  |  |  |  |  |  |  | `hermval3d(x, y, z, c)` |  |  |  |  |
-| `hermvander` |  |  | 2 |  |  |  |  | `hermvander(x, deg)` |  |  |  |  |
+| `hermvander` |  |  |  |  |  |  |  | `hermvander(x, deg)` |  |  |  |  |
 | `hermvander2d` |  |  |  |  |  |  |  | `hermvander2d(x, y, deg)` |  |  |  |  |
 | `hermvander3d` |  |  |  |  |  |  |  | `hermvander3d(x, y, z, deg)` |  |  |  |  |
 | `hermweight` |  |  |  |  |  |  |  | `hermweight(x)` |  |  |  |  |
@@ -1186,14 +1183,14 @@ lists what failed, with the compiler's reason.
 | `hermeline` |  |  |  |  |  |  |  | `hermeline(off, scl)` |  |  |  |  |
 | `hermemul` |  |  |  |  |  |  |  | `hermemul(c1, c2)` |  |  |  |  |
 | `hermemulx` |  |  |  |  |  |  |  | `hermemulx(c)` |  |  |  |  |
-| `hermepow` |  |  | 4 |  |  |  |  | `hermepow(c, pow, maxpower=16)` |  |  |  |  |
+| `hermepow` |  |  |  |  |  |  |  | `hermepow(c, pow, maxpower=16)` |  |  |  |  |
 | `hermeroots` |  |  |  |  |  |  |  | `hermeroots(c)` |  |  |  |  |
 | `hermesub` |  |  |  |  |  |  |  | `hermesub(c1, c2)` |  |  |  |  |
-| `hermetrim` |  |  | 2 |  |  |  |  | `hermetrim(c, tol=0)` |  |  |  |  |
+| `hermetrim` |  |  |  |  |  |  |  | `hermetrim(c, tol=0)` |  |  |  |  |
 | `hermeval` |  |  |  |  |  |  |  | `hermeval(x, c, tensor=True)` |  |  |  |  |
 | `hermeval2d` |  |  |  |  |  |  |  | `hermeval2d(x, y, c)` |  |  |  |  |
 | `hermeval3d` |  |  |  |  |  |  |  | `hermeval3d(x, y, z, c)` |  |  |  |  |
-| `hermevander` |  |  | 2 |  |  |  |  | `hermevander(x, deg)` |  |  |  |  |
+| `hermevander` |  |  |  |  |  |  |  | `hermevander(x, deg)` |  |  |  |  |
 | `hermevander2d` |  |  |  |  |  |  |  | `hermevander2d(x, y, deg)` |  |  |  |  |
 | `hermevander3d` |  |  |  |  |  |  |  | `hermevander3d(x, y, z, deg)` |  |  |  |  |
 | `hermeweight` |  |  |  |  |  |  |  | `hermeweight(x)` |  |  |  |  |
@@ -1226,14 +1223,14 @@ lists what failed, with the compiler's reason.
 | `lagline` |  |  |  |  |  |  |  | `lagline(off, scl)` |  |  |  |  |
 | `lagmul` |  |  |  |  |  |  |  | `lagmul(c1, c2)` |  |  |  |  |
 | `lagmulx` |  |  |  |  |  |  |  | `lagmulx(c)` |  |  |  |  |
-| `lagpow` |  |  | 4 |  |  |  |  | `lagpow(c, pow, maxpower=16)` |  |  |  |  |
+| `lagpow` |  |  |  |  |  |  |  | `lagpow(c, pow, maxpower=16)` |  |  |  |  |
 | `lagroots` |  |  |  |  |  |  |  | `lagroots(c)` |  |  |  |  |
 | `lagsub` |  |  |  |  |  |  |  | `lagsub(c1, c2)` |  |  |  |  |
-| `lagtrim` |  |  | 2 |  |  |  |  | `lagtrim(c, tol=0)` |  |  |  |  |
+| `lagtrim` |  |  |  |  |  |  |  | `lagtrim(c, tol=0)` |  |  |  |  |
 | `lagval` |  |  |  |  |  |  |  | `lagval(x, c, tensor=True)` |  |  |  |  |
 | `lagval2d` |  |  |  |  |  |  |  | `lagval2d(x, y, c)` |  |  |  |  |
 | `lagval3d` |  |  |  |  |  |  |  | `lagval3d(x, y, z, c)` |  |  |  |  |
-| `lagvander` |  |  | 2 |  |  |  |  | `lagvander(x, deg)` |  |  |  |  |
+| `lagvander` |  |  |  |  |  |  |  | `lagvander(x, deg)` |  |  |  |  |
 | `lagvander2d` |  |  |  |  |  |  |  | `lagvander2d(x, y, deg)` |  |  |  |  |
 | `lagvander3d` |  |  |  |  |  |  |  | `lagvander3d(x, y, z, deg)` |  |  |  |  |
 | `lagweight` |  |  |  |  |  |  |  | `lagweight(x)` |  |  |  |  |
@@ -1266,14 +1263,14 @@ lists what failed, with the compiler's reason.
 | `legline` |  |  |  |  |  |  |  | `legline(off, scl)` |  |  |  |  |
 | `legmul` |  |  |  |  |  |  |  | `legmul(c1, c2)` |  |  |  |  |
 | `legmulx` |  |  |  |  |  |  |  | `legmulx(c)` |  |  |  |  |
-| `legpow` |  |  | 4 |  |  |  |  | `legpow(c, pow, maxpower=16)` |  |  |  |  |
+| `legpow` |  |  |  |  |  |  |  | `legpow(c, pow, maxpower=16)` |  |  |  |  |
 | `legroots` |  |  |  |  |  |  |  | `legroots(c)` |  |  |  |  |
 | `legsub` |  |  |  |  |  |  |  | `legsub(c1, c2)` |  |  |  |  |
-| `legtrim` |  |  | 2 |  |  |  |  | `legtrim(c, tol=0)` |  |  |  |  |
+| `legtrim` |  |  |  |  |  |  |  | `legtrim(c, tol=0)` |  |  |  |  |
 | `legval` |  |  |  |  |  |  |  | `legval(x, c, tensor=True)` |  |  |  |  |
 | `legval2d` |  |  |  |  |  |  |  | `legval2d(x, y, c)` |  |  |  |  |
 | `legval3d` |  |  |  |  |  |  |  | `legval3d(x, y, z, c)` |  |  |  |  |
-| `legvander` |  |  | 2 |  |  |  |  | `legvander(x, deg)` |  |  |  |  |
+| `legvander` |  |  |  |  |  |  |  | `legvander(x, deg)` |  |  |  |  |
 | `legvander2d` |  |  |  |  |  |  |  | `legvander2d(x, y, deg)` |  |  |  |  |
 | `legvander3d` |  |  |  |  |  |  |  | `legvander3d(x, y, z, deg)` |  |  |  |  |
 | `legweight` |  |  |  |  |  |  |  | `legweight(x)` |  |  |  |  |
@@ -1304,15 +1301,15 @@ lists what failed, with the compiler's reason.
 | `polyline` |  |  |  |  |  |  |  | `polyline(off, scl)` |  |  |  |  |
 | `polymul` |  |  |  |  |  |  |  | `polymul(c1, c2)` |  |  |  |  |
 | `polymulx` |  |  |  |  |  |  |  | `polymulx(c)` |  |  |  |  |
-| `polypow` |  |  | 4 |  |  |  |  | `polypow(c, pow, maxpower=None)` |  |  |  |  |
+| `polypow` |  |  |  |  |  |  |  | `polypow(c, pow, maxpower=None)` |  |  |  |  |
 | `polyroots` |  |  |  |  |  |  |  | `polyroots(c)` |  |  |  |  |
 | `polysub` |  |  |  |  |  |  |  | `polysub(c1, c2)` |  |  |  |  |
-| `polytrim` |  |  | 2 |  |  |  |  | `polytrim(c, tol=0)` |  |  |  |  |
+| `polytrim` |  |  |  |  |  |  |  | `polytrim(c, tol=0)` |  |  |  |  |
 | `polyval` |  |  |  |  |  |  |  | `polyval(x, c, tensor=True)` |  |  |  |  |
 | `polyval2d` |  |  |  |  |  |  |  | `polyval2d(x, y, c)` |  |  |  |  |
 | `polyval3d` |  |  |  |  |  |  |  | `polyval3d(x, y, z, c)` |  |  |  |  |
 | `polyvalfromroots` |  |  |  |  |  |  |  | `polyvalfromroots(x, r, tensor=True)` |  |  |  |  |
-| `polyvander` |  |  | 2 |  |  |  |  | `polyvander(x, deg)` |  |  |  |  |
+| `polyvander` |  |  |  |  |  |  |  | `polyvander(x, deg)` |  |  |  |  |
 | `polyvander2d` |  |  |  |  |  |  |  | `polyvander2d(x, y, deg)` |  |  |  |  |
 | `polyvander3d` |  |  |  |  |  |  |  | `polyvander3d(x, y, z, deg)` |  |  |  |  |
 
@@ -1333,7 +1330,7 @@ lists what failed, with the compiler's reason.
 | `getdomain` |  |  |  |  |  |  |  | `getdomain(x)` |  |  |  |  |
 | `mapdomain` |  |  | 10 |  |  |  |  | `mapdomain(x, old, new)` |  |  |  |  |
 | `mapparms` |  |  | 4 |  |  |  |  | `mapparms(old, new)` |  |  |  |  |
-| `trimcoef` |  |  | 2 |  |  |  |  | `trimcoef(c, tol=0)` |  |  |  |  |
+| `trimcoef` |  |  |  |  |  |  |  | `trimcoef(c, tol=0)` |  |  |  |  |
 | `trimseq` |  |  | 3 |  |  |  |  | `trimseq(seq)` |  |  |  |  |
 
 ## `np.random`

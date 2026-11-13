@@ -301,11 +301,21 @@ A bool C/F operand of at least 16K elements reduced to rank >= 1 runs np.evaluat
 element" F-slab cells at 1M stream from L2 on both sides. Gate: `Logic/np.all_any.ResultLayout.Test.cs` (probed strides
 for bool / int32 / U inputs, F, permuted, stepped, tuple axes) and the string oracle's `strcomp` section.
 
-## `np.average` / `np.average_returned`: NumPy's statements
+## `np.average`: NumPy's statements
 
 `TensorEngine.Average` (`TensorEngine.FunctionBase.cs`), whose `DefaultEngine` override holds NumPy's
-`numpy/lib/_function_base_impl.py` statements (`Backends/Default/Statistics/Default.Average.cs`); the facades keep the
-null check, and their woven subclass path answers for a numpy.matrix operand (`NDSubclassRules.Average`).
+`numpy/lib/_function_base_impl.py` statements (`Backends/Default/Statistics/Default.Average.cs`); the facade keeps the
+null check, and its woven subclass path answers for a numpy.matrix operand (`NDSubclassRules.Average`, a rule over the
+result struct).
+- `np.average(a, axis, weights, returned, keepdims)` returns `np.AverageResult` (`Statistics/np.average.cs`): the average
+  (`values`) and, with NumPy's `returned`, `sum_of_weights` (null otherwise). It converts implicitly to `NDArray` and
+  `NDArray[]`, deconstructs (`var (avg, sum_of_weights) = np.average(a, returned: true);`, Python's unpacking error
+  without `returned`), forwards the array members callers read on an average (shape, dtype, flags, the typed getters,
+  `ToArray<T>`, `reshape`, `astype`), declares the explicit scalar casts of every dtype an average can have
+  (`(double)np.average(a)`: C# applies one user-defined conversion, so `(int)` needs `.values`), and is `IDisposable`
+  and `INDArrayCarrier`. One computation (`NDArray.average`) serves both NumPy returns and releases a sum of weights
+  nobody asked for. `np.ma.average` returns `MaskedArrayModule.AverageResult` the same way (`values` typed
+  `NDMaskedArray`).
 - `_weights_are_valid`: weights of another shape raise `TypeError("Axis must be specified when shapes of a and weights
   differ.")` without an axis and `ValueError("Shape of weights must be consistent with shape of a along specified
   axis.")` along one; weights along the axes are transposed and reshaped into the operand's frame. `result_dtype` is

@@ -156,9 +156,9 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `pow`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`, `spacing`,
   `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc` → `ufuncs.md` and `float-math.md` (`acos`, `asin`,
   `atan`, `atan2`, `pow`: NumPy 2.0's Array-API names, forwarding to the originals).
-- Math, reductions: `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `average_returned`, `count_nonzero`,
-  `cov`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`,
-  `percentile`, `prod`, `ptp`, `quantile`, `std`, `sum`, `var` → `reductions.md` (median / percentile / quantile: `quantile.md`).
+- Math, reductions: `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `count_nonzero`, `cov`, `cumprod`,
+  `cumsum`, `cumulative_prod`, `cumulative_sum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`,
+  `ptp`, `quantile`, `std`, `sum`, `var` → `reductions.md` (median / percentile / quantile: `quantile.md`).
 - Math, NaN-aware: `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`,
   `nansum`, `nanvar` → `reductions.md` (the nan quantile forms: `quantile.md`).
 - Bitwise: `bitwise_and`, `bitwise_invert`, `bitwise_left_shift`, `bitwise_or`, `bitwise_right_shift`, `bitwise_xor`,

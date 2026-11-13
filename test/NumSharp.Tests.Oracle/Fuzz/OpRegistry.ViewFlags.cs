@@ -201,7 +201,7 @@ namespace NumSharp.Tests.Fuzz
                 // ---- reductions ----
                 case "ptp": return np.ptp(a, VfOptInt(p, "axis"), null, VfKeepdims(p));
                 case "median": return np.median(a, VfOptInt(p, "axis"), keepdims: VfKeepdims(p));
-                case "average": return np.average(a, VfOptInt(p, "axis"), null, VfKeepdims(p));
+                case "average": return (NDArray)np.average(a, VfOptInt(p, "axis"), null, keepdims: VfKeepdims(p));
                 case "sum": case "prod": case "mean": case "std": case "var": case "max": case "min":
                 case "all": case "any": case "nansum": case "nanmax": case "argmax": case "argmin":
                     return ApplyReduce(fn, VfOptInt(p, "axis"), VfKeepdims(p), a);
@@ -547,9 +547,9 @@ namespace NumSharp.Tests.Fuzz
                 case "tile":
                     return form == "long[]" ? np.tile(a, dims) : np.tile(a, I());
                 case "indices":
-                    return isShape ? np.indices(S(), dt)
+                    return (NDArray)(isShape ? np.indices(S(), dt)
                          : form == "long[]" ? np.indices(dims, dt)
-                         : np.indices(I(), dt);
+                         : np.indices(I(), dt));
                 case "empty_like":
                 {
                     var r = np.empty_like(a, null, shape: S());
@@ -574,13 +574,15 @@ namespace NumSharp.Tests.Fuzz
             DType dt = VfDType(p);
             if (fn != "indices_sparse")
                 throw new NotSupportedException($"shapearg: unknown tuple fn '{fn}' (generator / registry drift)");
+            // NumPy's np.indices(..., sparse=True): the fn keeps the corpus name of the NumSharp-only indices_sparse it
+            // replayed before API-parity batch 11; every form still binds np.indices' one Shape parameter.
             if (form.StartsWith("view:", StringComparison.Ordinal))
-                return np.indices_sparse(ViewSizeLayouts.Build(dims, form.Substring("view:".Length)), dt);
+                return np.indices(ViewSizeLayouts.Build(dims, form.Substring("view:".Length)), dt, sparse: true).ToArray();
             return form switch
             {
-                "Shape" => np.indices_sparse(new Shape(dims), dt),
-                "long[]" => np.indices_sparse(dims, dt),
-                "int[]" => np.indices_sparse(dims.Select(d => checked((int)d)).ToArray(), dt),
+                "Shape" => np.indices(new Shape(dims), dt, sparse: true).ToArray(),
+                "long[]" => np.indices(dims, dt, sparse: true).ToArray(),
+                "int[]" => np.indices(dims.Select(d => checked((int)d)).ToArray(), dt, sparse: true).ToArray(),
                 _ => throw new NotSupportedException($"shapearg: form '{form}' of indices_sparse"),
             };
         }

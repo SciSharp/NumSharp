@@ -401,7 +401,7 @@ namespace NumSharp.Tests.Strings
                 "broadcast_to" => np.broadcast_to(x, new Shape(Longs(a[1]))),
                 "count_nonzero" => np.count_nonzero(x),
                 "union1d" => np.union1d((NDArray)a[0], (NDArray)a[1]),
-                "intersect1d" => np.intersect1d((NDArray)a[0], (NDArray)a[1]),
+                "intersect1d" => (NDArray)np.intersect1d((NDArray)a[0], (NDArray)a[1]),
                 "setxor1d" => np.setxor1d((NDArray)a[0], (NDArray)a[1]),
                 "isin" => np.isin((NDArray)a[0], (NDArray)a[1]),
                 "setdiff1d" => np.setdiff1d((NDArray)a[0], (NDArray)a[1], kw("assume_unique", out bool hasAu) is bool au && hasAu && au),
