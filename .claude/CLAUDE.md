@@ -144,18 +144,18 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
 - Shape manipulation: `append`, `array_split`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `block`, `c_`, `column_stack`,
   `concat`, `concatenate`, `delete`, `dsplit`, `dstack`, `expand_dims`, `flatten`, `flip`, `fliplr`, `flipud`, `hsplit`,
   `hstack`, `insert`, `intersect1d`, `matrix_transpose`, `moveaxis`, `pad`, `permute_dims`, `r_`, `ravel`, `repeat`,
-  `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`, `swapaxes`,
-  `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`,
-  `unique_values`, `unstack`, `vsplit`, `vstack` → `creation-manipulation.md` (`unique.md` for `unique` and `unique_*`;
-  every axis argument: `axis-arguments.md`).
+  `reshape`, `resize`, `roll`, `rollaxis`, `rot90`, `row_stack`, `setdiff1d`, `setxor1d`, `split`, `squeeze`, `stack`,
+  `swapaxes`, `tile`, `transpose`, `trim_zeros`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`,
+  `unique_values`, `unstack`, `vsplit`, `vstack`; `lib.stride_tricks.as_strided` / `sliding_window_view` →
+  `creation-manipulation.md` (`unique.md` for `unique` and `unique_*`; every axis argument: `axis-arguments.md`).
 - Broadcasting: `are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`.
 - Math, arithmetic: `abs`, `absolute`, `acos`, `acosh`, `add`, `arccos`, `arccosh`, `arcsin`, `arcsinh`, `arctan`,
   `arctan2`, `arctanh`, `asin`, `asinh`, `atan`, `atan2`, `atanh`, `cbrt`, `ceil`, `clip`, `convolve`, `correlate`, `cos`,
   `cosh`, `deg2rad`, `degrees`, `divide`, `divmod`, `exp`, `exp2`, `expm1`, `fabs`, `fix`, `float_power`, `floor`,
-  `floor_divide`, `fmod`, `gcd`, `lcm`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`,
-  `pow`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`, `spacing`,
-  `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc` → `ufuncs.md` and `float-math.md` (`acos`, `asin`,
-  `atan`, `atan2`, `pow`: NumPy 2.0's Array-API names, forwarding to the originals).
+  `floor_divide`, `fmod`, `gcd`, `interp`, `lcm`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`,
+  `positive`, `pow`, `power`, `rad2deg`, `radians`, `reciprocal`, `remainder`, `rint`, `sign`, `sin`, `sinc`, `sinh`,
+  `spacing`, `sqrt`, `square`, `subtract`, `tan`, `tanh`, `true_divide`, `trunc` → `ufuncs.md` and `float-math.md`
+  (`acos`, `asin`, `atan`, `atan2`, `pow`: NumPy 2.0's Array-API names, forwarding to the originals).
 - Math, reductions: `all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `average`, `count_nonzero`, `cov`, `cumprod`,
   `cumsum`, `cumulative_prod`, `cumulative_sum`, `diff`, `ediff1d`, `max`, `mean`, `median`, `min`, `percentile`, `prod`,
   `ptp`, `quantile`, `std`, `sum`, `var` → `reductions.md` (median / percentile / quantile: `quantile.md`).
@@ -355,7 +355,7 @@ Create issues on `SciSharp/NumSharp` with `gh issue create` (`GH_TOKEN` through 
 | `axis-arguments.md` | `Shape.check_and_adjust_axis` / `normalize_axis_tuple`, the rules every axis argument follows, NumPy's errors around axes |
 | `matrix.md` | `NDMatrix`: static type versus object (woven mechanisms), scalars, indexing, operators and scaling, reductions, construction, divergences, gates |
 | `ufuncs.md` | the ufunc surface (`dtype=`, `out=`, `where=`), the result layout, fix, fabs, clip, divmod, float_power, power's float loops, gcd / lcm, bitwise |
-| `float-math.md` | correlate / convolve, inverse hyperbolic, sinc, the float32 kernels ported from NumPy, exp2, expm1 / log1p, complex128 NaN signs |
+| `float-math.md` | correlate / convolve, np.interp's fill values, inverse hyperbolic, sinc, the float32 kernels ported from NumPy, exp2, expm1 / log1p, complex128 NaN signs |
 | `reductions.md` | the reduce prologue, sum / mean, var / std, numpy.ma mean / var, max / min / ptp schedules and keywords, float16 HALF loops, the scans, cov, the NaN-aware family |
 | `quantile.md` | the quantile family: `q`'s dtype and the lerp, `out=`, the nan forms, `weights=`, the partition |
 | `masked-arrays.md` | numpy.ma: semantics by result kind, the fill value, the set routines, `ma.put`, text and `StringDType` |

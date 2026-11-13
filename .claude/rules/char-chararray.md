@@ -41,7 +41,10 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
 
 `Char/NDCharArray{,.Strip,.Indexing,.Methods}.cs`, `APIs/np.char.array.cs`.
 - `np.@char.chararray(shape, itemsize, unicode, buffer, offset, strides, order)`: a `string` buffer FILLS,
-  `ReadOnlyMemory<byte>` is Python's read-only `bytes`, `byte[]` a writable `bytearray`, an `NDArray` is borrowed.
+  `ReadOnlyMemory<byte>` is Python's read-only `bytes`, `byte[]` a writable `bytearray`, an `NDArray` is borrowed. NumPy's
+  class constructor `new NDCharArray(shape, itemsize = 1, unicode = false, buffer = null, offset = 0, strides = null,
+  order = 'C')` runs the same statements (`CharModule.ChararrayData`) and takes over the plain array's storage; the
+  `UnmanagedStorage` constructor stays NumSharp's plumbing.
   `np.@char.array` / `asarray` follow NumPy's branches (str / bytes: `itemsize = len`, shape `len // itemsize`, Python's
   Python's `ZeroDivisionError`; an S / U array: a view, `itemsize // 4` for U, so U is always cast;
   numbers, bools, None and StringDType through NumPy's `tolist()` route, value-based widths; floats cast once, then
@@ -142,7 +145,9 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   its exact units, a per-piece `np.str_` flag: unicodeobject.c returns the element's own `np.str_` when the separator is
   longer or of a wider kind; the repr prints `np.str_('ab')`). Every structural member is the same NDArray operation on
   `Ids` (a view shares the ids, a copy copies them, the lists stay shared), so strides, flags, base and errors are NumPy's
-  for the object array.
+  for the object array. `np.vstack(NDListArray[])` / `np.row_stack(NDListArray[])` (`NDListArray.VStack`) stack the ids of
+  every part mapped into the FIRST part's heap (its own lists keep their identity; another family's are appended there
+  once) with `np.vstack` of the ids, so NumPy's shape rule and texts hold and the result shares the heap.
 - The members that read and write the lists' VALUES (`Char/NDListArray.{Engine,Compare,Sort,Reduce,Arithmetic,Assign,TextOperands}.cs`)
   are NumPy's object loops over CPython's list semantics: `list_richcompare` (ordering a str item against a bytes item is
   CPython's TypeError), the truth members over non-emptiness, `astype` (object converts only under `'unsafe'`), the sorts

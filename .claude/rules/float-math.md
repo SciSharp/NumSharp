@@ -2,8 +2,8 @@
 paths:
   - "src/NumSharp.Core/Utilities/{NDFloatMath,NDComplexMath}*.cs"
   - "src/NumSharp.Core/Math/NDArray.{Correlate,Convolve}*.cs"
-  - "src/NumSharp.Core/Backends/Default/Math/{Sliding/SlidingDot,Default.Correlate,Default.Convolve,Default.Sinc}*.cs"
-  - "src/NumSharp.Core/Math/np.{correlate,convolve,sinc,arcsinh,arccosh,arctanh,exp,exp2,expm1,log,log1p,sin,cos,tanh}*.cs"
+  - "src/NumSharp.Core/Backends/Default/Math/{Sliding/SlidingDot,Default.Correlate,Default.Convolve,Default.Sinc,Default.Interp}*.cs"
+  - "src/NumSharp.Core/Math/np.{correlate,convolve,sinc,interp,arcsinh,arccosh,arctanh,exp,exp2,expm1,log,log1p,sin,cos,tanh}*.cs"
   - "src/NumSharp.Core/Backends/ISlidingDotBackend.cs"
   - "test/NumSharp.Tests/Math/**"
 ---
@@ -70,6 +70,24 @@ NumPy's `_pyarray_correlate` + `small_correlate` (`Backends/Default/Math/Sliding
   real-only CBLAS handed complex) leaves the managed kernel in place. It is per position (one backend `?dot` per output,
   as NumPy calls `dotfunc`). Gate: `SlidingDotLiveParityTests` (live NumPy); the managed path is the `groupa` tier's
   default.
+
+## `np.interp`: the fill values are Python objects
+
+`np.interp(x, xp, fp, NDArray left = null, NDArray right = null, double? period = null)` is one signature
+(`Math/np.interp.cs`; the loops in `Backends/Default/Math/Default.Interp.cs`). fp's dtype alone picks the float64 or the
+complex128 loop; a period sets both fills to None before anything converts them. Each loop converts `left`, then `right`,
+only AFTER its operand and length checks, as NumPy's `arr_interp` / `arr_interp_complex` do:
+- the real loop is CPython's `PyFloat_AsDouble` (`InterpFillAsDouble`): a C# literal is its Python object (a number
+  converts; a Complex is `must be real number, not complex`, a string `must be real number, not str`); any other 0-d
+  array that is not explicit (`IsNumPyScalar`: an element `a[i]`, `np.float32(2.5)`, a Half / char / decimal) is a NumPy
+  scalar (an `np.complex128` gives its REAL part; `np.str_` / `np.bytes_` are refused); an explicit array is ndarray's
+  `float()` (the `(double)` operator: one or more dimensions `only 0-dimensional arrays can be converted to Python
+  scalars`, a 0-d complex `float() argument must be a string or a real number, not 'complex'`, 0-d text PARSED).
+- the complex loop is CPython 3.12's `PyComplex_RealAsDouble` / `ImagAsDouble` (`InterpFillAsComplex`): a Python
+  complex or an `np.complex128` scalar keeps both parts; anything else is the real loop's value with a zero imaginary
+  part, so a 0-d complex ARRAY is refused here too (3.13 would ask its `__complex__`).
+- Open (`OpenBugs.ApiParity.cs`): `np.array("5")` is unmarked (a NumPy scalar to NumSharp), so it is refused as an
+  `np.str_` where NumPy parses it.
 
 ## Inverse hyperbolic: `arcsinh` / `arccosh` / `arctanh`
 

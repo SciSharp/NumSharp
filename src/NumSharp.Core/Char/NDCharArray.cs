@@ -174,6 +174,54 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     NumPy's chararray constructor, <c>np.char.chararray(shape, itemsize=1, unicode=False, buffer=None, offset=0,
+        ///     strides=None, order='C')</c>: a new chararray of <paramref name="itemsize"/>-character <c>S</c> (or <c>U</c>)
+        ///     elements, exactly as <see cref="CharModule.chararray"/> builds it (<c>new NDCharArray(new Shape(2, 3), 2)</c>
+        ///     is NumPy's <c>chararray((2, 3), itemsize=2)</c>).
+        /// </summary>
+        /// <param name="shape">The dimensions (an <see cref="int"/>, a <c>long[]</c> or a tuple converts).</param>
+        /// <param name="itemsize">The element width in characters (0 to 2^31 - 1 for <c>S</c>, to 2^29 - 1 for
+        ///     <c>U</c>).</param>
+        /// <param name="unicode"><c>true</c> for <c>U</c> (str), <c>false</c> for <c>S</c> (bytes).</param>
+        /// <param name="buffer"><c>null</c> for new memory (<c>np.empty</c>'s); a C# <see cref="string"/> is NumPy's str
+        ///     FILLER stored into every element; any other buffer (a <c>byte[]</c>, a <c>Memory&lt;byte&gt;</c>, an
+        ///     <see cref="NDArray"/>) is viewed without copying, as <see cref="np.ndarray(Shape, DType, object, long, long[], char?)"/>
+        ///     views it. Typed <c>object</c> as np.ndarray's and np.char.chararray's buffer is.</param>
+        /// <param name="offset">The BYTE offset of the first element in <paramref name="buffer"/>.</param>
+        /// <param name="strides">The BYTE strides over <paramref name="buffer"/>, or <c>null</c> for <paramref name="order"/>'s.</param>
+        /// <param name="order"><c>'C'</c> or <c>'F'</c> (either case; <c>'A'</c> / <c>'K'</c> are C).</param>
+        /// <exception cref="ValueError">An invalid itemsize (<c>invalid itemsize in generic type tuple</c>), a negative
+        ///     dimension (<c>negative dimensions are not allowed</c>), or an unknown order.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="itemsize"/> is 0 (NumSharp's fixed-width string buffers
+        ///     hold no zero-width element).</exception>
+        /// <exception cref="UnicodeEncodeError">A non-ASCII str filler into an <c>S</c> chararray.</exception>
+        /// <exception cref="TypeError">A buffer too small (<c>buffer is too small for requested array</c>) or not
+        ///     bytes-like.</exception>
+        /// <remarks>
+        ///     API-parity batch 12: NumPy's class constructor beside the <see cref="UnmanagedStorage"/> one (NumSharp's
+        ///     plumbing, which a subclass chains to). The chararray owns its memory without a buffer or with a str filler,
+        ///     and views the buffer otherwise.
+        /// </remarks>
+        public NDCharArray(Shape shape, long itemsize = 1, bool unicode = false, object buffer = null, long offset = 0,
+                           long[] strides = null, char order = 'C')
+            : this(CharModule.ChararrayData(shape, itemsize, unicode, buffer, offset, strides, order), adoptStorage: true)
+        {
+        }
+
+        /// <summary>
+        ///     Takes over a freshly created plain array's storage and releases the plain wrapper: the chararray then holds the
+        ///     buffer's only counted reference, as the array NumPy allocated as the subclass would.
+        /// </summary>
+        /// <param name="created">The plain array <see cref="CharModule.ChararrayData"/> made; released here.</param>
+        /// <param name="adoptStorage">A marker separating this constructor from the public ones (always true).</param>
+        private NDCharArray(NDArray created, bool adoptStorage) : base(created.Storage)
+        {
+            // base(storage) took this chararray's own reference on the buffer, so the plain wrapper's reference can go now
+            // (an ambient scope that also tracked it later disposes an already-disposed array: a no-op).
+            created.Dispose();
+        }
+
+        /// <summary>
         ///     Whether this 0-d object is the stand-in for the Python <c>str</c> / <c>bytes</c> (or NumPy scalar) an element
         ///     access returns in NumPy, not a real 0-d chararray. It prints as a plain 0-d array, and the comparison operators
         ///     read it as the scalar it stands for (a Python <c>str</c> compares without stripping).

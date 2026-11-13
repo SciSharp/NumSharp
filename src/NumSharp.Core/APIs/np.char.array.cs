@@ -79,6 +79,33 @@ namespace NumSharp
         public NDCharArray chararray(Shape shape, long itemsize = 1, bool unicode = false, object buffer = null, long offset = 0,
                                      long[] strides = null, char order = 'C')
         {
+            var created = ChararrayData(shape, itemsize, unicode, buffer, offset, strides, order);
+
+            // The new array is the chararray (NumPy allocates it as the subclass): the chararray takes over its storage, so
+            // OWNDATA is the ndarray's (true without a buffer, false over one). The plain wrapper is reclaimed by the scope.
+            return new NDCharArray(created.Storage);
+        }
+
+        /// <summary>
+        ///     The statements of <c>chararray.__new__</c> up to the subclass: the plain array of the chararray's data, which
+        ///     <see cref="chararray"/> and the <see cref="NDCharArray"/> constructor of the same parameters wrap.
+        /// </summary>
+        /// <param name="shape">The dimensions.</param>
+        /// <param name="itemsize">The element width in characters.</param>
+        /// <param name="unicode"><c>true</c> for <c>U</c>, <c>false</c> for <c>S</c>.</param>
+        /// <param name="buffer">null, a str filler, or a buffer to view (see <see cref="chararray"/>).</param>
+        /// <param name="offset">The byte offset into <paramref name="buffer"/>.</param>
+        /// <param name="strides">The byte strides over <paramref name="buffer"/>, or null.</param>
+        /// <param name="order">The memory order.</param>
+        /// <returns>A new plain array of the chararray's descriptor, owned by the caller (wrap its storage, then release
+        ///     it).</returns>
+        /// <exception cref="ValueError">An invalid itemsize, a negative dimension, an unknown order.</exception>
+        /// <exception cref="NotSupportedException">A zero itemsize (NumSharp holds no zero-width strings).</exception>
+        /// <exception cref="UnicodeEncodeError">A non-ASCII str filler into an <c>S</c> chararray.</exception>
+        /// <exception cref="TypeError">A buffer too small or not bytes-like.</exception>
+        internal static NDArray ChararrayData(Shape shape, long itemsize, bool unicode, object buffer, long offset,
+                                              long[] strides, char order)
+        {
             // ndarray.__new__ converts the (dtype, itemsize) tuple before it reads the buffer or the order.
             var descr = TextDescr(unicode, itemsize);
 
@@ -86,9 +113,18 @@ namespace NumSharp
             if (buffer is string filler)
             {
                 // "unicode objects do not have the buffer interface": a str buffer is dropped, the array allocated as for no
-                // buffer (offset and strides unused), and the str stored into every element.
+                // buffer (offset and strides unused), and the str stored into every element. The filler's store runs after
+                // the allocation, so a refused filler (non-ASCII into S) releases the array it was written into.
                 created = np.ndarray(shape, descr, order: order);
-                created[Slice.Ellipsis] = filler;
+                try
+                {
+                    created[Slice.Ellipsis] = filler;
+                }
+                catch
+                {
+                    created.Dispose();
+                    throw;
+                }
             }
             else if (buffer is null)
             {
@@ -98,10 +134,7 @@ namespace NumSharp
             {
                 created = np.ndarray(shape, descr, buffer, offset, strides, order);
             }
-
-            // The new array is the chararray (NumPy allocates it as the subclass): the chararray takes over its storage, so
-            // OWNDATA is the ndarray's (true without a buffer, false over one). The plain wrapper is reclaimed by the scope.
-            return new NDCharArray(created.Storage);
+            return created;
         }
 
         /// <summary>

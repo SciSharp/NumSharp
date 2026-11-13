@@ -172,6 +172,22 @@ np.iinfo / np.can_cast / np.issubdtype / np.isdtype / np.dtype / np.result_type)
 their [O] / [T] entries are on purpose; NumPy's flag-dependent returns become result structs; the polynomial facades
 take typed parameters only. Not taken: np.frombuffer's NPTypeCode / string dtype twins.
 
+**Refresh 2026-11-13 (API-parity batch 12 on `journey5` at `cc8fe6a4`).** Regenerated on the batch's tree: 1310 → 1315
+NumPy names with a C# spelling, 1023 → 1029 with NumPy's signature, 287 → 286 to change; M 44 → 43, B 15 → 13, Q 1 → 3
+(as_strided's and the chararray constructor's `long[] strides`, np.NDIterator's `itershape` / `op_axes` refuse an
+`int[]`), O 249 unchanged (np.interp and np.append went to one signature; np.row_stack [O3] and the chararray
+constructor [O2] joined with their kept forms), X 48, T 15 and L 17 unchanged; the absent names 76 → 69; the coverage
+artifact's headline 366 → 368 (all NumPy APIs 70.1% → 70.3%). Fixed: np.interp's fills are `NDArray` Python objects
+the loops convert as NumPy's do; np.append has one signature and appends a C# number as NumPy's array of the Python
+number (int64 for `np.append(int32_array, 5)`); new np.lib.stride_tricks.as_strided (byte strides, refused outside the
+buffer), np.row_stack, np.vstack / np.row_stack over `NDListArray`, the masked array's `@base` / `device` /
+`to_device` / `getfield` / `setfield`, and NumPy's class constructors for np.NDIndex (`params long[]`), np.NDIterator
+(NumPy's defaults) and NDCharArray (chararray's parameters). The owner's decisions from this round: np.histogram /
+np.histogram_bin_edges keep their four `bins` forms ("C keep four"), so their [O4] entries stay on purpose; the
+`NDListArray` vstack form stays beside vstack's two ("support that too"). Found by the validation and pinned in
+`OpenBugs.ApiParity.cs`: `np.array("x")` is an unmarked 0-d array (a NumPy scalar to NumSharp), and np.concatenate
+reports a later 0-d array with the 0-d text where NumPy reports the rank mismatch.
+
 ---
 
 ## Contents

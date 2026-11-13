@@ -558,23 +558,30 @@ namespace NumSharp
         /// <param name="xp">The sample points, 1-D, increasing unless a period is given (not checked: NumPy's loop answers
         ///     other points deterministically).</param>
         /// <param name="fp">The sample values, 1-D, as many as xp.</param>
-        /// <param name="left">The value below <c>xp[0]</c>, NumPy's Python object: null (None, meaning <c>fp[0]</c>), a
-        ///     double (a float) or a Complex (a complex, which the real loop refuses).</param>
-        /// <param name="right">The value above <c>xp[-1]</c>, as <paramref name="left"/> (null means <c>fp[-1]</c>).</param>
+        /// <param name="left">The value below <c>xp[0]</c> as NumPy's Python object, or null (None, meaning
+        ///     <c>fp[0]</c>). A C# literal is a Python number / bool / str (a double or an int converts implicitly, a
+        ///     Complex is a Python complex), a 0-d array that is not an explicit array a NumPy scalar, anything else an
+        ///     ndarray; the loop converts it as NumPy's does (<c>PyFloat_AsDouble</c>, or for the complex loop
+        ///     <c>PyComplex_RealAsDouble</c> / <c>ImagAsDouble</c>) after the operand and length checks.</param>
+        /// <param name="right">The value above <c>xp[-1]</c>, as <paramref name="left"/> (null means <c>fp[-1]</c>),
+        ///     converted after it.</param>
         /// <param name="period">The period of the x-coordinates, or null; it must not be zero.</param>
         /// <returns>A new array of x's shape (0-d for a 0-d x): complex128 for a complex fp, float64 otherwise.</returns>
-        /// <exception cref="ArgumentException"><paramref name="left"/> or <paramref name="right"/> is neither null, a
-        ///     double nor a Complex.</exception>
         /// <exception cref="NullReferenceException">An operand is null.</exception>
         /// <exception cref="ValueError">fp or xp not 1-D (<c>object too deep for desired array</c> / <c>object of too
         ///     small depth for desired array</c>), empty sample points, lengths that differ, a zero period; with a period,
         ///     points that are not 1-D (<c>Data points must be 1-D sequences</c>) or text that does not parse as a
-        ///     float.</exception>
+        ///     float; a 0-d text array fill that spells no float (<c>could not convert string to float</c>).</exception>
         /// <exception cref="InvalidCastException">Without a period, an operand that does not cast 'safely' to the loop's
         ///     dtype (NumPy's TypeError text).</exception>
-        /// <exception cref="TypeError">A real fp, no period and a complex fill value (<c>must be real number, not
-        ///     complex</c>), raised after the operand and length checks.</exception>
-        public abstract NDArray Interp(NDArray x, NDArray xp, NDArray fp, object left = null, object right = null,
+        /// <exception cref="TypeError">Without a period, a fill value the loop's conversion refuses, raised after the
+        ///     operand and length checks: a Python complex in the real loop (<c>must be real number, not complex</c>), a
+        ///     Python str (<c>must be real number, not str</c>), an array of one or more dimensions (<c>only
+        ///     0-dimensional arrays can be converted to Python scalars</c>), a 0-d complex array (<c>float() argument must
+        ///     be a string or a real number, not 'complex'</c>).</exception>
+        /// <remarks>API-parity batch 12: the fill values were an <c>object</c> that took only a double or a Complex; they
+        ///     are now typed, and every Python object NumPy converts converts here too.</remarks>
+        public abstract NDArray Interp(NDArray x, NDArray xp, NDArray fp, NDArray left = null, NDArray right = null,
             double? period = null);
 
         /// <summary>

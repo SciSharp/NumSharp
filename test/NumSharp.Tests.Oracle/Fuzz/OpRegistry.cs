@@ -304,8 +304,9 @@ namespace NumSharp.Tests.Fuzz
                                    p.TryGetValue("dtype", out var cpd) ? (DType)FuzzCorpus.DtypeToTC(cpd.GetString()) : null);
                 case "interp":
                 {
-                    double? left = p.TryGetValue("left", out var pil) ? pil.GetDouble() : (double?)null;
-                    double? right = p.TryGetValue("right", out var pir) ? pir.GetDouble() : (double?)null;
+                    // The fills are Python floats in the corpus: a C# double converts to NumPy's Python-float operand.
+                    NDArray left = p.TryGetValue("left", out var pil) ? pil.GetDouble() : null;
+                    NDArray right = p.TryGetValue("right", out var pir) ? pir.GetDouble() : null;
                     double? period = p.TryGetValue("period", out var pip2) ? pip2.GetDouble() : (double?)null;
                     return np.interp(ops[0], ops[1], ops[2], left, right, period);
                 }

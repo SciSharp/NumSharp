@@ -335,6 +335,18 @@ numpy.matrix / numpy.char.chararray rules and the null checks; `np.apply_over_ax
 plain statements would not apply.
 - `concat` is NumPy 2.0's alias of `concatenate`, with every overload (array form with `axis`/`out`/`dtype`/`casting`,
   tuple-arity forms).
+- `row_stack` is NumPy 2.4's deprecated alias of `vstack` (NumPy warns; NumSharp has no warnings channel, the remarks
+  say it), with vstack's three forms: the kept `params NDArray[]` form, `(NDArray[] tup, DType dtype, string casting)`, and
+  `(NDListArray[] tup)`. `np.vstack(NDListArray[])` / `np.row_stack(NDListArray[])` stack `np.char.split`'s object arrays
+  of lists (`NDListArray.VStack`): the ids of every part in the FIRST part's heap (`IdsInThisHeap`: the same lists, as
+  NumPy's object pointers; another family's lists appended there once), `np.vstack` of the int64 ids (NumPy's shape rule
+  and texts), a new array sharing the heap. A sequence parameter, not `params`: a second params form would make
+  `np.vstack()` ambiguous.
+- `append(arr, values, axis=None)` has one signature (`NDArray values`; the `object` overload is gone). NumPy's
+  `asanyarray(arr)` / `ravel(values)` build the ARRAY of a Python scalar, so a C# number literal takes the Python
+  number's default dtype (`NDArray.PythonScalarAsArray`: int64, uint64 past int64, float64, complex128) whatever its C#
+  width: `np.append(int32_array, 5)` and `np.append(uint8_array, 300)` are int64. A bool, a string, a Half / char and a
+  decimal keep their arrays' dtypes. Never apply that conversion to an operand NumPy reads as a WEAK scalar.
 - `unstack(x, axis=0)` returns views (write-through), each `x.shape` minus the axis, built by dropping the axis from
   dims/strides and advancing the offset. A 1-D input gives 0-d views; a 0-d input raises
   `ValueError("Input array must be at least 1-d.")`.
@@ -470,7 +482,15 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   kept int / int[] axis forms) is NumPy's statements over a `Shape` of `x`'s own buffer window (its offset and buffer
   size): the window checks, `normalize_axis_tuple(..., allow_duplicate: true)`, `x.strides + x.strides[axes]`, the
   trimmed shape; read-only unless `writeable: true` (and never more writeable than `x`). A plain array (`subok=False`).
-  NumPy's `as_strided` is not ported: it reads whatever memory the strides reach.
+- `np.lib.stride_tricks.as_strided(x, Shape? shape = null, long[] strides = null, bool subok = false, bool writeable =
+  true)`: NumPy's BYTE strides over `x`'s buffer window, the computation `NDArray.as_strided`
+  (`Manipulation/NDArray.StrideTricks.cs`, `[SubclassAware]`: `subok` reads the caller's class, which a woven function
+  would turn into a plain view). The array interface's defaults: `x`'s shape, and `x`'s strides unless `x` is
+  C-contiguous (then the C strides of the given shape). NumPy's order: `mismatch in length of strides and shape` before
+  `negative dimensions are not allowed`. The view is as writeable as `x` even with a zero stride (NumPy protects only
+  `broadcast_to` / `broadcast_arrays`; NumSharp's `Shape` computes a zero-stride layout read-only, so the bit is set back,
+  and `Alias` clears it for a read-only `x`). [Misaligned] by design: a stride that is not a multiple of the item size,
+  and a view reaching outside the buffer, are `ValueError`s where NumPy reads arbitrary memory.
 
 ## `np.copyto`
 

@@ -166,6 +166,8 @@ namespace NumSharp.Tests.Fuzz
             });
             E(l, "NDMaskedArray.filled", "default + value", f => new object[] { f.MA.filled(), f.MA.filled(-1.0) });
             E(l, "NDMaskedArray.flatten", "C", f => f.MA.flatten());
+            // getfield: a masked VIEW of the data's field with the same mask memory (API-parity batch 12).
+            E(l, "NDMaskedArray.getfield", "the float64 field, a masked view", f => f.MA.getfield(np.float64));
             E(l, "NDMaskedArray.harden_mask", "owned copy", f => f.MA.copy().harden_mask());
             E(l, "NDMaskedArray.ids", "addresses", f => Box(f.MA.ids()));
             E(l, "NDMaskedArray.iscontiguous", "flag", f => Box(f.MA.iscontiguous()));
@@ -224,6 +226,13 @@ namespace NumSharp.Tests.Fuzz
                 var m = np.ma.masked_array(sorted);
                 return m.searchsorted(f.V3);
             });
+            // setfield writes the data alone (masked slots too), on an owned copy so the fixture stays as built.
+            E(l, "NDMaskedArray.setfield", "owned copy", f =>
+            {
+                var c = f.MA.copy();
+                c.setfield(9.0, np.float64);
+                return c;
+            });
             E(l, "NDMaskedArray.shrink_mask", "owned copy", f => f.MA.copy().shrink_mask());
             E(l, "NDMaskedArray.soften_mask", "owned copy", f => f.MA.copy().soften_mask());
             E(l, "NDMaskedArray.sort", "last axis", f => f.MA.sort());
@@ -232,6 +241,8 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDMaskedArray.sum", "axis", f => f.MA.sum(1));
             E(l, "NDMaskedArray.swapaxes", "0,1", f => f.MA.swapaxes(0, 1));
             E(l, "NDMaskedArray.take", "flat indices", f => f.MA.take(f.Idx));
+            // to_device("cpu") returns the receiver itself: an owned copy, handed back as the entry's result.
+            E(l, "NDMaskedArray.to_device", "cpu returns the masked array itself", f => f.MA.copy().to_device("cpu"));
             E(l, "NDMaskedArray.tobytes", "fill", f => f.MA.tobytes(0.0));
             T(l, "NDMaskedArray.tofile", "raises by design (NumPy: MaskedArray.tofile() not implemented yet)", f =>
             {

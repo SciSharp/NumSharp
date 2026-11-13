@@ -46,13 +46,13 @@ lists what failed, with the compiler's reason.
 
 | group | names with a NumPy counterpart | M ● | M ◦ only | X | O | T ● | T ◇ | B ● | B ◐ | L ● | L ◐ | L ◦ | Q | no mark | not compared | NumSharp-only names | of them O | of them T | NumPy names NumSharp lacks |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `np` | 382 | 8 | 126 | 16 | 95 | 5 | 2 | 2 | 0 | 1 | 0 | 0 | 0 | 176 | 0 | 15 | 7 | 8 | 30 |
+| `np` | 383 | 8 | 126 | 16 | 94 | 5 | 2 | 2 | 0 | 1 | 0 | 0 | 0 | 178 | 0 | 15 | 7 | 8 | 29 |
 | `ndarray` | 57 | 4 | 1 | 4 | 13 | 1 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 38 | 0 | 83 | 45 | 15 | 3 |
 | `np.char` | 53 | 0 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 42 | 0 | 1 | 0 | 0 | 0 |
 | `np.dtypes` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `np.emath` | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `np.fft` | 18 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 18 | 0 | 0 | 0 | 0 | 0 |
-| `np.lib.stride_tricks` | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `np.lib.stride_tricks` | 2 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.linalg` | 31 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 30 | 0 | 0 | 0 | 0 | 1 |
 | `np.ma` | 211 | 27 | 61 | 24 | 12 | 0 | 0 | 4 | 0 | 1 | 0 | 0 | 1 | 113 | 0 | 3 | 0 | 0 | 6 |
 | `np.polynomial` | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 | 0 | 0 | 0 | 0 | 0 |
@@ -69,13 +69,13 @@ lists what failed, with the compiler's reason.
 | `np.typing` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ndarray (NDArray<T>)` | 2 | 1 | 0 | 1 | 2 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 1 | 0 | 3 |
 | `np.matrix` | 54 | 10 | 1 | 1 | 12 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 31 | 0 | 4 | 0 | 0 | 0 |
-| `np.char.chararray` | 61 | 1 | 1 | 2 | 5 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 54 | 0 | 4 | 0 | 0 | 0 |
-| `np.ma.MaskedArray` | 60 | 2 | 1 | 0 | 3 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 1 | 53 | 0 | 2 | 1 | 0 | 17 |
+| `np.char.chararray` | 61 | 0 | 1 | 2 | 6 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 54 | 0 | 4 | 0 | 0 | 0 |
+| `np.ma.MaskedArray` | 63 | 2 | 1 | 0 | 3 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 1 | 56 | 0 | 2 | 1 | 0 | 12 |
 | `np.dtype` | 4 | 1 | 0 | 0 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 3 | 0 | 5 | 3 | 2 | 0 |
-| `np.nditer` | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 8 | 0 | 3 | 0 | 0 | 0 |
+| `np.nditer` | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 8 | 0 | 3 | 0 | 0 | 0 |
 | `np.broadcast` | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 3 | 0 | 0 | 0 |
 | `np.flatiter` | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 3 | 0 | 1 | 1 |
-| `np.ndindex` | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 0 | 0 | 0 |
+| `np.ndindex` | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 4 | 0 | 0 | 0 |
 | `np.ndenumerate` | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 3 | 0 | 0 | 0 |
 | `np.poly1d` | 3 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 5 | 1 | 0 | 0 |
 | `np.vectorize` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 |
@@ -89,13 +89,13 @@ lists what failed, with the compiler's reason.
 | `np.random.PCG64DXSM` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 |
 | `np.random.Philox` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 |
 | `np.random.SFC64` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 10 | 0 | 0 | 0 |
-| **total** | 1310 | 56 | 220 | 51 | 249 | 9 | 7 | 17 | 0 | 2 | 15 | 0 | 4 | 808 | 0 | 236 | 60 | 26 | 76 |
+| **total** | 1315 | 55 | 220 | 51 | 249 | 9 | 7 | 15 | 0 | 2 | 15 | 0 | 6 | 814 | 0 | 236 | 60 | 26 | 69 |
 
 *no mark*: no M (● or ◦), X, O, T, B, L or Q: the name matches NumPy in every respect the table checks.
 
 ## `np`
 
-### Names NumPy has (382)
+### Names NumPy has (383)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -110,7 +110,7 @@ lists what failed, with the compiler's reason.
 | `amin` |  |  |  |  |  |  |  | `amin(a, axis=None, out=None, keepdims=<no value>, initial=<no value>, where=<no value>)` |  |  |  |  |
 | `angle` |  |  |  |  |  |  |  | `angle(z, deg=False)` |  |  |  |  |
 | `any` |  |  | 2 |  |  |  |  | `any(a, axis=None, out=None, keepdims=<no value>, *, where=<no value>)` |  |  |  |  |
-| `append` |  |  | 2 |  |  |  |  | `append(arr, values, axis=None)` |  |  |  |  |
+| `append` |  |  |  |  |  |  |  | `append(arr, values, axis=None)` |  |  |  |  |
 | `apply_along_axis` |  |  | 2 |  |  |  |  | `apply_along_axis(func1d, axis, arr, *args, **kwargs)` |  |  |  |  |
 | `apply_over_axes` |  |  |  |  |  |  |  | `apply_over_axes(func, a, axes)` |  |  |  |  |
 | `arange` | ◦ |  | 11 |  | ● | ● |  | `arange(start_or_stop, /, stop=None, step=1, *, dtype=None, device=None, like=None)` | excluded: `like` |  |  | `step` alone: no overload takes 2 arguments<br>`device` alone: no overload takes 2 arguments<br>`stop`: no overload fits; the closest one wants `float` for argument 1 |
@@ -274,7 +274,7 @@ lists what failed, with the compiler's reason.
 | `indices` |  |  |  |  |  |  |  | `indices(dimensions, dtype=<class 'int'>, sparse=False)` |  |  |  |  |
 | `inner` |  |  |  |  |  |  |  | `inner(a, b, /)` |  |  |  |  |
 | `insert` |  |  | 12 |  |  |  |  | `insert(arr, obj, values, axis=None)` |  |  |  |  |
-| `interp` |  |  | 2 |  |  |  |  | `interp(x, xp, fp, left=None, right=None, period=None)` |  |  |  |  |
+| `interp` |  |  |  |  |  |  |  | `interp(x, xp, fp, left=None, right=None, period=None)` |  |  |  |  |
 | `intersect1d` |  |  |  |  |  |  |  | `intersect1d(ar1, ar2, assume_unique=False, return_indices=False)` |  |  |  |  |
 | `invert` | ◦ |  |  |  |  |  |  | `invert(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `isclose` |  |  |  |  |  |  |  | `isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False)` |  |  |  |  |
@@ -410,6 +410,7 @@ lists what failed, with the compiler's reason.
 | `roots` |  |  |  |  |  |  |  | `roots(p)` |  |  |  |  |
 | `rot90` |  |  |  |  |  |  |  | `rot90(m, k=1, axes=(0, 1))` |  |  |  |  |
 | `round` |  |  |  |  |  |  |  | `round(a, decimals=0, out=None)` |  |  |  |  |
+| `row_stack` |  |  | 3 |  |  |  |  | `row_stack(tup, *, dtype=None, casting='same_kind')` |  |  |  |  |
 | `save` |  |  | 4 |  |  |  |  | `save(file, arr, allow_pickle=True)` |  |  |  |  |
 | `savetxt` |  | ● | 6 |  |  |  |  | `savetxt(fname, X, fmt='%.18e', delimiter=' ', newline='\n', header='', footer='', comments='# ', encoding=None)` |  | `stream`, `writer` |  |  |
 | `savez` |  |  | 8 |  |  |  |  | `savez(file, *args, allow_pickle=True, **kwds)` |  |  |  |  |
@@ -477,7 +478,7 @@ lists what failed, with the compiler's reason.
 | `vecmat` | ◦ |  |  |  |  |  |  | `vecmat(x1, x2, /, out=None, *, axes=<no value>, axis=<no value>, keepdims=False, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `subok`, `signature` |  |  |  |
 | `vectorize` | ● |  | 12 |  |  |  |  | `vectorize(pyfunc=<no value>, otypes=None, doc=None, excluded=None, cache=False, signature=None)` | `doc`, `excluded`, `cache` |  |  |  |
 | `vsplit` |  | ● | 2 |  |  |  |  | `vsplit(ary, indices_or_sections)` |  | `indices` |  |  |
-| `vstack` |  |  | 2 |  |  |  |  | `vstack(tup, *, dtype=None, casting='same_kind')` |  |  |  |  |
+| `vstack` |  |  | 3 |  |  |  |  | `vstack(tup, *, dtype=None, casting='same_kind')` |  |  |  |  |
 | `where` |  |  | 5 |  |  |  |  | `where(condition, x=None, y=None, /)` |  |  |  |  |
 | `zeros` | ◦ |  |  |  |  |  |  | `zeros(shape, dtype=None, order='C', *, device=None, like=None)` | excluded: `like` |  |  |  |
 | `zeros_like` | ◦ |  |  |  |  |  |  | `zeros_like(a, dtype=None, order='K', subok=True, shape=None, *, device=None)` | excluded: `subok` |  |  |  |
@@ -502,9 +503,9 @@ lists what failed, with the compiler's reason.
 | `save_version` |  |  |  |
 | `sctype2char` |  | ● | `NPTypeCode sctype` |
 
-### NumPy names NumSharp lacks (30)
+### NumPy names NumSharp lacks (29)
 
-`__array_namespace_info__`, `__version__`, `busday_count`, `busday_offset`, `busdaycalendar`, `datetime64`, `datetime_as_string`, `errstate`, `flatiter` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`), `from_dlpack`, `fromregex`, `genfromtxt`, `get_include`, `geterr`, `geterrcall`, `info`, `is_busday`, `isnat`, `memmap`, `poly1d`, `recarray`, `record`, `row_stack` (in `np.ma`), `seterr`, `seterrcall`, `show_config`, `show_runtime`, `test`, `timedelta64`, `ufunc`
+`__array_namespace_info__`, `__version__`, `busday_count`, `busday_offset`, `busdaycalendar`, `datetime64`, `datetime_as_string`, `errstate`, `flatiter` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`), `from_dlpack`, `fromregex`, `genfromtxt`, `get_include`, `geterr`, `geterrcall`, `info`, `is_busday`, `isnat`, `memmap`, `poly1d`, `recarray`, `record`, `seterr`, `seterrcall`, `show_config`, `show_runtime`, `test`, `timedelta64`, `ufunc`
 
 ## `ndarray`
 
@@ -783,15 +784,12 @@ lists what failed, with the compiler's reason.
 
 ## `np.lib.stride_tricks`
 
-### Names NumPy has (1)
+### Names NumPy has (2)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `as_strided` |  |  |  |  |  |  | ● | `as_strided(x, shape=None, strides=None, subok=False, writeable=True)` |  |  |  | `strides` as a sequence: no overload fits; the closest one wants `long[]` for argument 2 |
 | `sliding_window_view` | ◦ |  |  |  |  |  |  | `sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=False)` | excluded: `subok` |  |  |  |
-
-### NumPy names NumSharp lacks (1)
-
-`as_strided`
 
 ## `np.linalg`
 
@@ -1621,7 +1619,7 @@ lists what failed, with the compiler's reason.
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `(constructor)` | ● | ● |  |  |  |  | ● | `chararray(shape, itemsize=1, unicode=False, buffer=None, offset=0, strides=None, order='C')` | `shape (C#: storage)`, `itemsize`, `unicode`, `buffer`, `offset`, `strides`, `order` | `storage` |  | `shape` as a sequence: no overload fits; the closest one wants `UnmanagedStorage` for argument 1 |
+| `(constructor)` |  | ● | 2 |  |  |  | ● | `chararray(shape, itemsize=1, unicode=False, buffer=None, offset=0, strides=None, order='C')` |  | `storage` |  | `strides` as a sequence: no overload fits; the closest one wants `long[]` for argument 2 |
 | `__getitem__` |  |  |  |  |  |  |  | `chararray.__getitem__(obj)` |  |  |  |  |
 | `__iter__` |  |  |  |  |  |  |  | `chararray.__iter__()` |  |  |  |  |
 | `argmax` |  |  | 2 |  |  |  |  | `chararray.argmax(axis=None, out=None, *, keepdims=False)` |  |  |  |  |
@@ -1694,7 +1692,7 @@ lists what failed, with the compiler's reason.
 
 ## `np.ma.MaskedArray`
 
-### Names NumPy has (60)
+### Names NumPy has (63)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1723,6 +1721,7 @@ lists what failed, with the compiler's reason.
 | `fill` |  |  |  |  |  |  |  | `MaskedArray.fill(value)` |  |  |  |  |
 | `filled` |  |  |  |  |  |  |  | `MaskedArray.filled(fill_value=None)` |  |  |  |  |
 | `flatten` |  |  |  |  |  |  |  | `MaskedArray.flatten(order='C')` |  |  |  |  |
+| `getfield` |  |  |  |  |  |  |  | `MaskedArray.getfield(dtype, offset=0)` |  |  |  |  |
 | `harden_mask` |  |  |  |  |  |  |  | `MaskedArray.harden_mask()` |  |  |  |  |
 | `ids` |  |  |  |  |  |  |  | `MaskedArray.ids()` |  |  |  |  |
 | `iscontiguous` |  |  |  |  |  |  |  | `MaskedArray.iscontiguous()` |  |  |  |  |
@@ -1742,6 +1741,7 @@ lists what failed, with the compiler's reason.
 | `resize` |  |  |  |  |  |  |  | `MaskedArray.resize(newshape, refcheck=True, order=False)` |  |  |  |  |
 | `round` |  |  |  |  |  |  |  | `MaskedArray.round(decimals=0, out=None)` |  |  |  |  |
 | `searchsorted` |  |  |  |  |  |  |  | `MaskedArray.searchsorted(v, side='left', sorter=None)` |  |  |  |  |
+| `setfield` |  |  |  |  |  |  |  | `MaskedArray.setfield(val, dtype, offset=0)` |  |  |  |  |
 | `shrink_mask` |  |  |  |  |  |  |  | `MaskedArray.shrink_mask()` |  |  |  |  |
 | `soften_mask` |  |  |  |  |  |  |  | `MaskedArray.soften_mask()` |  |  |  |  |
 | `sort` |  |  |  |  |  |  |  | `MaskedArray.sort(axis=-1, kind=None, order=None, endwith=True, fill_value=None, *, stable=False)` |  |  |  |  |
@@ -1750,6 +1750,7 @@ lists what failed, with the compiler's reason.
 | `sum` |  |  |  |  |  |  |  | `MaskedArray.sum(axis=None, dtype=None, out=None, keepdims=<no value>)` |  |  |  |  |
 | `swapaxes` |  |  |  |  |  |  |  | `MaskedArray.swapaxes(axis1, axis2, /)` |  |  |  |  |
 | `take` |  |  |  |  |  |  |  | `MaskedArray.take(indices, axis=None, out=None, mode='raise')` |  |  |  |  |
+| `to_device` |  |  |  |  |  |  |  | `MaskedArray.to_device(device, /, *, stream=None)` |  |  |  |  |
 | `tobytes` |  |  |  |  |  |  |  | `MaskedArray.tobytes(fill_value=None, order='C')` |  |  |  |  |
 | `tofile` |  |  |  |  |  |  |  | `MaskedArray.tofile(fid, sep='', format='%s')` |  |  |  |  |
 | `tolist` |  |  |  |  |  |  |  | `MaskedArray.tolist(fill_value=None)` |  |  |  |  |
@@ -1766,9 +1767,9 @@ lists what failed, with the compiler's reason.
 | `ToString` | 2 |  |  |
 | `putmask` |  |  |  |
 
-### NumPy names NumSharp lacks (17)
+### NumPy names NumSharp lacks (12)
 
-`base` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`, `np.dtype`), `ctypes`, `device` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`), `dump`, `dumps`, `flags` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`, `np.dtype`), `get_fill_value`, `get_imag`, `get_real`, `getfield` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`), `set_fill_value` (in `np.ma`), `setfield` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`), `setflags` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`), `sharedmask`, `to_device` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`), `toflex`, `torecords`
+`ctypes`, `dump`, `dumps`, `flags` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`, `np.dtype`), `get_fill_value`, `get_imag`, `get_real`, `set_fill_value` (in `np.ma`), `setflags` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`), `sharedmask`, `toflex`, `torecords`
 
 ## `np.dtype`
 
@@ -1797,7 +1798,7 @@ lists what failed, with the compiler's reason.
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `(constructor)` |  |  |  |  | ● |  |  | `nditer(op, flags=None, op_flags=None, op_dtypes=None, order='K', casting='safe', op_axes=None, itershape=None, buffersize=0)` |  |  |  | required parameters only: needs `flags` — `new np.NDIterator(new NDArray[] { a })` |
+| `(constructor)` |  |  |  |  |  |  | ● | `nditer(op, flags=None, op_flags=None, op_dtypes=None, order='K', casting='safe', op_axes=None, itershape=None, buffersize=0)` |  |  |  | `itershape` as a sequence: no overload fits; the closest one wants `long[]` for argument 2<br>`op_axes` as a sequence: no overload fits; the closest one wants `int[][]` for argument 2 |
 | `close` |  |  |  |  |  |  |  | `nditer.close()` |  |  |  |  |
 | `copy` |  |  |  |  |  |  |  | `nditer.copy()` |  |  |  |  |
 | `debug_print` |  |  |  |  |  |  |  | `nditer.debug_print()` |  |  |  |  |
@@ -1850,7 +1851,7 @@ lists what failed, with the compiler's reason.
 
 ### NumPy names NumSharp lacks (1)
 
-`base` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`, `np.dtype`)
+`base` (in `ndarray`, `ndarray (NDArray<T>)`, `np.matrix`, `np.char.chararray`, `np.ma.MaskedArray`, `np.dtype`)
 
 ## `np.ndindex`
 
@@ -1858,7 +1859,7 @@ lists what failed, with the compiler's reason.
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `(constructor)` |  |  |  |  | ● |  |  | `ndindex(*shape)` |  |  |  | several `*shape` values: CS1729: 'np.NDIndex' does not contain a constructor that takes 2 arguments — `new np.NDIndex(1, 1)` |
+| `(constructor)` |  |  |  |  |  |  |  | `ndindex(*shape)` |  |  |  |  |
 
 ### Names NumPy does not have (4)
 

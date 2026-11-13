@@ -545,6 +545,9 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.fromiter", "IEnumerable", f => np.fromiter(new[] { 1.5, 2.5, 3.5 }, np.float64));
             E(l, "np.fromfunction", "index grids", f => np.fromfunction(ix => ix[0] + ix[1], (2, 3)));
             E(l, "np.lib.stride_tricks.sliding_window_view", "1-D window", f => np.lib.stride_tricks.sliding_window_view(f.V, 2));
+            // as_strided: a view over the operand's buffer (byte strides; API-parity batch 12).
+            E(l, "np.lib.stride_tricks.as_strided", "overlapping windows", f =>
+                np.lib.stride_tricks.as_strided(f.V, new Shape(4, 3), new long[] { 8, 8 }));
             E(l, "np.get_printoptions", "read", f => np.get_printoptions());
             E(l, "np.getbufsize", "read", f => Box(np.getbufsize()));
             E(l, "np.histogram", "int bins", f => (NDArray[])np.histogram(f.V, 10));

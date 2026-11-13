@@ -15,8 +15,12 @@ namespace NumSharp
         /// <param name="x">The x-coordinates at which to evaluate the interpolated values (any shape; the result has the same shape).</param>
         /// <param name="xp">The x-coordinates of the data points — 1-D, must be increasing unless <paramref name="period"/> is given.</param>
         /// <param name="fp">The y-coordinates of the data points, same length as xp (float or complex).</param>
-        /// <param name="left">Value returned for <c>x &lt; xp[0]</c>; default is <c>fp[0]</c>. Ignored when <paramref name="period"/> is given.</param>
-        /// <param name="right">Value returned for <c>x &gt; xp[-1]</c>; default is <c>fp[-1]</c>. Ignored when <paramref name="period"/> is given.</param>
+        /// <param name="left">Value returned for <c>x &lt; xp[0]</c>; null (NumPy's None) means <c>fp[0]</c>. Any
+        ///     number NumPy's <c>float()</c> takes: a C# double or int (a Python float / int), a <see cref="Complex"/> for a
+        ///     complex <paramref name="fp"/> (a Python complex), a NumPy scalar, a 0-d array. Ignored when
+        ///     <paramref name="period"/> is given.</param>
+        /// <param name="right">Value returned for <c>x &gt; xp[-1]</c>; null means <c>fp[-1]</c>. As <paramref name="left"/>.
+        ///     Ignored when <paramref name="period"/> is given.</param>
         /// <param name="period">A period for the x-coordinates, allowing proper interpolation of angular x-coordinates. Must be non-zero.</param>
         /// <returns>The interpolated values, same shape as x (float64, or complex128 when fp is complex). A scalar (0-d) if x is a scalar.</returns>
         /// <exception cref="ValueError"><paramref name="fp"/> or <paramref name="xp"/> is not 1-D (<c>object too deep for desired
@@ -26,7 +30,13 @@ namespace NumSharp
         ///     (text, or a complex x / xp — NumPy's TypeError <c>Cannot cast array data from dtype('&lt;U2') to dtype('float64')
         ///     according to the rule 'safe'</c>, <c>Cannot cast scalar …</c> for a 0-d x).</exception>
         /// <exception cref="ValueError">With a period, a text operand that does not parse as float64: NumPy parses the text
-        ///     first (<c>np.asarray(…, dtype=float64)</c>: <c>could not convert string to float</c>).</exception>
+        ///     first (<c>np.asarray(…, dtype=float64)</c>: <c>could not convert string to float</c>). Without one, a 0-d text
+        ///     array fill that spells no float.</exception>
+        /// <exception cref="TypeError">Without a period, a fill value NumPy's loop refuses, raised AFTER the operand and length
+        ///     checks: a <see cref="Complex"/> for a real <paramref name="fp"/> (<c>must be real number, not complex</c>, even
+        ///     with a zero imaginary part), a C# string (<c>must be real number, not str</c>), an array of one or more
+        ///     dimensions (<c>only 0-dimensional arrays can be converted to Python scalars</c>), a 0-d complex array
+        ///     (<c>float() argument must be a string or a real number, not 'complex'</c>, for either loop).</exception>
         /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.interp.html
@@ -38,46 +48,25 @@ namespace NumSharp
         ///     converts x, xp and fp with <c>np.asarray(…, dtype=…)</c>, which PARSES text (an empty text array converts to an
         ///     empty float array without parsing).
         ///     </para>
-        /// </remarks>
-        [NDScoped]
-        public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
-            double? left = null, double? right = null, double? period = null)
-        {
-            if (x is null) throw new ArgumentNullException(nameof(x));
-            // NumPy's compiled interp returns a 0-d x's value as its scalar (PyArray_Return of the fresh result).
-            return x.TensorEngine.Interp(x, xp, fp, left, right, period).PyArray_Return();
-        }
-
-        /// <summary>
-        ///     Complex-fill overload of <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>: complex
-        ///     <paramref name="left"/> / <paramref name="right"/> fill values for a complex <paramref name="fp"/>.
-        /// </summary>
-        /// <param name="x">The x-coordinates at which to evaluate the interpolated values.</param>
-        /// <param name="xp">The x-coordinates of the data points (1-D).</param>
-        /// <param name="fp">The y-coordinates of the data points (1-D, same length as xp).</param>
-        /// <param name="left">Value returned for <c>x &lt; xp[0]</c>; null means <c>fp[0]</c>.</param>
-        /// <param name="right">Value returned for <c>x &gt; xp[-1]</c>; null means <c>fp[-1]</c>.</param>
-        /// <param name="period">A period for the x-coordinates; when given, <paramref name="left"/> and <paramref name="right"/>
-        ///     are ignored.</param>
-        /// <returns>The interpolated values, same shape as x: complex128 for a complex fp, else float64.</returns>
-        /// <exception cref="ValueError">As <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
-        /// <exception cref="InvalidCastException">As <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
-        /// <exception cref="ValueError">As <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
-        /// <exception cref="TypeError"><paramref name="fp"/> is not complex, no period is given, and <paramref name="left"/> or
-        ///     <paramref name="right"/> is given: <c>must be real number, not complex</c>.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.interp.html
         ///     <para>
-        ///     NumPy picks the loop from <paramref name="fp"/> only. A real fp runs the real loop, which converts the fill values
-        ///     with <c>PyFloat_AsDouble</c> AFTER its operand and length checks — and that refuses a Python complex even with a
-        ///     zero imaginary part. (This overload used to compute in complex for a real fp, and so returned complex128 where
-        ///     NumPy raises or returns float64.)
+        ///     <b>The fill values</b> are NumPy's Python objects, converted by the chosen loop after its operand and length
+        ///     checks (left before right): the real loop takes <c>PyFloat_AsDouble</c>, the complex loop keeps both parts of
+        ///     a Python complex or an <c>np.complex128</c> scalar and takes <c>PyFloat_AsDouble</c> of anything else. So a
+        ///     C# literal converts as its Python number, an element read from a complex array (an <c>np.complex128</c>
+        ///     scalar) gives the real loop its REAL part (NumPy's ComplexWarning has no NumSharp channel), and an explicit
+        ///     0-d array converts through <c>float()</c>: <c>np.array("5")</c> parses to 5.0 where the literal
+        ///     <c>"5"</c> is refused. A period discards both before any conversion.
+        ///     </para>
+        ///     <para>
+        ///     API-parity batch 12: one signature. The <c>double?</c> overload and the <c>Complex?</c> overload became
+        ///     <see cref="NDArray"/> fills, which a C# double, int or <see cref="Complex"/> converts to implicitly; a
+        ///     nullable variable is passed as <c>value is { } v ? v : null</c> (C# has no lifted conversion from
+        ///     <c>double?</c> to a class).
         ///     </para>
         /// </remarks>
         [NDScoped]
         public static NDArray interp(NDArray x, NDArray xp, NDArray fp,
-            Complex? left, Complex? right = null, double? period = null)
+            NDArray left = null, NDArray right = null, double? period = null)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
             // NumPy's compiled interp returns a 0-d x's value as its scalar (PyArray_Return of the fresh result).

@@ -121,6 +121,15 @@ the text classes included. The masked reductions' statistics (`ma.mean` / `ma.va
   `min` and refuses initial / where (`MaskedArray.max() got an unexpected keyword argument 'initial'`); `fill_value` is
   gone. Also NumPy's: `row_stack(object[] tup, dtype, casting)` (= vstack), `ndenumerate(a, compressed)` (`masked` at
   the masked slots when false), `arange(…, dtype, device, fill_value, hardmask)`, `left_shift` / `right_shift(a, n)`.
+- ndarray's members a masked array inherits in NumPy: `@base` is the stored data object (`ma.array(d).@base` IS `d`
+  without a copy; never null; disposing it releases the masked array's data), `device` is `"cpu"`, `to_device(device,
+  stream)` runs ndarray's checks on the data and returns `this`. `getfield(dtype, offset)` is a masked VIEW of the data's
+  field carrying the same mask memory (a masked write through either reaches the other), the hard-mask flag and a
+  converted COPY of the stored fill (`__array_finalize__`); `setfield(val, dtype, offset)` is ndarray's, on the data
+  alone (masked slots and a hard mask included, the mask unchanged). Not offered: `flags` / `setflags` (the stored data
+  is the caller's object, so a flag would reach the caller's array), `sharedmask` (sharing is not tracked), and NumPy's
+  `get_fill_value` / `set_fill_value` / `get_real` / `get_imag` (C# reserves those names for the property accessors:
+  CS0571).
 - Open: a 0-d result NumPy returns as a plain scalar stays a 0-d masked array. `NDArray.view()` of a DISPOSED array
   returns a live view over the freed buffer (`InitializeArc` ignores `TryAddRef`'s failure).
 - Gate: `Ma/NDMaskedArrayInheritanceTests.cs` (probed member by member against NumPy).

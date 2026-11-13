@@ -207,7 +207,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="result">The concatenation computed on the plain views.</param>
         /// <param name="arr">The caller's array.</param>
-        /// <param name="values">The caller's values (<c>null</c> when an overload takes them as a Python object).</param>
+        /// <param name="values">The caller's values (a C# literal's 0-d array is never a matrix, so it only lets
+        ///     <paramref name="arr"/>'s class decide).</param>
         /// <returns>The matrix view of the result, or the result.</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
         internal static NDArray Append(NDArray result, NDArray arr, NDArray values)

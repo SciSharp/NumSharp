@@ -3038,14 +3038,20 @@ namespace NumSharp
         /// <exception cref="ValueError">A 0-d input with an axis (<c>zero-dimensional arrays cannot be concatenated</c>).</exception>
         /// <exception cref="IncorrectShapeException">The inputs' ranks or other axes differ.</exception>
         /// <exception cref="InvalidCastException">An input that does not cast to the result dtype.</exception>
-        /// <remarks>Scoped by <c>[NDScoped]</c>: the ravels of a multi-dimensional input are released, exceptions included;
-        ///     the result is yielded. A 1-D input passes to concatenate as it is (built before the scope opened, so never
-        ///     disposed). It sees plain arrays only: the woven public function hands it the plain view of a subclass
-        ///     operand and answers for the class itself (NDSubclass).</remarks>
-        [NDScoped /* the ravels of multi-dimensional inputs are released; the concatenated result is yielded */]
+        /// <remarks>Scoped by <c>[NDScoped]</c>: the Python scalars' arrays and the ravels of a multi-dimensional input are
+        ///     released, exceptions included; the result is yielded. A 1-D input passes to concatenate as it is (built
+        ///     before the scope opened, so never disposed). It sees plain arrays only: the woven public function hands it
+        ///     the plain view of a subclass operand and answers for the class itself (NDSubclass).</remarks>
+        [NDScoped /* the literals' arrays and the ravels of multi-dimensional inputs are released; the result is yielded */]
         [SubclassRule(typeof(NDSubclassRules), nameof(NDSubclassRules.Append))]
         internal static NDArray append(NDArray arr, NDArray values, int? axis)
         {
+            // NumPy's asanyarray(arr) and ravel(values) (asanyarray, then ravel) build the ARRAY of a Python scalar: a C#
+            // number literal takes the Python number's default dtype, not its C# width (np.append(int32_array, 5) is int64
+            // in NumPy, where the int32 literal kept int32 and the result with it).
+            arr = PythonScalarAsArray(arr);
+            values = PythonScalarAsArray(values);
+
             if (axis is null)
             {
                 // Both inputs ravel'd into 1-D, then concatenate along axis 0.

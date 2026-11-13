@@ -230,5 +230,46 @@ namespace NumSharp.Tests
         {
             np.ma.default_fill_value("f8").Should().Be("N/A");
         }
+
+        /// <summary>
+        ///     <c>np.array("5")</c> / <c>np.asarray("5")</c> are NumPy ndarrays, but NumSharp leaves their 0-d text arrays
+        ///     unmarked (<c>np.array(string)</c> returns <c>FromAnyScalar</c> without <c>MarkExplicitZeroDimArray</c>, which
+        ///     <c>np.array&lt;T&gt;(T)</c> calls), so they read as NumPy SCALARS (<c>np.str_</c>):
+        ///     <c>np.isscalar(np.array('x'))</c> is True (NumPy: False), and np.interp's fill conversion refuses
+        ///     <c>left=np.array('5')</c> as an <c>np.str_</c> (<c>must be real number, not numpy.str_</c>) where NumPy's
+        ///     <c>float()</c> of the 0-d array parses it to 5.0 (and <c>np.array('x')</c> is <c>could not convert string to
+        ///     float: 'x'</c>). Found by API-parity batch 12's validation (scratchpad dbg12/marks12.cs).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-12")]
+        public void ApiParity_ArrayOfString_IsAnExplicitArray()
+        {
+            np.isscalar(np.array("x")).Should().BeFalse();
+            np.isscalar(np.asarray("x")).Should().BeFalse();
+            np.interp(np.array(new[] { -1.0 }), np.array(new[] { 0.0, 1.0 }), np.array(new[] { 10.0, 20.0 }), np.array("5"))
+                .ToArray<double>().Should().Equal(5.0);
+            new Action(() => np.interp(np.array(new[] { -1.0 }), np.array(new[] { 0.0, 1.0 }), np.array(new[] { 10.0, 20.0 }),
+                    np.array("x")))
+                .Should().Throw<ValueError>().Which.Message.Should().Be("could not convert string to float: 'x'");
+        }
+
+        /// <summary>
+        ///     <c>np.concatenate((a2d, a0d), axis=0)</c>: NumPy's <c>PyArray_ConcatenateArrays</c> refuses a 0-d FIRST array
+        ///     (<c>zero-dimensional arrays cannot be concatenated</c>) and reports a later 0-d one as a rank mismatch
+        ///     (<c>all the input arrays must have same number of dimensions, but the array at index 0 has 2 dimension(s) and the
+        ///     array at index 1 has 0 dimension(s)</c>); NumSharp's concatenate checks every array for 0-d first and raises the
+        ///     0-d text for both. Reached through <c>np.append(a2d, 5, axis: 0)</c>. Found by API-parity batch 12's validation.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-12")]
+        public void ApiParity_Concatenate_LaterZeroDimArray_IsTheRankMismatch()
+        {
+            var a2d = np.array(new long[,] { { 1, 2 } });
+            new Action(() => np.concatenate(new[] { a2d, np.array(5L) }, 0)).Should().Throw<ValueError>().Which.Message.Should()
+                .Be("all the input arrays must have same number of dimensions, but the array at index 0 has 2 dimension(s) and the array at index 1 has 0 dimension(s)");
+            new Action(() => np.append(np.array(new long[,] { { 1, 2 }, { 3, 4 } }), 5, 0)).Should().Throw<ValueError>().Which.Message
+                .Should().Be("all the input arrays must have same number of dimensions, but the array at index 0 has 2 dimension(s) and the array at index 1 has 0 dimension(s)");
+            // The first array's 0-d check keeps NumPy's text.
+            new Action(() => np.concatenate(new[] { np.array(5L), a2d }, 0)).Should().Throw<ValueError>().Which.Message.Should()
+                .Be("zero-dimensional arrays cannot be concatenated");
+        }
     }
 }

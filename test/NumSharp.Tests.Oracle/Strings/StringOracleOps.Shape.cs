@@ -145,12 +145,13 @@ namespace NumSharp.Tests.Strings
                     if (p.TryGetValue("complex_left", out var cl) && cl.GetBoolean())
                     {
                         var l = p["left"].EnumerateArray().Select(x => x.GetDouble()).ToArray();
-                        result = np.interp(a, b, ops[2], (Complex?)new Complex(l[0], l[1]), null, period);
+                        result = np.interp(a, b, ops[2], new Complex(l[0], l[1]), null, period);
                     }
                     else
                     {
-                        double? left = p.TryGetValue("left", out var le) && le.ValueKind == JsonValueKind.Number ? le.GetDouble() : null;
-                        double? right = p.TryGetValue("right", out var ri) && ri.ValueKind == JsonValueKind.Number ? ri.GetDouble() : null;
+                        // A Python float fill is a C# double (NumPy's Python-float operand); None stays null.
+                        NDArray left = p.TryGetValue("left", out var le) && le.ValueKind == JsonValueKind.Number ? le.GetDouble() : null;
+                        NDArray right = p.TryGetValue("right", out var ri) && ri.ValueKind == JsonValueKind.Number ? ri.GetDouble() : null;
                         result = np.interp(a, b, ops[2], left, right, period);
                     }
                     return true;

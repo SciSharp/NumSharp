@@ -5,45 +5,142 @@
 
 using System;
 using System.Numerics;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        /// <inheritdoc />
-        [NDScoped] // the converted operands and the period's sorted copies are this call's own
-        public override NDArray Interp(NDArray x, NDArray xp, NDArray fp, object left = null, object right = null,
+        /// <summary>
+        ///     NumPy's <c>np.interp(x, xp, fp, left=None, right=None, period=None)</c> on the managed engine: the
+        ///     piecewise-linear interpolant through (xp, fp) at x, from the float64 loop or, for a complex fp, the
+        ///     complex128 loop (<c>compiled_base.c</c>'s <c>arr_interp</c> / <c>arr_interp_complex</c>).
+        /// </summary>
+        /// <param name="x">The coordinates to evaluate at, any shape.</param>
+        /// <param name="xp">The sample points, 1-D (increasing unless a period is given; not checked, as in NumPy).</param>
+        /// <param name="fp">The sample values, 1-D, as many as xp; its dtype alone picks the loop.</param>
+        /// <param name="left">The value below <c>xp[0]</c> as the caller's Python object (a C# number, Complex, bool or
+        ///     string literal, a NumPy scalar or an array), or null (None) for <c>fp[0]</c>; converted only after the
+        ///     operand and length checks, as NumPy's loops convert it.</param>
+        /// <param name="right">The value above <c>xp[-1]</c>, as <paramref name="left"/> (null means <c>fp[-1]</c>).</param>
+        /// <param name="period">The period of the x-coordinates, or null; when given, the fill values are discarded.</param>
+        /// <returns>A new array of x's shape (0-d for a 0-d x): complex128 for a complex fp, float64 otherwise.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="fp"/>, <paramref name="xp"/> or <paramref name="x"/>
+        ///     is null.</exception>
+        /// <exception cref="ValueError">fp or xp not 1-D, empty sample points, lengths that differ, a zero period; with a
+        ///     period, points that are not 1-D or text that does not parse as a float; a 0-d text array fill that spells
+        ///     no float.</exception>
+        /// <exception cref="InvalidCastException">Without a period, an operand that does not cast 'safely' to the loop's
+        ///     dtype (NumPy's TypeError text).</exception>
+        /// <exception cref="TypeError">Without a period, a fill value the loop's conversion refuses
+        ///     (<see cref="InterpFillAsDouble"/> / <see cref="InterpFillAsComplex"/>), raised after the operand and length
+        ///     checks.</exception>
+        [NDScoped /* the converted operands and the period's sorted copies are this call's own */]
+        public override NDArray Interp(NDArray x, NDArray xp, NDArray fp, NDArray left = null, NDArray right = null,
             double? period = null)
         {
-            // NumPy's fill values are Python objects: a C# double (or null, None) is a float, a Complex a complex. NumPy
-            // dispatches on fp's dtype alone; the operand checks run inside each loop in NumPy's order (fp, xp, x).
-            Complex? cleft = InterpFillValue(left, nameof(left));
-            Complex? cright = InterpFillValue(right, nameof(right));
+            // NumPy dispatches on fp's dtype alone (np.iscomplexobj(np.asarray(fp))). The fill values stay Python objects
+            // until the chosen loop converts them - after its operand and length checks, left before right - and a period
+            // discards them first (NumPy's wrapper sets them to None), so a fill that cannot convert raises exactly where
+            // NumPy's does, or not at all.
             if (fp.typecode == NPTypeCode.Complex)
-                return InterpComplex(x, xp, fp, cleft, cright, period);
-            // The real loop. Its PyFloat_AsDouble refuses a complex fill value once the operand and length checks have
-            // passed; a period discards the fill values before the loop reads them (NumPy sets them to None).
-            return left is Complex || right is Complex
-                ? InterpReal(x, xp, fp, null, null, period, complexFill: !period.HasValue)
-                : InterpReal(x, xp, fp, left as double?, right as double?, period, complexFill: false);
+                return InterpComplex(x, xp, fp, left, right, period);
+            return InterpReal(x, xp, fp, left, right, period);
         }
 
         /// <summary>
-        ///     Reads one of np.interp's fill values as NumPy's Python object: null (None, the default), a double (a
-        ///     float) or a Complex (a complex).
+        ///     CPython's <c>PyFloat_AsDouble</c> over one of np.interp's fill values: the conversion NumPy's real loop
+        ///     (<c>arr_interp</c>) runs on <c>left</c> / <c>right</c>, and its complex loop on a fill that is no Python
+        ///     complex. The NDArray stands for the Python object the caller passed, told apart by its boundary marks.
         /// </summary>
-        /// <param name="value">The fill value.</param>
-        /// <param name="name">The parameter's name, for the error.</param>
-        /// <returns>The value as a complex number (a double's imaginary part is zero), or null.</returns>
-        /// <exception cref="ArgumentException">Any other type.</exception>
-        private static Complex? InterpFillValue(object value, string name) => value switch
+        /// <param name="value">The fill value (not null: null is None, which the loops answer with fp's end values
+        ///     before they get here).</param>
+        /// <returns>The value as a double.</returns>
+        /// <exception cref="TypeError">A C# string literal (a Python str: <c>must be real number, not str</c>; a
+        ///     <c>numpy.char</c> bytes literal likewise <c>not bytes</c>); a C# Complex (a Python complex: <c>must be real
+        ///     number, not complex</c>); an <c>np.str_</c> / <c>np.bytes_</c> scalar (<c>must be real number, not
+        ///     numpy.str_</c>); an array of one or more dimensions (<c>only 0-dimensional arrays can be converted to Python
+        ///     scalars</c>); an explicit 0-d complex array (<c>float() argument must be a string or a real number, not
+        ///     'complex'</c>).</exception>
+        /// <exception cref="ValueError">An explicit 0-d text array that spells no float (<c>could not convert string to
+        ///     float: 'x'</c>).</exception>
+        /// <remarks>
+        ///     Three kinds of object reach it, and each converts as its Python object does:
+        ///     <list type="bullet">
+        ///     <item>A C# literal (<see cref="NDArray.WasScalarArgument"/>) is a Python int / float / bool / complex / str:
+        ///     the numbers convert, while a complex and a str have no <c>__float__</c> and are refused by type name.</item>
+        ///     <item>Any other 0-d array that is not an explicit array (<see cref="NDArray.IsNumPyScalar"/>: an element read
+        ///     as <c>a[i]</c>, <c>np.float32(2.5)</c>, a C# Half / char / decimal) is a NumPy scalar, whose
+        ///     <c>__float__</c> gives its value: an <c>np.complex128</c> gives its REAL part (NumPy warns ComplexWarning;
+        ///     NumSharp has no warnings channel), and <c>np.str_</c> / <c>np.bytes_</c> have none.</item>
+        ///     <item>An explicit array is an ndarray, whose <c>__float__</c> (<c>array_float</c>, NumSharp's
+        ///     <c>(double)</c> operator) converts only a 0-d array, through its element's <c>float()</c>.</item>
+        ///     </list>
+        ///     Footgun: so <c>np.array("5")</c> PARSES to 5.0 while the C# literal <c>"5"</c> is refused, and
+        ///     <c>np.array(1+2j)</c> is refused where the element <c>c[0]</c> of a complex array gives its real part, exactly
+        ///     as in NumPy.
+        /// </remarks>
+        private static double InterpFillAsDouble(NDArray value)
         {
-            null => null,
-            double d => new Complex(d, 0),
-            Complex c => c,
-            _ => throw new ArgumentException(
-                $"{name} must be a double (a Python float) or a Complex (a Python complex), not {value.GetType().Name}", name),
-        };
+            // A Python str / bytes has no __float__: PyFloat_AsDouble refuses it by its type name, before any parsing.
+            if (value.WasPythonStr)
+                throw new TypeError("must be real number, not str");
+            if (value.WasPythonBytes)
+                throw new TypeError("must be real number, not bytes");
+
+            if (value.IsNumPyScalar)
+            {
+                switch (value.typecode)
+                {
+                    case NPTypeCode.Complex:
+                        // A Python complex has no __float__; np.complex128's __float__ keeps the real part.
+                        if (value.WasPythonLiteral)
+                            throw new TypeError("must be real number, not complex");
+                        return value.GetAtIndex<Complex>(0).Real;
+                    case NPTypeCode.String:
+                        // np.str_ and np.bytes_ subclass str / bytes (no __float__); a StringDType element is a Python
+                        // str itself.
+                        string typeName = Backends.Strings.NDStringUfuncs.IsVString(value) ? "str"
+                            : Backends.Strings.NDStringMethods.IsBytes(value) ? "numpy.bytes_" : "numpy.str_";
+                        throw new TypeError($"must be real number, not {typeName}");
+                }
+
+                // A Python int / float / bool or a NumPy number scalar: its __float__, the value itself (an integer
+                // correctly rounded, a bool 0 / 1, a char NumSharp's uint16 number).
+                return Converts.ChangeType<double>(value.Storage.GetAtIndex(0));
+            }
+
+            // An ndarray: ndarray.__float__ (array_float) - the rank check, then the 0-d element through float().
+            return (double)value;
+        }
+
+        /// <summary>
+        ///     CPython 3.12's <c>PyComplex_RealAsDouble</c> / <c>PyComplex_ImagAsDouble</c> over one of np.interp's fill
+        ///     values: the conversion NumPy's complex loop (<c>arr_interp_complex</c>) runs on <c>left</c> /
+        ///     <c>right</c>.
+        /// </summary>
+        /// <param name="value">The fill value (not null: null is None).</param>
+        /// <returns>A Python complex or an <c>np.complex128</c> scalar as itself; anything else as
+        ///     <see cref="InterpFillAsDouble"/>'s value with a zero imaginary part.</returns>
+        /// <exception cref="TypeError">As <see cref="InterpFillAsDouble"/>, for every fill that is no complex scalar: a
+        ///     0-d complex ARRAY is refused too (<c>float() argument must be a string or a real number, not
+        ///     'complex'</c>).</exception>
+        /// <exception cref="ValueError">As <see cref="InterpFillAsDouble"/>.</exception>
+        /// <remarks>
+        ///     Only <c>PyComplex_Check</c> objects keep their imaginary part: a Python complex (a C# Complex literal) and an
+        ///     <c>np.complex128</c> scalar (a complex subclass). Every other object takes <c>PyFloat_AsDouble</c> for the
+        ///     real part and 0 for the imaginary part, which is why <c>np.array(1+2j)</c> is refused even by the complex
+        ///     loop. That is CPython 3.12 (NumPy 2.4.2's oracle): 3.13 also asks the object's <c>__complex__</c>, which a
+        ///     0-d complex ndarray answers.
+        /// </remarks>
+        private static Complex InterpFillAsComplex(NDArray value)
+        {
+            // PyComplex_Check: a Python complex or an np.complex128 scalar gives both of its parts.
+            if (value.IsNumPyScalar && value.typecode == NPTypeCode.Complex)
+                return value.GetAtIndex<Complex>(0);
+            // Everything else: the real part through PyFloat_AsDouble (its refusals), a zero imaginary part.
+            return new Complex(InterpFillAsDouble(value), 0.0);
+        }
 
         // =====================================================================
         // Real (float64) path
@@ -55,18 +152,20 @@ namespace NumSharp.Backends
         /// <param name="x">The query points (any rank).</param>
         /// <param name="xp">The sample points (must be 1-D).</param>
         /// <param name="fp">The sample values (must be 1-D, real).</param>
-        /// <param name="left">The fill below <c>xp[0]</c>, or null for <c>fp[0]</c>.</param>
-        /// <param name="right">The fill above <c>xp[-1]</c>, or null for <c>fp[-1]</c>.</param>
-        /// <param name="period">The period, or null.</param>
-        /// <param name="complexFill">True when the caller passed a complex fill value without a period: NumPy's
-        ///     <c>PyFloat_AsDouble</c> refuses it once the operand and length checks have passed.</param>
+        /// <param name="left">The fill below <c>xp[0]</c> as the caller's Python object, or null (None) for <c>fp[0]</c>;
+        ///     converted by <see cref="InterpFillAsDouble"/> after the operand and length checks.</param>
+        /// <param name="right">The fill above <c>xp[-1]</c>, as <paramref name="left"/> (null means <c>fp[-1]</c>),
+        ///     converted after it.</param>
+        /// <param name="period">The period, or null: when given, both fill values are discarded unread.</param>
         /// <returns>The float64 result, x's shape.</returns>
         /// <exception cref="ValueError">A rank, emptiness, length or period error (see the public overload).</exception>
         /// <exception cref="InvalidCastException">An operand that does not cast 'safely' to float64.</exception>
-        /// <exception cref="ValueError">A period with a text operand that does not parse as float64.</exception>
-        /// <exception cref="TypeError"><paramref name="complexFill"/> is true.</exception>
+        /// <exception cref="ValueError">A period with a text operand that does not parse as float64; a 0-d text array fill
+        ///     that spells no float.</exception>
+        /// <exception cref="TypeError">A fill value <c>PyFloat_AsDouble</c> refuses (<see cref="InterpFillAsDouble"/>):
+        ///     a Python complex or str, an array of one or more dimensions, a 0-d complex array.</exception>
         private unsafe NDArray InterpReal(NDArray x, NDArray xp, NDArray fp,
-            double? left, double? right, double? period, bool complexFill)
+            NDArray left, NDArray right, double? period)
         {
             if (period.HasValue)
                 (x, xp, fp, left, right) = ApplyPeriodReal(x, xp, fp, period.Value);
@@ -83,9 +182,6 @@ namespace NumSharp.Backends
                 throw new ValueError("array of sample points is empty");
             if (afp.size != lenxp)
                 throw new ValueError("fp and xp are not of the same length.");
-            // PyFloat_AsDouble(left/right) runs after the length checks; a Python complex fill is refused there.
-            if (complexFill)
-                throw new TypeError("must be real number, not complex");
 
             var result = NewArray(NPTypeCode.Double, new Shape(x.Shape.dimensions, copy: false), fillZeros: false);
             long lenx = xc.size;
@@ -95,8 +191,10 @@ namespace NumSharp.Backends
             double* dz = (double*)xc.Address;
             double* dres = (double*)result.Address;
 
-            double lval = left ?? dy[0];
-            double rval = right ?? dy[lenxp - 1];
+            // PyFloat_AsDouble(left), then (right): only now, after the operand and length checks, so a bad length
+            // reports before a bad fill, and left's refusal before right's.
+            double lval = left is null ? dy[0] : InterpFillAsDouble(left);
+            double rval = right is null ? dy[lenxp - 1] : InterpFillAsDouble(right);
 
             if (lenxp == 1)
             {
@@ -162,18 +260,29 @@ namespace NumSharp.Backends
         /// <param name="x">The query points (any rank).</param>
         /// <param name="xp">The sample points (must be 1-D).</param>
         /// <param name="fp">The complex sample values (must be 1-D).</param>
-        /// <param name="left">The fill below <c>xp[0]</c>, or null for <c>fp[0]</c>.</param>
-        /// <param name="right">The fill above <c>xp[-1]</c>, or null for <c>fp[-1]</c>.</param>
-        /// <param name="period">The period, or null.</param>
+        /// <param name="left">The fill below <c>xp[0]</c> as the caller's Python object, or null (None) for <c>fp[0]</c>;
+        ///     converted by <see cref="InterpFillAsComplex"/> after the operand and length checks.</param>
+        /// <param name="right">The fill above <c>xp[-1]</c>, as <paramref name="left"/> (null means <c>fp[-1]</c>),
+        ///     converted after it.</param>
+        /// <param name="period">The period, or null: when given, both fill values are discarded unread.</param>
         /// <returns>The complex128 result, x's shape.</returns>
         /// <exception cref="ValueError">A rank, emptiness, length or period error (see the public overload).</exception>
         /// <exception cref="InvalidCastException">xp or x does not cast 'safely' to float64.</exception>
-        /// <exception cref="ValueError">A period with a text x or xp that does not parse as float64.</exception>
+        /// <exception cref="ValueError">A period with a text x or xp that does not parse as float64; a 0-d text array fill
+        ///     that spells no float.</exception>
+        /// <exception cref="TypeError">A fill value <see cref="InterpFillAsComplex"/> refuses: a Python str, an array of
+        ///     one or more dimensions, a 0-d complex array.</exception>
         private unsafe NDArray InterpComplex(NDArray x, NDArray xp, NDArray fp,
-            Complex? left, Complex? right, double? period)
+            NDArray left, NDArray right, double? period)
         {
             if (period.HasValue)
+            {
                 (x, xp, fp) = ApplyPeriodComplex(x, xp, fp, period.Value);
+                // NumPy's wrapper sets left = right = None under a period, for the complex loop as for the real one: a
+                // fill that would not convert is never read (the old Complex? fills were kept here, unreachable only
+                // because the wrapped x always lies inside the extended samples).
+                left = right = null;
+            }
 
             // NumPy's order: fp, xp, x — each one's rank before its cast.
             var afp = ToContiguous1DComplex(fp);
@@ -195,8 +304,10 @@ namespace NumSharp.Backends
             double* dz = (double*)xc.Address;
             Complex* dres = (Complex*)result.Address;
 
-            Complex lval = left ?? dy[0];
-            Complex rval = right ?? dy[lenxp - 1];
+            // PyComplex_RealAsDouble / ImagAsDouble of left, then of right: after the operand and length checks, as the
+            // real loop's conversions.
+            Complex lval = left is null ? dy[0] : InterpFillAsComplex(left);
+            Complex rval = right is null ? dy[lenxp - 1] : InterpFillAsComplex(right);
 
             if (lenxp == 1)
             {
@@ -392,8 +503,8 @@ namespace NumSharp.Backends
         }
 
         // period preprocessing (numpy _function_base_impl.py): normalize periodic boundaries,
-        // sort by xp, and wrap-extend the endpoints. left/right are discarded (set null).
-        private static (NDArray x, NDArray xp, NDArray fp, double? left, double? right)
+        // sort by xp, and wrap-extend the endpoints. left/right are discarded (set null, NumPy's None).
+        private static (NDArray x, NDArray xp, NDArray fp, NDArray left, NDArray right)
             ApplyPeriodReal(NDArray x, NDArray xp, NDArray fp, double period)
         {
             var (nx, nxp, nfp) = PreparePeriodic(x, xp, fp, period, NPTypeCode.Double);

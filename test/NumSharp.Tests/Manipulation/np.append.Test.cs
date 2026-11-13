@@ -14,11 +14,14 @@ namespace NumSharp.Tests.Manipulation
                 .array_equal(np.array(new long[] { 1, 2, 3, 4, 5, 6 })).Should().BeTrue();
         }
 
+        /// <summary>A C# long literal is NumPy's Python int. NumPy 2.4.2: <c>np.append(int64[1, 2, 3], 4)</c> is int64
+        ///     <c>[1, 2, 3, 4]</c>.</summary>
         [TestMethod]
         public void Scalar_Value()
         {
-            np.append(np.array(new long[] { 1, 2, 3 }), (object)4L)
-                .array_equal(np.array(new long[] { 1, 2, 3, 4 })).Should().BeTrue();
+            var r = np.append(np.array(new long[] { 1, 2, 3 }), 4L);
+            r.dtype.Should().Be<long>();
+            r.array_equal(np.array(new long[] { 1, 2, 3, 4 })).Should().BeTrue();
         }
 
         [TestMethod]
@@ -96,52 +99,55 @@ namespace NumSharp.Tests.Manipulation
                 .array_equal(np.array(new double[] { 1.0, 2.0, 3.0, 4.0 })).Should().BeTrue();
         }
 
+        /// <summary>A uint8 array value keeps uint8 (a C# byte LITERAL is a Python int, whose array is int64:
+        ///     <c>NumPyKeywordParity.Batch12</c>). NumPy 2.4.2: <c>np.append(uint8[1, 2], np.array([3], np.uint8))</c> is
+        ///     uint8 <c>[1, 2, 3]</c>.</summary>
         [TestMethod]
         public void Dtype_Byte()
         {
-            np.append(np.array(new byte[] { 1, 2 }), (object)(byte)3)
-                .array_equal(np.array(new byte[] { 1, 2, 3 })).Should().BeTrue();
+            var r = np.append(np.array(new byte[] { 1, 2 }), np.array(new byte[] { 3 }));
+            r.dtype.Should().Be<byte>();
+            r.array_equal(np.array(new byte[] { 1, 2, 3 })).Should().BeTrue();
         }
 
-        // ---------------- lifetime: an NDArray reaching the object overload ----------------
+        // ---------------- lifetime: the caller's arrays survive the call ----------------
 
         /// <summary>
-        ///     An <see cref="NDArray"/> whose static type is <see cref="object"/> binds the object overload, and
-        ///     <c>np.asanyarray</c> hands it back unchanged. The hand-written overload disposed that conversion
-        ///     unconditionally, which released the CALLER'S array: after <c>np.append(a, (object)v)</c>,
-        ///     <c>v</c> was disposed and its buffer back in the pool (a second call then read recycled memory).
-        ///     The overload is now <c>[NDScoped]</c>, and <c>v</c> was built before its scope opened, so the scope
-        ///     never touches it. NumPy 2.4.2: <c>np.append([1, 2, 3], [4, 5])</c> → <c>[1, 2, 3, 4, 5]</c>.
+        ///     <c>NDArray.append</c> is <c>[NDScoped]</c> and converts a C# literal to NumPy's array of the Python number
+        ///     (<see cref="NDArray"/>'s <c>PythonScalarAsArray</c>); an array argument comes back from that conversion
+        ///     unchanged, built before the scope opened, so the scope never disposes it. (The removed <c>object</c>
+        ///     overload once disposed its conversion unconditionally, which released the CALLER'S array.) NumPy 2.4.2:
+        ///     <c>np.append([1, 2, 3], [4, 5])</c> → <c>[1, 2, 3, 4, 5]</c>.
         /// </summary>
         [TestMethod]
-        public void ObjectOverload_NDArrayValue_SurvivesTheCall()
+        public void NDArrayValue_SurvivesTheCall()
         {
             var arr = np.array(new long[] { 1, 2, 3 });
             var values = np.array(new long[] { 4, 5 });
 
-            var r = np.append(arr, (object)values);
+            var r = np.append(arr, values);
 
-            LeakGuards.StillUsable(values, " — the object overload must not dispose the caller's NDArray");
+            LeakGuards.StillUsable(values, " — np.append must not dispose the caller's NDArray");
             LeakGuards.StillUsable(arr);
             r.array_equal(np.array(new long[] { 1, 2, 3, 4, 5 })).Should().BeTrue();
             // A second call reads the same live array, not a recycled buffer.
-            np.append(arr, (object)values).array_equal(r).Should().BeTrue();
+            np.append(arr, values).array_equal(r).Should().BeTrue();
             values.ToArray<long>().Should().Equal(4L, 5L);
         }
 
         /// <summary>
-        ///     The axis path of the same overload. NumPy 2.4.2:
+        ///     The axis path of the same call. NumPy 2.4.2:
         ///     <c>np.append([[1, 2], [3, 4]], [[5, 6]], axis=0)</c> → <c>[[1, 2], [3, 4], [5, 6]]</c>.
         /// </summary>
         [TestMethod]
-        public void ObjectOverload_NDArrayValue_Axis0_SurvivesTheCall()
+        public void NDArrayValue_Axis0_SurvivesTheCall()
         {
             var arr = np.array(new long[] { 1, 2, 3, 4 }).reshape(2, 2);
             var values = np.array(new long[] { 5, 6 }).reshape(1, 2);
 
-            var r = np.append(arr, (object)values, axis: 0);
+            var r = np.append(arr, values, axis: 0);
 
-            LeakGuards.StillUsable(values, " — the object overload must not dispose the caller's NDArray");
+            LeakGuards.StillUsable(values, " — np.append must not dispose the caller's NDArray");
             r.array_equal(np.array(new long[] { 1, 2, 3, 4, 5, 6 }).reshape(3, 2)).Should().BeTrue();
         }
     }

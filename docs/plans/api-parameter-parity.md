@@ -2059,9 +2059,39 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    The pattern was latent in every result struct (np.unique's, linspace's, meshgrid's, gradient's, the histograms');
    only a deconstruction after a subclass deconstruction shows it. Fixed in `SubclassWeaver.IsNDArray` (an `out`
    parameter is written, never read), pinned by `NumPyKeywordParity.Batch11.Test` and `NDMatrixOperand.Tests`.
+69. **A `subok` that reads the caller's class needs a `[SubclassAware]` computation** (API-parity batch 12). The
+   subclass weaver gives every public `np.*` function with an NDArray parameter a prologue that re-calls it with PLAIN
+   VIEWS of a subclass operand, unless the computation it returns declares otherwise. `np.lib.stride_tricks.as_strided`
+   computed in its own body (its producers: an NDArray constructor and an `NDSubclass` call, so "plain"), so a
+   `numpy.matrix` reached it as a plain view and `subok=True` could never keep the class. Its statements moved to
+   `NDArray.as_strided`, marked `[SubclassAware]`. Any public function whose ANSWER depends on the operand's class must
+   return such a computation (or declare a `[SubclassRule]`); a body inlined in the facade is woven as plain.
+70. **A C# literal's width leaks into a function that ARRAYS its argument** (API-parity batch 12). NumSharp's literal
+   arrays keep their C# width (a C# int is an int32 0-d array marked as NumPy's Python int); the weak-scalar readers
+   (NEP 50) never see the width, but a NumPy body that runs `asanyarray(x)` / `ravel(x)` and then reads the result as an
+   array does: `np.append(int32_array, 5)` was int32 where NumPy's `ravel(5)` is int64. `NDArray.PythonScalarAsArray`
+   gives such a body NumPy's array of the Python number (int64, uint64 past int64, float64, complex128). The audit to
+   run: every np.* body that converts an argument with `asanyarray` / `ravel` / `array` and lets its dtype into the
+   result (not into a weak promotion).
+71. **`np.array(string)` is an unmarked 0-d array** (API-parity batch 12, open: `OpenBugs.ApiParity.cs`). `np.array<T>(T)`
+   marks its 0-d result as an explicit ndarray, the string overloads do not, so `np.array("x")` reads as an `np.str_`
+   scalar: `np.isscalar(np.array("x"))` is True (NumPy: False) and np.interp's `float()` conversion refuses it instead of
+   parsing it. Found while checking np.interp's array fills.
 
 ## 7. State log
 
+- **2026-11-13**: API-parity batch 12 on `journey5` (branch `api-parity/batch-12`; the owner approved all 9 fixes and
+  kept np.histogram's four `bins` forms: "C keep four"). Fixed: np.interp is one signature with `NDArray left / right`,
+  the engine converting them as NumPy's loops do (`PyFloat_AsDouble`, CPython 3.12's `PyComplex_RealAsDouble` /
+  `ImagAsDouble`) after the operand and length checks, and a period discarding them in the complex loop too; np.append
+  is one signature and arrays a C# number in the Python number's dtype (finding 70); np.lib.stride_tricks.as_strided
+  (byte strides; `[Misaligned]` refusals outside the buffer and between items; a `[SubclassAware]` computation, finding
+  69); np.row_stack (vstack's three forms), and np.vstack / np.row_stack over `NDListArray`; the masked array's `@base`,
+  `device`, `to_device`, `getfield`, `setfield`; `new np.NDIndex(params long[])`; NumPy's defaults on
+  `new np.NDIterator(op, ...)`; NumPy's `new NDCharArray(shape, itemsize, unicode, buffer, offset, strides, order)`.
+  Pinned (`OpenBugs.ApiParity.cs`): `np.array(string)` is unmarked (finding 71), and np.concatenate reports a LATER 0-d
+  array with the 0-d text where NumPy reports the rank mismatch. Callers: 6 `(object)` calls in np.append's tests, the
+  oracle's double? / Complex? fills.
 - **2026-11-13**: API-parity batch 11 on `journey5` (branch `api-parity/batch-11`; the owner approved 3 of 4 fixes and
   decided 3 questions). Decisions: the dtype functions stay as they are ("Keep as is"); the polynomial facades are typed
   only; NumPy's flag-dependent returns become result structs. Fixed: np.intersect1d is one signature returning
