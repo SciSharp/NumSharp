@@ -235,13 +235,13 @@ namespace NumSharp.Tests.Matrixlib
         [TestMethod]
         public void AverageReturned_PairsTheMatrixWithAPlainSumOfWeights()
         {
-            var (avg, weights) = np.average_returned(M(), 0);
+            var (avg, weights) = np.average(M(), 0, returned: true);
             Check(avg, true, 1, 3);
             avg.Should().BeOfValues(2.5, 3.5, 4.5);
             Check(weights, false, 1, 3);
             weights.Should().BeOfValues(2.0, 2.0, 2.0);
 
-            var (scalarAvg, scalarWeights) = np.average_returned(M());
+            var (scalarAvg, scalarWeights) = np.average(M(), returned: true);
             scalarAvg.ndim.Should().Be(0);
             scalarWeights.ndim.Should().Be(0);
             ((double)scalarAvg).Should().Be(3.5);
@@ -728,12 +728,12 @@ namespace NumSharp.Tests.Matrixlib
             ((double)all).Should().Be(3.3333333333333335);
 
             // returned=True: NumPy's (2, 1) average and (2, 1) weight sum [[6.0], [15.0]] are matrices.
-            var (avg, sumOfWeights) = np.average_returned(a, 1, weights: M());
+            var (avg, sumOfWeights) = np.average(a, 1, weights: M(), returned: true);
             Check(avg, false, 2);
             avg.Should().BeOfValues(1.3333333333333333, 4.133333333333334);
             Check(sumOfWeights, false, 2);
             sumOfWeights.Should().BeOfValues(6.0, 15.0);
-            var (avgT, sumOfWeightsT) = np.average_returned(a, new[] { 0 }, weights: M());
+            var (avgT, sumOfWeightsT) = np.average(a, new[] { 0 }, weights: M(), returned: true);
             Check(avgT, false, 3);
             Check(sumOfWeightsT, false, 3);
             sumOfWeightsT.Should().BeOfValues(5.0, 7.0, 9.0);

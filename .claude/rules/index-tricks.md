@@ -92,10 +92,16 @@ in the `manip` tier. Sources `Creation/np.{r_,c_}.cs`, `Indexing/np.{ix_,s_}.cs`
   `"negative dimensions are not allowed"` where `ogrid[5:0, 0:3]` gives an empty axis. `MGridResult` converts to
   `NDArray`, deconstructs (`var (x, y) = np.mgrid["0:5", "0:3"];`) and indexes the per-axis grids. Gate:
   `Creation/np.mgrid.Test.cs`.
-- `np.indices(Shape dimensions, dtype)` is one dense signature (the sparse grid is `np.indices_sparse`); an int converts
-  to a one-dimension Shape, so `np.indices(3)` is the `(1, 3)` grid where NumPy raises `'int' object is not iterable`
-  (`[Misaligned]`). `np.ma.indices` adds `_convert2ma`'s `fill_value` / `hardmask` over a nomask result.
-- `np.indices(dimensions, dtype, sparse)` is `NDArray.indices` / `indices_sparse` (`Backends/NDArray.Numeric.cs`),
+- `np.indices(Shape dimensions, DType dtype = null, bool sparse = false)` is NumPy's one signature and returns
+  `np.IndicesResult` (`Indexing/np.indices.cs`): the dense grid (`values`, the members callers read on an array
+  forwarded to it, an implicit conversion to `NDArray`) or, with `sparse`, NumPy's tuple of broadcast-shaped arrays
+  (`values` null; converting it to `NDArray` raises `InvalidCastException`). Either form indexes and deconstructs per
+  axis (`var (i, j) = np.indices((2, 3));`, Python's unpacking of a grid's first axis) and converts to `NDArray[]`; the
+  struct is `IDisposable` and `INDArrayCarrier`, not enumerable. An int converts to a one-dimension Shape, so
+  `np.indices(3)` is the `(1, 3)` grid where NumPy raises `'int' object is not iterable` (`[Misaligned]`).
+  `np.ma.indices` adds `_convert2ma`'s `fill_value` / `hardmask` over a nomask result (no `sparse`: NumPy's own raises
+  `'tuple' object has no attribute 'view'`).
+- `np.indices(dimensions, dtype, sparse)` computes in `NDArray.indices` / `indices_sparse` (`Backends/NDArray.Numeric.cs`),
   NumPy's `res = empty((N,) + dimensions, dtype)` then one `arange(dim, dtype)` per axis assigned with broadcasting: the
   allocation's ValueError comes first (a negative dimension), an arange's TypeError next (a text dtype at any length,
   bool past two elements, even in an empty grid), a text dtype's empty tuple is an empty text array, and an int64-lane

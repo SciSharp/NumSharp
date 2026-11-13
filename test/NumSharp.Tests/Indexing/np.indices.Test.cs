@@ -3,7 +3,7 @@ using System;
 namespace NumSharp.Tests.Indexing
 {
     /// <summary>
-    ///     Tests for <see cref="np.indices"/> / <see cref="np.indices_sparse"/> — focused on the
+    ///     Tests for <see cref="np.indices"/> (dense and <c>sparse: true</c>) — focused on the
     ///     NumSharp-friendly dimension spellings (int[] / long[] / Shape). Expected values are from
     ///     NumPy 2.4.2 (<c>np.indices((2,3))</c> etc.); the differential-fuzz corpus already gates
     ///     the full value matrix, so these pin the API SURFACE: that the house long/Shape shape
@@ -104,8 +104,8 @@ namespace NumSharp.Tests.Indexing
         [TestMethod]
         public void IndicesSparse_LongOverload_EqualsIntPath()
         {
-            var viaInt = np.indices_sparse(new int[] { 2, 3 });
-            var viaLong = np.indices_sparse(new long[] { 2, 3 });
+            var viaInt = np.indices(new int[] { 2, 3 }, sparse: true);
+            var viaLong = np.indices(new long[] { 2, 3 }, sparse: true);
             viaLong.Length.Should().Be(viaInt.Length);
             // axis-d array has shape (1,…,dim,…,1): (2,1) and (1,3).
             string.Join(",", viaLong[0].Shape.Dimensions).Should().Be("2,1");
@@ -117,8 +117,8 @@ namespace NumSharp.Tests.Indexing
         [TestMethod]
         public void IndicesSparse_ShapeTupleOverload()
         {
-            var viaTuple = np.indices_sparse((2, 3));
-            var viaInt = np.indices_sparse(new int[] { 2, 3 });
+            var viaTuple = np.indices((2, 3), sparse: true);
+            var viaInt = np.indices(new int[] { 2, 3 }, sparse: true);
             viaTuple.Length.Should().Be(2);
             np.array_equal(viaTuple[0], viaInt[0]).Should().BeTrue();
             np.array_equal(viaTuple[1], viaInt[1]).Should().BeTrue();
@@ -127,7 +127,7 @@ namespace NumSharp.Tests.Indexing
         [TestMethod]
         public void IndicesSparse_EmptyDimensions_ReturnsEmptyTuple()
         {
-            np.indices_sparse(new long[0]).Should().BeEmpty();
+            np.indices(new long[0], sparse: true).ToArray().Should().BeEmpty();
         }
 
         // ─────────────────────────────────────────────────────────── downstream consumers
@@ -186,8 +186,9 @@ namespace NumSharp.Tests.Indexing
         [TestMethod]
         public void IndicesSparse_ForeachAndLinq()
         {
-            // The sparse result is a plain NDArray[] — foreach- and LINQ-able.
-            var sp = np.indices_sparse((2, 3));
+            // The sparse result converts to a plain NDArray[] — foreach- and LINQ-able (the result struct itself
+            // is not enumerable).
+            NDArray[] sp = np.indices((2, 3), sparse: true);
             System.Linq.Enumerable.Select(sp, a => string.Join("x", a.Shape.Dimensions))
                 .Should().Equal("2x1", "1x3");
 

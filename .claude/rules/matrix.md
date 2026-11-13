@@ -28,7 +28,10 @@ to `NumSharp.NDMatrix` (all members but `ctypes` / `dump` / `dumps`, which ndarr
   function calls (`Backends/Subclass/NDSubclassAttributes.cs`), and NumSharp.Build weaves it into the function
   (`tools/NumSharp.Build/SubclassWeaver.cs`): a one-branch prologue sends a call with a subclass operand to a generated
   `<name>subclass` path, which calls the function again on PLAIN VIEWS of the operands inside an `NDScope`, gives an
-  operand that comes back to the caller as the caller's own object, and applies the mechanism (`NDSubclass`).
+  operand that comes back to the caller as the caller's own object, and applies the mechanism (`NDSubclass`). An
+  operand is an `NDArray` / `NDArray[]` parameter by value, `in` or `ref` - never an `out NDArray`, which is written and
+  not read: a result struct's `Deconstruct` is not woven (woven, it read the caller's variables, which a reused
+  deconstruction temporary can leave holding the previous statement's matrix, and wrote its own alias locals).
   - Mechanisms: a ufunc-shaped `TensorEngine` member (only `NDArray` inputs, then `dtype`, `out`, `where`) or `[Ufunc]`
     is `__array_wrap__` over the inputs by priority; `[ArrayWrap]` the same for a function that ends in a wrap
     (`np.dot`, `np.linalg.inv`: a 1-d result becomes a 1 × N row, more than two long axes raise

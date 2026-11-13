@@ -125,11 +125,11 @@ namespace NumSharp.Tests.Documentation
             g[0].ToArray<long>().Should().Equal(0L, 0, 0, 1, 1, 1, 2, 2, 2);
             g[1].ToArray<long>().Should().Equal(0L, 1, 2, 0, 1, 2, 0, 1, 2);
 
-            // The sparse form: one broadcast-shaped array per dimension, shapes (3,1) and (1,3).
-            var sp = np.indices_sparse((3, 3));
-            sp.Length.Should().Be(2);
-            sp[0].shape.Should().Equal(new long[] { 3, 1 });
-            sp[1].shape.Should().Equal(new long[] { 1, 3 });
+            // sparse: true, deconstructed as the page shows: one broadcast-shaped array per dimension, (3,1) and (1,3).
+            var (rows, cols) = np.indices((3, 3), sparse: true);
+            rows.shape.Should().Equal(new long[] { 3, 1 });
+            cols.shape.Should().Equal(new long[] { 1, 3 });
+            np.indices((3, 3), sparse: true).Length.Should().Be(2);
         }
 
         // ── 3. Replicating, joining, mutating ──────────────────────────────────────────────────────

@@ -29,8 +29,9 @@ namespace NumSharp.Tests.Lifetime
 
         /// <summary>
         ///     Releases whatever <see cref="Run"/> handed back. Ops return an NDArray, an array of
-        ///     them, or a plain scalar; only the first two own memory.
+        ///     them, a result struct (boxed here), or a plain scalar; all but the scalar own memory.
         /// </summary>
+        /// <param name="result">The op's result, boxed.</param>
         public static void DisposeResult(object result)
         {
             switch (result)
@@ -54,6 +55,12 @@ namespace NumSharp.Tests.Lifetime
                     foreach (var n in (NDArray[])ur)
                         if (n is not null)
                             n.Dispose();
+                    break;
+                case IDisposable carrier:
+                    // The disposable result structs (np.AverageResult, np.Intersect1dResult, np.IndicesResult since
+                    // API-parity batch 11): boxed they match neither array case, and their Dispose releases every
+                    // output they hold - without it the values buffer strands on the finalizer queue.
+                    carrier.Dispose();
                     break;
             }
         }

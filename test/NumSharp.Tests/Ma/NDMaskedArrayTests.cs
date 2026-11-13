@@ -300,7 +300,9 @@ namespace NumSharp.Tests.Ma
         [TestMethod]
         public void Unique_UnmaskedValues_PlusOneMasked()
         {
-            var u = np.ma.unique(np.ma.array(np.array(new double[] { 1, 2, 2, 3 }), mask: np.array(new bool[] { false, false, true, false })));
+            // ma.unique returns MaskedArrayModule.UniqueResult (API-parity batch 11): an object-typed np.ma function receives
+            // the struct boxed - it does not see the implicit conversion - so the masked values go in as NDMaskedArray.
+            NDMaskedArray u = np.ma.unique(np.ma.array(np.array(new double[] { 1, 2, 2, 3 }), mask: np.array(new bool[] { false, false, true, false })));
             // unmasked values {1,2,3} (idx2's 2 is masked) → [1,2,3] + 1 masked slot.
             Assert.IsTrue(np.ma.getmaskarray(u).ToArray<bool>().SequenceEqual(new[] { false, false, false, true }));
             var vals = np.ma.getdata(u).astype(np.float64).ToArray<double>();
@@ -675,7 +677,7 @@ namespace NumSharp.Tests.Ma
             Assert.IsTrue(np.ma.argsort(s, endwith: true).astype(np.int64).ToArray<long>().SequenceEqual(new long[] { 2, 0, 1 }));
         }
 
-        /// <summary>average keepdims keeps the reduced axis; average_returned yields (avg, sum-of-weights) —
+        /// <summary>average keepdims keeps the reduced axis; average(returned: true) yields (avg, sum-of-weights) —
         /// the sum-of-weights being the unmasked count (uniform) or Σweights (weighted).</summary>
         [TestMethod]
         public void Average_Keepdims_And_Returned()
@@ -686,12 +688,12 @@ namespace NumSharp.Tests.Ma
             Assert.AreEqual(1.0, av.data.GetDouble(0)); // row0: only col0 unmasked
             Assert.AreEqual(3.5, av.data.GetDouble(1));
 
-            var (avg, sws) = np.ma.average_returned(Ma(new double[] { 1, 2, 3 }, new[] { false, false, true }));
+            var (avg, sws) = np.ma.average(Ma(new double[] { 1, 2, 3 }, new[] { false, false, true }), returned: true);
             Assert.AreEqual(1.5, avg.data.GetDouble(0));
             Assert.AreEqual(2.0, sws.GetDouble(0)); // 2 unmasked
 
-            var (avgW, swsW) = np.ma.average_returned(Ma(new double[] { 1, 2, 3 }, new[] { false, false, true }),
-                                                      weights: np.array(new double[] { 1, 2, 3 }));
+            var (avgW, swsW) = np.ma.average(Ma(new double[] { 1, 2, 3 }, new[] { false, false, true }),
+                                             weights: np.array(new double[] { 1, 2, 3 }), returned: true);
             Assert.AreEqual(5.0 / 3.0, avgW.data.GetDouble(0), 1e-12);
             Assert.AreEqual(3.0, swsW.GetDouble(0)); // 1 + 2 (masked weight dropped)
         }

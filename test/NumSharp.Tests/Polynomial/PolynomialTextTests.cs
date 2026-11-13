@@ -117,8 +117,8 @@ namespace NumSharp.Tests.Polynomial
             new Action(() => np.polynomial.laguerre.lagweight(T3)).Should().Throw<TypeError>().WithMessage(NoLoop("negative", "StringDType"));
             // polyvalfromroots: x - r with a weak Python int x.
             new Action(() => pp.polyvalfromroots(0L, T3)).Should().Throw<TypeError>().WithMessage(NoLoop("subtract", "_PyLongDType", "StringDType"));
-            // trimcoef: tol < 0 is the less ufunc on text.
-            new Action(() => np.polynomial.polyutils.trimcoef(F3, T0)).Should().Throw<TypeError>().WithMessage(NoLoop("less", "StringDType", "_PyLongDType"));
+            // (trimcoef's text tol - NumPy's less ufunc on text - has no C# call since API-parity batch 11 typed tol as a
+            // double.)
         }
 
         [TestMethod]

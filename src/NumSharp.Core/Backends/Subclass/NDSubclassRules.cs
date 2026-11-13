@@ -488,40 +488,42 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>np.average(a, axis, weights)</c> of a matrix: the matrix METHOD's reduction - <c>keepdims=True</c>, then
-        ///     <c>_collapse(axis)</c>, which is the scalar without an axis and the kept axes as they are otherwise. The
-        ///     computation reduced a matrix operand's axes with keepdims (<c>NDArray.average</c>), so a given axis needs only the
-        ///     class; any other operand keeps the plain answer.
+        ///     <c>np.average(a, axis, weights, returned)</c> of a matrix: the matrix METHOD's reduction - <c>keepdims=True</c>,
+        ///     then <c>_collapse(axis)</c>, which is the scalar without an axis and the kept axes as they are otherwise - for
+        ///     the average; the sum of weights stays plain (NumPy's <c>np.broadcast_to(scl, avg_as_array.shape).copy()</c>).
+        ///     The computation reduced a matrix operand's axes with keepdims (<c>NDArray.average</c>), so a given axis needs
+        ///     only the class; any other operand keeps the plain answer.
         /// </summary>
-        /// <param name="result">The average computed on the plain view.</param>
+        /// <param name="result">The average (and the sum of weights) computed on the plain view.</param>
         /// <param name="a">The caller's operand.</param>
         /// <param name="axis">The caller's axis, boxed: <c>null</c> for None, or its <see cref="NDAxis"/> (an int or a
         ///     tuple: either keeps the reduced axes, so only None collapses to the scalar).</param>
-        /// <returns>The scalar or the matrix view of a matrix operand's average, otherwise <paramref name="result"/>.</returns>
+        /// <returns>The result with a matrix operand's average as the scalar or the matrix view, otherwise
+        ///     <paramref name="result"/>.</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
-        internal static NDArray Average(NDArray result, NDArray a, object axis)
+        internal static np.AverageResult Average(np.AverageResult result, NDArray a, object axis)
         {
             if (NDSubclass.KindOf(a) != NDSubclassKind.Matrix)
                 return result;
-            // _collapse(None): the computation reduced every axis to the scalar.
-            if (axis is null)
-                return NDSubclass.Collapse(result, null, a, null, subtypeOthers: false, NewSubtypeZeroDim.Array);
-            return NDSubclass.NewSubtype(result, null, a, keepRank: false, NewSubtypeZeroDim.Array);
+            return new np.AverageResult(AverageOfMatrix(result.values, a, axis), result.sum_of_weights);
         }
 
         /// <summary>
-        ///     <c>np.average(..., returned=True)</c>: the average as <see cref="Average"/>, and NumPy's sum of weights, which
-        ///     ends in the average's shape (<c>np.broadcast_to(scl, avg_as_array.shape).copy()</c>, a plain array) - the
-        ///     computation reduced it with the same keepdims as the average, so it already has that shape.
+        ///     The class of a matrix operand's average (<see cref="Average"/>'s first slot): <c>_collapse(None)</c> is the
+        ///     scalar of the every-axis reduction, any given axis keeps the reduced axes as a matrix.
         /// </summary>
-        /// <param name="result">The average and the sum of weights computed on the plain views.</param>
-        /// <param name="a">The caller's operand.</param>
-        /// <param name="axis">The caller's axis, boxed: <c>null</c> for None, or its <see cref="NDAxis"/> (an int or a
-        ///     tuple: either keeps the reduced axes, so only None collapses to the scalar).</param>
-        /// <returns>The pair, the average shaped as <see cref="Average"/>.</returns>
+        /// <param name="average">The plain average.</param>
+        /// <param name="a">The caller's matrix operand.</param>
+        /// <param name="axis">The caller's axis, boxed (null for None).</param>
+        /// <returns>The scalar or the matrix view.</returns>
         /// <exception cref="ValueError">A matrix result with more than two axes longer than 1.</exception>
-        internal static (NDArray, NDArray) AverageReturned((NDArray, NDArray) result, NDArray a, object axis)
-            => (Average(result.Item1, a, axis), result.Item2);
+        private static NDArray AverageOfMatrix(NDArray average, NDArray a, object axis)
+        {
+            // _collapse(None): the computation reduced every axis to the scalar.
+            if (axis is null)
+                return NDSubclass.Collapse(average, null, a, null, subtypeOthers: false, NewSubtypeZeroDim.Array);
+            return NDSubclass.NewSubtype(average, null, a, keepRank: false, NewSubtypeZeroDim.Array);
+        }
 
         #endregion
 

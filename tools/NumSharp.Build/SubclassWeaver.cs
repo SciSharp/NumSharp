@@ -476,15 +476,23 @@ internal static class SubclassWeaver
         => m.Parameters.Where(p => IsNDArray(p) || p.ParameterType.FullName == NDArrayArrayFullName).ToList();
 
     /// <summary>
-    ///     Whether a parameter carries one NDArray: by value, or by reference (<c>in NDArray x1</c>). A by-reference
-    ///     operand is read through its address everywhere the weaver loads it, and its plain alias is passed back by the
-    ///     address of a local, so the re-call keeps the overload the caller chose.
+    ///     Whether a parameter carries one NDArray INTO the function: by value, or by reference (<c>in NDArray x1</c>,
+    ///     <c>ref NDArray</c>). A by-reference operand is read through its address everywhere the weaver loads it, and its
+    ///     plain alias is passed back by the address of a local, so the re-call keeps the overload the caller chose.
     /// </summary>
     /// <param name="p">The parameter.</param>
-    /// <returns>True for <c>NDArray</c> and <c>NDArray&amp;</c>; false for anything else, NDArray[] included.</returns>
+    /// <returns>True for <c>NDArray</c> and an <c>in</c> / <c>ref</c> <c>NDArray&amp;</c>; false for an <c>out NDArray</c>
+    ///     and anything else, NDArray[] included.</returns>
+    /// <remarks>
+    ///     An <c>out</c> parameter is the function's OUTPUT: it is written, never read, so it is no operand. Testing it would
+    ///     read whatever the caller's variable held before the call - a result struct's <c>Deconstruct(out NDArray values,
+    ///     ...)</c> is the case: the compiler reuses a deconstruction's temporaries, so one can still hold the previous
+    ///     statement's matrix - take the subclass path, write the outputs into that path's alias locals, and leave the
+    ///     caller's variables holding the stale arrays. Without it, a <c>Deconstruct</c> has no operand and is not woven.
+    /// </remarks>
     private static bool IsNDArray(ParameterDefinition p)
         => p.ParameterType.FullName == NDArrayFullName ||
-           p.ParameterType is ByReferenceType br && br.ElementType.FullName == NDArrayFullName;
+           p.ParameterType is ByReferenceType br && br.ElementType.FullName == NDArrayFullName && !p.IsOut;
 
     /// <summary>
     ///     The full name of the value a parameter carries: its type's, or the element type's for a by-reference parameter.

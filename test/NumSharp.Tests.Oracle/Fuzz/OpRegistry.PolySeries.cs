@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Text.Json;
 using NumSharp;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Tests.Fuzz
 {
@@ -428,6 +429,40 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
+        ///     Replays a <c>{p}trim</c> / <c>trimcoef</c> case the way C# source can spell it. The facade's one signature,
+        ///     <c>(c, double tol = 0)</c> (API-parity batch 11, the owner's decision 2: typed parameters only), takes no tol
+        ///     (NumPy's default 0) or a Python float, and a Python int that a double holds exactly (NumPy compares a weak int
+        ///     and a weak float tolerance alike). Every other tolerance - None, a complex, a str, a huge Python int, a NumPy
+        ///     scalar or an array (strong under NEP 50) - has no C# spelling since then, so the case replays through the
+        ///     computation the removed object facades called (<see cref="NDPolySeries.TrimCoef"/> over
+        ///     <see cref="PolyUtilsModule.Tolerance(object)"/>: NumPy's <c>tol &lt; 0</c> and comparison semantics over any
+        ///     value, the machinery the series class's <c>trim</c> still reaches). The corpus stays whole.
+        /// </summary>
+        /// <param name="a">The case's argument decoder (<c>c</c> decoded first, then the optional <c>tol</c>).</param>
+        /// <param name="viaDouble">The facade with a tolerance.</param>
+        /// <param name="viaDefault">The facade at NumPy's default tolerance.</param>
+        /// <returns>The facade's or the computation's result.</returns>
+        private static NDArray PolyTrim(PolyArgs a, Func<object, double, NDArray> viaDouble, Func<object, NDArray> viaDefault)
+        {
+            object c = a.Get("c");
+            if (!a.Has("tol"))
+                return viaDefault(c);
+            object tol = a.Get("tol");
+            // 2**53 bounds the Python ints a double holds exactly: past it the facade would compare a rounded tolerance.
+            const long ExactInDouble = 1L << 53;
+            if (tol is double d)
+                return viaDouble(c, d);
+            if (tol is long l && l >= -ExactInDouble && l <= ExactInDouble)
+                return viaDouble(c, l);
+            // The removed object facade was unscoped, but its computation allocates (the coefficient copy, the comparison):
+            // the scope reclaims those intermediates for the scope-audit sweep that replays through this registry.
+            using var scope = NDScope.Open();
+            var result = NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(tol));
+            scope.Returns(result);
+            return result;
+        }
+
+        /// <summary>
         ///     Dispatches an additive-family / polyutils key (U1), a calculus key (U4), a Vandermonde key (U5), a
         ///     companion / roots key (U7) or a weight key (U8, <c>{p}weight</c>) to the facade member NumPy's name refers to (the SAME member: the module part
         ///     picks the submodule, so <c>laguerre.lagline</c> is exercised on <c>np.polynomial.laguerre</c>). The series
@@ -458,7 +493,7 @@ namespace NumSharp.Tests.Fuzz
                         object r = seq is object[] list ? u.trimseq(list) : u.trimseq(seq);
                         return r as NDArray ?? global::NumSharp.Backends.UnmanagedStorage.FromSequence(r);
                     }
-                    case "trimcoef": return a.Has("tol") ? u.trimcoef(a.Get("c"), a.Get("tol")) : u.trimcoef(a.Get("c"));
+                    case "trimcoef": return PolyTrim(a, (c, tol) => u.trimcoef(c, tol), c => u.trimcoef(c));
                     case "getdomain": return u.getdomain(a.Get("x"));
                     case "mapdomain":
                     {
@@ -506,7 +541,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "add" => m.polyadd(a.Get("c1"), a.Get("c2")),
                         "sub" => m.polysub(a.Get("c1"), a.Get("c2")),
-                        "trim" => a.Has("tol") ? m.polytrim(a.Get("c"), a.Get("tol")) : m.polytrim(a.Get("c")),
+                        "trim" => PolyTrim(a, (c, tol) => m.polytrim(c, tol), c => m.polytrim(c)),
                         "line" => m.polyline(a.Get("off"), a.Get("scl")),
                         "domain" => ConstantFacet(() => m.polydomain, a),
                         "zero" => ConstantFacet(() => m.polyzero, a),
@@ -514,7 +549,7 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.polyx, a),
                         "der" => a.CalcFacet(m.polyder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.polyint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
-                        "vander" => a.CalcFacet(PolyVander1(a, m.polyvander, m.polyvander)),
+                        "vander" => a.CalcFacet(PolyVander1(a, PolyBasis.Power, m.polyvander)),
                         "vander2d" => a.CalcFacet(m.polyvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.polyvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.polycompanion(a.Get("c"))),
@@ -529,7 +564,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "add" => m.chebadd(a.Get("c1"), a.Get("c2")),
                         "sub" => m.chebsub(a.Get("c1"), a.Get("c2")),
-                        "trim" => a.Has("tol") ? m.chebtrim(a.Get("c"), a.Get("tol")) : m.chebtrim(a.Get("c")),
+                        "trim" => PolyTrim(a, (c, tol) => m.chebtrim(c, tol), c => m.chebtrim(c)),
                         "line" => m.chebline(a.Get("off"), a.Get("scl")),
                         "domain" => ConstantFacet(() => m.chebdomain, a),
                         "zero" => ConstantFacet(() => m.chebzero, a),
@@ -537,7 +572,7 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.chebx, a),
                         "der" => a.CalcFacet(m.chebder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.chebint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
-                        "vander" => a.CalcFacet(PolyVander1(a, m.chebvander, m.chebvander)),
+                        "vander" => a.CalcFacet(PolyVander1(a, PolyBasis.Chebyshev, m.chebvander)),
                         "vander2d" => a.CalcFacet(m.chebvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.chebvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.chebcompanion(a.Get("c"))),
@@ -559,7 +594,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "add" => m.legadd(a.Get("c1"), a.Get("c2")),
                         "sub" => m.legsub(a.Get("c1"), a.Get("c2")),
-                        "trim" => a.Has("tol") ? m.legtrim(a.Get("c"), a.Get("tol")) : m.legtrim(a.Get("c")),
+                        "trim" => PolyTrim(a, (c, tol) => m.legtrim(c, tol), c => m.legtrim(c)),
                         "line" => m.legline(a.Get("off"), a.Get("scl")),
                         "domain" => ConstantFacet(() => m.legdomain, a),
                         "zero" => ConstantFacet(() => m.legzero, a),
@@ -567,7 +602,7 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.legx, a),
                         "der" => a.CalcFacet(m.legder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.legint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
-                        "vander" => a.CalcFacet(PolyVander1(a, m.legvander, m.legvander)),
+                        "vander" => a.CalcFacet(PolyVander1(a, PolyBasis.Legendre, m.legvander)),
                         "vander2d" => a.CalcFacet(m.legvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.legvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.legcompanion(a.Get("c"))),
@@ -583,7 +618,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "add" => m.lagadd(a.Get("c1"), a.Get("c2")),
                         "sub" => m.lagsub(a.Get("c1"), a.Get("c2")),
-                        "trim" => a.Has("tol") ? m.lagtrim(a.Get("c"), a.Get("tol")) : m.lagtrim(a.Get("c")),
+                        "trim" => PolyTrim(a, (c, tol) => m.lagtrim(c, tol), c => m.lagtrim(c)),
                         "line" => m.lagline(a.Get("off"), a.Get("scl")),
                         "domain" => ConstantFacet(() => m.lagdomain, a),
                         "zero" => ConstantFacet(() => m.lagzero, a),
@@ -591,7 +626,7 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.lagx, a),
                         "der" => a.CalcFacet(m.lagder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.lagint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
-                        "vander" => a.CalcFacet(PolyVander1(a, m.lagvander, m.lagvander)),
+                        "vander" => a.CalcFacet(PolyVander1(a, PolyBasis.Laguerre, m.lagvander)),
                         "vander2d" => a.CalcFacet(m.lagvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.lagvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.lagcompanion(a.Get("c"))),
@@ -607,7 +642,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "add" => m.hermadd(a.Get("c1"), a.Get("c2")),
                         "sub" => m.hermsub(a.Get("c1"), a.Get("c2")),
-                        "trim" => a.Has("tol") ? m.hermtrim(a.Get("c"), a.Get("tol")) : m.hermtrim(a.Get("c")),
+                        "trim" => PolyTrim(a, (c, tol) => m.hermtrim(c, tol), c => m.hermtrim(c)),
                         "line" => m.hermline(a.Get("off"), a.Get("scl")),
                         "domain" => ConstantFacet(() => m.hermdomain, a),
                         "zero" => ConstantFacet(() => m.hermzero, a),
@@ -615,7 +650,7 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.hermx, a),
                         "der" => a.CalcFacet(m.hermder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.hermint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
-                        "vander" => a.CalcFacet(PolyVander1(a, m.hermvander, m.hermvander)),
+                        "vander" => a.CalcFacet(PolyVander1(a, PolyBasis.Hermite, m.hermvander)),
                         "vander2d" => a.CalcFacet(m.hermvander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.hermvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.hermcompanion(a.Get("c"))),
@@ -631,7 +666,7 @@ namespace NumSharp.Tests.Fuzz
                     {
                         "add" => m.hermeadd(a.Get("c1"), a.Get("c2")),
                         "sub" => m.hermesub(a.Get("c1"), a.Get("c2")),
-                        "trim" => a.Has("tol") ? m.hermetrim(a.Get("c"), a.Get("tol")) : m.hermetrim(a.Get("c")),
+                        "trim" => PolyTrim(a, (c, tol) => m.hermetrim(c, tol), c => m.hermetrim(c)),
                         "line" => m.hermeline(a.Get("off"), a.Get("scl")),
                         "domain" => ConstantFacet(() => m.hermedomain, a),
                         "zero" => ConstantFacet(() => m.hermezero, a),
@@ -639,7 +674,7 @@ namespace NumSharp.Tests.Fuzz
                         "x" => ConstantFacet(() => m.hermex, a),
                         "der" => a.CalcFacet(m.hermeder(a.Get("c"), a.Int("m", 1), a.Opt("scl"), a.Int("axis", 0))),
                         "int" => a.CalcFacet(m.hermeint(a.Get("c"), a.Int("m", 1), a.Opt("k"), a.Opt("lbnd"), a.Opt("scl"), a.Int("axis", 0))),
-                        "vander" => a.CalcFacet(PolyVander1(a, m.hermevander, m.hermevander)),
+                        "vander" => a.CalcFacet(PolyVander1(a, PolyBasis.HermiteE, m.hermevander)),
                         "vander2d" => a.CalcFacet(m.hermevander2d(a.Get("x"), a.Get("y"), a.Get("deg"))),
                         "vander3d" => a.CalcFacet(m.hermevander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.hermecompanion(a.Get("c"))),

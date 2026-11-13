@@ -326,14 +326,16 @@ namespace NumSharp.Tests.Backends.Strings
         {
             // ma.unique(ma.array(['c', 'a', 'b'], mask=True)) -> data ['c'], mask [True], fill 'N' (the sort materialized
             // 'N/A', the result's dtype <U1 converts it).
-            var r = np.ma.unique(np.ma.array(np.array(new[] { "c", "a", "b" }), mask: true));
+            // ma.unique's MaskedArrayModule.UniqueResult goes to the object-typed np.ma functions as its NDMaskedArray (a
+            // boxed struct is no masked array to them).
+            NDMaskedArray r = np.ma.unique(np.ma.array(np.array(new[] { "c", "a", "b" }), mask: true));
             NDArray.AsStringArray(np.ma.getdata(r)).Should().Equal("c");
             np.ma.getmaskarray(r).ToArray<bool>().Should().Equal(true);
             Text(r.fill_value).Should().Be("N");
             // Masked and unmasked text: the masked slot sorts with the fill 'N/A' cut to the width:
             // ma.unique(ma.array(['ab', 'c', 'de'], mask=[1, 0, 0])) -> data [--, 'c', 'de'], mask [True, False, False],
             // fill_value 'N/' (probed against NumPy 2.4.2).
-            var mixed = np.ma.unique(MU());
+            NDMaskedArray mixed = np.ma.unique(MU());
             NDArray.AsStringArray(np.ma.getdata(mixed))[1..].Should().Equal("c", "de");
             np.ma.getmaskarray(mixed).ToArray<bool>().Should().Equal(true, false, false);
             Text(mixed.fill_value).Should().Be("N/");

@@ -95,9 +95,9 @@ namespace NumSharp.Tests.Ma
             masked.Should().Throw<TypeError>().WithMessage("Unsuitable type StringDType() for calculating minimum.");
             var three = np.ma.unique(np.ma.array(np.array(new[] { "de", "c", "ab", "c" }, T)));
             three.shape.Should().Equal(3L);
-            three._data.GetAtIndex(0).Should().Be("ab");
-            three._data.GetAtIndex(1).Should().Be("c");
-            three._data.GetAtIndex(2).Should().Be("de");
+            three.values._data.GetAtIndex(0).Should().Be("ab");
+            three.values._data.GetAtIndex(1).Should().Be("c");
+            three.values._data.GetAtIndex(2).Should().Be("de");
             three.dtype.Should().Be(T);
             ReferenceEquals(three.mask, np.ma.nomask).Should().BeTrue();
 
@@ -107,7 +107,7 @@ namespace NumSharp.Tests.Ma
             ReferenceEquals(empty.mask, np.ma.nomask).Should().BeTrue();
             var one = np.ma.unique(np.ma.array(np.array("ab", T)));
             one.shape.Should().Equal(1L);
-            one._data.GetAtIndex(0).Should().Be("ab");
+            one.values._data.GetAtIndex(0).Should().Be("ab");
         }
 
         /// <summary>

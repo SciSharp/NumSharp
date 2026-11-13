@@ -124,7 +124,7 @@ namespace NumSharp.Tests.Fuzz
                 case "any": return np.ma.any(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
                 case "anom": return np.ma.anom(ops[0], ParseAxis(p), ParseMaDtype(p));
                 case "median": return np.ma.median(ops[0], ParseAxis(p), keepdims: ParseKeepdims(p));
-                case "average": return np.ma.average(ops[0], ParseAxis(p), null, ParseKeepdims(p));
+                case "average": return (NDMaskedArray)np.ma.average(ops[0], ParseAxis(p), null, keepdims: ParseKeepdims(p));
                 case "count": return np.ma.count(ops[0], ParseAxis(p), ParseKeepdims(p));
                 case "count_masked": return np.ma.count_masked(ops[0], ParseAxis(p));
                 case "argmin": return np.ma.argmin(ops[0], ParseAxis(p), null);
@@ -235,7 +235,7 @@ namespace NumSharp.Tests.Fuzz
                                                      endwith: p.TryGetValue("endwith", out var aew) ? aew.GetBoolean() : true);
                 // The arraysetops (ma_sortsetops.jsonl, ma_setops.jsonl): `plain` / `hard` params say which operands NumPy
                 // received as a plain ndarray or hardened (SetOpOperand), the rest are NumPy's keyword arguments.
-                case "unique": return np.ma.unique(SetOpOperand(p, ops, 0));
+                case "unique": return (NDMaskedArray)np.ma.unique(SetOpOperand(p, ops, 0));
                 case "intersect1d": return np.ma.intersect1d(SetOpOperand(p, ops, 0), SetOpOperand(p, ops, 1), Flag(p, "assume_unique"));
                 case "union1d": return np.ma.union1d(SetOpOperand(p, ops, 0), SetOpOperand(p, ops, 1));
                 case "setxor1d": return np.ma.setxor1d(SetOpOperand(p, ops, 0), SetOpOperand(p, ops, 1), Flag(p, "assume_unique"));

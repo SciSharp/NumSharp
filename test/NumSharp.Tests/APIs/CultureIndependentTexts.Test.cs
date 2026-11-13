@@ -115,15 +115,18 @@ namespace NumSharp.Tests.APIs
         }
 
         /// <summary>
-        ///     A float in an error text keeps a decimal point under a decimal-comma culture: polypow's power beyond int64
-        ///     (a NumSharp text: NumPy would run out of memory) prints <c>1.5E+19</c>, which read <c>1,5E+19</c> under de-DE.
+        ///     A float in an error text keeps a decimal point under a decimal-comma culture: the power-series guard for a
+        ///     power beyond int64 (a NumSharp text: NumPy would run out of memory) prints <c>1.5E+19</c>, which read
+        ///     <c>1,5E+19</c> under de-DE. Since API-parity batch 11 the public <c>{p}pow</c> takes NumPy's integer power
+        ///     only, so the float-power guard is reached through the computation it lives in.
         /// </summary>
         /// <exception cref="AssertFailedException">The text changed with the culture.</exception>
         [TestMethod]
         public void ErrorTexts_FormatFloatsInvariantly_UnderEveryCulture()
         {
             UnderEachCulture(culture =>
-                new Action(() => np.polynomial.polynomial.polypow(new[] { 1.0 }, 1.5e19).Dispose()).Should().Throw<OverflowException>()
+                new Action(() => NumSharp.NDPolyAlgebra.Pow(NumSharp.Backends.Kernels.PolyBasis.Power, new[] { 1.0 }, 1.5e19, null).Dispose())
+                    .Should().Throw<OverflowException>()
                     .WithMessage("power 1.5E+19 is beyond int64: NumPy would run out of memory computing it", culture));
         }
 

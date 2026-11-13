@@ -69,7 +69,7 @@ public static class Calls
             ("np.nanmin(a, (0, 1))", "NDAxis?"), ("np.median(a, 1)", "int"), ("np.nanmedian(a, null)", "int[]"),
             ("np.percentile(a, q, 1)", "int"), ("np.nanpercentile(a, q, (0, 2))", "NDAxis?"),
             ("np.quantile(a, 0.5, new[] { 0, 2 })", "int[]"), ("np.nanquantile(a, 0.5, null)", "int[]"),
-            ("np.average(a, 1)", "int"), ("np.average_returned(a, (0, 2))", "NDAxis?"),
+            ("np.average(a, 1)", "int"), ("np.average(a, (0, 2), returned: true)", "NDAxis?"),
             ("np.all(a, 1)", "int"), ("np.any(a, null)", "int[]"), ("np.count_nonzero(a, 1)", "int"),
             ("np.count_nonzero(a, (0, 2))", "NDAxis?"),
             // Manipulation.

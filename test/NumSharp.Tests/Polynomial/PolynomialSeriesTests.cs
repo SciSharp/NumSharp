@@ -318,23 +318,20 @@ namespace NumSharp.Tests.Polynomial
         [TestMethod]
         public void TrimCoef_ToleranceTyping_WeakVsStrong()
         {
-            // float16 series: both a Python float and np.float64(1.0001) keep [1, 1.001]
+            // float16 series: a Python float tol (C#'s double, weak under NEP 50) keeps [1, 1.001]. NumPy's strong
+            // np.float64(1.0001) gives the same answer; it has no C# spelling since API-parity batch 11 typed tol as a
+            // double.
             var c = np.array(new[] { (Half)1.0, (Half)1.0009765625 });
             AssertBytes(PU.trimcoef(c, 1.0001), "float16", new long[] { 2 }, "003c013c");
-            AssertBytes(PU.trimcoef(c, NDArray.Scalar(1.0001)), "float16", new long[] { 2 }, "003c013c");
         }
 
         [TestMethod]
         public void TrimCoef_Errors()
         {
+            // NumPy's errors for a complex, None or huge-int tol have no C# call since API-parity batch 11: tol is a
+            // double, so the compiler refuses those arguments.
             Action neg = () => PU.trimcoef(new[] { 1.0 }, -1);
             neg.Should().Throw<ValueError>().WithMessage("tol must be non-negative");
-            Action cplx = () => PU.trimcoef(new[] { 1.0 }, new Complex(1, 0));
-            cplx.Should().Throw<TypeError>().WithMessage("'<' not supported between instances of 'complex' and 'int'");
-            Action none = () => PU.trimcoef(new[] { 1.0 }, null);
-            none.Should().Throw<TypeError>().WithMessage("'<' not supported between instances of 'NoneType' and 'int'");
-            Action big = () => PU.trimcoef(new[] { 1.0, 2.0 }, BigInteger.Pow(2, 1030));
-            big.Should().Throw<OverflowError>().WithMessage("int too large to convert to float");
         }
 
         [TestMethod]

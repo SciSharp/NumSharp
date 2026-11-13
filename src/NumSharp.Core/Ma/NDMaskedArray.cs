@@ -9126,7 +9126,7 @@ namespace NumSharp
 
         /// <summary>Masked grid-index array for <paramref name="dimensions"/> (no element masked) — NumPy's
         ///     <c>np.ma.indices(dimensions, dtype=int, *, fill_value=None, hardmask=False)</c>, numpy.ma's
-        ///     <c>_convert2ma</c> wrapper of <see cref="np.indices(Shape, DType)"/>.</summary>
+        ///     <c>_convert2ma</c> wrapper of <see cref="np.indices(Shape, DType, bool)"/>.</summary>
         /// <param name="dimensions">The grid's shape: a tuple, an <c>int[]</c> / <c>long[]</c> or a <see cref="Shape"/> (all
         ///     convert implicitly; only the sizes are read).</param>
         /// <param name="dtype">The index dtype; null is int64 (NumPy's <c>int</c>).</param>
@@ -11073,43 +11073,134 @@ namespace NumSharp
             return Yield(scope, result);
         }
 
-        /// <summary>Weighted average over unmasked elements (NumPy's <c>average</c>): with no weights this is the
-        /// mean; otherwise <c>sum(a·w)/sum(w)</c> with masked slots dropped from BOTH sums.</summary>
-        /// <param name="a">Data.</param><param name="axis">Axis or null.</param>
-        /// <param name="weights">Weights (same shape as <paramref name="a"/>, or 1-D along <paramref name="axis"/>); null ⇒ uniform.</param>
-        /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
-        /// <returns>The masked (weighted) average.</returns>
-        public NDMaskedArray average(object a, int? axis = null, object weights = null, bool keepdims = false)
+        /// <summary>
+        ///     The result of <see cref="average(object, int?, object, bool, bool)"/> - NumPy's bare-masked-average-OR-tuple
+        ///     return as one type: the masked average (<see cref="values"/>, typed <see cref="NDMaskedArray"/>), plus
+        ///     <see cref="sum_of_weights"/> when <c>returned</c> was set (null otherwise). It converts implicitly to
+        ///     <see cref="NDMaskedArray"/> and deconstructs: <c>var (avg, sum_of_weights) = np.ma.average(a, returned:
+        ///     true);</c>.
+        /// </summary>
+        /// <remarks>
+        ///     <para>API-parity batch 11 (the owner's decision 3): it replaces np.ma.average's NDMaskedArray return and the
+        ///     NumSharp-only <c>np.ma.average_returned</c>. Its constructor is internal: only np.ma.average builds it, so
+        ///     <see cref="values"/> is always the masked average. The masked array's members callers read on an average
+        ///     (data, mask, shape, dtype, size, filled) forward to <see cref="values"/>.</para>
+        ///     <para>Footgun: an extension method of <see cref="NDMaskedArray"/> does not see through the implicit
+        ///     conversion - call it on <see cref="values"/>.</para>
+        /// </remarks>
+        public readonly struct AverageResult : INDArrayCarrier
         {
-            // Scoped by hand: the shared core also computes the sum-of-weights, which this form discards — it is
-            // reclaimed with the core's other intermediates; only the average and its mask leave.
-            using var scope = NDScope.Open();
-            return Yield(scope, AverageCore(a, axis, weights, keepdims).avg);
+            /// <summary>The masked average (0-d over every axis; a full reduction of a fully masked operand is
+            ///     masked). Always present.</summary>
+            public NDMaskedArray values { get; }
+
+            /// <summary>The sum of weights in the average's shape (the unmasked count without weights), or <c>null</c>
+            ///     when <c>returned</c> was false. NumPy's is a MaskedArray or an ndarray depending on the case; here it is
+            ///     whichever the computation produced, typed <see cref="NDArray"/>.</summary>
+            public NDArray sum_of_weights { get; }
+
+            /// <summary>Wraps the outputs <see cref="average(object, int?, object, bool, bool)"/> computed.</summary>
+            /// <param name="values">The masked average.</param>
+            /// <param name="sum_of_weights">The sum of weights, or null without <c>returned</c>.</param>
+            internal AverageResult(NDMaskedArray values, NDArray sum_of_weights)
+            {
+                this.values = values;
+                this.sum_of_weights = sum_of_weights;
+            }
+
+            /// <summary>The average's data (<see cref="NDMaskedArray.data"/>).</summary>
+            public NDArray data => values.data;
+
+            /// <summary>The average's mask (<see cref="NDMaskedArray.mask"/>).</summary>
+            public NDArray mask => values.mask;
+
+            /// <summary>The average's shape.</summary>
+            public long[] shape => values.shape;
+
+            /// <summary>The average's dtype.</summary>
+            public DType dtype => values.dtype;
+
+            /// <summary>The average's element count.</summary>
+            public long size => values.size;
+
+            /// <summary>The average with its masked slots replaced (<see cref="NDMaskedArray.filled"/>).</summary>
+            /// <param name="fill_value">The value for the masked slots, or null for the average's fill value.</param>
+            /// <returns>A plain array.</returns>
+            public NDArray filled(object fill_value = null) => values.filled(fill_value);
+
+            /// <summary>Number of present outputs: 1, or 2 with <c>returned</c>.</summary>
+            public int Length => sum_of_weights is null ? 1 : 2;
+
+            /// <summary>The masked average: NumPy's first tuple element, and the whole result without <c>returned</c>.</summary>
+            /// <param name="result">The result.</param>
+            /// <returns><see cref="values"/>.</returns>
+            public static implicit operator NDMaskedArray(AverageResult result) => result.values;
+
+            /// <summary>Deconstructs a <c>returned=True</c> result: <c>var (avg, sum_of_weights) = ...</c>.</summary>
+            /// <param name="values">The masked average.</param>
+            /// <param name="sum_of_weights">The sum of weights.</param>
+            /// <exception cref="InvalidOperationException">The result holds the average alone: Python's <c>not enough
+            ///     values to unpack (expected 2, got 1)</c>.</exception>
+            public void Deconstruct(out NDMaskedArray values, out NDArray sum_of_weights)
+            {
+                if (this.sum_of_weights is null)
+                    throw new InvalidOperationException("not enough values to unpack (expected 2, got 1)");
+                values = this.values;
+                sum_of_weights = this.sum_of_weights;
+            }
+
+            // Yields the average's parts (data, mask, a stored fill) and the sum of weights: a scoped caller returning this
+            // result keeps them alive.
+            void INDArrayCarrier.YieldTo(NDScope scope)
+            {
+                scope.Returns(values?._data);
+                scope.Returns(values?._mask);
+                scope.Returns(values?._fill_value);
+                scope.Returns(sum_of_weights);
+            }
         }
 
         /// <summary>
-        ///     Weighted average AND its sum-of-weights (NumPy's <c>average(..., returned=True)</c>, which returns
-        ///     the pair). The C# analog of NumPy's tuple return — <c>var (avg, sws) = np.ma.average_returned(a)</c>
-        ///     — mirroring the base library's <see cref="np.average_returned(NDArray,NDAxis?,NDArray,bool)"/>. With no
-        ///     weights the sum-of-weights is the COUNT of unmasked elements (as float64), matching NumPy.
+        ///     Weighted average over unmasked elements - NumPy's <c>ma.average(a, axis=None, weights=None, returned=False,
+        ///     *, keepdims)</c>: with no weights this is the mean; otherwise <c>sum(a·w)/sum(w)</c> with masked slots
+        ///     dropped from BOTH sums, and with <paramref name="returned"/> the sum of weights too.
         /// </summary>
-        /// <param name="a">Data.</param><param name="axis">Axis or null.</param>
-        /// <param name="weights">Weights, or null for uniform.</param><param name="keepdims">Keep reduced axes.</param>
-        /// <returns>A tuple of the masked average and the (plain float64) sum of weights.</returns>
-        public (NDMaskedArray avg, NDArray sumOfWeights) average_returned(object a, int? axis = null, object weights = null, bool keepdims = false)
+        /// <param name="a">Data.</param>
+        /// <param name="axis">Axis or null.</param>
+        /// <param name="weights">Weights (same shape as <paramref name="a"/>, or 1-D along <paramref name="axis"/>); null ⇒
+        ///     uniform.</param>
+        /// <param name="returned">NumPy's <c>returned</c>: also return the sum of weights (the COUNT of unmasked elements,
+        ///     in the average's dtype, without weights).</param>
+        /// <param name="keepdims">Keep the reduced axes as size-1 (NumPy 2.0 <c>keepdims</c>).</param>
+        /// <returns>An <see cref="AverageResult"/>: the masked (weighted) average (it converts implicitly to
+        ///     <see cref="NDMaskedArray"/>) and, with <paramref name="returned"/>, the sum of weights.</returns>
+        /// <exception cref="AxisError">The axis is out of bounds (<c>axis: axis 5 is out of bounds for array of dimension
+        ///     1</c>).</exception>
+        /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
+        ///     and weights differ.</c>); text weights against a masked operand; a text operand.</exception>
+        /// <exception cref="ValueError">Weights that are not 1-D of the axis's length (<c>Shape of weights must be consistent
+        ///     with shape of a along specified axis.</c>).</exception>
+        /// <remarks>
+        ///     <para>Scoped by hand (a struct carrying a masked array is not a shape the weaver yields): the average's
+        ///     data / mask and, with <paramref name="returned"/>, the sum of weights are handed back; everything else the
+        ///     core built (a sum of weights not asked for included) is reclaimed.</para>
+        ///     <para>API-parity batch 11 (the owner's decision 3): NumPy's <c>returned</c> in NumPy's place (before
+        ///     <c>keepdims</c>, keyword-only in NumPy) and the <see cref="AverageResult"/> return; the NumSharp-only
+        ///     <c>average_returned</c> went.</para>
+        /// </remarks>
+        public AverageResult average(object a, int? axis = null, object weights = null, bool returned = false, bool keepdims = false)
         {
-            // Scoped by hand (a tuple carrying a masked array is not a shape the weaver yields): both halves of the
-            // pair are handed back — the average's data/mask and the sum-of-weights — and everything else the core
-            // built is reclaimed.
             using var scope = NDScope.Open();
             var result = AverageCore(a, axis, weights, keepdims);
             Yield(scope, result.avg);
+            if (!returned)
+                return new AverageResult(result.avg, null);
             scope.Returns(result.sumOfWeights);
-            return result;
+            return new AverageResult(result.avg, result.sumOfWeights);
         }
 
-        /// <summary>Shared core of <see cref="average"/>/<see cref="average_returned"/>: computes the masked
-        /// average and the sum-of-weights so the two public entry points never drift apart.</summary>
+        /// <summary>The core of <see cref="average"/>: computes the masked average and the sum-of-weights (the caller keeps
+        /// the second only for <c>returned</c>).</summary>
         /// <param name="a">Data.</param>
         /// <param name="axis">Axis or null.</param>
         /// <param name="weights">Weights, or null for the uniform (mean) form.</param>
@@ -11133,7 +11224,7 @@ namespace NumSharp
         ///     / scl</c>. The division is numpy.ma's (a zero sum of weights is masked) except for a full reduction, whose sums
         ///     are NumPy scalars: there <c>0/0</c> is a plain nan.
         ///     </para>
-        ///     <para>Unscoped on purpose: both callers open the scope and decide which halves of the pair leave, so
+        ///     <para>Unscoped on purpose: the caller opens the scope and decides which halves of the pair leave, so
         ///     the core's intermediates (the casts, broadcast weights, weighted products) ride the caller's scope.</para>
         /// </remarks>
         private (NDMaskedArray avg, NDArray sumOfWeights) AverageCore(object a, int? axis, object weights, bool keepdims)
@@ -12100,21 +12191,40 @@ namespace NumSharp
             return compress_rowcols(a, 1);
         }
 
-        /// <summary>Masks the ENTIRE rows of a 2-D array that contain any masked element (NumPy's <c>mask_rows</c>, which
-        /// is <c>mask_rowcols(a, 0)</c>).</summary>
+        /// <summary>Masks the ENTIRE rows of a 2-D array that contain any masked element (NumPy's <c>mask_rows(a,
+        /// axis=np._NoValue)</c>, which is <c>mask_rowcols(a, 0)</c>).</summary>
         /// <param name="a">2-D operand.</param>
+        /// <param name="axis">NumPy's deprecated <c>axis</c>, IGNORED as NumPy ignores it (NumPy 1.18 deprecated passing it
+        ///     - "The axis argument has always been ignored, in future passing it will raise TypeError" - and NumSharp has no
+        ///     warnings): any value, null included, masks the rows.</param>
         /// <returns>The row-masked array (over the operand's data, with a new mask).</returns>
         /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D: NumPy reports it from
         ///     <c>mask_rowcols</c> (<c>mask_rowcols works for 2D arrays only.</c>).</exception>
-        public NDMaskedArray mask_rows(object a) => mask_rowcols(a, 0);
+        /// <remarks>API-parity batch 11: <paramref name="axis"/> was missing, so a ported call that passes it did not
+        ///     compile.</remarks>
+        public NDMaskedArray mask_rows(object a, int? axis = null)
+        {
+            // NumPy only warns about a given axis and then ignores it: the rows are masked whatever it says.
+            _ = axis;
+            return mask_rowcols(a, 0);
+        }
 
-        /// <summary>Masks the ENTIRE columns of a 2-D array that contain any masked element (NumPy's <c>mask_cols</c>,
-        /// which is <c>mask_rowcols(a, 1)</c>).</summary>
+        /// <summary>Masks the ENTIRE columns of a 2-D array that contain any masked element (NumPy's <c>mask_cols(a,
+        /// axis=np._NoValue)</c>, which is <c>mask_rowcols(a, 1)</c>).</summary>
         /// <param name="a">2-D operand.</param>
+        /// <param name="axis">NumPy's deprecated <c>axis</c>, IGNORED as NumPy ignores it (see <see cref="mask_rows"/>): any
+        ///     value, null included, masks the columns.</param>
         /// <returns>The column-masked array (over the operand's data, with a new mask).</returns>
         /// <exception cref="NotImplementedError"><paramref name="a"/> is not 2-D (NumPy's <c>mask_rowcols works for 2D arrays
         ///     only.</c>).</exception>
-        public NDMaskedArray mask_cols(object a) => mask_rowcols(a, 1);
+        /// <remarks>API-parity batch 11: <paramref name="axis"/> was missing, so a ported call that passes it did not
+        ///     compile.</remarks>
+        public NDMaskedArray mask_cols(object a, int? axis = null)
+        {
+            // NumPy only warns about a given axis and then ignores it: the columns are masked whatever it says.
+            _ = axis;
+            return mask_rowcols(a, 1);
+        }
 
         /// <summary>
         ///     Masks whole rows and/or columns of a 2-D array that contain any masked element (NumPy's
@@ -12732,7 +12842,7 @@ namespace NumSharp
         /// <see cref="np.int64"/> for integer grids.</param>
         /// <returns>An unmasked masked array of <paramref name="function"/>'s result.</returns>
         /// <remarks>
-        ///     The null default USED to fall through to <see cref="np.indices(Shape, DType)"/>'s own default
+        ///     The null default USED to fall through to <see cref="np.indices(Shape, DType, bool)"/>'s own default
         ///     (int64), so every default-dtype call computed on integer grids where NumPy computes on float64 —
         ///     a wrong result dtype (and integer arithmetic, e.g. division) for the most common spelling.
         ///     <para>
@@ -12749,7 +12859,8 @@ namespace NumSharp
         {
             var dims = shape.dimensions.Select(x => (int)x).ToArray();
             // shape (ndim, *dims); grid[i] is the i-th coordinate grid, float64 unless the caller asked otherwise.
-            var grid = np.indices(dims, dtype ?? np.float64);
+            // The dense grid (np.indices' result converts to its NDArray): released below, after the callback.
+            NDArray grid = np.indices(dims, dtype ?? np.float64);
             var args = new NDArray[dims.Length];
             NDArray result = null;
             try

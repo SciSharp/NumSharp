@@ -466,26 +466,28 @@ namespace NumSharp.Tests.APIs
 
         // ------------------------------------------------------------------ fix 12: average
 
-        /// <summary>One signature each for average and average_returned; NumPy: <c>average(a, None)</c> is 11.5,
-        ///     <c>average(a, (0, 2))</c> <c>[7.5, 11.5, 15.5]</c>, <c>(0, 0)</c> <c>repeated axis in `axis` argument</c>; a
-        ///     matrix's <c>(0, 1)</c> is the 1 x 1 matrix <c>[[3.0]]</c> and its None the scalar 3.0.</summary>
+        /// <summary>One signature for average (average_returned became its <c>returned</c> parameter in batch 11); NumPy:
+        ///     <c>average(a, None)</c> is 11.5, <c>average(a, (0, 2))</c> <c>[7.5, 11.5, 15.5]</c>, <c>(0, 0)</c>
+        ///     <c>repeated axis in `axis` argument</c>; a matrix's <c>(0, 1)</c> is the 1 x 1 matrix <c>[[3.0]]</c> and its
+        ///     None the scalar 3.0.</summary>
         [TestMethod]
         public void Average_OneSignature_NoneTuple_AsNumPy()
         {
             AxisForms("average").Should().HaveCount(1);
-            AxisForms("average_returned").Should().HaveCount(1);
+            // API-parity batch 11 folded average_returned into np.average's returned parameter (np.AverageResult).
+            NpForms("average_returned").Should().BeEmpty();
             ((double)np.average(A, null)).Should().Be(11.5);
             np.average(A, (0, 2)).ToArray<double>().Should().Equal(7.5, 11.5, 15.5);
-            var (avg, sum) = np.average_returned(A, (0, 2));
+            var (avg, sum) = np.average(A, (0, 2), returned: true);
             avg.ToArray<double>().Should().Equal(7.5, 11.5, 15.5);
             sum.ToArray<double>().Should().Equal(8.0, 8.0, 8.0);
             Action repeat = () => np.average(A, (0, 0));
             repeat.Should().Throw<ValueError>().WithMessage("repeated axis in `axis` argument");
-            var m = np.average(M, (0, 1));
+            NDArray m = np.average(M, (0, 1));
             (m is NDMatrix).Should().BeTrue();
             m.shape.Should().Equal(1L, 1L);
             m.ToArray<double>().Should().Equal(3.0);
-            var scalar = np.average(M, null);
+            NDArray scalar = np.average(M, null);
             (scalar is NDMatrix).Should().BeFalse();
             ((double)scalar).Should().Be(3.0);
         }

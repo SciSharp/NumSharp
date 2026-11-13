@@ -2050,9 +2050,30 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    the ordered pass's check survived every test with one refused operand; only a case where the mask must be reported
    BEFORE another operand's refusal (the order decides) killed it. When a port adds an ordered check in front of an old
    one, test the cases where the old one would answer differently.
+68. **An `out` parameter is no operand** (API-parity batch 11). The subclass weaver counted every by-reference NDArray
+   parameter as an operand, so each result struct's `Deconstruct(out NDArray ...)` nested in `np` was woven: its
+   prologue tested the caller's variables BEFORE the call wrote them. The C# compiler reuses a deconstruction's
+   temporaries, so after `var (avg, w) = np.average(m, 0, returned: true)` of a matrix they still held matrices; the
+   next deconstruction then took the subclass path, wrote its own alias locals, and the caller got the previous
+   statement's arrays (`np.average(m, returned: true)` deconstructed into a (1, 3) matrix instead of NumPy's scalars).
+   The pattern was latent in every result struct (np.unique's, linspace's, meshgrid's, gradient's, the histograms');
+   only a deconstruction after a subclass deconstruction shows it. Fixed in `SubclassWeaver.IsNDArray` (an `out`
+   parameter is written, never read), pinned by `NumPyKeywordParity.Batch11.Test` and `NDMatrixOperand.Tests`.
 
 ## 7. State log
 
+- **2026-11-13**: API-parity batch 11 on `journey5` (branch `api-parity/batch-11`; the owner approved 3 of 4 fixes and
+  decided 3 questions). Decisions: the dtype functions stay as they are ("Keep as is"); the polynomial facades are typed
+  only; NumPy's flag-dependent returns become result structs. Fixed: np.intersect1d is one signature returning
+  `np.Intersect1dResult`; np.ma.unique keeps only its typed `UniqueResult` form (numpy.ma's own result type);
+  np.ma.mask_rows / mask_cols take NumPy's ignored axis; `{p}pow(c, int, int?)`, `{p}trim(c, double)`,
+  `trimcoef(c, double)` and `{p}vander(x, int)` replaced the object and double forms (the computations keep NumPy's
+  any-value statements for the series classes and the corpus); np.average / np.ma.average gained NumPy's `returned`
+  through `np.AverageResult` / `MaskedArrayModule.AverageResult` (average_returned went) and np.indices NumPy's `sparse`
+  through `np.IndicesResult` (indices_sparse went). Found on the way: the subclass weaver wove every result struct's
+  `Deconstruct` (an `out NDArray` read as an operand; finding 68), and NumPy's positional `returned` silently rebinds an
+  old positional keepdims (a census found 5 oracle calls, now named). Callers: 21 average_returned and 12 indices_sparse
+  sites migrated; the polynomial argument-kinds tests of the removed forms became typed tests.
 - **2026-11-13**: API-parity batch 10 on `journey5` (branch `api-parity/batch-10`; the owner approved 2 of 15 picks).
   The owner turned down five picks that collapsed the dtype functions (np.finfo / np.iinfo, np.can_cast,
   np.issubdtype, np.isdtype, np.dtype) into one `object` parameter each: "object are not good idea, user will never

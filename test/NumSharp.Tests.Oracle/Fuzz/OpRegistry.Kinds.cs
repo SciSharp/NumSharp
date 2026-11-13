@@ -414,8 +414,10 @@ namespace NumSharp.Tests.Fuzz
                         ? (int?)null
                         : p["axis"].GetInt32();
                     NDArray weights = p["weighted"].GetBoolean() ? ops[1] : null;
-                    var (average, sumOfWeights) = np.average_returned(ops[0], axis, weights,
-                        p["keepdims"].GetBoolean());
+                    // NumPy's np.average(..., returned=True); the op keeps the corpus name of the NumSharp-only
+                    // average_returned it replayed before API-parity batch 11 folded it into np.average's result struct.
+                    var (average, sumOfWeights) = np.average(ops[0], axis, weights, returned: true,
+                        keepdims: p["keepdims"].GetBoolean());
                     return new[] { average, sumOfWeights };
                 }
                 case "unique_counts":
@@ -501,9 +503,11 @@ namespace NumSharp.Tests.Fuzz
 
                 case "broadcast_arrays":
                     return np.broadcast_arrays(ops);
+                // NumPy's np.indices(..., sparse=True) (the corpus keeps the name of the NumSharp-only indices_sparse it
+                // replayed before API-parity batch 11).
                 case "indices_sparse":
-                    return np.indices_sparse(ParseIntArray(p["dimensions"]),
-                        FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                    return np.indices(ParseIntArray(p["dimensions"]),
+                        FuzzCorpus.DtypeToTC(p["dtype"].GetString()), sparse: true).ToArray();
                 // np.linspace(..., retstep=True): NumPy's (samples, step); naming retstep binds the whole-signature
                 // overload over object ends, which returns np.LinspaceResult.
                 case "linspace_retstep":

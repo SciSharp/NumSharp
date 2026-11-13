@@ -160,6 +160,18 @@ entries wait for a typed design (a carrier like NDAxis, or the typed overloads r
 np.result_type's `params object[]`, ma.default_fill_value's object form, ma.fromfunction; deferred: np.strings add /
 multiply, the random choice / dirichlet / multinomial / size-less sampler twins, numpy.matrix's one signatures.
 
+**Refresh 2026-11-13 (API-parity batch 11 on `journey5` at `d752ad27`).** Regenerated on the batch's tree: 997 → 1023
+NumPy names with NumPy's signature, 313 → 287 to change; O 270 → 249, M 49 → 44, every other mark unchanged; the
+coverage artifact's headline 363 → 366. Fixed: np.intersect1d is one signature returning `np.Intersect1dResult`;
+np.ma.unique keeps only its typed `UniqueResult` form; np.ma.mask_rows / mask_cols take NumPy's ignored axis; the
+polynomial facades are typed (`{p}pow(c, int, int?)`, `{p}trim(c, double)`, `trimcoef(c, double)`, `{p}vander(x,
+int)`), their computations keeping NumPy's any-value statements; np.average / np.ma.average gained `returned`
+(`np.AverageResult` / `MaskedArrayModule.AverageResult`) and np.indices `sparse` (`np.IndicesResult`), so
+average_returned and indices_sparse went. The owner's decisions from this round: the dtype functions (np.finfo /
+np.iinfo / np.can_cast / np.issubdtype / np.isdtype / np.dtype / np.result_type) STAY as they are ("Keep as is"), so
+their [O] / [T] entries are on purpose; NumPy's flag-dependent returns become result structs; the polynomial facades
+take typed parameters only. Not taken: np.frombuffer's NPTypeCode / string dtype twins.
+
 ---
 
 ## Contents
@@ -500,8 +512,8 @@ result's shape (it is never broadcast); the result is cast into `out` under NumP
 | name | missing | note |
 |---|---|---|
 | `np.linspace` | (done) | plan D3: `retstep` and `axis` exist; `retstep` binds NumPy's whole signature over `object` ends, which returns `np.LinspaceResult` |
-| `np.average`, `np.ma.average` | `returned` | B10: `np.average_returned` exists as a separate NumSharp name; NumPy's form is one function |
-| `np.indices`, `np.ma.indices` | `sparse` | plan D4: `np.indices_sparse` exists separately |
+| `np.average`, `np.ma.average` | (done) | API-parity batch 11: NumPy's `returned`, the result `np.AverageResult` / `MaskedArrayModule.AverageResult` (`average_returned` went) |
+| `np.indices`, `np.ma.indices` | (done for `np.indices`) | API-parity batch 11: NumPy's `sparse`, the result `np.IndicesResult` (`indices_sparse` went); `np.ma.indices` has none (NumPy's own `sparse=True` raises `'tuple' object has no attribute 'view'`) |
 | `np.vectorize` | `doc`, `excluded`, `cache` | H2 |
 | `np.array2string`, `np.printoptions`, `np.set_printoptions` | `formatter`, `legacy` (+ `override_repr` for the last two) | H1 |
 | `np.frompyfunc` | `identity` | read from NumPy's stub |

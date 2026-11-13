@@ -185,5 +185,50 @@ namespace NumSharp.Tests
             Action mismatch = () => np.unwrap(np.array(new[] { 0.0, 1.0, 2.0, -1.0, 0.0 }), period: np.array(new[] { 4.0, 4.0 }));
             mismatch.Should().Throw<ValueError>().WithMessage("operands could not be broadcast together with shapes (4,) (2,) ");
         }
+
+        /// <summary>
+        ///     np.isdtype with NumPy's TUPLE of kinds: <c>np.isdtype(np.dtype('i8'), ('integral', 'real floating'))</c> is True
+        ///     and <c>np.isdtype(np.int64, (np.int32, 'bool'))</c> False. In C# the tuple is a ValueTuple, which binds the
+        ///     <c>params object[] kinds</c> overload as ONE kind, and that kind loop refuses a tuple (<c>TypeError: kind argument
+        ///     must be comprised of NumPy dtypes or strings only, but is a &lt;class 'tuple'&gt;.</c>). The owner kept the
+        ///     dtype functions' typed overloads as they are (API-parity batch 11, decision 1: "Keep as is"), so the tuple's
+        ///     reading waits for its own fix inside the existing overloads. Found by API-parity batch 10's validation
+        ///     (scratchpad b10_check/today.txt).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-10")]
+        public void ApiParity_Isdtype_TupleOfKinds_IsNumPysTuple()
+        {
+            np.isdtype(np.dtype("i8"), ("integral", "real floating")).Should().BeTrue();
+            np.isdtype(np.int64, (np.int32, "bool")).Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     np.result_type with a C# number beside an array: NumPy's Python int is WEAK (NEP 50), so
+        ///     <c>np.result_type(np.array([1], np.int8), 1)</c> is int8. The <c>(NDArray arr1, NDArray arr2)</c> overload takes
+        ///     the literal through NDArray's implicit conversion and promotes it as a strong int32, so NumSharp answers int32;
+        ///     the <c>params object[]</c> form already reads it weak (<c>np.result_type(1, np.int8)</c> is int8). The owner kept
+        ///     the overload set (API-parity batch 11, decision 1), so the pair form's weak reading waits for its own fix. Found
+        ///     by API-parity batch 10's validation.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-10")]
+        public void ApiParity_ResultType_ArrayAndCSharpNumber_IsWeak()
+        {
+            var a8 = np.array(new sbyte[] { 1 });
+            np.result_type(a8, 1).Should().Be(np.int8);
+        }
+
+        /// <summary>
+        ///     np.ma.default_fill_value of a STRING: NumPy reads <c>obj</c> as a dtype, an object with <c>.dtype</c>, or
+        ///     <c>np.asanyarray(obj).dtype</c>, so a str is DATA and <c>ma.default_fill_value('f8')</c> is <c>'N/A'</c>. C#'s
+        ///     overload resolution prefers the <c>DType</c> overload for a string (string to DType is a better conversion than
+        ///     string to object), which parses the string as a dtype and answers 1e+20. The object form alone gives NumPy's
+        ///     answer (<c>default_fill_value((object)"f8")</c> is "N/A"). Found by API-parity batch 10's validation; the fix
+        ///     offered there (dropping the DType form) was not taken.
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-10")]
+        public void ApiParity_MaDefaultFillValue_OfAString_IsData()
+        {
+            np.ma.default_fill_value("f8").Should().Be("N/A");
+        }
     }
 }

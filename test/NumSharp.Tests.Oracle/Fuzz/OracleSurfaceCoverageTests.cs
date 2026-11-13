@@ -531,9 +531,8 @@ namespace NumSharp.Tests.Fuzz
             ["innerproduct"] = "ma.inner",
             ["outerproduct"] = "ma.outer",
             ["asanyarray"] = "ma.asarray",
-            // The returned=True twin of ma.average — same weighted-average value path, plus the
-            // sum-of-weights slot pinned by NDMaskedArrayTests.
-            ["average_returned"] = "ma.average",
+            // (average_returned retired with API-parity batch 11: NumPy's returned=True is ma.average's own parameter
+            // now, so the ma.average op covers the one member.)
         };
 
         // Gated by the NDMaskedArrayTests suite + the ledger in docs/MA_ORACLE_DESIGN.md. Since 2026-10-08 the

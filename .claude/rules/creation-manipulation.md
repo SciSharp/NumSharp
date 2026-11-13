@@ -270,11 +270,12 @@ construction. `Manipulation/np.{union1d,intersect1d,setxor1d,setdiff1d}.cs` are 
 `setdiff1d` are the engine members `TensorEngine.Union1d` / `Setxor1d` / `Setdiff1d`
 (`Backends/Default/Manipulation/Default.SetOps.cs`).
 - `union1d(ar1, ar2)` = `unique(concatenate(ravel(ar1), ravel(ar2)))`.
-- `intersect1d` has three overloads that reproduce NumPy's bare-array-or-tuple return: `intersect1d(ar1, ar2)` and
-  `intersect1d(ar1, ar2, assume_unique)` return `NDArray`; `intersect1d(ar1, ar2, assume_unique=false,
-  return_indices=false)` returns `NDArray[]{values, comm1, comm2}` with both keywords optional, so
-  `np.intersect1d(a, b, return_indices: true)` ports verbatim (C# betterness binds the two-argument call to the bare
-  form). The tuple path uses a stable argsort, so the first occurrence in each input wins.
+- `intersect1d(ar1, ar2, assume_unique = false, return_indices = false)` is NumPy's one signature and returns
+  `np.Intersect1dResult` (np.unique's result-struct pattern): `values`, and with `return_indices` `comm1` / `comm2`
+  (null otherwise). It converts implicitly to `NDArray` (NumPy's bare array) and `NDArray[]`, indexes and deconstructs
+  the present outputs (`var (v, i1, i2) = np.intersect1d(a, b, return_indices: true);`; Python's unpacking error
+  without the flag), forwards the array members callers read on the values, and is `IDisposable` and
+  `INDArrayCarrier`. The indices path uses a stable argsort, so the first occurrence in each input wins.
 - `setxor1d` returns the values in exactly one input; `setdiff1d(ar1, ar2, assume_unique=false)` returns ar1's values
   absent from ar2 (built on `isin(..., invert=true)`), keeping ar1's dtype and, under `assume_unique`, its duplicates.
 - Empty inputs give NumPy's float64 empty (from the empty concatenate).

@@ -268,29 +268,25 @@ namespace NumSharp
         public NDArray polysub(object c1, object c2) => NDPolySeries.AddSub(c1, c2, subtract: true);
 
         /// <summary>
-        ///     <c>polytrim</c> — NumPy's alias of <see cref="PolyUtilsModule.trimcoef(object)"/>: removes the trailing
-        ///     zero coefficients (tolerance 0) and returns a fresh copy of the coefficient dtype.
+        ///     <c>polytrim</c> — NumPy's alias of <see cref="PolyUtilsModule.trimcoef(object, double)"/>: removes the trailing coefficients whose
+        ///     magnitude is at most <paramref name="tol"/> (<c>np.abs(c) &gt; tol</c> decides what stays) and returns the
+        ///     rest as a fresh copy of the coefficient dtype; when nothing exceeds the tolerance the result is
+        ///     <c>c[:1]*0</c>.
         /// </summary>
         /// <param name="c">The series (1-D).</param>
-        /// <returns>The trimmed copy (an all-zero series becomes <c>c[:1]*0</c>).</returns>
-        /// <exception cref="ValueError">An empty or non-1-d series, or no common type.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polytrim.html</remarks>
-        [NDScoped]
-        public NDArray polytrim(object c) => NDPolySeries.TrimCoef(c, PolyNumber.FromPython(PyScalar.Int(0)));
-
-        /// <summary>
-        ///     <c>polytrim</c> — NumPy's alias of <see cref="PolyUtilsModule.trimcoef(object, object)"/>: removes the
-        ///     trailing coefficients whose magnitude is at most <paramref name="tol"/> and returns a fresh copy.
-        /// </summary>
-        /// <param name="c">The series (1-D).</param>
-        /// <param name="tol">The non-negative tolerance (a Python number, or a NumPy scalar compared in the promoted dtype).</param>
+        /// <param name="tol">The non-negative tolerance, NumPy's Python number (0, the default, trims only exact zeros): it
+        ///     adopts the coefficients' precision, so a float16 series compares against the float16-rounded tolerance; a
+        ///     NaN tolerance trims everything.</param>
         /// <returns>The trimmed copy (<c>c[:1]*0</c> when nothing exceeds the tolerance).</returns>
         /// <exception cref="ValueError"><c>tol must be non-negative</c>, an empty or non-1-d series, or no common type.</exception>
-        /// <exception cref="TypeError">A complex or null tolerance.</exception>
-        /// <exception cref="OverflowError">A Python int tolerance too large to convert.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polytrim.html</remarks>
+        /// <remarks>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polytrim.html</para>
+        ///     <para>API-parity batch 11 (the owner's decision 2, typed parameters only): one signature with NumPy's
+        ///     default; the <c>(object c)</c> and <c>(object c, object tol)</c> forms went, so a NumPy scalar or a 0-d
+        ///     array tolerance (compared in the promoted dtype) is no longer a C# spelling - pass the number.</para>
+        /// </remarks>
         [NDScoped]
-        public NDArray polytrim(object c, object tol) => NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(tol));
+        public NDArray polytrim(object c, double tol = 0) => NDPolySeries.TrimCoef(c, PolyUtilsModule.Tolerance(tol));
 
         /// <summary>
         ///     Differentiates the power series <paramref name="c"/> <paramref name="m"/> times along <paramref name="axis"/>,
@@ -447,69 +443,6 @@ namespace NumSharp
         public NDArray polypow(object c, int pow, int? maxpower = null) => NDPolyAlgebra.Pow(PolyBasis.Power, c, pow, maxpower);
 
         /// <summary>
-        ///     <see cref="polypow(object, int, int?)"/> with a Python-float power: NumPy's <c>power = int(pow)</c>
-        ///     truncates, so 2.0 is 2 while 2.5 fails <c>power != pow</c>.
-        /// </summary>
-        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
-        /// <param name="pow">The power; it must equal its integer part and be ≥ 0.</param>
-        /// <param name="maxpower">The largest power allowed: null (NumPy's None: no limit).</param>
-        /// <returns>The power series.</returns>
-        /// <exception cref="ValueError">The series' errors; <c>cannot convert float NaN to integer</c>;
-        ///     <c>Power must be a non-negative integer.</c> (a fractional or negative power); <c>Power is too large</c>.</exception>
-        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power beyond
-        ///     int64 with no limit (NumPy would run until memory is exhausted).</exception>
-        /// <exception cref="System.NotSupportedException">An object series (see <see cref="polymul"/>), raised after the power checks.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polypow.html</remarks>
-        [NDScoped]
-        public NDArray polypow(object c, double pow, int? maxpower = null) => NDPolyAlgebra.Pow(PolyBasis.Power, c, pow, maxpower);
-
-        /// <summary>
-        ///     <see cref="polypow(object, int, int?)"/> for ANY power argument, with no limit (NumPy's default <c>maxpower=None</c>): <c>power =
-        ///     int(pow)</c> with Python's semantics — a bool is 0 / 1, np.float16 (Half) or decimal truncates like a float, a
-        ///     str parses with int()'s grammar (and then fails <c>power != pow</c>), a 0-d NDArray converts its element — and
-        ///     NumPy's error for every value int() refuses.
-        /// </summary>
-        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
-        /// <param name="pow">The power: any value (see the summary).</param>
-        /// <returns>The power series.</returns>
-        /// <exception cref="ValueError">The series' errors (see <see cref="polymul"/>); <c>cannot convert float NaN to
-        ///     integer</c>; <c>invalid literal for int() with base 10: '…'</c>; <c>Power must be a non-negative
-        ///     integer.</c>; <c>Power is too large</c>.</exception>
-        /// <exception cref="TypeError">A power int() refuses: a complex, null (None), a list or tuple (<c>int() argument must
-        ///     be a string, a bytes-like object or a real number, not '…'</c>), an ndarray of one or more dims (<c>only
-        ///     0-dimensional arrays can be converted to Python scalars</c>).</exception>
-        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power beyond int64
-        ///     with no limit (NumPy would run until memory is exhausted).</exception>
-        /// <exception cref="System.NotSupportedException">An object series (see <see cref="polymul"/>), raised after the
-        ///     power checks.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polypow.html</remarks>
-        [NDScoped]
-        public NDArray polypow(object c, object pow) => NDPolyAlgebra.Pow(PolyBasis.Power, c, pow, null);
-
-        /// <summary>
-        ///     <see cref="polypow(object, object)"/> with ANY limit: null is None (no limit); anything else is compared as
-        ///     NumPy compares <c>power &gt; maxpower</c> — exactly for a Python int / bool / float, a NumPy integer scalar
-        ///     (char) or decimal; in float16 for np.float16 (Half); for an ndarray (an NDArray, a typed C# array) in its dtype
-        ///     (float16 / float32 / float64 rounding the power first, complex lexicographically, bool as int64, integers
-        ///     exactly), the comparison's truth value then needing exactly one element.
-        /// </summary>
-        /// <param name="c">The coefficients, LOW degree first: an <see cref="NDArray"/> (any layout), a typed C# array, a Python list or tuple (<c>object[]</c>, a <c>ValueTuple</c>, a jagged array — np.array's coercion), or a single number. Integer series are computed in float64; a bool series has no common type.</param>
-        /// <param name="pow">The power: any value (see <see cref="polypow(object, object)"/>).</param>
-        /// <param name="maxpower">The largest power allowed: any value, null for no limit.</param>
-        /// <returns>The power series.</returns>
-        /// <exception cref="ValueError">The series' and the power's errors; <c>Power is too large</c>; an ndarray limit with
-        ///     no element or several (NumPy's truth-value texts).</exception>
-        /// <exception cref="TypeError">A power int() refuses, or a limit that does not compare with an int: a complex, str,
-        ///     list or tuple (<c>'&gt;' not supported between instances of 'int' and '…'</c>).</exception>
-        /// <exception cref="OverflowError"><c>cannot convert float infinity to integer</c>; a power the limit's
-        ///     comparison dtype cannot hold (<c>int too large to convert to float</c> for a float limit ndarray or np.float16,
-        ///     <c>int too big to convert</c> for a bool one); a power beyond int64 with no limit.</exception>
-        /// <exception cref="System.NotSupportedException">An object series, raised after the power checks.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polypow.html</remarks>
-        [NDScoped]
-        public NDArray polypow(object c, object pow, object maxpower) => NDPolyAlgebra.Pow(PolyBasis.Power, c, pow, maxpower);
-
-        /// <summary>
         ///     The power series whose roots are <paramref name="roots"/>: the roots sorted, one linear factor per root
         ///     (<c>polyline(-r, 1) = [-r, 1]</c>), multiplied pairwise as a balanced tree (<c>polyutils._fromroots</c>) with <c>polymul</c>.
         ///     Empty roots give <c>[1.]</c>. The factors are built by <c>np.array([-r, …])</c>, whose coercion promotes a
@@ -557,27 +490,6 @@ namespace NumSharp
         public NDArray polyvander(object x, int deg) => NDPolyVander.Vander(PolyBasis.Power, x, deg);
 
         /// <summary>
-        ///     <see cref="polyvander(object, int)"/> with a degree of ANY kind, read as NumPy's <c>polyutils._as_int</c> reads it
-        ///     (Python's <c>operator.index</c>): a C# integer, bool (True is 1), <see cref="System.Numerics.BigInteger"/>, char,
-        ///     or a 0-d integer <see cref="NDArray"/>. Anything else — a float or double (even 2.0), a complex, a str, null, a
-        ///     0-d bool / float array, an array of one or more dims, a list or tuple — raises NumPy's TypeError, whose text
-        ///     formats the value as NumPy's f-string does (<c>deg must be an integer, received 1e+20</c>,
-        ///     <c>… received [1 2]</c>, <c>… received None</c>).
-        /// </summary>
-        /// <param name="x">The points (see <see cref="polyvander(object, int)"/>).</param>
-        /// <param name="deg">The degree, any value (see the summary).</param>
-        /// <returns>The matrix (see <see cref="polyvander(object, int)"/>).</returns>
-        /// <exception cref="TypeError">A degree operator.index refuses: <c>deg must be an integer, received …</c> — raised
-        ///     before x is looked at.</exception>
-        /// <exception cref="ValueError"><c>deg must be non-negative</c> (before x is converted); a ragged list x;
-        ///     <c>Maximum allowed dimension exceeded</c> (a degree of 2^63 - 1 or more) or <c>array is too big; …</c>.</exception>
-        /// <exception cref="MemoryError">The matrix cannot be allocated (NumPy's MemoryError).</exception>
-        /// <exception cref="System.NotSupportedException">A null or str x, or a list NumPy makes a str / object array of.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvander.html</remarks>
-        [NDScoped]
-        public NDArray polyvander(object x, object deg) => NDPolyVander.Vander(PolyBasis.Power, x, deg);
-
-        /// <summary>
         ///     The 2-D Vandermonde matrix: column <c>a*(deg[1] + 1) + b</c> is <c>x**a * y**b</c> at every point pair — NumPy's
         ///     <c>polyutils._vander_nd_flat</c>, the outer product <c>V_x[..., :, None] * V_y[..., None, :]</c> of the two 1-D
         ///     matrices, flattened. Bit-identical to NumPy 2.4.2's <c>polyvander2d</c>: one IL kernel pass builds each block of
@@ -588,7 +500,8 @@ namespace NumSharp
         ///     Python float is float64 there, so a float16 array with a Python-float y is float64) plus 0.0.</param>
         /// <param name="y">The second coordinates (same shape as x).</param>
         /// <param name="deg">The two degrees <c>[x_deg, y_deg]</c>: a list / tuple, a typed C# array, an NDArray or a str of
-        ///     length 2, each item read as <see cref="polyvander(object, object)"/>'s deg.</param>
+        ///     length 2, each item read as NumPy's <c>polyutils._as_int</c> (Python's <c>operator.index</c>: an integer, a
+        ///     bool, a NumPy integer scalar or 0-d integer array; anything else is <c>deg must be an integer, received …</c>).</param>
         /// <returns>A view of shape <c>x.shape + ((deg[0] + 1) * (deg[1] + 1),)</c> over a new array (OWNDATA false; a scalar x, y
         ///     is one point).</returns>
         /// <exception cref="TypeError">A deg without a length (<c>object of type 'int' has no len()</c>, <c>len() of unsized
@@ -697,7 +610,7 @@ namespace NumSharp
         /// <summary>
         ///     The least-squares fit of a power series to data: the coefficients <c>c</c> that minimise the weighted squared error
         ///     <c>sum_j w_j**2 * |y_j - polyval(x_j, c)|**2</c>, computed as NumPy 2.4.2 writes it (<c>polyutils._fit</c>: the
-        ///     <see cref="polyvander(object, object)"/> design matrix with its columns scaled to unit norm, solved by
+        ///     <see cref="polyvander(object, int)"/> design matrix with its columns scaled to unit norm, solved by
         ///     <c>np.linalg.lstsq</c>), so the coefficients are NumPy's bit for bit with the OpenBLAS backend NumPy loads.
         /// </summary>
         /// <param name="x">
