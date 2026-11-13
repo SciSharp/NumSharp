@@ -2620,15 +2620,16 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     NumPy's <c>np.array("d")</c> is an explicit 0-d ndarray, not a <c>str</c>: <c>isinstance(np.array("d"), str)</c>
-        ///     is False, and <c>np.mintypecode([np.array("d")], typeset="Ud")</c> reads it through <c>asarray(t).dtype.char</c>
-        ///     as <c>'U'</c> (then "substring not found"). NumSharp marks an explicit 0-d array only for an UNMANAGED scalar
-        ///     (<c>np.array&lt;T&gt;(T)</c>, <c>NDArray.MarkExplicitZeroDimArray</c>); <c>np.array(string)</c> returns it
-        ///     unmarked, so the boundary map reads it as a <c>numpy.str_</c> scalar (<c>NDScalarType.PyStr.__instancecheck__</c>
-        ///     is True) and np.mintypecode takes its text. Found by the np.mintypecode port (2026-11-05).
+        ///     Regression pin (fixed 2026-11-13 by API-parity batch 13: <c>np.array(string)</c> marks its 0-d result an
+        ///     explicit array). NumPy's <c>np.array("d")</c> is an explicit 0-d ndarray, not a <c>str</c>:
+        ///     <c>isinstance(np.array("d"), str)</c> is False, and <c>np.mintypecode([np.array("d")], typeset="Ud")</c> reads it
+        ///     through <c>asarray(t).dtype.char</c> as <c>'U'</c> (then "substring not found"). NumSharp marked an explicit 0-d
+        ///     array only for an UNMANAGED scalar (<c>np.array&lt;T&gt;(T)</c>, <c>NDArray.MarkExplicitZeroDimArray</c>);
+        ///     <c>np.array(string)</c> returned it unmarked, so the boundary map read it as a <c>numpy.str_</c> scalar
+        ///     (<c>NDScalarType.PyStr.__instancecheck__</c> was True) and np.mintypecode took its text. Found by the
+        ///     np.mintypecode port (2026-11-05).
         /// </summary>
         [TestMethod]
-        [OpenBugs]
         public void NpArrayOfString_IsAnExplicitZeroDimArray()
         {
             var explicitZeroDim = np.array("d");

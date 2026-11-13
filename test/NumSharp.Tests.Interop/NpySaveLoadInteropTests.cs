@@ -345,7 +345,7 @@ namespace NumSharp.Tests.Interop
                     using (PyObject _ = Python.np.with("np.savez(p, weights=w, biases=b)", ("p", p), ("w", w), ("b", b))) { }
 
                     using NpzFile npz = np.load_npz(path);
-                    npz.Keys.Should().Contain(new[] { "weights", "biases" });
+                    npz.keys().Should().Contain(new[] { "weights", "biases" });
                     ByteContract.AssertSameBytes(npz["weights"], w, "numpy npz 'weights' is byte-exact in NumSharp");
                     ByteContract.AssertSameBytes(npz["biases"], b, "numpy npz 'biases' is byte-exact in NumSharp");
                 });

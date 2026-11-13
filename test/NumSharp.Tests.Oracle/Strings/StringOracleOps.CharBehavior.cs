@@ -361,7 +361,7 @@ namespace NumSharp.Tests.Strings
                 "compress" => np.compress(Nd(a[0]), (NDArray)a[1], hasAxis ? Axis(axis) : null),
                 "extract" => np.extract((NDArray)a[0], (NDArray)a[1]),
                 "trim_zeros" => np.trim_zeros(x),
-                "insert" => np.insert(x, I(a[1]), a[2]),
+                "insert" => np.insert(x, I(a[1]), OptNd(a[2])),
                 "delete" => np.delete(x, I(a[1])),
                 "split" => Items(np.split(x, I(a[1]))),
                 "array_split" => Items(np.array_split(x, I(a[1]))),

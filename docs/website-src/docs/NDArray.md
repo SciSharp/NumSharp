@@ -416,7 +416,7 @@ a.SetAtIndex(99L, 6);                   // flat index
 
 **Rule of thumb:** use `.item<T>()` when porting NumPy code, `GetAtIndex<T>` in a hot loop, and the indexer (`a[i, j]`) when you want NumPy-like ergonomics and don't mind the 0-d NDArray detour.
 
-> `.item()` without arguments works on any size-1 array (0-d, 1-element 1-d, 1×1 2-d) and throws `IncorrectSizeException` otherwise - the NumPy 2.x replacement for the removed `np.asscalar()`.
+> `.item()` without arguments works on any size-1 array (0-d, 1-element 1-d, 1×1 2-d) and throws NumPy's `ValueError` otherwise (`can only convert an array of size 1 to a Python scalar`) - the NumPy 2.x replacement for the removed `np.asscalar()`.
 
 ---
 
@@ -559,7 +559,7 @@ np.savez_compressed("bundle.npz", w, b);            // same, Deflate-compressed
 using NpzFile npz = np.load_npz("bundle.npz");      // lazy + cached; dispose it (holds the file handle)
 NDArray w1 = npz["w"];                              // "w.npy" also works as a key
 NDArray w2 = npz.f.w;                               // dot access, like NumPy's npz.f
-foreach (string name in npz.Files) { }             // "w", "b" - the ".npy" is stripped
+foreach (string name in npz.files) { }             // "w", "b" - the ".npy" is stripped
 
 // np.load dispatches on the file's magic bytes and returns `object`
 object any = np.load("bundle.npz");                 // NDArray for .npy, NpzFile for .npz
@@ -717,7 +717,7 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 | `np.savez_compressed(path, …)` | `.npz` | - | Same as `savez`, Deflate-compressed |
 | `np.load(path)` | `.npy` / `.npz` | - | Returns `object` (`NDArray` or `NpzFile`); `Stream` / `byte[]` overloads |
 | `np.load_npy(path)` | `.npy` | copy | Typed → `NDArray` |
-| `np.load_npz(path)` | `.npz` | lazy | Typed → `NpzFile` (`IDisposable`; `.Files`, `["w"]` / `.f.w` access) |
+| `np.load_npz(path)` | `.npz` | lazy | Typed → `NpzFile` (`IDisposable`; NumPy's `.files`, `.keys()` / `.values()` / `.items()`, `["w"]` / `.f.w` / `.get("w")` access, `.close()`) |
 | `arr.tofile(path)` | raw | - | Element bytes only, no header |
 | `np.fromfile(path, dtype)` | raw | copy | Pair with `tofile` |
 | `np.frombuffer(byte[], …)` | in-memory | view (pins array) | Endian-prefix dtype strings trigger a copy |

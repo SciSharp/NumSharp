@@ -2073,13 +2073,43 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    gives such a body NumPy's array of the Python number (int64, uint64 past int64, float64, complex128). The audit to
    run: every np.* body that converts an argument with `asanyarray` / `ravel` / `array` and lets its dtype into the
    result (not into a weak promotion).
-71. **`np.array(string)` is an unmarked 0-d array** (API-parity batch 12, open: `OpenBugs.ApiParity.cs`). `np.array<T>(T)`
+71. **`np.array(string)` is an unmarked 0-d array** (API-parity batch 12, fixed in batch 13). `np.array<T>(T)`
    marks its 0-d result as an explicit ndarray, the string overloads do not, so `np.array("x")` reads as an `np.str_`
    scalar: `np.isscalar(np.array("x"))` is True (NumPy: False) and np.interp's `float()` conversion refuses it instead of
    parsing it. Found while checking np.interp's array fills.
+72. **A C# `int` converts to `Slice` and to `NDArray`** (API-parity batch 13). Both are user-defined conversions, so a
+   function left with a `Slice` form and an `NDArray` form for one parameter makes `f(a, 1)` CS0121, and a pick's
+   `before` probe cannot see it (the integer overload it removes still binds there). np.delete and np.insert keep one
+   `long obj` form beside their two (it forwards the Python int as a 0-d literal). A removal pick is validated by the
+   `after` build of the kept spellings, or by working out the conversions both ways at pick time.
+73. **NumPy's `arange` length runs on the arguments' own arithmetic** (API-parity batch 13). `_calc_length` computes
+   `stop - start`, `/ step` and `start + step` on the Python OBJECTS it was handed: Python numbers in CPython's
+   arithmetic (exact ints), and NumPy's operation the moment a NumPy scalar or array takes part (NEP 50:
+   `np.arange(0, 1, np.float32(0.1))` divides in float32, `np.arange(np.int8(-128), np.int8(127), np.int8(100))` wraps
+   to empty), with any OverflowError reported as `Maximum allowed size exceeded`. `UnmanagedStorage.ArangeObj(NDArray,
+   NDArray, NDArray, DType)` routes the two (`PyScalar` / NumSharp's operators). Left open: NumPy's integer setitem
+   range-checks a NumPy SCALAR element where NumSharp casts it (stage S3, `OpenBugs.ApiParity.cs`).
 
 ## 7. State log
 
+- **2026-11-13**: API-parity batch 13 on `journey5` (branch `api-parity/batch-13`; the owner approved fixes 1-4 and 7-15,
+  not 5 (np.where without its object forms) and 6 (np.save without its Array form), with three comments: fix 7 "Also
+  NDListArray i think", fix 8 "reduce the case of the properties, we must match numpy", fix 12 "but keep existing
+  overloads"). Fixed: `np.array(string)` / `np.asarray(string)` mark an explicit 0-d array (finding 71); np.concatenate's
+  rank checks in `PyArray_ConcatenateArrays`' order; np.delete and np.insert down to `Slice` / `NDArray` / `long obj`
+  (finding 72; insert's `object values` forms went); `new np.Broadcast(params NDArray[])` public, the parameterless
+  constructor gone, `np.broadcast(NDListArray[])`; NpzFile's NumPy names (`files`, `f`, `zip`, `fid`, `allow_pickle`,
+  `max_header_size`, `keys()`, `values()`, `items()`, `get()`, `close()`, the `own_fid` / `allow_pickle` /
+  `max_header_size` keywords); np.lib.array_utils; np.lib.format (`NpyFormat.HeaderData` carries the descr text, and the
+  header-length refusal is NumPy's ValueError); np.ma.MaskedArray; np.arange's NumPy signature over the generic
+  `PyArray_ArangeObj` port (finding 73), the float overloads float64 and new `ulong` forms (QB02); np.repeat's per-element
+  text and ndarray.item's ValueErrors (QB03, QB04); NDArray.Normalize and AxisOutOfRangeException deleted; Shape dims for
+  np.unravel_index / np.ravel_multi_index and long[] dims in `TensorEngine.UnravelIndex` / `RavelMultiIndex` (QB56).
+  Pinned: `ApiParity_Arange_NumPyScalarStores_AreRangeChecked` (stage S3); `[Misaligned]`: `np.arange(5, null)` binds the
+  kept `(double stop, DType dtype)` overload. Regression pins now: QB02, QB03, QB04, QB56, the two batch-12 ApiParity
+  pins and `OpenBugs.cs` `NpArrayOfString_IsAnExplicitZeroDimArray`. Callers: 46 np.insert lines with `object` values, 21
+  NpzFile lines, the float32 arange and item() tests. Tools: the gap tool registers the two modules; the coverage tool's
+  NpzFile spelling adapters went (its MaskedArray count, stale since batch 12, is 82).
 - **2026-11-13**: API-parity batch 12 on `journey5` (branch `api-parity/batch-12`; the owner approved all 9 fixes and
   kept np.histogram's four `bins` forms: "C keep four"). Fixed: np.interp is one signature with `NDArray left / right`,
   the engine converting them as NumPy's loops do (`PyFloat_AsDouble`, CPython 3.12's `PyComplex_RealAsDouble` /

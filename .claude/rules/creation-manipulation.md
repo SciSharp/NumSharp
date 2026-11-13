@@ -18,17 +18,38 @@ paths:
 
 `np.arange(start, stop, step, dtype)` is NumPy's `PyArray_ArangeObj` (`ctors.c`: `UnmanagedStorage.ArangeObj`,
 `Backends/Unmanaged/UnmanagedStorage.Ctors.cs`). No ufunc runs, so no TensorEngine member is involved.
+- NumPy's signature is `arange(NDArray start = null, NDArray stop = null, NDArray step = null, DType dtype = null,
+  string device = null)` (`array_arange`: a lone `stop:` becomes the start, neither is `arange() requires stop to be
+  specified.`), over `ArangeObj(NDArray, NDArray, NDArray, DType)`: the dtype is int64 promoted with each argument's own
+  descriptor (a Python int by its value, int64 or uint64; a float32 or float16 scalar or a uint64 value gives float64;
+  a complex complex128; a string discovers a text dtype, then the fill refusal), and `_calc_length`'s arithmetic is the
+  arguments' own: Python numbers run CPython's (`PyScalar`), and once a NumPy scalar or array takes part the operation
+  is NumPy's (NumSharp's operators, NEP 50), so `np.arange(0, 1, np.float32(0.1))` divides in float32 and
+  `np.arange(np.int8(-128), np.int8(127), np.int8(100))` wraps to an empty array. A complex dtype takes the smaller
+  ceiling of the quotient's two parts (`np.arange(1+2j)` is `[0j]`, `np.arange(np.complex128(3))` empty); an argument
+  with dimensions is NumPy's `only 0-dimensional arrays can be converted to Python scalars` (or a truth-value error);
+  any OverflowError of the length is `Maximum allowed size exceeded`.
+- The typed overloads stay beside it and win C#'s overload resolution for plain C# numbers: `int` / `long` (Python
+  ints), `double` (Python floats), `float` (a C# float is a Python float: float64 computed from the exact float32
+  values, as NumPy's `np.arange(np.float32(0), np.float32(1), np.float32(0.1))`), `ulong` (Python ints by value: past
+  int64 the dtype is float64, the length exact), and the dtype forms `(double stop, DType dtype)` /
+  `(double start, double stop, DType)` / `(double start, double stop, double step, DType)`. The kept `(double stop,
+  DType dtype)` form binds `np.arange(5, null)` and `np.arange(5, dtype: null)`, so a null dtype there is NumPy's
+  discovery for a Python float, float64 (`[Misaligned]`; NumPy's int64 needs `np.arange(5)`).
 - The length is `ceil((stop - start) / step)` in Python's arithmetic on the bounds: the `double` overloads are Python
   floats, the `long` / `int` overloads Python ints (exact, with the correctly rounded true division). A quotient that
   underflows to zero counts one element for +0 and none for -0. A ceiling of exactly `2**63` is NumPy's x86 empty array
   (C's cast gives INT64_MIN there; .NET 9+ saturates, so the case is decided explicitly).
 - `start` and `start + step` are stored through the dtype's `setitem` slot (NumPy's errors: `Python integer 130 out of
   bounds for int8`), and the rest is filled by its `fill` slot in the dtype's own arithmetic (bool's fill refuses more
-  than two elements).
+  than two elements). A NumPy SCALAR element is cast where NumPy's integer setitem range-checks it
+  (`np.arange(np.int64(1000), 1002, dtype=np.int8)` is NumPy's OverflowError): the scalar-store stage S3, pinned as
+  `OpenBugs.ApiParity.ApiParity_Arange_NumPyScalarStores_AreRangeChecked`.
 - NumPy's dtype checks run first (a text dtype is NumPy's TypeError "arange() not supported for inputs with DType …"),
   then Python's `ZeroDivisionError` for a zero step; a NaN length is "arange: cannot compute
   length", a length past int64 "Maximum allowed size exceeded".
-- Gates: the `arange_full` oracle tier (zero excuses) and `Creation/np.arange.NumPyPort.Test.cs`.
+- Gates: the `arange_full` oracle tier (zero excuses), `Creation/np.arange.NumPyPort.Test.cs` and
+  `APIs/NumPyKeywordParity.Batch13.Test.cs` (NumPy's signature over the scalar and complex inputs).
 
 ## `np.ndarray`
 
@@ -359,6 +380,16 @@ plain statements would not apply.
   `NDArray[]`, 1-D primitive arrays and `IList` are Python lists; `NDArray`, scalars and rank ≥ 2 rectangular arrays are
   leaves; `np.block(x)` at depth 0 returns a copy. A C# scalar leaf keeps its C# type (`10` is int32, a Python int
   int64).
+- `concatenate`'s rank checks are `PyArray_ConcatenateArrays`' order: only the FIRST array's 0-d check (`zero-dimensional
+  arrays cannot be concatenated`), then each array's rank against the first, the first mismatch reported
+  (`IncorrectShapeException` with NumPy's `all the input arrays must have same number of dimensions, but the array at
+  index 0 has 2 dimension(s) and the array at index 1 has 0 dimension(s)`), so a later 0-d array is the rank mismatch.
+- `np.delete(arr, obj, axis)` and `np.insert(arr, obj, values, axis)` take NumPy's two typed obj forms, `Slice` and
+  `NDArray` (a C# `int[]` / `long[]` / `bool[]` converts; a 0-d integer is NumPy's single-index path), plus one `long obj`
+  form, because a C# `int` converts to `Slice` and `NDArray` alike (CS0121 without it); it passes the Python int as a 0-d
+  literal, so every form answers alike. `insert`'s values are an `NDArray` (a C# number is NumPy's Python scalar, a string
+  is parsed, a `(NDArray)null` is None; a C# `List` is passed as `np.array(list)`). A bool scalar obj to `delete` is
+  NumPy's ValueError `boolean array argument obj to delete must be one dimensional and match the axis length of 6`.
 - `concatenate`'s layout vote: F output only when every input is F-contiguous and not all are also C-contiguous (inputs
   that are both, such as `(N,1)` columns, give C, as `PyArray_CreateMultiSortedStridePerm`). When every per-outer slab
   is the same 1/2/4/8/16 bytes (the `(N,1)` column pattern), it interleaves with constant-size loads and stores.
@@ -421,7 +452,9 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
 - Matched, no need to re-prove: the values of `split`/`array_split`/`hsplit`/`vsplit` × {0, negative, empty},
   `repeat`/`tile`/`roll` × {0, negative, empty axis}, `squeeze`, `moveaxis`, `swapaxes`.
 - Text divergences (each typed and texted on both sides): `np.split(a, 0)` raises "number sections must be
-  larger than 0." where NumPy leaks `ZeroDivisionError: integer modulo by zero`; the `repeat(-1)` text differs in wording;
+  larger than 0." where NumPy leaks `ZeroDivisionError: integer modulo by zero`; the broadcast `repeat(-1)` text differs
+  in wording (NumPy: `negative dimensions are not allowed`; a negative entry of a count ARRAY is NumPy's ValueError
+  `repeats may not contain negative values.`, period included);
   `np.broadcast_to(a, (2^62, 6))` builds the view where NumPy refuses with `iterator is too large`.
 - The reshape METHOD of NDArray, `NDArray<T>`, NDMatrix and NDCharArray has NumPy's two spellings (batch 9):
   `reshape(Shape shape, char order = 'C', bool? copy = null)` and the loose integers (`params long[]` + its
@@ -444,8 +477,11 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   `_broadcast_shape` first (`Shape.BroadcastShape`: PyArray_Broadcast's scan, `shape mismatch: objects cannot be
   broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape (4,).`, past 64 operands
   numbered within each group of 63), then lays the views out through `Shape.Broadcast`; `np.broadcast` is ONE scan over
-  every operand (`Shape.MultiIterShape`; NumSharp takes more than NumPy's 64). Gate:
-  `Creation/np.broadcast.RefusalTexts.Test.cs`.
+  every operand (`Shape.MultiIterShape`; NumSharp takes more than NumPy's 64). NumPy's class IS the function:
+  `new np.Broadcast(params NDArray[] arrays)` is public, and no operand is NumPy's `np.broadcast()` (shape `()`, size 1,
+  one empty step). `np.broadcast(NDListArray[])` / `new np.Broadcast(NDListArray[])` broadcast `np.char.split`'s object
+  arrays of lists over their ids and step through tuples of the lists (`iters` refused: its flat iterators read
+  numbers); a list array and a numeric array do not mix in one object. Gate: `Creation/np.broadcast.RefusalTexts.Test.cs`.
   The axis errors of this family (`split(..., axis=oob)`'s leaked `IndexError`, `squeeze`) are NumPy's
   (`axis-arguments.md`).
 - No `NPY_MAXDIMS` (a documented divergence, `[Misaligned]`): an array may have more than NumPy's 64 dimensions. Where

@@ -522,7 +522,7 @@ namespace NumSharp.Tests.Documentation
             np.savez(At("bundle.npz"), x, y);           // positional → "arr_0", "arr_1"
 
             using NpzFile npz = np.load_npz(At("bundle.npz"));
-            npz.Files.Should().Equal("arr_0", "arr_1");
+            npz.files.Should().Equal("arr_0", "arr_1");
             npz["arr_0"].ToArray<long>().Should().Equal(0L, 1L, 2L);
             npz["arr_1"].ToArray<double>().Should().Equal(0.0, 1.0, 2.0, 3.0);
         }
@@ -535,7 +535,7 @@ namespace NumSharp.Tests.Documentation
             np.savez(At("bundle.npz"), new Dictionary<string, NDArray> { ["w"] = w, ["b"] = b });
 
             using NpzFile npz = np.load_npz(At("bundle.npz"));
-            npz.Files.Should().BeEquivalentTo(new[] { "w", "b" });
+            npz.files.Should().BeEquivalentTo(new[] { "w", "b" });
             npz["w"].shape.Should().Equal(new long[] { 2, 3 });
         }
 
@@ -560,7 +560,7 @@ namespace NumSharp.Tests.Documentation
             NDArray w2 = npz.f.w;                        // dot access, like NumPy's npz.f
             w2.ToArray<long>().Should().Equal(0L, 1L, 2L);
 
-            npz.Files.Should().BeEquivalentTo(new[] { "w", "b" }, "'.npy' is stripped from Files");
+            npz.files.Should().BeEquivalentTo(new[] { "w", "b" }, "'.npy' is stripped from files");
         }
 
         [TestMethod]

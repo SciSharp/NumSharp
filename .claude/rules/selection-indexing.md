@@ -344,6 +344,10 @@ Every store entry point packs a C# literal as NumPy's `PyArray_Pack` of a Python
   `indices: 5L` binds, returning `long[]`), `ravel_multi_index(multi_index, dims, mode, order)` (the scalar `long[]` form
   and the per-axis `string[] mode` form too; a bare `mode: null` is ambiguous between the two mode forms, so write
   `(string[])null` or `(string)null`).
+- The shape parameters are `Shape`, so NumPy's idiom `np.unravel_index(np.argmax(a), a.shape)` binds `a.shape`
+  (`long[]`), `a.Shape`, an `int[]` or a tuple; the engines (`TensorEngine.UnravelIndex` / `RavelMultiIndex`) read
+  NumPy's intp dimensions as `long[]` (a `(2**40, 3)` shape unravels), and the dims products detect an overflow exactly
+  (`Math.BigMul`; a divide-back test would throw on `long.MinValue / -1`).
 - Gates: the layout-parity oracle's `unravel` / `ravelmi` families, the string oracle (no layout excuse) and
   `Indexing/IndexSearchLayout.Test.cs`.
 

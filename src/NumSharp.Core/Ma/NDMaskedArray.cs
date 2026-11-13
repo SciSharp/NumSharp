@@ -1717,12 +1717,11 @@ namespace NumSharp
         ///     (negative counts from the end), or one index per dimension.</param>
         /// <returns>The element's value, boxed in its C# type (a <c>long</c> for int64 data, a <c>double</c> for
         ///     float64, …).</returns>
-        /// <exception cref="IncorrectSizeException">No argument and the array does not hold exactly one element
-        ///     (<c>can only convert an array of size 1 to a Python scalar</c>).</exception>
+        /// <exception cref="ValueError">No argument and the array does not hold exactly one element (<c>can only convert
+        ///     an array of size 1 to a Python scalar</c>), or neither one index nor one per dimension (<c>incorrect number
+        ///     of indices for array</c>): NumPy's ValueErrors since API-parity batch 13 (parity QA-04).</exception>
         /// <exception cref="IndexOutOfRangeException">A flat index out of bounds (NumPy's IndexError text <c>index 9 is out
         ///     of bounds for size 6</c>), or a coordinate out of its axis' bounds.</exception>
-        /// <exception cref="ArgumentException">Neither one index nor one per dimension (NumPy's ValueError <c>incorrect
-        ///     number of indices for array</c>).</exception>
         /// <remarks>Forwards to <see cref="NDArray.item()"/> / <see cref="NDArray.item(long)"/> /
         ///     <see cref="NDArray.item(long[])"/> over the data, so its argument checks are ndarray's. Until API-parity batch
         ///     8 this took no argument and answered a masked element with the masked constant; NumPy's never did.</remarks>
@@ -3125,6 +3124,32 @@ namespace NumSharp
         ///     batch 8 (the third positional was the fill value, NumPy's is the dtype). <c>subok</c> is the parity plan's
         ///     exclusion. See <see cref="array"/> for the mask rules.</remarks>
         public NDMaskedArray masked_array(object data, object mask = null, DType dtype = null, bool copy = false, int ndmin = 0,
+            object fill_value = null, bool keep_mask = true, bool? hard_mask = null, bool shrink = true, char? order = null)
+            => MaskedArrayNew(data, mask, dtype, copy, ndmin, fill_value, keep_mask, hard_mask, shrink, order);
+
+        /// <summary>
+        ///     NumPy's <c>np.ma.MaskedArray(data, mask, ...)</c>: the masked-array CLASS called as NumPy code calls it -
+        ///     <c>np.ma.masked_array</c> IS that class (<c>ma.MaskedArray is ma.masked_array</c> is True), so this is
+        ///     <see cref="masked_array"/>, parameter for parameter.
+        /// </summary>
+        /// <param name="data">Data array-like (required, as <see cref="masked_array"/>'s).</param>
+        /// <param name="mask">Optional mask array-like (see <see cref="masked_array"/>).</param>
+        /// <param name="dtype">Optional dtype the data is cast or converted to.</param>
+        /// <param name="copy">When true, copies the data and the masks.</param>
+        /// <param name="ndmin">The minimum rank of the result.</param>
+        /// <param name="fill_value">Optional default fill value.</param>
+        /// <param name="keep_mask">With a given mask, true ORs it with the data's own mask.</param>
+        /// <param name="hard_mask">Hard / soft mask, or null to inherit the data's hardness.</param>
+        /// <param name="shrink">With no mask and <paramref name="keep_mask"/> false, true leaves no mask.</param>
+        /// <param name="order">The data's memory layout (NumPy's <c>np.array(..., order=)</c>).</param>
+        /// <returns>A new <see cref="NDMaskedArray"/>, <see cref="masked_array"/>'s answer.</returns>
+        /// <exception cref="MaskError">The mask does not fit the data (see <see cref="masked_array"/>).</exception>
+        /// <exception cref="TypeError">A fill value numpy.ma cannot convert to the data's dtype.</exception>
+        /// <exception cref="ValueError">An unknown order letter, <paramref name="ndmin"/> past 64, or a data / dtype pair
+        ///     NumPy refuses (see <see cref="masked_array"/>).</exception>
+        /// <remarks>The C# class is <see cref="NDMaskedArray"/> (the ND* type naming); this member is NumPy's spelling of
+        ///     its construction. API-parity batch 13.</remarks>
+        public NDMaskedArray MaskedArray(object data, object mask = null, DType dtype = null, bool copy = false, int ndmin = 0,
             object fill_value = null, bool keep_mask = true, bool? hard_mask = null, bool shrink = true, char? order = null)
             => MaskedArrayNew(data, mask, dtype, copy, ndmin, fill_value, keep_mask, hard_mask, shrink, order);
 

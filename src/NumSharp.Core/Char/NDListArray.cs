@@ -558,9 +558,10 @@ namespace NumSharp
             Heap.Dispose();
         }
 
-        /// <summary>Throws when the array was disposed.</summary>
+        /// <summary>Throws when the array was disposed: the guard every member runs first, and the one np.broadcast's list
+        ///     form runs on each operand before it borrows the ids (internal for that reason).</summary>
         /// <exception cref="ObjectDisposedException">Always, once <see cref="Dispose"/> ran.</exception>
-        private void ThrowIfDisposed()
+        internal void ThrowIfDisposed()
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(NDListArray));

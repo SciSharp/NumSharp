@@ -23,11 +23,25 @@ commas and the Python 2 `3L` suffix all work; `max_header_size` (default 10000) 
 lifts it.
 - `np.load` returns `object`: `NDArray` for a `.npy`, `NpzFile` for a `.npz`, dispatching on the magic bytes (NumPy's
   content-dependent return; C# has no union type). `np.load_npy` / `np.load_npz` are the typed forms, and each reports a
-  directed error if handed the other kind. `NpzFile` is lazy and cached, takes `"w"` or `"w.npy"` as keys, exposes
-  `.Files` stripped, supports `npz.f.weights` (NumPy's `BagObj`), and must be disposed. It is safe to share between
+  directed error if handed the other kind. `NpzFile` is lazy and cached, takes `"w"` or `"w.npy"` as keys, and has
+  NumPy's members and names: `NpzFile(fid, own_fid, allow_pickle, max_header_size)` (a path owns its file), `files`
+  (stripped), `keys()` / `values()` / `items()` / `get(key, default)`, `f` (NumPy's `BagObj`: `npz.f.weights`), `zip`,
+  `fid` (the stream only when owned), `allow_pickle`, `max_header_size` and `close()` (then `zip` / `fid` / `f` are null);
+  the dictionary interface's `Count` / `Keys` / `Values` are explicit, `ContainsKey` / `TryGetValue` / the indexer /
+  `foreach` stay C#'s, and it must be disposed. It is safe to share between
   threads: a cached member is returned without a lock, every read of the archive (a first load, `GetRawBytes`,
   `IsArray`'s magic check, `Dispose`) runs under one gate because a `ZipArchive` reads one stream, and two threads loading
   the same member first get one instance.
+
+- `np.lib.format` (`APIs/np.lib.format.cs`) is NumPy's `numpy.lib.format` over `NpyFormat`'s statements, typed:
+  `magic(major, minor)`, `read_magic(fp)` (a `(major, minor)` tuple), `dtype_to_descr(dtype)` (`dtype.str` for a legacy
+  dtype, byte order kept; `'|O'` for a StringDType), `descr_to_dtype(descr)` (`np.dtype(descr)`, NumPy's statement for
+  a string), `drop_metadata`, `header_data_from_array_1_0` (an `IDictionary` with a copied `long[]` shape),
+  `write_array_header_1_0` / `_2_0`, `read_array_header_1_0` / `_2_0` (`(long[] shape, bool fortran_order, DType
+  dtype)`, the header's own descriptor), `write_array` / `read_array` (`np.save` / `np.load`'s bytes) and the constants
+  (`ARRAY_ALIGN`, `BUFFER_SIZE`, `MAGIC_LEN`, `MAGIC_PREFIX`, `GROWTH_AXIS_MAX_DIGITS`, `EXPECTED_KEYS`). NumPy's
+  ValueErrors are `ValueError` with NumPy's texts (`Header length 80069 too big for version=(1, 0)` included). Not
+  offered: `open_memmap` (no `np.memmap`) and `isfileobj` (a CPython file-object test).
 
 | Dtype | Maps to | Notes |
 |-------|---------|-------|

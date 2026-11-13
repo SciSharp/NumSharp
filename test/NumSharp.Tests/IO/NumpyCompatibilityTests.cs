@@ -136,7 +136,7 @@ namespace NumSharp.Tests.IO
 
             using var npz = np.load_npz(Path.Combine(TestDir, "multi.npz"));
 
-            Assert.AreEqual(2, npz.Count);
+            Assert.AreEqual(2, npz.files.Count);
             Assert.IsTrue(npz.ContainsKey("a"));
             Assert.IsTrue(npz.ContainsKey("b"));
 

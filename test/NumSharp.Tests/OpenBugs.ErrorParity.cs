@@ -58,7 +58,8 @@ namespace NumSharp.Tests
         ///     <c>np.squeeze</c> report an out-of-range axis with NumPy's AxisError text — "axis 5 is out of bounds for
         ///     array of dimension 2", prefixed with the argument's role (<c>destination:</c> / <c>source:</c> /
         ///     <c>axis2:</c>) where NumPy normalizes more than one axis. They threw the legacy
-        ///     <c>AxisOutOfRangeException</c> ("axis (5) is out of bounds for array of dimension (2)" — parenthesized
+        ///     <c>AxisOutOfRangeException</c> (deleted in API-parity batch 13: "axis (5) is out of bounds for array of
+        ///     dimension (2)" — parenthesized
         ///     numbers, no role prefix), and <c>np.squeeze</c> leaked .NET's generic range message.
         /// </summary>
         /// <exception cref="Exception">The assertion framework's failure exception, if one of these regresses to the

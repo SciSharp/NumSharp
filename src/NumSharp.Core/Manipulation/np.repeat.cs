@@ -25,7 +25,10 @@ namespace NumSharp
         ///     decimal or text (<c>Cannot cast array data from dtype('float64') to dtype('int64') according to the rule
         ///     'safe'</c>; <c>Cannot cast scalar …</c> for a 0-d repeats).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
-        /// <exception cref="ArgumentException">The repeats' length does not match, or a count is negative.</exception>
+        /// <exception cref="ValueError">A negative entry of a per-element count array (NumPy's <c>repeats may not contain
+        ///     negative values.</c>).</exception>
+        /// <exception cref="ArgumentException">The repeats' length does not match, or one broadcast count is negative
+        ///     (NumPy's text for that one is <c>negative dimensions are not allowed</c>: pinned).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
         ///     <para>

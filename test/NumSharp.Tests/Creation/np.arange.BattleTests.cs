@@ -560,34 +560,44 @@ public class ArangeBattleTests
 
     #endregion
 
-    #region Single-Precision Float (float32)
+    #region C# float arguments (Python floats: float64)
 
+    /// <summary>
+    ///     A C# <c>float</c> is a Python float (API-parity batch 13, parity QA-02), so the float overloads answer NumPy's
+    ///     float64: <c>np.arange(np.float32(0), np.float32(5))</c> is <c>float64 [0., 1., 2., 3., 4.]</c> in NumPy 2.4.2.
+    ///     They returned float32 computed in float32 before; a float32 result takes the dtype.
+    /// </summary>
     [TestMethod]
-    public void Arange_Float32_Basic()
+    public void Arange_CSharpFloat_Basic_IsFloat64()
     {
         // Explicit float overload
         var result = np.arange(0f, 5f);
 
-        result.dtype.Should().Be(typeof(float));
-        result.Should().BeOfValues(0f, 1f, 2f, 3f, 4f);
+        result.dtype.Should().Be(typeof(double));
+        result.Should().BeOfValues(0.0, 1.0, 2.0, 3.0, 4.0);
     }
 
+    /// <summary>NumPy 2.4.2: <c>np.arange(np.float32(0), np.float32(2), np.float32(0.5))</c> is
+    ///     <c>float64 [0., 0.5, 1., 1.5]</c>.</summary>
     [TestMethod]
-    public void Arange_Float32_WithStep()
+    public void Arange_CSharpFloat_WithStep_IsFloat64()
     {
         var result = np.arange(0f, 2f, 0.5f);
 
-        result.dtype.Should().Be(typeof(float));
-        result.Should().BeOfValues(0f, 0.5f, 1f, 1.5f);
+        result.dtype.Should().Be(typeof(double));
+        result.Should().BeOfValues(0.0, 0.5, 1.0, 1.5);
     }
 
+    /// <summary>NumPy 2.4.2: <c>np.arange(np.float32(5), np.float32(0), np.float32(-1))</c> is
+    ///     <c>float64 [5., 4., 3., 2., 1.]</c>; <c>dtype=np.float32</c> gives the same values in float32.</summary>
     [TestMethod]
-    public void Arange_Float32_NegativeStep()
+    public void Arange_CSharpFloat_NegativeStep_IsFloat64()
     {
         var result = np.arange(5f, 0f, -1f);
 
-        result.dtype.Should().Be(typeof(float));
-        result.Should().BeOfValues(5f, 4f, 3f, 2f, 1f);
+        result.dtype.Should().Be(typeof(double));
+        result.Should().BeOfValues(5.0, 4.0, 3.0, 2.0, 1.0);
+        np.arange(5f, 0f, -1f, np.float32).Should().BeOfValues(5f, 4f, 3f, 2f, 1f);
     }
 
     #endregion

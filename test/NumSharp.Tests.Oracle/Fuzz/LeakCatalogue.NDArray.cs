@@ -228,12 +228,6 @@ namespace NumSharp.Tests.Fuzz
                 x.ReplaceData(new double[] { 1, 2 });
                 return x;
             });
-            T(l, "ndarray.Normalize", "unimplemented (NotImplementedException)", f =>
-            {
-                using var x = np.array(new double[] { 1, 2, 3, 4 });   // the entry's own scratch — released on the throw
-                x.Normalize();
-                return null;
-            });
             E(l, "ndarray.itemset", "shape + value", f =>
             {
                 var x = np.zeros(new Shape(2, 2));

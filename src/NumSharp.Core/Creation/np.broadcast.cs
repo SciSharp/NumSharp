@@ -26,9 +26,33 @@ namespace NumSharp
         ///     Two-operand overload — the most common case. Retained as an explicit overload so
         ///     <c>np.broadcast(a, b)</c> stays binary-compatible and skips the params-array allocation.
         /// </summary>
+        /// <param name="nd1">The first operand.</param>
+        /// <param name="nd2">The second operand.</param>
+        /// <returns>The broadcast object of the two operands.</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast together (NumPy's text).</exception>
         public static Broadcast broadcast(NDArray nd1, NDArray nd2)
         {
             return new Broadcast(nd1, nd2);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.broadcast(*arrays)</c> over object arrays of lists - <c>np.char.split</c>'s
+        ///     <see cref="NDListArray"/> results: their shapes broadcast together, and iterating yields one tuple of the
+        ///     operands' lists (each a <see cref="List{T}"/> of its pieces, NumPy's Python list) per broadcast position.
+        /// </summary>
+        /// <param name="arrays">The list arrays (NumPy's sequence of operands); the object borrows them.</param>
+        /// <returns>The broadcast object over the list arrays.</returns>
+        /// <exception cref="ArgumentNullException">An operand is null.</exception>
+        /// <exception cref="ObjectDisposedException">An operand was disposed.</exception>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast together (NumPy's text).</exception>
+        /// <remarks>
+        ///     A sequence parameter, not <c>params</c>: a second <c>params</c> form would make <c>np.broadcast()</c>
+        ///     ambiguous. NumSharp's lists are their own array type, so a list array and a numeric array do not broadcast in
+        ///     one object here (NumPy's object array would). API-parity batch 13.
+        /// </remarks>
+        public static Broadcast broadcast(NDListArray[] arrays)
+        {
+            return new Broadcast(arrays);
         }
 
         /// <summary>
@@ -39,40 +63,40 @@ namespace NumSharp
         /// </summary>
         public class Broadcast : IEnumerable<object[]>, IEnumerator<object[]>
         {
-            [NDBorrowed] private readonly NDArray[] _ops;   // the caller's operands
+            [NDBorrowed] private readonly NDArray[] _ops;   // the caller's operands (a list array's ids for list operands)
+            [NDBorrowed] private readonly NDListArray[] _lists; // the caller's list arrays, or null for array operands
             private NDFlatIterator[] _iters;
             private NDArray[] _views;     // operands broadcast to the result shape (lazy) — OWNED, released by Dispose
             private int _index;           // live cursor — NumPy's broadcast.index
             private object[] _current;    // values at the previous cursor position
 
-            /// <summary>
-            ///     Parameterless constructor retained for source/binary compatibility
-            ///     (the public surface previously exposed an implicit one). An instance
-            ///     built this way has no operands, so <see cref="iters"/> stays null
-            ///     unless explicitly assigned.
-            /// </summary>
-            public Broadcast() { }
-
+            /// <summary>The two-operand broadcast <see cref="np.broadcast(NDArray, NDArray)"/> builds.</summary>
+            /// <param name="op1">The first operand (borrowed).</param>
+            /// <param name="op2">The second operand (borrowed).</param>
+            /// <exception cref="IncorrectShapeException">The operands do not broadcast together.</exception>
             internal Broadcast(NDArray op1, NDArray op2) : this(new[] { op1, op2 }) { }
 
             /// <summary>
-            ///     Broadcast N operands together (NumPy's <c>np.broadcast(*args)</c>). The result
+            ///     NumPy's <c>np.broadcast(*arrays)</c> class constructor: broadcast N operands together. The result
             ///     <see cref="shape"/> is the broadcast of every operand's shape (resolved eagerly;
             ///     iterators are built lazily on first <see cref="iters"/> access). Incompatible
             ///     shapes raise <see cref="IncorrectShapeException"/> (NumPy parity). Unlike NumPy's
             ///     fixed NPY_MAXARGS=64 cap, any number of operands is accepted — matching NumSharp's
-            ///     unlimited-operand <c>NDIter</c>.
+            ///     unlimited-operand <c>NDIter</c>. No operand at all (<c>new np.Broadcast()</c>) is NumPy's
+            ///     <c>np.broadcast()</c>: the 0-d broadcast, shape <c>()</c> and size 1.
             /// </summary>
-            /// <param name="ops">The operands (null is treated as none); the object borrows them, it does not own or dispose
-            ///     them.</param>
+            /// <param name="arrays">The operands (null is treated as none); the object borrows them, it does not own or
+            ///     dispose them.</param>
+            /// <remarks>Public since API-parity batch 13 (NumPy's class IS the function); the operand-less public
+            ///     constructor it replaced built an object whose <c>shape</c> threw and whose <c>size</c> was 0.</remarks>
             /// <exception cref="IncorrectShapeException">Two operands disagree on an axis: NumPy's <c>shape mismatch: objects
             ///     cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (3,) and arg 1 with shape
             ///     (4,).</c> (<see cref="Shape.MultiIterShape"/>).</exception>
             /// <exception cref="ValueError">The broadcast shape's element count does not fit a 64-bit integer
             ///     (<c>broadcast dimensions too large.</c>).</exception>
-            internal Broadcast(params NDArray[] ops)
+            public Broadcast(params NDArray[] arrays)
             {
-                _ops = ops ?? Array.Empty<NDArray>();
+                _ops = arrays ?? Array.Empty<NDArray>();
 
                 // NUMSHARP DIVERGENCE: NumPy caps the multi-iterator at NPY_MAXARGS=64, but
                 // NumSharp's NDIter allocates all per-operand state dynamically and imposes no
@@ -84,6 +108,47 @@ namespace NumSharp
                 shape = _ops.Length == 0
                     ? Shape.Scalar
                     : Shape.MultiIterShape(_ops.Select(o => o.Shape).ToArray());
+            }
+
+            /// <summary>
+            ///     NumPy's <c>np.broadcast(*arrays)</c> over object arrays of lists (<see cref="NDListArray"/>, the
+            ///     <c>np.char.split</c> results): the list arrays' shapes broadcast together, and each step's tuple holds
+            ///     the operands' LISTS (a <see cref="List{T}"/> of its pieces each, NumPy's Python list).
+            /// </summary>
+            /// <param name="arrays">The list arrays (null is treated as none); borrowed, never disposed here.</param>
+            /// <exception cref="ArgumentNullException">An operand is null.</exception>
+            /// <exception cref="ObjectDisposedException">An operand was disposed.</exception>
+            /// <exception cref="IncorrectShapeException">The operands do not broadcast together (NumPy's text).</exception>
+            /// <remarks>
+            ///     The broadcast runs over each list array's int64 ids (NumPy's object pointers), so the shape rule and its
+            ///     texts are the array constructor's; a step reads each id and hands back the list it names. <see cref="iters"/>
+            ///     is refused for list operands (its flat iterators read numbers). A sequence parameter, not <c>params</c>: a
+            ///     second <c>params</c> form would make <c>new np.Broadcast()</c> ambiguous. API-parity batch 13 (the owner:
+            ///     "Also NDListArray").
+            /// </remarks>
+            public Broadcast(NDListArray[] arrays)
+                : this(ListIds(arrays))
+            {
+                _lists = arrays ?? Array.Empty<NDListArray>();
+            }
+
+            /// <summary>The ids of each list array, checked in order (null and disposed operands refused first).</summary>
+            /// <param name="arrays">The list arrays, or null for none.</param>
+            /// <returns>Each operand's id array (the operand's own: borrowed, never disposed here).</returns>
+            /// <exception cref="ArgumentNullException">An operand is null.</exception>
+            /// <exception cref="ObjectDisposedException">An operand was disposed.</exception>
+            private static NDArray[] ListIds(NDListArray[] arrays)
+            {
+                if (arrays is null)
+                    return Array.Empty<NDArray>();
+                var ids = new NDArray[arrays.Length];
+                for (int i = 0; i < arrays.Length; i++)
+                {
+                    var part = arrays[i] ?? throw new ArgumentNullException(nameof(arrays), "arrays holds a null list array");
+                    part.ThrowIfDisposed();
+                    ids[i] = part.Ids;
+                }
+                return ids;
             }
 
             public Shape shape { get; internal set; }
@@ -105,14 +170,24 @@ namespace NumSharp
             ///     on first access — np.broadcast() only resolves the shape eagerly — and backed by
             ///     <see cref="np.broadcast_to(NDArray, Shape)"/> + <see cref="NDFlatIterator"/>, the
             ///     NDIter-aligned replacement for the removed NDIterator. There are <see cref="numiter"/>
-            ///     entries (0 when constructed without operands). Unlike NumPy's flatiters these are
+            ///     entries (none for a broadcast of no operand). Unlike NumPy's flatiters these are
             ///     independent and re-enumerable; they do not share the <see cref="index"/> cursor.
             /// </summary>
+            /// <exception cref="NotSupportedException">The operands are list arrays (<see cref="NDListArray"/>): their
+            ///     views hold ids, which a flat iterator would read as numbers; iterate the broadcast itself.</exception>
             public NDFlatIterator[] iters
             {
-                get => _iters ??= _ops is null
-                    ? null
-                    : Views.Select(v => new NDFlatIterator(v)).ToArray();
+                get
+                {
+                    // A list operand's view holds ids, and a flat iterator would read them as numbers: refused rather than
+                    // handing back pointers where NumPy hands back the lists.
+                    if (_lists is not null)
+                        throw new NotSupportedException(
+                            "iters of a broadcast over NDListArray operands: iterate the broadcast itself (each step's tuple holds the lists)");
+                    return _iters ??= _ops is null
+                        ? null
+                        : Views.Select(v => new NDFlatIterator(v)).ToArray();
+                }
                 internal set => _iters = value;
             }
 
@@ -127,7 +202,7 @@ namespace NumSharp
             /// <summary>
             ///     Number of operands being broadcast together (NumPy's <c>broadcast.numiter</c>,
             ///     equal to <c>len(iters)</c>). Equals the operand count passed to
-            ///     <see cref="np.broadcast(NDArray[])"/> (0 for the parameterless constructor).
+            ///     <see cref="np.broadcast(NDArray[])"/> (0 for a broadcast of no operand, <c>new np.Broadcast()</c>).
             /// </summary>
             public int numiter => _ops?.Length ?? 0;
 
@@ -150,7 +225,8 @@ namespace NumSharp
             /// <summary>
             ///     Advances the cursor one element and reads each operand's value at that flat
             ///     (C-order) position into <see cref="Current"/>. Returns false once <see cref="index"/>
-            ///     reaches <see cref="size"/> (or when constructed without operands).
+            ///     reaches <see cref="size"/>. A broadcast of no operand has one step, an empty tuple (NumPy's
+            ///     <c>list(np.broadcast())</c> is <c>[()]</c>); a list operand's value is its list.
             /// </summary>
             public bool MoveNext()
             {
@@ -160,7 +236,13 @@ namespace NumSharp
                 var views = Views;
                 var vals = new object[views.Length];
                 for (int i = 0; i < views.Length; i++)
-                    vals[i] = views[i].GetAtIndex(_index);
+                {
+                    // A list operand's view holds its ids: the step's value is the list the id names (NumPy's object
+                    // pointer read), a new .NET list of its pieces.
+                    vals[i] = _lists is null
+                        ? views[i].GetAtIndex(_index)
+                        : _lists[i].Heap.ToList((long)views[i].GetAtIndex(_index));
+                }
 
                 _current = vals;
                 _index++;

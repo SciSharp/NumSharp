@@ -52,19 +52,23 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QB-02 — np.arange's float overloads return float32 computed in float32
+        // QB-02 — np.arange's float overloads returned float32 computed in float32
+        // (FIXED 2026-11-13 by API-parity batch 13: a regression pin now)
         // ------------------------------------------------------------------
 
         /// <summary>
-        ///     <c>np.arange(float start, float stop, float step = 1)</c> and <c>np.arange(float stop)</c> (the "type inferred
-        ///     from C# parameter types" overloads) pass <c>NPTypeCode.Single</c>, so <c>np.arange(0f, 1f, 0.1f)</c> is a
-        ///     float32 array whose elements are float32 sums (<c>[3]</c> is <c>0.30000001192092896f</c>). NumPy 2.4.2 never
+        ///     Regression pin (QB-02, fixed 2026-11-13 by API-parity batch 13: the float overloads compute NumPy's float64
+        ///     from the Python floats a C# <c>float</c> stands for, and a C# <c>ulong</c> binds its own overloads, NumPy's
+        ///     Python int). It pinned: <c>np.arange(float start, float stop, float step = 1)</c> and
+        ///     <c>np.arange(float stop)</c> (the "type inferred from C# parameter types" overloads) passed
+        ///     <c>NPTypeCode.Single</c>, so <c>np.arange(0f, 1f, 0.1f)</c> was a float32 array whose elements were float32
+        ///     sums (<c>[3]</c> was <c>0.30000001192092896f</c>). NumPy 2.4.2 never
         ///     returns float32 from arange without a dtype: <c>np.arange(np.float32(0), np.float32(1), np.float32(0.1))</c>
         ///     is float64 <c>start + i*delta</c> in double (<c>[3]</c> is <c>0.30000000447034836</c>), and so is the house
         ///     map's reading of a C# <c>float</c> as a Python float (NumSharp's own <c>np.linspace(0f, 1f, 5)</c> is
         ///     float64). The int overloads already return NumPy's int64.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB02")]
+        [TestMethod]
         public void ParityQb_QB02_ArangeFloatOverloads_AreFloat64LikeNumPy()
         {
             using var r = np.arange(0f, 1f, 0.1f);
@@ -79,24 +83,27 @@ namespace NumSharp.Tests
             s.dtype.Should().Be(np.float64);
 
             // NumPy 2.4.2: np.arange(18446744073709551610, 18446744073709551615, 2) -> float64, 3 elements (the Python
-            // ints' exact length); a C# ulong binds the float32 overload here and gives an empty float32 array.
+            // ints' exact length); a C# ulong bound the float32 overload until batch 13 and gave an empty float32 array.
             using var u = np.arange(18446744073709551610UL, 18446744073709551615UL, 2UL);
             u.dtype.Should().Be(np.float64);
             u.size.Should().Be(3);
         }
 
         // ------------------------------------------------------------------
-        // QB-03 — np.repeat's per-element negative-count text lacks NumPy's period
+        // QB-03 — np.repeat's per-element negative-count text lacked NumPy's period
+        // (FIXED 2026-11-13 by API-parity batch 13: a regression pin now)
         // ------------------------------------------------------------------
 
         /// <summary>
+        ///     Regression pin (QB-03, fixed 2026-11-13 by API-parity batch 13: NumPy's ValueError, period included).
         ///     NumPy's <c>PyArray_Repeat</c> (item_selection.c) raises <c>ValueError: repeats may not contain negative
-        ///     values.</c> for an array of counts holding a negative entry. NumSharp raises the same text without the final
-        ///     period (<c>UnmanagedStorage.ItemSelection.cs</c> <c>ComputeCounts</c> and its 1-D twin). The broadcast
+        ///     values.</c> for an array of counts holding a negative entry; NumSharp raised the same text without the final
+        ///     period (<c>UnmanagedStorage.ItemSelection.cs</c> <c>ComputeCounts</c>, shared by the flat and the axis
+        ///     routes). The broadcast
         ///     (scalar) count is a different, documented wording difference (NumPy: <c>negative dimensions are not
         ///     allowed</c>) and is not part of this pin.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB03")]
+        [TestMethod]
         public void ParityQb_QB03_RepeatNegativeCountArray_TextEndsWithPeriod()
         {
             using var a = np.array(new long[] { 5, 1, 4 });
@@ -105,24 +112,25 @@ namespace NumSharp.Tests
             Action act = () => np.repeat(a, counts);
 
             // NumPy 2.4.2: np.repeat([5, 1, 4], np.array([1, -1, 2])) -> ValueError
-            act.Should().Throw<ArgumentException>().Which.Message.Should().Be("repeats may not contain negative values.");
+            act.Should().Throw<ValueError>().Which.Message.Should().Be("repeats may not contain negative values.");
         }
 
         // ------------------------------------------------------------------
         // QB-04 — ndarray.item() / MaskedArray.item() of a non-size-1 array: not NumPy's ValueError
+        // (FIXED 2026-11-13 by API-parity batch 13: a regression pin now)
         // ------------------------------------------------------------------
 
         /// <summary>
-        ///     NumPy 2.4.2 raises <c>ValueError: can only convert an array of size 1 to a Python scalar</c> for
-        ///     <c>a.item()</c> of an array whose size is not 1 (an empty one included), for ndarray and for
-        ///     <c>numpy.ma.MaskedArray</c>. NumSharp's <c>NDArray.item()</c> and <c>item&lt;T&gt;()</c>
-        ///     (<c>Manipulation/NDArray.item.cs</c>) throw <c>IncorrectSizeException</c>, which is not a
-        ///     <c>ValueError</c> (it derives <c>NumSharpException</c>), and <c>NDMaskedArray.item()</c> throws
-        ///     <c>InvalidOperationException</c>; NumSharp's own text arrays (<c>NDListArray</c>) already throw
-        ///     <c>ValueError</c> with the same text. A caller catching NumSharp's <c>ValueError</c> (or
-        ///     <c>ArgumentException</c>) misses both.
+        ///     Regression pin (QB-04, fixed 2026-11-13 by API-parity batch 13: NumPy's ValueErrors and texts). NumPy 2.4.2
+        ///     raises <c>ValueError: can only convert an array of size 1 to a Python scalar</c> for <c>a.item()</c> of an
+        ///     array whose size is not 1 (an empty one included), for ndarray and for <c>numpy.ma.MaskedArray</c>, and
+        ///     <c>incorrect number of indices for array</c> for a wrong index count. NumSharp's <c>NDArray.item()</c> and
+        ///     <c>item&lt;T&gt;()</c> (<c>Manipulation/NDArray.item.cs</c>) threw <c>IncorrectSizeException</c>, which is not
+        ///     a <c>ValueError</c> (it derives <c>NumSharpException</c>), the masked array's item forwarded it, and a wrong
+        ///     count was an <c>ArgumentException</c> with another text; NumSharp's own text arrays (<c>NDListArray</c>)
+        ///     already threw <c>ValueError</c> with the same text.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB04")]
+        [TestMethod]
         public void ParityQb_QB04_ItemOfANonSizeOneArray_RaisesValueError()
         {
             using var five = np.arange(5);
@@ -140,7 +148,7 @@ namespace NumSharp.Tests
             ma.Should().Throw<ValueError>();
 
             // NumPy 2.4.2: np.arange(6).reshape(2, 3).item(1, 1, 1) -> ValueError "incorrect number of indices for array"
-            // (NumSharp: ArgumentException "Incorrect number of indices for array with 2 dimensions.")
+            // (NumSharp said ArgumentException "Incorrect number of indices for array with 2 dimensions." until batch 13)
             using var matrix = np.arange(6).reshape(2, 3);
             Action wrongCount = () => matrix.item(1, 1, 1);
             wrongCount.Should().Throw<ValueError>().WithMessage("incorrect number of indices for array");
@@ -1564,20 +1572,23 @@ namespace NumSharp.Tests
         }
 
         // ------------------------------------------------------------------
-        // QB-56 — np.unravel_index / np.ravel_multi_index take the shape only as int[]
+        // QB-56 — np.unravel_index / np.ravel_multi_index took the shape only as int[]
+        // (FIXED 2026-11-13 by API-parity batch 13: a regression pin now)
         // ------------------------------------------------------------------
 
         /// <summary>
-        ///     NumPy's <c>unravel_index(indices, shape, order='C')</c> and <c>ravel_multi_index(multi_index, dims, ...)</c> take
-        ///     any shape-like, and their idiom is <c>np.unravel_index(np.argmax(a), a.shape)</c>. NumSharp's overloads take the
-        ///     shape only as <c>int[]</c>, while its own <c>a.shape</c> is <c>long[]</c> and <c>Shape</c> does not convert to
-        ///     <c>int[]</c>, so <c>np.unravel_index(i, a.shape)</c>, <c>np.unravel_index(i, a.Shape)</c> and
-        ///     <c>np.ravel_multi_index(idx, a.shape)</c> do not compile (CS1503); every other shape-taking function probed
+        ///     Regression pin (QB-56, fixed 2026-11-13 by API-parity batch 13: the shape parameters are <c>Shape</c>, and the
+        ///     engines read NumPy's intp dims as <c>long[]</c>). NumPy's <c>unravel_index(indices, shape, order='C')</c> and
+        ///     <c>ravel_multi_index(multi_index, dims, ...)</c> take any shape-like, and their idiom is
+        ///     <c>np.unravel_index(np.argmax(a), a.shape)</c>. NumSharp's overloads took the shape only as <c>int[]</c>, while
+        ///     its own <c>a.shape</c> is <c>long[]</c> and <c>Shape</c> does not convert to <c>int[]</c>, so
+        ///     <c>np.unravel_index(i, a.shape)</c>, <c>np.unravel_index(i, a.Shape)</c> and
+        ///     <c>np.ravel_multi_index(idx, a.shape)</c> did not compile (CS1503); every other shape-taking function probed
         ///     (zeros, full, indices, ndindex, tile, resize, empty_like's <c>shape=</c>, reshape, standard_normal) binds
         ///     <c>a.shape</c>. Converting by hand gives NumPy's values. The runtime binder (<c>dynamic</c>) reproduces the
         ///     overload resolution, so the missing binding is asserted at run time (q159).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB56")]
+        [TestMethod]
         public void ParityQb_QB56_UnravelIndex_BindsTheArraysOwnShape()
         {
             using var m = np.array(new double[] { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8 }).reshape(3, 4);

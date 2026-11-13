@@ -60,8 +60,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices">An integer (or bool) array of flat indices, of any rank and layout. Read as int64: a uint64
         ///     index at or past 2^63 wraps negative and is out of bounds, as NumPy's same_kind cast to intp makes it.</param>
-        /// <param name="shape">The dimensions to unravel into. An empty shape (NumPy's <c>()</c>) is legal: its one valid
-        ///     index is 0, and only a 0-d index array may use it.</param>
+        /// <param name="shape">The dimensions to unravel into (NumPy's intp sequence; negative dimensions multiply in). An
+        ///     empty shape (NumPy's <c>()</c>) is legal: its one valid index is 0, and only a 0-d index array may use it.
+        ///     Read only: the facade passes a <see cref="Shape"/>'s own array.</param>
         /// <param name="order"><c>'C'</c> (row-major, the default) or <c>'F'</c> (column-major), in either case.</param>
         /// <returns>One int64 array per dimension of <paramref name="shape"/>, each of <paramref name="indices"/>' shape:
         ///     the columns of one interleaved buffer of shape <c>indices.shape + (len(shape),)</c> laid out along the
@@ -79,9 +80,10 @@ namespace NumSharp
         ///     permitted</c>).</exception>
         /// <exception cref="NotSupportedException">Runtime code generation is unavailable (the IL kernel cannot be
         ///     emitted).</exception>
-        /// <remarks>New in 0.80.0 (the np-layer dtype plan): the public <c>np.unravel_index(NDArray, int[], char)</c> computes
-        ///     a <c>numpy.matrix</c> operand as a plain array and calls this.</remarks>
-        public abstract NDArray<long>[] UnravelIndex(NDArray indices, int[] shape, char order = 'C');
+        /// <remarks>New in 0.80.0 (the np-layer dtype plan): the public <c>np.unravel_index(NDArray, Shape, char)</c>
+        ///     computes a <c>numpy.matrix</c> operand as a plain array and calls this. The dimensions are <c>long[]</c> (NumPy's
+        ///     intp) since API-parity batch 13; they were <c>int[]</c>.</remarks>
+        public abstract NDArray<long>[] UnravelIndex(NDArray indices, long[] shape, char order = 'C');
 
         /// <summary>
         ///     NumPy's <c>np.ravel_multi_index(multi_index, dims, mode='raise', order='C')</c> (<c>arr_ravel_multi_index</c>,
@@ -91,8 +93,8 @@ namespace NumSharp
         /// <param name="multi_index">The coordinate arrays, one per dimension of <paramref name="dims"/>: integer or bool,
         ///     any layout; they broadcast against each other, and the broadcast shape is the result's. A null entry is
         ///     NumPy's <c>None</c>, refused.</param>
-        /// <param name="dims">The shape the coordinates index. An empty shape (NumPy's <c>()</c>) takes no coordinate array
-        ///     and gives the flat index 0.</param>
+        /// <param name="dims">The shape the coordinates index (NumPy's intp sequence, read only). An empty shape (NumPy's
+        ///     <c>()</c>) takes no coordinate array and gives the flat index 0.</param>
         /// <param name="mode">NumPy's mode argument: a string for every axis - <c>"raise"</c> (an out-of-range coordinate
         ///     raises), <c>"wrap"</c> (modulo, with sign correction) or <c>"clip"</c> (saturate) -, a sequence of such
         ///     strings other than a string (NumPy's tuple or list: one mode per axis, a null entry raising on its axis), or
@@ -123,8 +125,9 @@ namespace NumSharp
         ///     emitted).</exception>
         /// <remarks>New in 0.80.0 (the np-layer dtype plan): the public <c>np.ravel_multi_index</c> array overloads compute
         ///     a <c>numpy.matrix</c> operand as a plain array and call this; the scalar overload
-        ///     <c>np.ravel_multi_index(long[], int[], string, char)</c> computes its one index itself.</remarks>
-        public abstract NDArray<long> RavelMultiIndex(NDArray[] multi_index, int[] dims, object mode = null, char order = 'C');
+        ///     <c>np.ravel_multi_index(long[], Shape, string, char)</c> computes its one index itself. The dimensions are
+        ///     <c>long[]</c> (NumPy's intp) since API-parity batch 13; they were <c>int[]</c>.</remarks>
+        public abstract NDArray<long> RavelMultiIndex(NDArray[] multi_index, long[] dims, object mode = null, char order = 'C');
 
         /// <summary>
         ///     NumPy's <c>np.packbits(a, axis=None, bitorder='big')</c> (<c>io_pack</c> / <c>pack_bits</c>,

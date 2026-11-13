@@ -1493,8 +1493,20 @@ namespace NumSharp.Backends
             for (int i = axis + 1; i < dims.Length; i++) nel *= dims[i];
         }
 
-        // Materializes the per-j repeat counts as a long[] and validates non-negative.
-        // Returns the total output size along the axis.
+        /// <summary>
+        ///     Materializes the per-element repeat counts of <c>PyArray_Repeat</c> as a <c>long[]</c> (or the one broadcast
+        ///     count) and checks their signs; the flat and the along-axis routes share it.
+        /// </summary>
+        /// <param name="repFlat">The counts, raveled (int64-castable, checked by the caller).</param>
+        /// <param name="broadcast">Whether one count serves every element.</param>
+        /// <param name="n">The number of elements along the repeated axis (of the flattened array for no axis).</param>
+        /// <param name="counts">Receives one count per element, or null when <paramref name="broadcast"/>.</param>
+        /// <param name="broadcastVal">Receives the broadcast count, or 0.</param>
+        /// <returns>The total output length along the axis.</returns>
+        /// <exception cref="ArgumentException">A negative broadcast count (NumPy's ValueError reads <c>negative dimensions
+        ///     are not allowed</c>: a pinned wording difference).</exception>
+        /// <exception cref="ValueError">A negative entry of a per-element count array: NumPy's <c>repeats may not contain
+        ///     negative values.</c>, period included (parity QA-03).</exception>
         private static long ComputeCounts(NDArray repFlat, bool broadcast, long n, out long[] counts, out long broadcastVal)
         {
             if (broadcast)
@@ -1512,8 +1524,10 @@ namespace NumSharp.Backends
             for (long j = 0; j < n; j++)
             {
                 long c = Converts.ToInt64(repFlat.GetAtIndex(j));
+                // PyArray_Repeat's per-element loop: `if (counts[j] < 0) PyErr_SetString(PyExc_ValueError, "repeats may not
+                // contain negative values.")`.
                 if (c < 0)
-                    throw new ArgumentException("repeats may not contain negative values");
+                    throw new ValueError("repeats may not contain negative values.");
                 counts[j] = c;
                 total += c;
             }

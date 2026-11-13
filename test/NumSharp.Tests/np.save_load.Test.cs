@@ -164,7 +164,7 @@ namespace NumSharp.Tests
 
             using var npz = np.load_npz(file);
 
-            npz.Files.Should().Equal("arr_0", "arr_1");
+            npz.files.Should().Equal("arr_0", "arr_1");
             npz["arr_0"].ToArray<long>().Should().Equal(0L, 1L, 2L);
             npz["arr_1"].ToArray<double>().Should().Equal(0.0, 1.0, 2.0, 3.0);
         }
@@ -181,7 +181,7 @@ namespace NumSharp.Tests
 
             using var npz = np.load_npz(file);
 
-            npz.Files.Should().BeEquivalentTo(new[] { "weights", "biases" });
+            npz.files.Should().BeEquivalentTo(new[] { "weights", "biases" });
             npz["weights"].shape.Should().Equal(new long[] { 2, 3 });
             npz["biases"].ToArray<double>().Should().Equal(0.0, 1.0, 2.0);
         }
@@ -222,7 +222,7 @@ namespace NumSharp.Tests
             npz.ContainsKey("arr_0").Should().BeTrue();
             npz.ContainsKey("arr_0.npy").Should().BeTrue();
             npz["arr_0.npy"].Should().BeSameAs(npz["arr_0"], "both spellings name the same member");
-            npz.Files.Should().Equal(new[] { "arr_0" }, "'.files' reports names with '.npy' stripped");
+            npz.files.Should().Equal(new[] { "arr_0" }, "'.files' reports names with '.npy' stripped");
         }
 
         [TestMethod]
@@ -261,7 +261,7 @@ namespace NumSharp.Tests
         {
             using var npz = np.load_npz(np.savez(np.arange(3), np.arange(4), np.arange(5)));
 
-            npz.Count.Should().Be(3);
+            npz.files.Count.Should().Be(3);
             npz.Select(kv => kv.Key).Should().Equal("arr_0", "arr_1", "arr_2");
             npz.Sum(kv => kv.Value.size).Should().Be(3 + 4 + 5);
         }
@@ -300,8 +300,8 @@ namespace NumSharp.Tests
                 ["B/A"] = np.arange(4),
             }));
 
-            npz.Count.Should().Be(2);
-            npz.Files.Should().BeEquivalentTo(new[] { "A/A", "B/A" });
+            npz.files.Count.Should().Be(2);
+            npz.files.Should().BeEquivalentTo(new[] { "A/A", "B/A" });
             npz["A/A"].ToArray<long>().Should().Equal(0L, 1L, 2L, 3L);
         }
 

@@ -234,7 +234,7 @@ public class StorePythonLiteralTests
     {
         const string msg = "Python integer 1000 out of bounds for int8";
         Raises<OverflowError>(() => np.insert(Z(NPTypeCode.SByte), 1, 1000), msg);
-        Raises<OverflowError>(() => np.insert(Z(NPTypeCode.SByte), 1, (object)1000), msg);
+        Raises<OverflowError>(() => np.insert(Z(NPTypeCode.SByte), 1, 1000), msg);
         Raises<OverflowError>(() => np.insert(Z(NPTypeCode.SByte), new[] { 1, 2 }, 1000), msg);
         Raises<OverflowError>(() => np.fill_diagonal(np.zeros(new Shape(2, 2), NPTypeCode.SByte), 1000), msg);
         Raises<OverflowError>(() => np.fill_diagonal(np.zeros(new Shape(0, 0), NPTypeCode.SByte), 1000), msg);

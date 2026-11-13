@@ -1304,8 +1304,8 @@ NUMPY_PUBLIC_MODULES = (
     ("polynomial.legendre", "np.polynomial.legendre"), ("polynomial.hermite", "np.polynomial.hermite"),
     ("polynomial.hermite_e", "np.polynomial.hermite_e"), ("polynomial.laguerre", "np.polynomial.laguerre"),
     ("ma", "np.ma"), ("char", "np.char"), ("strings", "np.strings"), ("dtypes", "np.dtypes"), ("typing", "np.typing"),
-    ("lib.stride_tricks", "np.lib.stride_tricks"), ("lib.array_utils", None), ("rec", None), ("lib.recfunctions", None),
-    ("exceptions", None), ("ma.mrecords", None), ("ctypeslib", None), ("lib.format", None), ("lib.introspect", None),
+    ("lib.stride_tricks", "np.lib.stride_tricks"), ("lib.array_utils", "np.lib.array_utils"), ("rec", None), ("lib.recfunctions", None),
+    ("exceptions", None), ("ma.mrecords", None), ("ctypeslib", None), ("lib.format", "np.lib.format"), ("lib.introspect", None),
     ("lib", None), ("lib.mixins", None), ("version", None), ("f2py", None), ("testing", None),
     ("testing.overrides", None),
 )

@@ -44,10 +44,12 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException">An element of <paramref name="arrays"/> is null.</exception>
         /// <exception cref="ArgumentException">An unknown <paramref name="casting"/> name; both <paramref name="out"/> and
         ///     <paramref name="dtype"/>.</exception>
-        /// <exception cref="ValueError">No arrays, or a 0-d array with an axis.</exception>
+        /// <exception cref="ValueError">No arrays, or a 0-d FIRST array with an axis (NumPy checks only the first array's
+        ///     rank there).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for the inputs' rank.</exception>
-        /// <exception cref="IncorrectShapeException">The inputs' ranks or non-axis extents differ, or <paramref name="out"/>
-        ///     has the wrong rank or shape.</exception>
+        /// <exception cref="IncorrectShapeException">The inputs' ranks (a later 0-d array included: NumPy's "all the input
+        ///     arrays must have same number of dimensions" text) or non-axis extents differ, or <paramref name="out"/> has
+        ///     the wrong rank or shape.</exception>
         /// <exception cref="InvalidCastException">An input does not cast to the result dtype under
         ///     <paramref name="casting"/>.</exception>
         /// <remarks>
@@ -82,17 +84,21 @@ namespace NumSharp
                 throw new ArgumentException(
                     "concatenate() only takes `out` or `dtype` as an argument, but both were provided.");
 
-            // 0-D arrays cannot be concatenated along an axis (NumPy: "zero-dimensional arrays cannot be concatenated");
-            // axis=None ravels every input first (PyArray_ConcatenateFlattenedArrays), so a 0-d input is one element there
-            // (np.concatenate((np.array(1), np.array(2)), axis=None) is [1, 2]).
+            // A null operand is refused before anything reads the operands.
             for (int k = 0; k < arrays.Length; k++)
             {
                 if (arrays[k] is null)
                     throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"{nameof(arrays)}[{k}]"));
-                if (arrays[k].ndim == 0 && axis is not null)
-                    throw new ValueError(
-                        "zero-dimensional arrays cannot be concatenated");
             }
+
+            // PyArray_ConcatenateArrays checks the FIRST array's rank only ("zero-dimensional arrays cannot be
+            // concatenated"); a later 0-d array meets the per-array rank check below, NumPy's "all the input arrays must
+            // have same number of dimensions, ... the array at index 1 has 0 dimension(s)". axis=None ravels every input
+            // first (PyArray_ConcatenateFlattenedArrays), so a 0-d input is one element there
+            // (np.concatenate((np.array(1), np.array(2)), axis=None) is [1, 2]).
+            if (arrays.Length > 0 && arrays[0].ndim == 0 && axis is not null)
+                throw new ValueError(
+                    "zero-dimensional arrays cannot be concatenated");
 
             // axis=None: flatten every input to 1-D, then concatenate along axis 0.
             // ravel() allocates a fresh NDArray wrapper per input (even when it returns a
