@@ -64,16 +64,17 @@ namespace NumSharp.Tests.Issues
         }
 
         /// <summary>
-        ///     The comment's two corrections of the issue text: <c>.T</c> on a 3-D array reverses the axes (it is not an error
-        ///     in NumPy 2.4.2), and <c>np.cross</c> of 2-vectors returns the z-component (NumPy only warns).
+        ///     The comment's two corrections of the issue text: <c>.T</c> on a 3-D array reverses the axes (it is not an
+        ///     error), and <c>np.cross</c> of 2-vectors — the z-component with a DeprecationWarning when the comment was
+        ///     posted (NumPy 2.4) — raises since NumPy 2.5 expired that deprecation, so NumSharp raises NumPy's text too.
         /// </summary>
         [TestMethod]
         public void IssueTextCorrections_TransposeAndCross()
         {
             np.ones(new Shape(2, 3, 4)).T.Should().BeShaped(4, 3, 2);
-            var z = np.cross(np.array(new[] { 1.0, 2.0 }), np.array(new[] { 3.0, 4.0 }));
-            z.ndim.Should().Be(0);
-            z.GetDouble().Should().Be(-2.0);
+            new Action(() => np.cross(np.array(new[] { 1.0, 2.0 }), np.array(new[] { 3.0, 4.0 })))
+                .Should().Throw<ValueError>().WithMessage(
+                    "Both input arrays must be (arrays of) 3-dimensional vectors, but they are 2 and 2 dimensional instead.");
         }
 
         /// <summary>

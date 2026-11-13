@@ -13,7 +13,7 @@ libraries as tests on GitHub Actions.
 
 ## Run it
 
-You need the .NET 10 SDK and a 64-bit Python 3.11, 3.12 or 3.13. From this folder:
+You need the .NET 10 SDK and a 64-bit Python 3.12 or 3.13. From this folder:
 
 ```bash
 # Windows
@@ -34,7 +34,7 @@ The program prints what it embedded and where it saved the figure that Matplotli
 Python      3.12.12  C:\src\NumSharpPythonnetLocalExample\.venv\Scripts\python.exe  (virtual environment)
 library     C:\Python312\python312.dll
 pythonnet   3.0.5
-numpy       2.4.2
+numpy       2.5.4
 pandas      3.0.5
 scipy       1.16.3
 sklearn     1.9.1
@@ -51,7 +51,7 @@ project, which its workflow runs on Windows, Linux and macOS.
 
 | File | Library | What crosses |
 |---|---|---|
-| [`Libraries/NumPy.cs`](Libraries/NumPy.cs) | NumPy 2.4.2 | NumPy views NumSharp's buffer and both sides write to it. The FFT of the shared samples comes back as an `NDArray`. `numpy.linalg.svd` returns three arrays into one C# tuple. `ToNumpy` / `ToNumpyCopy` / `AsNDArray` / `ToNDArray` choose a view or a copy. |
+| [`Libraries/NumPy.cs`](Libraries/NumPy.cs) | NumPy 2.5.4 | NumPy views NumSharp's buffer and both sides write to it. The FFT of the shared samples comes back as an `NDArray`. `numpy.linalg.svd` returns three arrays into one C# tuple. `ToNumpy` / `ToNumpyCopy` / `AsNDArray` / `ToNDArray` choose a view or a copy. |
 | [`Libraries/Pandas.cs`](Libraries/Pandas.cs) | pandas 3.0.5 | A `DataFrame` that sits on NumSharp's memory (`copy=False`). Means, a rolling window with missing values, a correlation matrix and a filtered frame come back as arrays. A `Series` is viewed read-only (pandas 3 Copy-on-Write). A group-by runs over a strided NumSharp column. |
 | [`Libraries/SciPy.cs`](Libraries/SciPy.cs) | SciPy 1.16.3 | `scipy.signal` designs a filter (two coefficient arrays as one C# tuple) and runs it over NumSharp's samples. `scipy.ndimage` writes its result into a NumSharp array (`output=`). `scipy.stats` and `scipy.optimize` return objects whose fields read as C# numbers. |
 | [`Libraries/ScikitLearn.cs`](Libraries/ScikitLearn.cs) | scikit-learn 1.9.1 | `KMeans`, `LinearRegression` and a `StandardScaler` + `PCA` pipeline fit on NumSharp arrays. Labels, centers, coefficients and predictions come back as arrays. |

@@ -4,7 +4,7 @@ partitions, ``np.lexsort``, the searches, ``np.unique`` and its Array-API forms,
 ``np.sort_complex``, the histograms, the quantile family and ``np.median`` (fixed-width ``S`` / ``U`` and NEP 55
 ``StringDType``), and ``StringDType``'s comparisons, arithmetic, truth readers, reductions and numpy.ma members.
 
-Every case is recorded by ``gen_strings_oracle.add`` (NumPy 2.4.2's answer or its exact error) under the op keys the C#
+Every case is recorded by ``gen_strings_oracle.add`` (the pinned NumPy's answer or its exact error) under the op keys the C#
 replay already knows, in a section named ``soak<seed>``, and written to ``<out>/soak_<seed>.jsonl``.
 ``StringOracleTests.StringSoak`` replays every ``*.jsonl`` file of the directory in ``NUMSHARP_STRING_ORACLE_SOAK_DIR``
 with the committed sections' comparator; every case is phase 1, so a deferral is a failure.
@@ -13,10 +13,12 @@ Usage::
 
     python test/oracle/soak_strings_oracle.py --seeds 1,2,3 --out DIR [--scale 1.0] [--families sort,sets]
 
-The script avoids the inputs that crash or misbehave in NumPy 2.4.2 itself (the committed generator documents each):
+The script avoids the inputs that crash or misbehave in NumPy itself (the committed generator documents each):
 ``np.lexsort`` over a ``StringDType`` key that is not contiguous along the axis (an access violation), the argsort of a
-broadcast ``StringDType`` view holding arena texts, ``np.searchsorted`` over a haystack text outside its cell, the
-``StringDType``-to-complex cast (zeros only), and the nan-forms' ``apply_along_axis`` object result for a ``None`` row.
+broadcast ``StringDType`` view holding arena texts, and the nan-forms' ``apply_along_axis`` object result for a ``None``
+row (2.4.2 and 2.5.4 alike). Under NumPy 2.4 it also kept ``np.histogram``'s searched data to texts inside their cells,
+the ``StringDType``-to-complex cast to zeros and an empty text's repetition counts non-negative, three defects NumPy 2.5
+fixed (``g._NUMPY_2_5`` lifts each restriction).
 Each family of each seed runs in its own process (``--worker``), so a NumPy crash costs one family, not the soak.
 """
 
@@ -264,10 +266,10 @@ def layout_spec(rng, name):
 LAYOUT_NAMES = ["c1", "c1", "c1", "step", "rev", "revstep", "slice", "c2", "c2", "f2", "c3", "t3", "s2", "r2", "col",
                 "row", "nx", "bc", "bcol", "z0", "one", "d5", "e1", "e2", "e3"]
 BROADCAST = ("bc", "bcol")
-# The layouts that are not C-contiguous: NumPy 2.4.2's np.argsort(v, axis=None) of such a StringDType view misorders
-# its arena texts (np.argsort(v.ravel()), np.sort(v, axis=None), an axis, the partitions and ndarray.sort all order them
-# right; measured over 12,000 random views), so the sort family skips that one call when the view holds an arena text —
-# a NumPy bug NumSharp does not reproduce.
+# The layouts that are not C-contiguous: NumPy's (2.4.2 and 2.5.4) np.argsort(v, axis=None) of such a StringDType view
+# misorders its arena texts (np.argsort(v.ravel()), np.sort(v, axis=None), an axis, the partitions and ndarray.sort all
+# order them right; measured over 12,000 random views), so the sort family skips that one call when the view holds an
+# arena text — a NumPy bug NumSharp does not reproduce.
 NON_CONTIGUOUS = ("step", "rev", "revstep", "f2", "t3", "s2", "r2", "col", "bc", "bcol")
 
 
@@ -399,7 +401,7 @@ def fam_sort(rng, sec, count):
 
 def fam_lexsort(rng, sec, count):
     """np.lexsort over one to three keys of StringDType / U / S / integer / float kinds (StringDType keys contiguous
-    along the axis: NumPy 2.4.2 crashes otherwise)."""
+    along the axis: NumPy, 2.4.2 and 2.5.4 alike, crashes otherwise)."""
     for _ in range(count):
         n = int(rng.integers(0, 40)) if rng.random() < 0.85 else int(rng.integers(40, 300))
         two_d = rng.random() < 0.25 and n >= 2
@@ -600,15 +602,17 @@ COMPLEX_TEXTS = ["1", "-2.5", "3+4j", "j", "-j", "1e1", "nan", "inf", "-inf", "0
 
 
 def fam_sort_complex(rng, sec, count):
-    """np.sort_complex over U / S numeric texts (the parse and its errors) and StringDType zeros (NumPy 2.4.2's
-    StringDType-to-complex cast stores the real part in both parts: only a +0 real compares as a value — "-0" would give
-    NumPy an imaginary -0, which NumSharp's correct cast does not reproduce)."""
+    """np.sort_complex over U / S numeric texts (the parse and its errors) and StringDType texts: any complex text under
+    NumPy 2.5, which parses both parts as NumSharp does; zeros only under NumPy 2.4 (its StringDType-to-complex cast
+    stored the real part in both parts: only a +0 real compared as a value, "-0" gave an imaginary -0)."""
     for _ in range(count):
         kind = pick(rng, ["T", "U", "S"])
         n = int(rng.integers(0, 8))
         if kind == "T":
             spec = pick(rng, [TD, TDN, TDNAN, TDS])
             pool = ["0", "+0", "0.0", " 0 ", "x", "1e1e1"] if rng.random() < 0.3 else ["0", "+0", "0.0", " 0 "]
+            if g._NUMPY_2_5:
+                pool = pool + ["-0", "1+2j", "-1.5", " 3-4j ", "(2-0.5j)", "inf", "nanj"]
             vals = [pick(rng, pool) for _ in range(n)]
             if spec.na is not _ABSENT and n and rng.random() < 0.3:
                 vals[int(rng.integers(0, n))] = spec.na
@@ -635,10 +639,11 @@ def fam_hist(rng, sec, count):
         r = rng.random()
         ek = (kind if rng.random() < 0.8 else rand_kind(rng)) if r < 0.6 else None
         # Text edges search the SORTED DATA (np.histogram's _search_sorted_inclusive): with a StringDType side NumPy
-        # 2.4.2's binary search loads the haystack's cells with the KEYS' allocator, so an arena text in the data reads
-        # garbage (MemoryError, or counts from foreign bytes). The data then holds cell texts only.
+        # 2.4.2's binary search loaded the haystack's cells with the KEYS' allocator, so an arena text in the data read
+        # garbage (MemoryError, or counts from foreign bytes) and the data held cell texts only. NumPy 2.5 reads each
+        # side with its own allocator.
         vals = rand_values(rng, int(rng.integers(0, 12)), kind, spec, pick(rng, [0.0, 0.2]),
-                           short=ek is not None and "T" in (kind, ek))
+                           short=ek is not None and "T" in (kind, ek) and not g._NUMPY_2_5)
         data = make_base(vals, kind, spec)
         ops = [(data, data)]
         params = {"fn": pick(rng, ["histogram", "histogram", "histogram_bin_edges"]), "range": None,
@@ -831,11 +836,13 @@ def fam_tarith(rng, sec, count):
             (b, v), lname, spec = rand_operand(rng, "T", layouts=["c1", "c2", "f2", "bc", "z0", "e1"])
             shape = v.shape
             reps = rng.integers(-1, 4, shape) if shape else np.array(int(rng.integers(-1, 4)))
-            # NumPy 2.4.2 HANGS on an empty StringDType text times a negative count (its size_t repeat loop runs 2^64
-            # times copying nothing; NumSharp returns the empty text, pinned by the unit tests): such pairs get a
-            # count of 0 instead.
-            empty = np.array([x == "" for x in np.array(v, copy=True).reshape(-1).tolist()], dtype=bool).reshape(shape)
-            reps = np.where(empty & (np.broadcast_to(reps, shape) < 0), 0, reps)
+            # NumPy 2.4.2 HUNG on an empty StringDType text times a negative count (its size_t repeat loop ran 2^64
+            # times copying nothing), so under NumPy 2.4 such pairs get a count of 0 instead; NumPy 2.5 returns the
+            # empty text, as NumSharp does.
+            if not g._NUMPY_2_5:
+                empty = np.array([x == "" for x in np.array(v, copy=True).reshape(-1).tolist()],
+                                 dtype=bool).reshape(shape)
+                reps = np.where(empty & (np.broadcast_to(reps, shape) < 0), 0, reps)
             rop = g.num_operand(reps)
             if rng.random() < 0.5:
                 g.add(sec, "ufunc", params={"name": "multiply"}, operands=[(b, v), rop], layout=label("T", spec, lname),

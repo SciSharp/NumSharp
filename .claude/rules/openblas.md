@@ -92,8 +92,8 @@ public abstract partial class TensorEngine
 
 ## The bundled binary
 
-- The package ships the binary NumPy pins: `scipy-openblas64==0.3.31.22.0` (numpy's `requirements/ci_requirements.txt`),
-  byte-identical to numpy 2.4.2's copy (both sha256 `74a40872…`; NumPy's mangled filename is that hash), as
+- The package ships the binary NumPy pins: `scipy-openblas64==0.3.34.106.0` (numpy's `requirements/ci_requirements.txt`),
+  byte-identical to numpy 2.5.4's copy (both sha256 `ed4f167a…`; NumPy's mangled filename is that hash), as
   `runtimes/<rid>/native/` assets for 8 RIDs. win-arm64 is scipy-openblas32, because NumPy's own build selects LP64
   there; it exports `scipy_cblas_sgemm`, which `Bind` handles.
 - The binaries are gitignored. `src/NumSharp.Interop.OpenBLAS/tools/openblas-manifest.json` is the checked-in pin, and
@@ -167,12 +167,14 @@ public abstract partial class TensorEngine
 - MSBuild traps: a target's `Condition` evaluates before its `DependsOnTargets` run, so the has-override gate sits on the
   task, not the target; `dotnet pack` defaults to Release on .NET 8+, and this repo's incremental build can declare
   stale Release outputs up to date, so run `-t:Rebuild` before packing.
-- glibc Linux: the fetch task matches the wheel by `"-" + <anchor of the manifest wheel's platform tag> + "."`
-  (`manylinux2014_x86_64`). scipy-openblas wheels from 0.3.33.0.0 are tagged
-  `manylinux_2_27_x86_64.manylinux_2_28_x86_64`, so pinning one fails on linux-x64 and linux-arm64 with
-  `expected exactly one scipy-openblas64 … wheel for platform tag 'manylinux2014_x86_64', found 0`; 0.3.29.0.0 fails the
-  same way (its compound tag lists `manylinux_2_17` first). The OpenBLAS of NumPy 2.5 therefore cannot be pinned there.
-  Versions that stage on all 8 RIDs: 0.3.29.265.1 to 0.3.31.188.0.
+- Wheel selection (the fetch task and `fetch_openblas.py`'s `select_wheel` alike): a candidate's compound platform tag is
+  read as components; the one wheel holding the manifest wheel's anchor (its first component: `manylinux_2_27_x86_64`
+  for the bundled build) wins, and otherwise, for glibc Linux only, a wheel holding any manylinux tag of the anchor's
+  architecture (PEP 513/571/599 aliases, PEP 600 `manylinux_<major>_<minor>_<arch>`). scipy-openblas retagged its glibc
+  wheels from `manylinux2014_<arch>` to `manylinux_2_27_<arch>.manylinux_2_28_<arch>` with 0.3.33.0.0 (0.3.29.0.0 lists
+  `manylinux_2_17_<arch>` first), so an override crosses the change in either direction; Windows, macOS and musllinux
+  tags match exactly. Zero or several candidates fail the build: `expected exactly one scipy-openblas64 … wheel for
+  platform tag '…', found N`.
 - Gates: `tools/verify_build_override.sh` (a scripted nupkg flow including tamper, mirror-needs-sha, invalid-knob,
   delivery=none, two-reference-conflict and poisoned-cache steps; network once, then the cache) and
   `OpenBlasDeliveryTests` (priority pins and hostile markers).
@@ -235,12 +237,13 @@ them.
   reference the package that is already referenced (`solve`/`inv`/`det`/`slogdet` take the managed LU). The docs', the
   package README's and that exception's "referencing the package is the whole opt-in" holds only for code that names
   the package before it computes; the consumer of `verify_package_consumer.sh` names the type too, so no gate sees it.
-- Parity: the bundled DLL is the file inside numpy 2.4.2's wheel (sha256 `74a40872…0377`) and the 0.3.31.188.0 DLL the
-  one inside numpy 2.4.4's (`63c857e7…1080`). The float32 `(512,784) @ (784,512)` product of `np.random.seed(7)` inputs
-  has NumPy's hash at 1, 2 and 24 threads for both pairs, and the 1- and 2-thread hashes are equal on Windows and Linux.
+- Parity: the bundled DLL is the file inside numpy 2.5.4's wheel (sha256 `ed4f167a…ecf8`) and the Advanced example's
+  0.3.31.188.0 DLL the one inside numpy 2.4.4's (`63c857e7…1080`). The float32 `(512,784) @ (784,512)` product of
+  `np.random.seed(7)` inputs has NumPy's hash at 1, 2 and 24 threads for both pairs on Windows (bundled vs 2.5.4:
+  `d02ca290…`, `67cdb5ec…`, `d16b7257…`); the 0.3.31 builds' 1- and 2-thread hashes are also equal on Linux.
 - NumPy's OpenBLAS pins (`requirements/ci_requirements.txt` at each tag): 2.2.6 / 2.3.0 → 0.3.29.0.0; 2.3.2–2.3.4 →
   0.3.30.0.1; 2.3.5 / 2.4.0 / 2.4.1 → 0.3.30.0.7; 2.4.2 → 0.3.31.22.0; 2.4.3 → 0.3.31.126.1; 2.4.4 → 0.3.31.188.0;
-  2.5.0 / 2.5.1 → 0.3.33.112.0.
+  2.5.0–2.5.2 → 0.3.33.112.0; 2.5.3 / 2.5.4 → 0.3.34.106.0.
 - Output size: a portable build output carries the libraries of all 8 RIDs (201 MB);
   `dotnet publish -r <rid> --self-contained false` gives 23 MB (Windows) / 29 MB (Linux), with the override and its
   marker flattened beside the app.

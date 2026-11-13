@@ -1,6 +1,6 @@
 # NumPy Differential Fuzzer (Plan A)
 
-Proves every NDIter-backed operation produces **bit-identical** output to NumPy 2.4.2 across the
+Proves every NDIter-backed operation produces **bit-identical** output to NumPy 2.5.4 across the
 full input space — caught systematically, not by hand-picked cases. The motivating failure (the
 cast saturate-vs-wrap bug, latent in `where`/`copyto`/`concatenate`) must be impossible to ship again.
 
@@ -30,7 +30,7 @@ NumPy is the oracle. Python (`test/oracle/`) generates a **committed, bytes-exac
 **replays the operand bytes** and bit-compares — *no Python at test time, none in CI*.
 
 ```
-test/oracle/                         corpus generators (NumPy 2.4.2)
+test/oracle/                         corpus generators (NumPy 2.5.4, numpy-version.txt)
   layout_catalog.py                  the layout builders (single-array, pairwise, where-triple)
   gen_oracle.py                      deterministic matrices (astype/binary/comparison/unary/reduce/where/place);
                                      per-mode dtype axes widened to ALL_DTYPES; Char WOVEN into every tier
@@ -370,7 +370,7 @@ np.flatnonzero, np.unravel_index and np.ravel_multi_index keep the ones they had
 
 **How it is replayed.** `test/oracle/gen_lifetime_oracle.py` writes cases whose operands are RECIPES
 (2–8 MB each, so a kernel lasts long enough for a collection to land inside it; bytes would cost
-~1 GB of corpus) and records NumPy 2.4.2's answer as (`dtype.str`, shape, SHA-256). The replay
+~1 GB of corpus) and records the pinned NumPy's answer as (`dtype.str`, shape, SHA-256). The replay
 (`Fuzz/Lifetime/`) runs the Oracle assembly as a CHILD PROCESS (`LifetimeChildProgram.Main`,
 `--numsharp-lifetime`; the csproj sets `GenerateProgramFile=false`) with `DOTNET_TieredCompilation=0`:
 tier-0 code reports every local live for the whole method, so the window does not exist there, and a
@@ -652,7 +652,7 @@ The **`fft` tier** (`fft.jsonl`, 2,000 cases) gates the managed pocketfft engine
 + helpers (`fftfreq`/`rfftfreq`/`fftshift`/`ifftshift`), swept over dtype, `n`/`s`
 {default/truncate/zero-pad/prime-13 Bluestein}, `norm` {backward/ortho/forward}, `axis`/`axes`, and the
 memory layouts {C, F, strided, reversed, transposed, broadcast-read}. **float64/complex128/int/bool are
-bit-exact** with NumPy 2.4.2; **float32/float16 are the one documented divergence** (F1 above) —
+bit-exact** with NumPy 2.5.4; **float32/float16 are the one documented divergence** (F1 above) —
 NumSharp has no complex64, so it promotes to double (values = the correctly-rounded double result).
 A generator note that bit: NumPy's 2-D forms default `axes` to `(-2,-1)` but treat an *explicit*
 `axes=None` as all-axes (fftn), so the generator OMITS a `None` `s`/`axes`/`norm` to exercise each op's
@@ -904,8 +904,8 @@ widening that set is C#-oracle work tracked in its own memory topic.
 | **P3** precision-loss (known): negative-stride reduction accumulation (sum/mean: 11–32 ULP where NumPy is EXACT on the same reversed view — no hit since the exact flat add.reduce of 2026-10-04) + f32 deep product contraction (inner/tensordot K=2049, 1–2 ULP past the prefer-precise slack vs BLAS sgemm). The f32 var/std accumulation clause (55/26 ULP vs truth where NumPy sits at 3/2) and var/std on the reversed view are gone: np.var / np.std are NumPy's `_var` since 2026-10-05, bit-exact on the precision tier | truth-bearing × Value × (negstride sum/mean, or Single product family), every diff ≤256 ULP-vs-truth | 2 (2026-10-05) |
 
 **Narrowed: the NumPy-ported float kernels are no longer excused.** `NDFloatMath` ports the kernels NumPy
-2.4.2 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32`, `simd_tanh_f32`/`simd_tanh_f64` — and
-`rad2deg`/`deg2rad` now form their constant at float precision like NumPy's macros. Each agrees with NumPy 2.4.2 on
+2.5.4 actually runs — `simd_exp_FLOAT`, `simd_log_FLOAT`, `simd_sincos_f32`, `simd_tanh_f32`/`simd_tanh_f64` — and
+`rad2deg`/`deg2rad` now form their constant at float precision like NumPy's macros. Each agrees with NumPy 2.5.4 on
 **all 2³² float32 inputs** (verified by a chunked-checksum sweep over the entire bit space, through both the SIMD and
 scalar paths), so the blanket unary-ULP branch now skips `exp`/`log`/`sin`/`cos`/`tanh`/`rad2deg`/`deg2rad` at a
 float32 result and any divergence there fails the gate. The `numpy_f32_kernels.jsonl` tier (140 cases) feeds each kernel the inputs that
@@ -944,7 +944,7 @@ pre-port `MathF.Tanh` differs from NumPy in 34 of the 512 chunks (the rest of th
 NaN, where libm already agreed), while the ported kernel matches in all 512.
 
 **Host-pinned, like the cast kernels.** The port fuses the quadrant's `mul`+`add` because MSVC 19.44 — the
-compiler of the pinned `numpy==2.4.2` win-amd64 wheel — contracted that intrinsic pair into a `vfmadd`. It is
+compiler of the pinned `numpy==2.5.4` win-amd64 wheel, as of 2.4.2's — contracted that intrinsic pair into a `vfmadd`. It is
 observable at exactly one probed input, `x = 0xc26d0e6c`, where `x·log2(e)` is the exact tie `-85.5`: fused
 rounds the quadrant to -85, unfused to -86, and the results differ by 1 ULP. A NumPy built by a toolchain that
 does not contract there would differ at such ties, so this is a NumSharp regression pin against *this* wheel
@@ -1058,7 +1058,7 @@ arithmetic (`S3`) diverges.
 so it never renumbers the shared corpus) is the dedicated NaN oracle. It runs every UNARY op for
 which a NaN output is reachable over the FULL special-value grid — finite / ±0 / ±inf / **BOTH NaN
 signs (+NaN `0x7ff8…` AND −NaN `0xfff8…`)** — as complex128 (the 64-element re×im cross-product) plus
-float16/32/64 lines, recording NumPy 2.4.2's exact output bytes. `CompareArray` applies the
+float16/32/64 lines, recording the pinned NumPy's exact output bytes. `CompareArray` applies the
 NaN-contract policy verbatim:
 
 - **complex128 unary ops** (`ComplexNanContractOps`: sqrt/log/log2/log10/log1p/exp/exp2/expm1/square/
@@ -1084,7 +1084,7 @@ operands wins) left that list on 2026-10-03 and has its own raw-byte tier, `nan_
 `nan_order.jsonl` (`gen_oracle.py nan_order`, 2,796 cases, floor 2,750; 2026-10-03) gates WHICH NaN a
 float add or multiply returns when BOTH operands are NaN. x86 `addpd`/`mulpd` return their FIRST source
 operand's NaN (quieted), and the operations are commutative, so the answer is the operand order the
-compiled loop emits. numpy 2.4.2 win-amd64 (MSVC 19.44), probed on every loop path:
+compiled loop emits. numpy 2.4.2 and 2.5.4 win-amd64 (MSVC 19.44), probed on every loop path:
 
 - add / multiply keep the SECOND operand's NaN: contiguous (scalar, 4×-unrolled body, tail), strided,
   reversed, `out=` (also aliasing an input), `where=`, transposed, buffered 2-D broadcasts, 0-d × 0-d;
@@ -1150,7 +1150,7 @@ bits as `[OpenBugs]` in `NumSharp.Tests/OpenBugs.NaNOperandOrder.cs`, one test p
 
 `reduce_start.jsonl` (`gen_oracle.py reduce_start`, 8,666 cases, floor 8,300) gates how a reduction STARTS.
 That is visible only when the result is zero: the sign of the zero tells whether the loop started from the
-identity or copied the first element. NumPy 2.4.2's rules:
+identity or copied the first element. NumPy 2.5.4's rules:
 
 - `add.reduce` starts from the `+0.0` identity, so a sum of only `-0.0` values is `+0.0`, one element and a
   length-1 axis included. `mean`, `average`, `nansum`, `nanmean`, `trapezoid` and `median` (which is
@@ -1296,7 +1296,7 @@ summation-order or nan-family blankets (`IsIdentitySumSignedZeroFlip`), because 
 ### np.var / np.std as NumPy's `_var` / `_std` (`varstd` tier) — 2026-10-05
 
 `varstd.jsonl` (`gen_oracle.py varstd`, 16,108 cases, floor 15,800) gates `np.var` / `np.std` (and `ndarray.var` /
-`ndarray.std`, the same engine) as NumPy 2.4.2's `_var` / `_std` (`numpy/_core/_methods.py`). `_var` has no special path
+`ndarray.std`, the same engine) as NumPy 2.5.4's `_var` / `_std` (`numpy/_core/_methods.py`). `_var` has no special path
 for any size or keyword, so its bits depend on the reduction schedule, the layouts and every keyword at once:
 
 1. `rcount` is the reduced element count (`_count_reduce_items` normalizes the axis first, so an axis on a 0-d array is
@@ -1354,7 +1354,7 @@ through a double.
 ### np.nanvar / np.nanstd as NumPy's `nanvar` / `nanstd` (`nanvarstd` tier) — 2026-10-05
 
 `nanvarstd.jsonl` (`gen_oracle.py nanvarstd`, 13,382 cases, floor 13,000) gates `np.nanvar` / `np.nanstd` as NumPy
-2.4.2's `nanvar` / `nanstd` (`numpy/lib/_nanfunctions_impl.py`). For an inexact input NumPy runs:
+2.5.4's `nanvar` / `nanstd` (`numpy/lib/_nanfunctions_impl.py`). For an inexact input NumPy runs:
 
 1. `_replace_nan(a, 0)`: a K-order copy (`np.array(a, copy=True)`, positive strides) with its NaNs zeroed, and the mask.
    An input that is not inexact has no mask, and `nanvar` returns `np.var` (the `varstd` tier's rules).
@@ -1402,7 +1402,7 @@ exist. The nanreduce tier hid all of it under the nan-family branches: 841 shape
 ### np.mean as NumPy's `_mean` (`mean_loops` tier) — 2026-10-05
 
 `mean_loops.jsonl` (`gen_oracle.py mean_loops`, 6,590 cases, floor 6,400) gates `np.mean` (and `ndarray.mean`) as
-NumPy 2.4.2's `_methods._mean`:
+NumPy 2.5.4's `_methods._mean`:
 
 1. `rcount = _count_reduce_items(arr, axis)`: the reduced extent as an `np.intp` (a STRONG int64). It normalizes the
    axis itself, so a 0-d input refuses every axis (np.sum would take 0 and -1).
@@ -1447,7 +1447,7 @@ broadcast uint64 case (101.8 for NumPy's 3.69e18) under the unbounded summation 
 
 ### np.nanmean as NumPy's `nanmean` (`nanmean` tier) — 2026-10-05
 
-`nanmean.jsonl` (`gen_oracle.py nanmean`, 5,017 cases, floor 4,900) gates `np.nanmean` as NumPy 2.4.2's `nanmean`
+`nanmean.jsonl` (`gen_oracle.py nanmean`, 5,017 cases, floor 4,900) gates `np.nanmean` as NumPy 2.5.4's `nanmean`
 (`numpy/lib/_nanfunctions_impl.py`):
 
 1. `_replace_nan(a, 0)`: a K-order copy with its NaNs zeroed, and the mask. An input that is not inexact has no mask,
@@ -1699,7 +1699,7 @@ parameter gets the literal's implicit 0-d array (marked `WasPythonLiteral` / `Wa
 the boxed literal, np.copyto its generic overload.
 
 **Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `weak_scalar` op. The generator leaves out four
-classes: a where= comparison of an integer array with a Python int outside its dtype (NumPy 2.4.2 SEGFAULTS there,
+classes: a where= comparison of an integer array with a Python int outside its dtype (NumPy 2.4.2 and 2.5.4 SEGFAULT there,
 probed), a bool array against a Python int past int64 and a store error naming the C `long` ("too large to convert",
 "too big to convert": the text differs by platform; unit tests pin the LP64 texts), and np.copyto's complex64 cast
 text (NumSharp has one complex width).
@@ -1716,7 +1716,7 @@ cases each.
 ### np.power's float loops (`power_fast` tier) — 2026-10-06
 
 `power_fast.jsonl` (`gen_oracle.py power_fast`, 7,902 cases, floor 7,500) gates np.power and np.float_power as NumPy
-2.4.2's float power loops (plan `docs/plans/api-parameter-parity.md` X13, X19, X20):
+2.5.4's float power loops (plan `docs/plans/api-parameter-parity.md` X13, X19, X20):
 - DOUBLE_power / FLOAT_power write `1/x`, `1`, `sqrt(x)`, `x` or `x*x` for an exponent of -1, 0, 0.5, 1 or 2 when the
   exponent's STEP in the inner-loop call is 0, and call pow otherwise;
 - HALF_power is powf on the exactly widened halves, with no fast path;
@@ -1753,7 +1753,7 @@ before section I, two survived (plan finding 27).
 
 ### np.arange as NumPy's `PyArray_ArangeObj` (`arange_full` tier) — 2026-10-29
 
-`arange_full.jsonl` (`gen_oracle.py arange_full`, 475 cases, floor 450) gates np.arange as NumPy 2.4.2's
+`arange_full.jsonl` (`gen_oracle.py arange_full`, 475 cases, floor 450) gates np.arange as NumPy 2.5.4's
 `PyArray_ArangeObj` (`ctors.c`; np-layer dtype plan, P3's D4 fix):
 - the length is `ceil((stop - start) / step)` in Python's arithmetic on the bounds (a float division, or a Python int's
   correctly rounded true division), an underflowed quotient of a nonzero difference counted by its sign, the ceiling
@@ -1869,7 +1869,7 @@ matches NumPy. Its rule is dropped and its 8 `view_flags` cases moved back into 
 `OpenBugs.ViewFlags.cs`'s two nansum / nanprod pins are untagged.
 
 **Redrawn 2026-11-04** (29 ids and 438 carved cells since): np.broadcast_arrays returns an operand that already has the
-broadcast shape as itself and keeps a read-only operand's views read-only, as NumPy 2.4.2 does (parity QA-34,
+broadcast shape as itself and keeps a read-only operand's views read-only, as NumPy 2.5.4 does (parity QA-34,
 `f0a00d4a`), so VF17 matches NumPy. Its rule is dropped and its 6 `view_flags` cases moved back into the tier the same
 way; `OpenBugs.ViewFlags.cs`'s broadcast_arrays pin is untagged, and the strings oracle's VF17 layout excuse is gone.
 
@@ -2254,7 +2254,7 @@ case still open.
 
 ### The matrix tier (`matrix`) — 2026-10-09
 
-`test/oracle/gen_matrix_oracle.py` writes NumPy 2.4.2's answers for `numpy.matrix`, which NumSharp implements as
+`test/oracle/gen_matrix_oracle.py` writes the pinned NumPy's answers for `numpy.matrix`, which NumSharp implements as
 `NDMatrix` (`src/NumSharp.Core/Matrixlib/`). The cases ride the ordinary harness (`FuzzCorpusTests.Matrix`,
 `OpRegistry.Matrix.cs`), with three additions:
 
@@ -2361,7 +2361,7 @@ report every carved case still open.
 
 ### The matrix-operand tier (`matrix_operand` / `matrix_operand_host`) — 2026-10-10
 
-`test/oracle/gen_matrix_operand_oracle.py` writes what NumPy 2.4.2 returns when a public `np.*` function receives a
+`test/oracle/gen_matrix_operand_oracle.py` writes what the pinned NumPy returns when a public `np.*` function receives a
 `numpy.matrix` OPERAND. The matrix tier above holds the matrix CLASS (its members and operators); this tier holds
 the functions, which NumSharp answers at run time through the mechanism declared on each function's computation and
 woven into the function by NumSharp.Build (`src/NumSharp.Core/Backends/Subclass/`): the object's class decides, and
@@ -2436,7 +2436,7 @@ by unit tests with the probed class and shape: `NumSharp.Tests/Matrixlib/NDMatri
 
 **Generator rules worth keeping**:
 
-- NumPy 2.4.2's `np.stack` / `np.dstack` with a matrix operand raise `shape too large to be a matrix.` and CORRUPT
+- NumPy's (2.4.2 and 2.5.4) `np.stack` / `np.dstack` with a matrix operand raise `shape too large to be a matrix.` and CORRUPT
   NumPy's heap. Every matrix call runs in a worker process, which is retired after such an error.
 - A `keepdims=False` of the source case is not passed to NumPy (C# cannot tell an explicit `false` from the
   default, and NumPy's matrix methods refuse the keyword whatever its value).
@@ -2566,7 +2566,7 @@ previously gated only by the interop live-parity suite. **HOST-PINNED exactly li
 `MatmulParityPin` shape), because `NumSharp.Core` ships NO managed LU/QR/SVD/eigensolver: these compute
 ONLY through the opt-in `NumSharp.Interop.OpenBLAS` backend, and the result bytes come out of a specific
 LAPACK build dispatched to a specific CPU kernel. The gate enables that backend before replay and
-`Disable()`s after; a host that cannot load NumPy 2.4.2's pinned scipy-openblas (matched by CONTENT
+`Disable()`s after; a host that cannot load NumPy 2.5.4's pinned scipy-openblas (matched by CONTENT
 sha256, not file name) goes **Inconclusive, never red**. Pinned at **threads=1** — the deterministic
 config the interop suite proves — rather than `matmul_parity`'s ambient max; `gen_linalg_parity()` forces
 single-thread via ctypes so the recorded bytes are threading-independent. NumPy's `linalg` is "lite" (it
@@ -2667,7 +2667,7 @@ failed after allocating an output leaked that output's pooled buffer to the fina
 there).
 
 **The buffered sections (2026-10-14, strings phase 1 package P1.7g).** NumSharp's buffered NDIter is a port of NumPy
-2.4.2's buffering (`NDIterBufferManager.Buffering.cs`), and `gen_oracle.py`'s `_gen_nditer_protocol_buffered` adds
+2.5.4's buffering (`NDIterBufferManager.Buffering.cs`), and `gen_oracle.py`'s `_gen_nditer_protocol_buffered` adds
 1,768 traces of it: `reduce_buf` (the reduce double loop over C / F / permuted 3-D inputs, four `op_axes` maps, plain /
 external loop / multi-index walks, buffer sizes 0 / 3 / 5 / 7 / 13, with and without a float64 cast, allocated and
 given outputs), `reduce2d` (inner and OUTER reductions, cast reduction operands in both directions), `reduce_seek`
@@ -3423,7 +3423,7 @@ of `integers` and `randint`), which the G1 gate keeps equal to reflection.
   `[0, 624]` and a negative Philox `buffer_pos` refused where NumPy stores them and then reads outside the array; a
   string / nested / ndarray `spawn_key` stored as its flattened ints (identical pool; only the repr line differs).
 
-Regenerate: `python test/oracle/gen_random_oracle.py` (NumPy 2.4.2; WSL with Linux NumPy at `~/np242/bin/python` for
+Regenerate: `python test/oracle/gen_random_oracle.py` (the pinned NumPy, 2.5.4; WSL with Linux NumPy at `~/np254/bin/python` for
 the LP64 tier), then rebuild. After a surface change: `NUMSHARP_WRITE_RANDOM_SURFACE=1` on the G1 test first. When the
 member set changes, `python test/oracle/random_api_oracle_map.py` rebuilds the `random_api` key of
 `coverage/oracle_map.json` (the strict coverage join) from the corpus and the coverage catalog.

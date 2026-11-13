@@ -7,11 +7,14 @@ namespace NumSharp.Tests.RandomSampling
 {
     /// <summary>
     ///     What KIND of array a random function returns: NumPy's random functions return a fresh buffer that the result owns
-    ///     (<c>flags.owndata</c> True), C-ordered and writeable, with two exceptions NumPy itself makes — the legacy
-    ///     <c>RandomState.choice(int, size, replace=False)</c> without <c>p</c> (a slice of <c>permutation(pop_size)</c>) and
+    ///     (<c>flags.owndata</c> True), C-ordered and writeable, with the exceptions NumPy itself makes — the legacy
+    ///     <c>RandomState.choice(int, size, replace=False)</c> without <c>p</c> (a slice of <c>permutation(pop_size)</c>),
     ///     <c>Generator.permutation(x, axis)</c> along a non-leading axis (its fancy index returns a transposed view of a fresh
-    ///     buffer). Every expected value, stride and flag here is NumPy 2.4.2's answer for the same call (seed 42), probed on
-    ///     2026-10-05.
+    ///     buffer), and since NumPy 2.5 <c>Generator.choice(int, size, replace=False)</c> without <c>p</c> and
+    ///     <c>multivariate_normal</c> on both APIs, which end with <c>reshape</c> instead of an in-place shape assignment: a
+    ///     C-contiguous view whose <c>base</c> is the fresh flat buffer. Every expected value, stride and flag here is NumPy
+    ///     2.5.4's answer for the same call (seed 42), probed on 2026-11-09; only those two families' kinds differ from NumPy
+    ///     2.4.2's (probed 2026-10-05).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -22,10 +25,11 @@ namespace NumSharp.Tests.RandomSampling
     ///     </para>
     ///     <list type="bullet">
     ///         <item><c>Generator.choice</c> without replacement (Floyd, tail shuffle, weighted) and the legacy weighted path
-    ///         returned <c>reshape(shape)</c> views; NumPy assigns <c>idx.shape = shape</c> in place. Three
-    ///         <c>[OpenBugs]</c> pins (<c>2f92d91d</c>) moved here.</item>
-    ///         <item><c>multivariate_normal</c> (both APIs) returned a reshape view; NumPy assigns
-    ///         <c>x.shape = final_shape</c> in place.</item>
+    ///         returned <c>reshape(shape)</c> views; NumPy 2.4 assigned <c>idx.shape = shape</c> in place. Three
+    ///         <c>[OpenBugs]</c> pins (<c>2f92d91d</c>) moved here. NumPy 2.5 reshapes again on the unweighted
+    ///         Generator paths (Floyd, tail shuffle), so those are views once more, now pinned as NumPy's.</item>
+    ///         <item><c>multivariate_normal</c> (both APIs) returned a reshape view; NumPy 2.4 assigned
+    ///         <c>x.shape = final_shape</c> in place, and NumPy 2.5 returns <c>x.reshape(final_shape)</c>, a view again.</item>
     ///         <item><c>Generator.permutation(x, axis &gt; 0)</c> returned <c>np.take</c>'s C-ordered owning array; NumPy's
     ///         <c>arr[tuple(slices)]</c> returns the MapIter buffer (indexed axis first) transposed back.</item>
     ///     </list>
@@ -56,20 +60,42 @@ namespace NumSharp.Tests.RandomSampling
             r.flags.writeable.Should().BeTrue($"NumPy's {what} is writeable");
         }
 
+        /// <summary>
+        ///     Asserts a result is NumPy 2.5's <c>buffer.reshape(shape)</c> of a fresh flat buffer: a writeable,
+        ///     C-contiguous VIEW of the given dimensions (<c>owndata</c> False) whose <c>base</c> is an owning array of
+        ///     <paramref name="baseDims"/>.
+        /// </summary>
+        /// <param name="r">The result.</param>
+        /// <param name="dims">The expected dimensions.</param>
+        /// <param name="baseDims">The expected dimensions of the buffer the view reshapes (NumPy's <c>r.base.shape</c>).</param>
+        /// <param name="what">The NumPy call, named in the failure message.</param>
+        private static void ShouldBeCViewOfFreshBuffer(NDArray r, long[] dims, long[] baseDims, string what)
+        {
+            r.shape.Should().Equal(dims, what);
+            r.flags.owndata.Should().BeFalse($"NumPy 2.5's {what} is a reshape view");
+            r.flags.c_contiguous.Should().BeTrue($"NumPy's {what} is C-contiguous");
+            r.flags.writeable.Should().BeTrue($"NumPy's {what} is writeable");
+            using var b = r.@base;
+            b.Should().NotBeNull($"NumPy's {what} has a base");
+            b.shape.Should().Equal(baseDims, $"NumPy's {what}.base");
+            b.flags.owndata.Should().BeTrue($"NumPy's {what}.base owns the buffer");
+        }
+
         // ================================================================================================================
         //  choice — the three former [OpenBugs] pins and the passing control (moved from OpenBugs.Random.cs)
         // ================================================================================================================
 
         /// <summary>
-        ///     <c>Generator.choice(1000, 6, replace=False)</c> owns its data (NumPy's Floyd path fills <c>np.empty(size)</c>
-        ///     and assigns <c>idx.shape = shape</c> in place). Was an <c>[OpenBugs]</c> pin: a reshape view.
+        ///     <c>Generator.choice(1000, 6, replace=False)</c> is a view of its draws: NumPy 2.5's Floyd path fills
+        ///     <c>np.empty(size)</c> and ends with <c>idx = idx.reshape(shape)</c>. NumPy 2.4 assigned <c>idx.shape</c> in
+        ///     place, so its result owned the buffer (an <c>[OpenBugs]</c> pin, when NumSharp returned a view before 2.5 did).
         /// </summary>
         [TestMethod]
-        public void Choice_GeneratorWithoutReplacement_OwnsItsData()
+        public void Choice_GeneratorWithoutReplacement_IsAViewOfItsDraws()
         {
             using var r = np.random.default_rng(42).choice(1000L, new Shape(6L), replace: false);
             r.ToArray<long>().Should().Equal(652L, 770L, 432L, 858L, 438L, 88L);
-            r.flags.owndata.Should().BeTrue("NumPy assigns idx.shape in place, so the result owns its buffer");
+            ShouldBeCViewOfFreshBuffer(r, new long[] { 6 }, new long[] { 6 }, "choice(1000, 6, replace=False)");
         }
 
         /// <summary>
@@ -121,20 +147,21 @@ namespace NumSharp.Tests.RandomSampling
         // ================================================================================================================
 
         /// <summary>
-        ///     Floyd's path owns its data at every size NumPy accepts: N-D (laid out C from the size's dimensions), <c>()</c>
-        ///     and <c>None</c> (0-d; NumPy returns a Python int for <c>None</c>, NumSharp the 0-d array), empty, and with
-        ///     <c>shuffle=False</c> (Floyd's own order).
+        ///     Floyd's path is a view of its 1-D draws at every size NumPy accepts (NumPy 2.5's <c>idx.reshape(shape)</c>):
+        ///     N-D (laid out C from the size's dimensions), <c>()</c> (a 0-d view of one draw), empty, and with
+        ///     <c>shuffle=False</c> (Floyd's own order). <c>None</c> is the exception: NumPy unpacks it into the Python int
+        ///     89, which NumSharp returns as a fresh owning 0-d array.
         /// </summary>
         [TestMethod]
-        public void Choice_GeneratorFloyd_EverySizeOwnsItsData()
+        public void Choice_GeneratorFloyd_EverySize_IsAViewOfItsDraws()
         {
             using var r2d = np.random.default_rng(42).choice(1000L, new Shape(2L, 3L), replace: false);
-            ShouldOwnCLayout(r2d, new long[] { 2, 3 }, "choice(1000, (2,3), replace=False)");
+            ShouldBeCViewOfFreshBuffer(r2d, new long[] { 2, 3 }, new long[] { 6 }, "choice(1000, (2,3), replace=False)");
             r2d.strides.Should().Equal(new long[] { 24, 8 });
             r2d.ToArray<long>().Should().Equal(652L, 770L, 432L, 858L, 438L, 88L);
 
             using var r0 = np.random.default_rng(42).choice(1000L, Shape.Scalar, replace: false);
-            ShouldOwnCLayout(r0, Array.Empty<long>(), "choice(1000, (), replace=False)");
+            ShouldBeCViewOfFreshBuffer(r0, Array.Empty<long>(), new long[] { 1 }, "choice(1000, (), replace=False)");
             r0.GetAtIndex<long>(0).Should().Be(89L);
 
             using var rNone = np.random.default_rng(42).choice(1000L, null, replace: false);
@@ -142,35 +169,35 @@ namespace NumSharp.Tests.RandomSampling
             rNone.GetAtIndex<long>(0).Should().Be(89L);
 
             using var rEmpty = np.random.default_rng(42).choice(1000L, new Shape(0L), replace: false);
-            ShouldOwnCLayout(rEmpty, new long[] { 0 }, "choice(1000, (0,), replace=False)");
+            ShouldBeCViewOfFreshBuffer(rEmpty, new long[] { 0 }, new long[] { 0 }, "choice(1000, (0,), replace=False)");
 
             using var rNoShuffle = np.random.default_rng(42).choice(1000L, new Shape(6L), replace: false, shuffle: false);
-            ShouldOwnCLayout(rNoShuffle, new long[] { 6 }, "choice(1000, 6, replace=False, shuffle=False)");
+            ShouldBeCViewOfFreshBuffer(rNoShuffle, new long[] { 6 }, new long[] { 6 }, "choice(1000, 6, replace=False, shuffle=False)");
             rNoShuffle.ToArray<long>().Should().Equal(88L, 770L, 652L, 438L, 432L, 858L);
         }
 
         /// <summary>
         ///     The tail-shuffle path (a population over 10000 and more than 1/50 of it drawn; 1/20 with
-        ///     <c>shuffle=False</c>) owns its data: NumPy copies the tail of the shuffled range (<c>.copy()</c>, "to allow
-        ///     potentially large array backing idx to be gc") and assigns its shape in place.
+        ///     <c>shuffle=False</c>) is a view of its draws too: NumPy copies the tail of the shuffled range (<c>.copy()</c>,
+        ///     "to allow potentially large array backing idx to be gc") and, since NumPy 2.5, reshapes that copy.
         /// </summary>
         [TestMethod]
-        public void Choice_GeneratorTailShuffle_EverySizeOwnsItsData()
+        public void Choice_GeneratorTailShuffle_EverySize_IsAViewOfItsDraws()
         {
             using var r = np.random.default_rng(42).choice(20000L, new Shape(500L), replace: false);
-            ShouldOwnCLayout(r, new long[] { 500 }, "choice(20000, 500, replace=False)");
+            ShouldBeCViewOfFreshBuffer(r, new long[] { 500 }, new long[] { 500 }, "choice(20000, 500, replace=False)");
             var v = r.ToArray<long>();
             v.Take(6).Should().Equal(8305L, 18068L, 7297L, 2318L, 8047L, 5653L);
             v[^1].Should().Be(1785L);
             v.Sum().Should().Be(4998559L);
 
             using var r2d = np.random.default_rng(42).choice(20000L, new Shape(25L, 20L), replace: false);
-            ShouldOwnCLayout(r2d, new long[] { 25, 20 }, "choice(20000, (25,20), replace=False)");
+            ShouldBeCViewOfFreshBuffer(r2d, new long[] { 25, 20 }, new long[] { 500 }, "choice(20000, (25,20), replace=False)");
             r2d.strides.Should().Equal(new long[] { 160, 8 });
             r2d.ToArray<long>().Should().Equal(v, "the same draws as the 1-D size, laid out C");
 
             using var rNoShuffle = np.random.default_rng(42).choice(20000L, new Shape(1500L), replace: false, shuffle: false);
-            ShouldOwnCLayout(rNoShuffle, new long[] { 1500 }, "choice(20000, 1500, replace=False, shuffle=False)");
+            ShouldBeCViewOfFreshBuffer(rNoShuffle, new long[] { 1500 }, new long[] { 1500 }, "choice(20000, 1500, replace=False, shuffle=False)");
             var w = rNoShuffle.ToArray<long>();
             w.Take(6).Should().Equal(19404L, 8644L, 14443L, 10198L, 7981L, 7589L);
             w[^1].Should().Be(1785L);
@@ -224,12 +251,14 @@ namespace NumSharp.Tests.RandomSampling
         // ================================================================================================================
 
         /// <summary>
-        ///     <c>multivariate_normal</c> owns its data at every size on both APIs: NumPy computes the product into a fresh
-        ///     array and assigns <c>x.shape = final_shape</c> in place. (The identity covariance makes the managed SVD's
-        ///     factors exact, so the values are NumPy's without a LAPACK backend.)
+        ///     <c>multivariate_normal</c> is a view of its product at every size on both APIs: NumPy computes the product
+        ///     into a fresh <c>(rows, N)</c> array and, since NumPy 2.5, returns <c>x.reshape(final_shape)</c> (NumPy 2.4
+        ///     assigned <c>x.shape</c> in place and returned an owning array). <c>size=None</c> and <c>()</c> reshape a
+        ///     <c>(1, N)</c> product. (The identity covariance makes the managed SVD's factors exact, so the values are
+        ///     NumPy's without a LAPACK backend.)
         /// </summary>
         [TestMethod]
-        public void MultivariateNormal_EverySizeOwnsItsData()
+        public void MultivariateNormal_EverySize_IsAViewOfTheProduct()
         {
             var mean = new[] { 0.0, 0.0 };
             var cov = new double[,] { { 1, 0 }, { 0, 1 } };
@@ -250,12 +279,14 @@ namespace NumSharp.Tests.RandomSampling
             foreach (var (genSize, legSize, dims) in sizes)
             {
                 long n = dims.Aggregate(1L, (x, y) => x * y);
+                // The product's rows: one per sample, so (n / 2, 2) — (1, 2) for size=None / ().
+                var product = new long[] { n / 2, 2 };
                 using var g = np.random.default_rng(42).multivariate_normal(mean, cov, genSize);
-                ShouldOwnCLayout(g, dims, $"Generator.multivariate_normal(size={string.Join(",", dims)})");
+                ShouldBeCViewOfFreshBuffer(g, dims, product, $"Generator.multivariate_normal(size={string.Join(",", dims)})");
                 g.ToArray<double>().Should().Equal(gen.Take((int)n));
 
                 using var l = np.random.RandomState(42).multivariate_normal(mean, cov, legSize);
-                ShouldOwnCLayout(l, dims, $"RandomState.multivariate_normal(size={string.Join(",", dims)})");
+                ShouldBeCViewOfFreshBuffer(l, dims, product, $"RandomState.multivariate_normal(size={string.Join(",", dims)})");
                 l.ToArray<double>().Should().Equal(leg.Take((int)n));
             }
         }
@@ -426,8 +457,10 @@ namespace NumSharp.Tests.RandomSampling
 
         /// <summary>
         ///     Every sampler of both APIs, at sizes <c>()</c>, <c>(5,)</c>, <c>(2,3)</c>, <c>(0,)</c> and <c>(2,1,3)</c>,
-        ///     returns a fresh writeable C-contiguous array that owns its data, as NumPy's does (the probe found all of them
-        ///     already right except <c>multivariate_normal</c>; this pins the whole surface against a reshape-view return).
+        ///     returns a fresh writeable C-contiguous array that owns its data, as NumPy's does — except
+        ///     <c>multivariate_normal</c>, which since NumPy 2.5 is a C-contiguous view of its <c>(rows, 2)</c> product
+        ///     (<c>x.reshape(final_shape)</c>; NumPy 2.5.4 probed over this whole list, every other sampler unchanged from
+        ///     2.4.2). This pins the whole surface against a reshape-view return, and that one family against an owning one.
         /// </summary>
         [TestMethod]
         public void EverySampler_EverySize_ReturnsAFreshCArray()
@@ -498,14 +531,24 @@ namespace NumSharp.Tests.RandomSampling
                 void Check(string what, Func<NDArray> run, long trailing)
                 {
                     var want = trailing == 0 ? expected : expected.Append(trailing).ToList();
+                    // NumPy 2.5's multivariate_normal reshapes its (rows, N) product: a view whose base has one row per
+                    // sample (prod(size); one for size=()).
+                    bool view = what.EndsWith(".multivariate_normal", StringComparison.Ordinal);
                     using var r = run();
-                    if (!r.shape.SequenceEqual(want) || !r.flags.owndata || !r.flags.c_contiguous || !r.flags.writeable)
+                    using var b = view ? r.@base : null;
+                    long rows = dims.Aggregate(1L, (x, y) => x * y);
+                    bool kindOk = view
+                        ? !r.flags.owndata && b is not null && b.shape.SequenceEqual(new[] { rows, trailing })
+                        : r.flags.owndata;
+                    if (!r.shape.SequenceEqual(want) || !kindOk || !r.flags.c_contiguous || !r.flags.writeable)
                         failures.Add($"{what}(size=({string.Join(",", dims)})): shape ({string.Join(",", r.shape)}) " +
-                                     $"owndata={r.flags.owndata} c={r.flags.c_contiguous} writeable={r.flags.writeable}");
+                                     $"owndata={r.flags.owndata} c={r.flags.c_contiguous} writeable={r.flags.writeable}" +
+                                     (view ? $" base=({(b is null ? "none" : string.Join(",", b.shape))})" : ""));
                 }
             }
 
-            failures.Should().BeEmpty("NumPy's samplers return a fresh writeable C-ordered array that owns its data");
+            failures.Should().BeEmpty("NumPy's samplers return a fresh writeable C-ordered array that owns its data " +
+                                      "(multivariate_normal: a C view of its fresh product)");
         }
     }
 }

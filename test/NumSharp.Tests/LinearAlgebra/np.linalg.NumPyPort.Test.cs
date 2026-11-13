@@ -277,10 +277,13 @@ namespace NumSharp.Tests.LinearAlgebra
             CollectionAssert.AreEqual(new long[] { 0, 0 }, empty.shape.Select(d => (long)d).ToArray());
             Assert.AreEqual(np.float64, empty.dtype);
 
-            // np.linalg.tensorsolve([[2.]], [[4.]]): [[2.]], shape (1, 1), owning its data.
+            // np.linalg.tensorsolve([[2.]], [[4.]]): [[2.]], shape (1, 1), a view of the (1,) solution (NumPy 2.5's
+            // res.reshape(oldshape); 2.4's in-place res.shape = oldshape owned its data).
             var one = np.linalg.tensorsolve(np.array(new[,] { { 2.0 } }), np.array(new[,] { { 4.0 } }));
             CollectionAssert.AreEqual(new long[] { 1, 1 }, one.shape.Select(d => (long)d).ToArray());
-            Assert.IsTrue(one.flags.owndata, "tensorsolve([[2.]], [[4.]]) OWNDATA");
+            Assert.IsFalse(one.flags.owndata, "tensorsolve([[2.]], [[4.]]) OWNDATA");
+            using (var oneBase = one.@base)
+                CollectionAssert.AreEqual(new long[] { 1 }, oneBase.shape.Select(d => (long)d).ToArray(), "its base is the solution");
             Assert.AreEqual(2.0, one.GetDouble(0, 0));
 
             // np.linalg.tensorsolve(np.array(2.), np.ones(7)): the (1, 1) system against 7 elements is solve's gufunc
@@ -291,10 +294,10 @@ namespace NumSharp.Tests.LinearAlgebra
                 "(size 7 is different from 1)");
 
             // np.linalg.tensorsolve(np.eye(6).reshape(2, 3, 6), np.arange(6.).reshape(2, 3)): (6,) [0, 1, 2, 3, 4, 5],
-            // owning its data (res.shape = oldshape, not a view).
+            // a view of the (6,) solution even at the solution's own shape (NumPy 2.5's res.reshape(oldshape)).
             var x = np.linalg.tensorsolve(np.eye(6).reshape(2, 3, 6), np.arange(6.0).reshape(2, 3));
             CollectionAssert.AreEqual(new long[] { 6 }, x.shape.Select(d => (long)d).ToArray());
-            Assert.IsTrue(x.flags.owndata, "tensorsolve(eye(6).reshape(2, 3, 6), ...) OWNDATA");
+            Assert.IsFalse(x.flags.owndata, "tensorsolve(eye(6).reshape(2, 3, 6), ...) OWNDATA");
             CollectionAssert.AreEqual(new[] { 0.0, 1, 2, 3, 4, 5 }, x.ToArray<double>());
 
             // np.linalg.tensorsolve(np.zeros((0, 0), float16), np.zeros((0, 0))): solve's _commonType refusal, reached now

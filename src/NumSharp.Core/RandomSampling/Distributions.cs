@@ -25,9 +25,32 @@ namespace NumSharp
     ///     from a chain of divisions into a chain of subtractions, Step50's product loop into a load, and Step52's four
     ///     <c>log</c>s into one. Every (re)population of the key calls <see cref="ResetMemos"/>.
     ///     </para>
+    ///     <para>
+    ///     A setup belongs to one sampler FAMILY for life (<see cref="LegacyBtpe"/>, fixed by the owning
+    ///     <see cref="BinomialState"/>): NumPy 2.5 split <c>random_binomial_btpe</c> (Generator: the corrected Stirling
+    ///     bound) from <c>legacy_random_binomial_btpe</c> (RandomState: the original one), and the two differ only in
+    ///     Step52's final bound, so one port serves both and the memoized bound is always the family's own.
+    ///     </para>
     /// </remarks>
     internal sealed class BinomialSetup
     {
+        /// <summary>
+        ///     Creates an empty setup (<see cref="has_binomial"/> false) of one sampler family.
+        /// </summary>
+        /// <param name="legacyBtpe">True for RandomState's <c>legacy_random_binomial_btpe</c> Stirling bound (13680, all four
+        ///     error terms added), false for the Generator's corrected <c>random_binomial_btpe</c> one (see
+        ///     <see cref="LegacyBtpe"/>).</param>
+        internal BinomialSetup(bool legacyBtpe) => LegacyBtpe = legacyBtpe;
+
+        /// <summary>
+        ///     Which BTPE Step52 bound this setup evaluates: true is NumPy's <c>legacy_random_binomial_btpe</c> (the
+        ///     published constant 13680 and all four Stirling error terms ADDED, kept bit for bit for RandomState's stream),
+        ///     false the corrected <c>random_binomial_btpe</c> NumPy 2.5 gave the Generator (13860, the last two terms
+        ///     subtracted). Fixed at construction: a memoized Step52 bound (<see cref="Step52Stirling"/>) is only ever valid
+        ///     for the formula that computed it.
+        /// </summary>
+        internal readonly bool LegacyBtpe;
+
         /// <summary>
         ///     How far from the mode Step50's <c>F(y)</c> is memoized (<c>|y - m| &lt;= FWindow</c>). Step50 runs for
         ///     <c>|y - m| &lt;= 20</c> (and for every <c>y</c> once <c>nrq</c> is small), and accepted counts cluster within a
@@ -250,10 +273,18 @@ namespace NumSharp
             hi = t + rho;
         }
 
-        /// <summary>NumPy's Step52 Stirling-series bound verbatim.</summary>
+        /// <summary>
+        ///     NumPy's Step52 Stirling-series bound verbatim, in this setup's family (<see cref="LegacyBtpe"/>): the legacy
+        ///     sampler's <c>13680</c> with all four error terms added, or the Generator's corrected <c>13860</c> with the
+        ///     terms of <c>x1</c> and <c>w</c> subtracted (NumPy 2.5).
+        /// </summary>
         /// <param name="n">The trial count.</param>
         /// <param name="y">The candidate.</param>
         /// <returns>The exact acceptance bound.</returns>
+        /// <remarks>
+        ///     Both are C's left-to-right sums written as NumPy writes them, so every partial sum rounds where NumPy's does;
+        ///     <c>(n - m + 0.5)</c> and <c>(y - m)</c> are integer differences converted to double, as in C.
+        /// </remarks>
         private double ComputeStirling(long n, long y)
         {
             double x1 = (double)y + 1;
@@ -264,12 +295,25 @@ namespace NumSharp
             double f2 = f1 * f1;
             double z2 = z * z;
             double w2 = w * w;
+            if (LegacyBtpe)
+            {
+                // legacy_random_binomial_btpe: "the last two error terms of the Stirling approximation are incorrectly
+                // added" — kept, so RandomState's stream does not move.
+                return xm * Math.Log(f1 / x1) + (n - m + 0.5) * Math.Log(z / w) +
+                        (y - m) * Math.Log(w * r / (x1 * q)) +
+                        (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / f2) / f2) / f2) / f2) / f1 / 166320.0 +
+                        (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / z2) / z2) / z2) / z2) / z / 166320.0 +
+                        (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / x2) / x2) / x2) / x2) / x1 / 166320.0 +
+                        (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / w2) / w2) / w2) / w2) / w / 166320.0;
+            }
+            // random_binomial_btpe (NumPy 2.5): the corrected series — 13860, and the x1 / w terms subtracted, which the
+            // published algorithm (Kachitvichyanukul & Schmeiser) erroneously adds.
             return xm * Math.Log(f1 / x1) + (n - m + 0.5) * Math.Log(z / w) +
                     (y - m) * Math.Log(w * r / (x1 * q)) +
-                    (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / f2) / f2) / f2) / f2) / f1 / 166320.0 +
-                    (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / z2) / z2) / z2) / z2) / z / 166320.0 +
-                    (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / x2) / x2) / x2) / x2) / x1 / 166320.0 +
-                    (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / w2) / w2) / w2) / w2) / w / 166320.0;
+                    (13860.0 - (462.0 - (132.0 - (99.0 - 140.0 / f2) / f2) / f2) / f2) / f1 / 166320.0 +
+                    (13860.0 - (462.0 - (132.0 - (99.0 - 140.0 / z2) / z2) / z2) / z2) / z / 166320.0 -
+                    (13860.0 - (462.0 - (132.0 - (99.0 - 140.0 / x2) / x2) / x2) / x2) / x1 / 166320.0 -
+                    (13860.0 - (462.0 - (132.0 - (99.0 - 140.0 / w2) / w2) / w2) / w2) / w / 166320.0;
         }
 
         /// <summary>
@@ -396,21 +440,21 @@ namespace NumSharp
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     The cache is observable, which is why it is a shared object rather than recomputed per call: NumPy's legacy
-    ///     <c>RandomState</c> owns ONE of these and lends it to both <c>binomial</c> (legacy inversion, <c>exp(n*log(q))</c>)
-    ///     and <c>multinomial</c> (the modern inversion, <c>exp(n*log1p(-p))</c>). Both write the same fields under the same
-    ///     <c>(n, p)</c> key, so a <c>multinomial</c> call can leave a <c>q^n</c> that a later <c>binomial</c> with a matching
-    ///     key reuses instead of recomputing — a one-ULP-level difference NumPy's stream carries and this port reproduces.
-    ///     Nothing resets the cache — not re-seeding, not <c>set_state</c> — exactly as in NumPy.
+    ///     The cache is observable, which is why it is a shared object rather than recomputed per call: each generator owns
+    ///     ONE, which its <c>binomial</c> and <c>multinomial</c> share, and nothing resets it — not re-seeding, not
+    ///     <c>set_state</c> — exactly as in NumPy. Each owner runs ONE sampler family over it (<see cref="LegacyBtpe"/>):
+    ///     NumPy 2.5's <c>RandomState</c> draws both through <c>legacy_random_binomial</c> (the inversion's
+    ///     <c>exp(n*log(q))</c>, the original BTPE bound; its <c>multinomial</c> called the modern <c>random_binomial</c>
+    ///     up to NumPy 2.4, which let a <c>multinomial</c> leave a modern <c>q^n</c> for a later <c>binomial</c>), the
+    ///     <c>Generator</c> both through <c>random_binomial</c> (<c>exp(n*log1p(-p))</c>, the corrected BTPE bound).
     ///     </para>
     ///     <para>
     ///     <see cref="Memo"/> extends the single entry for a <c>multinomial</c> fill, whose rows cycle through one key per
     ///     category — a pattern on which NumPy's single entry never hits, so every binomial call re-runs its setup. While a
     ///     memo is installed, a miss on <see cref="Current"/> looks the key up there before recomputing; a hit swaps that
-    ///     setup in. This is unobservable: the memo only ever holds setups a MODERN call computed (a <c>multinomial</c> fill
-    ///     makes no other kind of call, and the memo is removed when the fill ends), and a modern miss would recompute
-    ///     exactly those values; the rule that a key hitting <see cref="Current"/> reuses whatever populated it — legacy
-    ///     formula included — is untouched. Access is serialized by the owning bit generator's lock.
+    ///     setup in. This is unobservable: the memo only ever holds setups the owner's family computed (a
+    ///     <c>multinomial</c> fill makes no other kind of call, and the memo is removed when the fill ends), and a miss
+    ///     would recompute exactly those values. Access is serialized by the owning bit generator's lock.
     ///     </para>
     /// </remarks>
     internal sealed class BinomialState
@@ -418,8 +462,23 @@ namespace NumSharp
         /// <summary>log2 of the memo's slot count (1024 direct-mapped slots, so the ~100 keys a many-trial fill cycles through rarely collide).</summary>
         internal const int MemoBits = 10;
 
+        /// <summary>Creates the empty cache of one generator.</summary>
+        /// <param name="legacyBtpe">True for a <c>RandomState</c> (NumPy's legacy samplers), false for a <c>Generator</c>;
+        ///     every setup this cache hands out evaluates that family's BTPE bound (<see cref="BinomialSetup.LegacyBtpe"/>).</param>
+        internal BinomialState(bool legacyBtpe)
+        {
+            LegacyBtpe = legacyBtpe;
+            Current = new BinomialSetup(legacyBtpe);
+        }
+
+        /// <summary>
+        ///     The owner's sampler family: true for <c>RandomState</c> (<c>legacy_random_binomial_btpe</c>'s bound), false for
+        ///     <c>Generator</c> (<c>random_binomial_btpe</c>'s). Every setup created here carries it.
+        /// </summary>
+        internal readonly bool LegacyBtpe;
+
         /// <summary>The setup NumPy's single <c>binomial_t</c> holds right now.</summary>
-        internal BinomialSetup Current = new BinomialSetup();
+        internal BinomialSetup Current;
 
         /// <summary>
         ///     The per-key memo of modern setups, direct-mapped by <c>(n, p)</c> — non-null only while a <c>multinomial</c>
@@ -467,9 +526,9 @@ namespace NumSharp
         ///     setup (so a fill whose keys never recur — a new count at every broadcast position — allocates nothing and
         ///     behaves like NumPy's single entry), and a later miss of the tagged key takes the slot over, reusing it in place
         ///     (evicting a colliding key) — safe because every memo slot holds a modern setup and a repopulation is itself
-        ///     modern. Whatever serves the last key stays <see cref="Current"/> after the fill, holding that key's modern
-        ///     setup exactly as NumPy's single entry would. NaN keys never compare equal, so they always repopulate, as in
-        ///     NumPy.
+        ///     of the owner's family. Whatever serves the last key stays <see cref="Current"/> after the fill, holding that
+        ///     key's setup exactly as NumPy's single entry would. NaN keys never compare equal, so they always repopulate, as
+        ///     in NumPy.
         /// </remarks>
         internal BinomialSetup Acquire(long n, double p, out bool fresh)
         {
@@ -493,13 +552,13 @@ namespace NumSharp
             {
                 // First miss of this key here: remember it, serve it from the scratch setup.
                 _tags[slot] = h;
-                _scratch ??= new BinomialSetup();
+                _scratch ??= new BinomialSetup(LegacyBtpe);
                 Current = _scratch;
                 fresh = true;
                 return _scratch;
             }
             if (e == null)
-                memo[slot] = e = new BinomialSetup();
+                memo[slot] = e = new BinomialSetup(LegacyBtpe);
             Current = e;
             fresh = true;
             return e;
@@ -947,8 +1006,10 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>random_binomial_btpe</c>: Kachitvichyanukul &amp; Schmeiser's BTPE rejection sampler for
-        ///     <c>n*min(p,1-p) &gt; 30</c>, with its setup cached in <paramref name="binomial"/>.
+        ///     NumPy's <c>random_binomial_btpe</c> / <c>legacy_random_binomial_btpe</c>: Kachitvichyanukul &amp; Schmeiser's
+        ///     BTPE rejection sampler for <c>n*min(p,1-p) &gt; 30</c>, with its setup cached in <paramref name="binomial"/>,
+        ///     whose family (<see cref="BinomialState.LegacyBtpe"/>) picks Step52's Stirling bound — the two C functions'
+        ///     only difference.
         /// </summary>
         /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="n">The trial count.</param>
@@ -1131,9 +1192,9 @@ namespace NumSharp
         /// <param name="binomial">The cache (see <see cref="BinomialState"/>).</param>
         /// <returns>The count of successes.</returns>
         /// <remarks>
-        ///     The legacy <c>RandomState.binomial</c> uses a copy that computes <c>exp(n * log(q))</c> instead
-        ///     (<c>NumPyRandom.LegacyBinomialInversion</c>); the two share the cache, see <see cref="BinomialState"/>, and the
-        ///     walk itself (<see cref="BinomialSetup.InversionWalk"/>).
+        ///     RandomState's samplers use a copy that computes <c>exp(n * log(q))</c> instead
+        ///     (<c>NumPyRandom.LegacyBinomialInversion</c>); since NumPy 2.5 the two never share a cache (each generator runs
+        ///     one family, see <see cref="BinomialState"/>), only the walk itself (<see cref="BinomialSetup.InversionWalk"/>).
         /// </remarks>
         internal static long RandomBinomialInversion(ref DrawBufferDouble src, long n, double p, BinomialState binomial)
         {
@@ -1194,10 +1255,11 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>random_multinomial</c>: one conditional binomial per category, the last category taking whatever is
-        ///     left. Writes one row of counts.
+        ///     NumPy's <c>random_multinomial</c> (the Generator's): one conditional modern binomial per category, the last
+        ///     category taking whatever is left. Writes one row of counts. RandomState's twin is
+        ///     <c>NumPyRandom.LegacyMultinomial</c> (NumPy 2.5's <c>legacy_random_multinomial</c>).
         /// </summary>
-        /// <typeparam name="TCount">The output count type (C <c>long</c> in the legacy build, <c>int64_t</c> in Generator).</typeparam>
+        /// <typeparam name="TCount">The output count type (<c>int64_t</c> in the Generator).</typeparam>
         /// <param name="src">The draw source — per-draw, or a read-ahead whose no-overdraw accounting the caller keeps.</param>
         /// <param name="n">The number of trials.</param>
         /// <param name="mnix">The row to write — its <paramref name="d"/> slots must be zero on entry (NumPy writes into an

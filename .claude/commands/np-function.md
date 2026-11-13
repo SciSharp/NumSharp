@@ -1,6 +1,6 @@
 ---
 name: np-function
-description: Implement a NumPy np.* function in NumSharp with full API parity, optimizations, and variation coverage (NumPy 2.4.2 source of truth).
+description: Implement a NumPy np.* function in NumSharp with full API parity, optimizations, and variation coverage (NumPy 2.5.4 source of truth).
 argument-hint: <np.function_name or description>
 ---
 
@@ -8,7 +8,7 @@ When user requests /np-function, you are to follow these instructions carefully!
 
 # np-function command
 
-We are looking to support NumPy's np.* to the fullest. we are aligning with NumPy 2.4.2 as source of truth and are to provide exact same API (np.* overloading) as NumPy does.
+We are looking to support NumPy's np.* to the fullest. we are aligning with NumPy 2.5.4 (the pin in `numpy-version.txt`) as source of truth and are to provide exact same API (np.* overloading) as NumPy does.
 This session we focusing on: """$ARGUMENTS"""
 You job is around interacting with np.* functions - no more than one unless they are closely related.
 

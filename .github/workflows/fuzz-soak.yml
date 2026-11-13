@@ -1,8 +1,9 @@
 name: Fuzz Soak
 
 # Nightly differential-fuzz soak: sweeps ONE fixed seed plus NINE fresh cryptographically-random
-# seeds through test/oracle/fuzz_random.py (NumPy 2.4.2 oracle), generating 200K cases per seed by
-# default and replaying them through the C# harness. The FuzzMatrix gate on every push/PR replays the
+# seeds through test/oracle/fuzz_random.py (the oracle is the NumPy pinned in numpy-version.txt),
+# generating 200K cases per seed by default and replaying them through the C# harness. The
+# FuzzMatrix gate on every push/PR replays the
 # small COMMITTED corpora (no Python); this job is the "millions of cases" tail that needs Python.
 #
 # Why 1 + 9: the generator is deterministic, so a fixed seed regenerates a byte-identical corpus every
@@ -87,10 +88,10 @@ jobs:
 
     # The raw per-instruction flags (AVX512F) survive the pin while the dispatch groups (X86_V4,
     # AVX512_ICL) do not, so "AVX512F=True ... X86_V4=False" is the pin at work on an AVX-512 runner.
-    - name: Install NumPy 2.4.2 (the oracle)
+    - name: Install the pinned NumPy (the oracle, numpy-version.txt)
       shell: bash
       run: |
-        pip install "numpy==2.4.2"
+        pip install "numpy==$(cat numpy-version.txt)"
         python -c "from numpy._core._multiarray_umath import __cpu_features__ as f; \
         print('cpu         ', 'AVX512F=%s AVX2=%s | numpy dispatch X86_V4=%s AVX512_ICL=%s' \
               % tuple(f.get(k) for k in ('AVX512F', 'AVX2', 'X86_V4', 'AVX512_ICL')))"
@@ -276,9 +277,9 @@ jobs:
       with:
         python-version: '3.12'
 
-    - name: Install NumPy 2.4.2 (the oracle)
+    - name: Install the pinned NumPy (the oracle, numpy-version.txt)
       shell: bash
-      run: pip install "numpy==2.4.2"
+      run: pip install "numpy==$(cat numpy-version.txt)"
 
     # 10 distinct seeds in [0, 2**32) (the legacy RandomState(int) domain every family runs), none of them one of the
     # committed corpus's fixed seeds (those are replayed on every push already). A dispatch may pin them instead.
@@ -346,9 +347,9 @@ jobs:
       with:
         python-version: '3.12'
 
-    - name: Install NumPy 2.4.2 (the oracle)
+    - name: Install the pinned NumPy (the oracle, numpy-version.txt)
       shell: bash
-      run: pip install "numpy==2.4.2"
+      run: pip install "numpy==$(cat numpy-version.txt)"
 
     - name: Download the LP64 rows
       uses: actions/download-artifact@v8

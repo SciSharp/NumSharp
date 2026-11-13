@@ -38,7 +38,8 @@ namespace NumSharp.Backends
         ///     NumPy's statements: the axis move, <c>oldshape = a.shape[-(an - b.ndim):]</c>, the size check, the square system
         ///     <c>a.reshape(prod, prod)</c> against <c>b.ravel()</c> (through this engine's <see cref="Solve"/>, NumPy's
         ///     <c>solve(a, b)</c>, so a subclass that overrides it computes the tensor system too) and
-        ///     <c>res.shape = oldshape</c>.
+        ///     <c>return res.reshape(oldshape)</c> — since NumPy 2.5 a view of the solution (<c>owndata</c> False, its base
+        ///     the 1-D solution), where NumPy 2.4's in-place <c>res.shape = oldshape</c> returned an owning array.
         ///     </para>
         ///     <para>
         ///     The axis move, the reshape and the ravel are the members np.transpose, np.reshape and np.ravel dispatch to.
@@ -109,11 +110,11 @@ namespace NumSharp.Backends
             var square = work.reshape(new[] {prod, prod});   // np.reshape's member
             var rhs = NDArray.ravel(b, 'C');                  // b.ravel(): np.ravel's member, order 'C'
 
-            // `res = wrap(solve(a, b)); res.shape = oldshape`: solve's fresh solution relabelled IN PLACE (it keeps owning
-            // its data), not a reshaped view of it.
+            // `res = wrap(solve(a, b)); return res.reshape(oldshape)` (NumPy 2.5; 2.4 relabelled res IN PLACE and returned
+            // an owning array): a VIEW of solve's fresh 1-D solution, owndata False, its base that solution. oldshape is
+            // built here, so the view's Shape adopts it.
             var res = Solve(square, rhs);
-            res.shape = oldshape;
-            return res;
+            return res.reshape(new Shape(oldshape, copy: false));
         }
     }
 }

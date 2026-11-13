@@ -33,7 +33,7 @@ namespace NumSharp.Utilities
     ///
     /// <para><b>The FMA contraction is part of the answer, not an optimization.</b> NumPy writes the
     /// quadrant as <c>_mm256_mul_ps(x, log2e)</c> followed by <c>_mm256_add_ps(quadrant, magic)</c>,
-    /// but the wheel's compiler (MSVC 19.44, the numpy==2.4.2 win-amd64 build) contracts that pair
+    /// but the wheel's compiler (MSVC 19.44, the numpy==2.5.4 win-amd64 build, as 2.4.2's) contracts that pair
     /// into a single <c>vfmadd</c>. The difference is observable: at <c>x = 0xc26d0e6c</c> the
     /// un-contracted product lands on the exact tie <c>-85.5</c> and the magic-constant rint takes it
     /// to <c>-86</c> (half-to-even), while the fused form keeps the extra bits of
@@ -106,8 +106,8 @@ namespace NumSharp.Utilities
         //
         // Unlike Exp/Log/Sin/Cos above, exp2 is NOT a port of a NumPy float32 SIMD kernel: NumPy's
         // vector exp2 (simd_exp2 in loops_umath_fp.dispatch) is SVML, gated on
-        // NPY_HAVE_AVX512_SKX && NPY_CAN_LINK_SVML — Linux/AVX-512 only — so the numpy==2.4.2
-        // win-amd64 wheel this repo targets runs the SCALAR fallback `npy_exp2f`, i.e. the MSVC CRT
+        // NPY_HAVE_AVX512_SKX && NPY_CAN_LINK_SVML — Linux/AVX-512 only — so the numpy==2.5.4
+        // win-amd64 wheel this repo targets, like 2.4.2's, runs the SCALAR fallback `npy_exp2f`, i.e. the MSVC CRT
         // `exp2f`, one element at a time. There is therefore no reproducible NumPy float kernel to
         // match bit-for-bit; the CRT exp2f is ~correctly-rounded and a pure-float polynomial cannot
         // reach it (float rounding of the Horner chain alone leaves ~1 ULP on a few percent of

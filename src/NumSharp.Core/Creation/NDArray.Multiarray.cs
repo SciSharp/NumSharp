@@ -1487,6 +1487,10 @@ namespace NumSharp
         ///     Raised after the dtype check, as in NumPy.</exception>
         /// <exception cref="TypeError">x and y have no common dtype (StringDType beside a number, a Python number beside
         ///     fixed-width text: NumPy's DTypePromotionError), raised before any shape error.</exception>
+        /// <exception cref="OverflowException">A Python-literal x or y (a C# number literal) does not fit the common dtype:
+        ///     NumPy 2.5's setitem text, "Python integer 300 out of bounds for int8" (past the C long, "Python int too large
+        ///     to convert to C long") — raised after the dtype check and before any shape error. NumPy 2.4 truncated the
+        ///     value instead.</exception>
         /// <remarks>The array object's member (the np-layer dtype plan's D1: np.where(cond, x, y) selects by the caller's
         ///     mask, plan section 1); np.where's single-argument form is np.nonzero, the engine's. The engine's own np.where
         ///     calls (the NaN replacement of the nan reductions and scans, StringDType's cell selection) call this member.
@@ -1507,6 +1511,18 @@ namespace NumSharp
             DType descr = text || x.GetTypeCode != y.GetTypeCode || (x.WasPythonLiteral && y.WasPythonLiteral)
                 ? DTypePromotion.ResultType(x.Nep50Operand, y.Nep50Operand)
                 : null;
+            // NumPy 2.5 (gh-30803): a Python-literal x / y is re-made in the common dtype by that dtype's setitem
+            // (npy_update_operand_for_scalar), x first, before the iterator sees any shape — so an int that does not fit
+            // raises OverflowError ("Python integer 300 out of bounds for int8") where NumPy 2.4 truncated it with a cast.
+            // A literal already in the common dtype is exact there (PackForStore returns it as it is).
+            if (!text)
+            {
+                NPTypeCode common = descr is null ? x.GetTypeCode : descr.GetTypeCode();
+                if (x.WasPythonLiteral)
+                    x = PackForStore(x, common, pyArrayPackRoute: false);
+                if (y.WasPythonLiteral)
+                    y = PackForStore(y, common, pyArrayPackRoute: false);
+            }
             long[] dims = BroadcastWhereOperands(condition, x, y);
 
             // Fixed-width strings: the result dtype is a DESCRIPTOR (result_type(x, y): the wider width) and the

@@ -7,7 +7,7 @@ namespace NumSharp.Tests.Backends.Strings
 {
     /// <summary>
     ///     OFFLINE twins of the pythonnet tier's text edge families (<c>TextEdgeLiveParityTests</c>): the same operations
-    ///     over the same four texts, held to numpy 2.4.2's answers recorded by
+    ///     over the same four texts, held to numpy 2.5.4's answers recorded by
     ///     <c>test/oracle/gen_text_edge_twins.py</c> — so the main suite, which runs without Python, guards the edges too:
     ///     operands of two text classes or NA objects (numpy's promotion, its "no loop" / "cannot use operands" refusals,
     ///     the incompatible-NA refusal), every <c>StringDType</c> NA kind through the functions whose answer depends on it,
@@ -47,15 +47,15 @@ namespace NumSharp.Tests.Backends.Strings
             ("U add T", "StringDType()", new object[] { "abxyz", "c ", "c ", "xyzab" }, null, null),
             ("U equal T", "|b1", new object[] { false, false, false, false }, null, null),
             ("U less T", "|b1", new object[] { true, false, true, false }, null, null),
-            ("U add TNone", "StringDType(na_object=None)", new object[] { "abxyz", "c ", "", "xyzab" }, null, null),
+            ("U add TNone", null, null, "ValueError,Exception,BaseException,object", "Cannot add null that is not a nan-like value"),
             ("U equal TNone", "|b1", new object[] { false, false, true, false }, null, null),
-            ("U less TNone", "|b1", new object[] { true, false, false, false }, null, null),
-            ("U add Tnan", "StringDType(na_object=nan)", new object[] { "abxyz", "c ", "", "xyzab" }, null, null),
-            ("U equal Tnan", "|b1", new object[] { false, false, true, false }, null, null),
+            ("U less TNone", null, null, "ValueError,Exception,BaseException,object", "'less' not supported for null values that are not nan-like or strings."),
+            ("U add Tnan", "StringDType(na_object=nan)", new object[] { "abxyz", "c ", double.NaN, "xyzab" }, null, null),
+            ("U equal Tnan", "|b1", new object[] { false, false, false, false }, null, null),
             ("U less Tnan", "|b1", new object[] { true, false, false, false }, null, null),
-            ("U add TNA", "StringDType(na_object='NA')", new object[] { "abxyz", "c ", "", "xyzab" }, null, null),
-            ("U equal TNA", "|b1", new object[] { false, false, true, false }, null, null),
-            ("U less TNA", "|b1", new object[] { true, false, false, false }, null, null),
+            ("U add TNA", "StringDType(na_object='NA')", new object[] { "abxyz", "c ", "NA", "xyzab" }, null, null),
+            ("U equal TNA", "|b1", new object[] { false, false, false, false }, null, null),
+            ("U less TNA", "|b1", new object[] { true, false, true, false }, null, null),
             ("S add U", null, null, "UFuncTypeError,UFuncTypeError,UFuncTypeError,TypeError,Exception,BaseException,object", "ufunc 'add' cannot use operands with types dtype('S3') and dtype('<U3')"),
             ("S equal U", null, null, "UFuncTypeError,UFuncTypeError,TypeError,Exception,BaseException,object", "ufunc 'equal' did not contain a loop with signature matching types (<class 'numpy.dtypes.BytesDType'>, <class 'numpy.dtypes.StrDType'>) -> None"),
             ("S less U", null, null, "UFuncTypeError,UFuncTypeError,TypeError,Exception,BaseException,object", "ufunc 'less' did not contain a loop with signature matching types (<class 'numpy.dtypes.BytesDType'>, <class 'numpy.dtypes.StrDType'>) -> None"),
@@ -83,15 +83,15 @@ namespace NumSharp.Tests.Backends.Strings
             ("T add T", "StringDType()", new object[] { "abxyz", "c ", "c ", "xyzab" }, null, null),
             ("T equal T", "|b1", new object[] { false, false, false, false }, null, null),
             ("T less T", "|b1", new object[] { true, false, true, false }, null, null),
-            ("T add TNone", "StringDType(na_object=None)", new object[] { "abxyz", "c ", "", "xyzab" }, null, null),
+            ("T add TNone", null, null, "ValueError,Exception,BaseException,object", "Cannot add null that is not a nan-like value"),
             ("T equal TNone", "|b1", new object[] { false, false, true, false }, null, null),
-            ("T less TNone", "|b1", new object[] { true, false, false, false }, null, null),
-            ("T add Tnan", "StringDType(na_object=nan)", new object[] { "abxyz", "c ", "", "xyzab" }, null, null),
-            ("T equal Tnan", "|b1", new object[] { false, false, true, false }, null, null),
+            ("T less TNone", null, null, "ValueError,Exception,BaseException,object", "'less' not supported for null values that are not nan-like or strings."),
+            ("T add Tnan", "StringDType(na_object=nan)", new object[] { "abxyz", "c ", double.NaN, "xyzab" }, null, null),
+            ("T equal Tnan", "|b1", new object[] { false, false, false, false }, null, null),
             ("T less Tnan", "|b1", new object[] { true, false, false, false }, null, null),
-            ("T add TNA", "StringDType(na_object='NA')", new object[] { "abxyz", "c ", "", "xyzab" }, null, null),
-            ("T equal TNA", "|b1", new object[] { false, false, true, false }, null, null),
-            ("T less TNA", "|b1", new object[] { true, false, false, false }, null, null),
+            ("T add TNA", "StringDType(na_object='NA')", new object[] { "abxyz", "c ", "NA", "xyzab" }, null, null),
+            ("T equal TNA", "|b1", new object[] { false, false, false, false }, null, null),
+            ("T less TNA", "|b1", new object[] { true, false, true, false }, null, null),
             ("TNone add U", null, null, "ValueError,Exception,BaseException,object", "Cannot add null that is not a nan-like value"),
             ("TNone equal U", "|b1", new object[] { false, true, false, false }, null, null),
             ("TNone less U", null, null, "ValueError,Exception,BaseException,object", "'less' not supported for null values that are not nan-like or strings."),
@@ -312,7 +312,7 @@ namespace NumSharp.Tests.Backends.Strings
         {
             string[] list = failures.Where(f => f != null).ToArray();
             if (list.Length > 0)
-                Assert.Fail($"{list.Length} {family} rows disagree with numpy 2.4.2:\n" + string.Join("\n", list));
+                Assert.Fail($"{list.Length} {family} rows disagree with numpy 2.5.4:\n" + string.Join("\n", list));
         }
 
         /// <summary>

@@ -1,6 +1,6 @@
 # The Python side of NumSharpPythonnetLocalExample: six data science libraries, each pinned to the
-# version the example was validated with. All six have binary wheels for Python 3.11, 3.12 and 3.13
-# on Windows x64, Linux x64 and macOS arm64.
+# version the example was validated with. All six have binary wheels for Python 3.12 and 3.13 on
+# Windows x64, Linux x64 and macOS arm64 (NumPy 2.5 dropped Python 3.11).
 #
 #   python -m venv .venv
 #   .venv\Scripts\python -m pip install -r requirements.txt      (Windows)
@@ -11,7 +11,7 @@
 # never loads. Remove the line when you want the GPU build.
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-numpy==2.4.2          # the NumPy release that NumSharp is tested against
+numpy==2.5.4          # the NumPy release that NumSharp is tested against
 pandas==3.0.5
 scipy==1.16.3
 scikit-learn==1.9.1

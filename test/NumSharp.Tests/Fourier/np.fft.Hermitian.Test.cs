@@ -4,13 +4,14 @@ using System.Numerics;
 namespace NumSharp.Tests.Fourier
 {
     /// <summary>
-    ///     Parity gate for the HERMITIAN transforms — <c>hfft</c>, <c>ihfft</c> — against NumPy 2.4.2.
+    ///     Parity gate for the HERMITIAN transforms — <c>hfft</c>, <c>ihfft</c> — against NumPy 2.5.4.
     ///     Both are pure compositions (numpy/fft/_pocketfft.py):
-    ///     <c>hfft(a,n,axis,norm) = irfft(conjugate(a), n, axis, _swap_direction(norm))</c> (out= IGNORED),
+    ///     <c>hfft(a,n,axis,norm) = irfft(conjugate(a), n, axis, _swap_direction(norm), out=out)</c> (out= USED since
+    ///     NumPy 2.5; 2.4 passed out=None),
     ///     <c>ihfft(a,n,axis,norm) = conjugate(rfft(a, n, axis, _swap_direction(norm)), out)</c> (out= USED).
-    ///     Every expected value/shape/dtype/error was probed from a live NumPy 2.4.2. Focus areas: the
+    ///     Every expected value/shape/dtype/error was probed from a live NumPy 2.5.4. Focus areas: the
     ///     double norm-swap, the <c>n</c> defaulting (<c>hfft</c>: <c>2*(m-1)</c>; <c>ihfft</c>: <c>m</c>),
-    ///     the real (float64) <c>hfft</c> output vs the complex128 <c>ihfft</c> output, the out= asymmetry,
+    ///     the real (float64) <c>hfft</c> output vs the complex128 <c>ihfft</c> output, both out= forms,
     ///     and the error taxonomy (IndexError when <c>n</c> defaults on a bad axis vs AxisError when <c>n</c>
     ///     is given; the WITH-space bad-norm message from <c>_swap_direction</c>).
     /// </summary>
@@ -363,19 +364,18 @@ namespace NumSharp.Tests.Fourier
         }
 
         // =====================================================================================
-        // 8. out= — hfft IGNORES out (NumPy hard-codes out=None into irfft);
+        // 8. out= — hfft hands out to irfft (NumPy 2.5; 2.4 hard-coded out=None) and returns it;
         //    ihfft USES out (threads into rfft, conjugates in place) and returns the same instance.
         // =====================================================================================
 
         [TestMethod]
-        public void Hfft_Out_IsIgnored_LikeNumpy()
+        public void Hfft_Out_SameInstance_WritesThrough()
         {
-            // NumPy's hfft passes out=None to irfft: the provided array is neither written nor returned.
+            // NumPy 2.5's hfft passes out to irfft: the provided array is written and returned.
             var o = new NDArray(new double[] { 99, 99, 99, 99, 99, 99 });
             var r = np.fft.hfft(Real(1, 2, 3, 4), @out: o);
-            ReferenceEquals(r, o).Should().BeFalse();
-            foreach (var z in o.Data<double>()) z.Should().Be(99);   // untouched
-            AssertCloseR(r, new double[] { 15, -4, 0, -1, 0, -4 });
+            ReferenceEquals(r, o).Should().BeTrue();
+            AssertCloseR(o, new double[] { 15, -4, 0, -1, 0, -4 });
         }
 
         [TestMethod]

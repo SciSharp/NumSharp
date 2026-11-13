@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""NumPy 2.4.2 oracle for the dtype of an array built from mixed scalars
--> test/NumSharp.Tests/Creation/corpus/asanyarray_mixed.numpy242.jsonl.
+"""NumPy 2.5.4 (the pin) oracle for the dtype of an array built from mixed scalars
+-> test/NumSharp.Tests/Creation/corpus/asanyarray_mixed.jsonl.
 
 np.asanyarray(object[]) in NumSharp is NumPy's array coercion of the Python list the C# list stands for, each boxed C#
 value read through the boundary map (UnmanagedStorage.Coercion.Sequence.cs): a bool is a Python bool, EVERY C# integer
@@ -9,7 +9,7 @@ its NumPy counterpart is np.array([1, 1.0, np.float16(1), ...]), not np.array([n
 coercion discovers a Python int as int64 and a Python float as float64, and promotes the running dtype with each new
 element in order (handle_promotion in array_coercion.c), which is order-sensitive only where a float16 meets a bool.
 
-    python test/oracle/gen_asanyarray_mixed_oracle.py      (numpy==2.4.2)
+    python test/oracle/gen_asanyarray_mixed_oracle.py      (the numpy in numpy-version.txt)
 
 Each line is {"t": [element dtypes, in order], "r": result dtype}, dtypes written as kind + item size ('b1', 'i1', ...,
 'f2', 'f4', 'f8', 'c16'): the C# type of each element, named by the NumPy dtype NumSharp stores it in (so 'i1' is a C#
@@ -23,13 +23,13 @@ import os
 import sys
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
-if np.__version__ != "2.4.2":
-    sys.exit(f"needs numpy==2.4.2, found {np.__version__}")
+numpy_pin.require(np, "gen_asanyarray_mixed_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
-OUT = os.path.join(REPO, "test", "NumSharp.Tests", "Creation", "corpus", "asanyarray_mixed.numpy242.jsonl")
+OUT = os.path.join(REPO, "test", "NumSharp.Tests", "Creation", "corpus", "asanyarray_mixed.jsonl")
 
 CODES = ["b1", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "c16"]
 SAMPLE_EVERY = 23

@@ -1,4 +1,4 @@
-"""Compare NumSharp's np.* / NDArray overloads (api_dump.json) with NumPy 2.4.2's signatures.
+"""Compare NumSharp's np.* / NDArray overloads (api_dump.json) with the imported NumPy's signatures.
 
 Rules (what a ported NumPy call needs to bind in C#):
   - positional-only parameters: only their SLOT counts (they cannot be passed by name);

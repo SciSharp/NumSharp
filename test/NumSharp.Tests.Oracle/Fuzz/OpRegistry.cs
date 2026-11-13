@@ -421,9 +421,16 @@ namespace NumSharp.Tests.Fuzz
                 case "power_fast":
                     return ApplyPowerFast(p, ops);
 
-                // Sorting / searching (T14).
-                case "argsort": return ApplyArgsort(ops[0], p["axis"].GetInt32());
-                case "sort": return np.sort(ops[0], p["axis"].GetInt32());          // Group A B2: value sort
+                // Sorting / searching (T14). NumPy 2.5's keyword-only stable= / descending= (gen_sort_descending's cases)
+                // take the keyword entry points, an axis of JSON null the flattening; every other case keeps its call.
+                case "argsort":
+                    return p.ContainsKey("descending") || p.ContainsKey("stable")
+                        ? np.argsort(ops[0], ParseAxis(p), stable: VfOptBool(p, "stable"), descending: VfOptBool(p, "descending"))
+                        : ApplyArgsort(ops[0], p["axis"].GetInt32());
+                case "sort":                                                        // Group A B2: value sort
+                    return p.ContainsKey("descending") || p.ContainsKey("stable")
+                        ? np.sort(ops[0], ParseAxis(p), stable: VfOptBool(p, "stable"), descending: VfOptBool(p, "descending"))
+                        : np.sort(ops[0], p["axis"].GetInt32());
                 case "searchsorted": return np.searchsorted(ops[0], ops[1], p["side"].GetString(),
                                                              ops.Length >= 3 ? ops[2] : null);   // ops[2] = optional sorter
                 case "digitize": return np.digitize(ops[0], ops[1], p["right"].GetBoolean()); // searchsorted + monotonicity

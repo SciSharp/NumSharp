@@ -12,7 +12,7 @@ using Python.Runtime;
 namespace NumSharp.Tests.Interop
 {
     /// <summary>
-    ///     <b>Edge-case and rare-scenario live parity (embedded CPython numpy 2.4.2) for the seven
+    ///     <b>Edge-case and rare-scenario live parity (embedded CPython numpy 2.5.4) for the seven
     ///     AuditV2 Tier-1 creation/ctor fixes.</b> The boundary and degenerate inputs the happy-path
     ///     <see cref="CreationCtorLiveParityTests"/> does not reach — size-1 / empty / higher-rank F
     ///     layouts across every dtype; negative-, fractional-step and single-arg <c>arange(bool)</c>;

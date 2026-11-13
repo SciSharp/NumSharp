@@ -51,8 +51,10 @@ jobs:
         with:
           python-version: '3.12'
 
+      # numpy-version.txt is the repository's one NumPy pin; generate_coverage.py refuses any other release.
       - name: Install pinned NumPy reference
-        run: python -m pip install numpy==2.4.2
+        shell: bash
+        run: python -m pip install "numpy==$(cat numpy-version.txt)"
 
       - name: Generate coverage artifact
         run: python coverage/generate_coverage.py --output artifacts/numpy-numsharp-coverage

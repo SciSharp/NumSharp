@@ -309,8 +309,9 @@ namespace NumSharp.Tests.APIs
 
         /// <summary>v = [3, 1, --, 5]: <c>ma.sort(v, 0, 'stable')</c> is [1, 3, 5, --], <c>ma.sort(v, -1, None, None,
         ///     False)</c> [--, 1, 3, 5], <c>ma.argsort(v, 0, 'mergesort')</c> [1, 0, 3, 2] and <c>v.argsort(kind='stable',
-        ///     endwith=False)</c> [2, 1, 0, 3]; stable=True is refused by ma.sort and both methods but ignored by
-        ///     ma.argsort (NumPy passes stable=None on); a bad kind and an order are NumPy's ValueErrors.</summary>
+        ///     endwith=False)</c> [2, 1, 0, 3]; stable=True is refused by ma.sort, ma.argsort of a masked operand (NumPy 2.5
+        ///     passes it on to the method; 2.4 passed stable=None) and both methods; a bad kind and an order are NumPy's
+        ///     ValueErrors.</summary>
         [TestMethod]
         public void MaSortArgsort_KindOrderStable()
         {
@@ -334,7 +335,7 @@ namespace NumSharp.Tests.APIs
             Throws<ValueError>(() => np.ma.sort(V(), order: "f"), "Cannot specify order when the array has no fields.");
 
             var v2 = np.ma.array(np.array(new[,] { { 3.0, 1.0 }, { 2.0, 5.0 } }), mask: new[,] { { false, true }, { false, false } });
-            np.ma.argsort(v2, 0, stable: true).ToArray<long>().Should().Equal(1L, 1L, 0L, 0L);
+            Throws<ValueError>(() => np.ma.argsort(v2, 0, stable: true), stableRefusal);
             np.ma.argsort(v2).ToArray<long>().Should().Equal(2L, 0L, 3L, 1L);
             np.ma.argsort(v2, kind: "stable").ToArray<long>().Should().Equal(2L, 0L, 3L, 1L);
             np.ma.argsort(v2, null, "stable").ToArray<long>().Should().Equal(2L, 0L, 3L, 1L);

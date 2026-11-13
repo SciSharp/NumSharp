@@ -190,19 +190,32 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     <c>PyArray_TakeFrom</c>'s three checks of a caller's <paramref name="out"/>, in NumPy's order: the shape (dims
-        ///     only, any layout), the safe cast of <paramref name="out"/>'s dtype to <paramref name="a"/>'s
-        ///     (<c>PyArray_FromArray(out, a.dtype, CARRAY | WRITEBACKIFCOPY)</c> casts the result back into it), and the
-        ///     writeability of the write-back base.
+        ///     <c>PyArray_TakeFrom</c>'s checks of a caller's <paramref name="out"/> (NumPy 2.5), in NumPy's order: the shape
+        ///     (dims only, any layout); the FORCECAST copy <c>PyArray_FromArray(out, a.dtype, CARRAY | WRITEBACKIFCOPY |
+        ///     FORCECAST)</c> makes of a <paramref name="out"/> of another dtype, whose cast of out's CURRENT contents into
+        ///     <paramref name="a"/>'s dtype can fail for text; and the writeability of the write-back base. The gather then
+        ///     writes the result back through an unsafe cast. Shared by <c>np.take</c> / <c>np.compress</c> and the quantile
+        ///     family's selecting methods (<c>take(arr, idx, axis=0, out=out)</c>).
         /// </summary>
         /// <param name="a">The source, whose dtype the gather writes.</param>
         /// <param name="out">The caller's destination.</param>
         /// <param name="outDims">The natural result's dimensions.</param>
-        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>), or a
-        ///     read-only <paramref name="out"/> (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
-        /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast to <paramref name="a"/>'s under
-        ///     <c>safe</c>.</exception>
-        private static void ValidateTakeOut(NDArray a, NDArray @out, long[] outDims)
+        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>); a text
+        ///     <paramref name="out"/> whose contents do not parse as <paramref name="a"/>'s numbers (<c>invalid literal for
+        ///     int() with base 10: np.str_('')</c>, <c>could not convert string to float: ...</c>: the copy casts them, even
+        ///     though the gather overwrites every element); or a read-only <paramref name="out"/> (<c>WRITEBACKIFCOPY base is
+        ///     read-only</c>, after that copy).</exception>
+        /// <exception cref="UnicodeEncodeError">A <c>U</c> / <c>StringDType</c> out holding non-ASCII text when
+        ///     <paramref name="a"/> is fixed-width bytes (the copy's encode).</exception>
+        /// <remarks>
+        ///     NumPy 2.4 checked the WRONG direction instead — a SAFE cast of out's dtype to the source's, a TypeError
+        ///     (<c>Cannot cast array data from dtype('float64') to dtype('float32') according to the rule 'safe'</c>) for
+        ///     every narrower source. NumPy 2.5 dropped it (gh-30615) and checks the right direction, the source's dtype to
+        ///     out's under same_kind, only for a DeprecationWarning (<c>Implicit casting of output to a different kind is
+        ///     deprecated</c>), which NumSharp has no channel for: a float source taken into an int out is written through
+        ///     the unsafe cast, as NumPy writes it.
+        /// </remarks>
+        internal static void ValidateTakeOut(NDArray a, NDArray @out, long[] outDims)
         {
             // PyArray_CompareLists(PyArray_DIMS(out), shape, nd): the dimensions alone, NumPy's text verbatim.
             var dims = @out.Shape.dimensions ?? Array.Empty<long>();
@@ -212,24 +225,17 @@ namespace NumSharp.Backends
             if (!sameShape)
                 throw new ValueError("output array does not match result of ndarray.take");
 
-            if (a.typecode == NPTypeCode.String || @out.typecode == NPTypeCode.String)
+            // The FORCECAST copy of an out of another descriptor: NumPy casts out's contents into the source's dtype
+            // before the gather overwrites them. Only a text out can fail that cast (a parse into a number, an encode into
+            // bytes), so only a text out of another descriptor is cast here — for its errors; the copy itself is dropped.
+            if (@out.typecode == NPTypeCode.String && !@out.HasSameElementType(a))
             {
-                // A string's width is part of its dtype: the rule is checked between DESCRIPTORS (a <U2 out of a <U4
-                // take is fine — <U2 → <U4 is safe — and the unsafe write-back truncates, as NumPy's does).
-                if (!@out.HasSameElementType(a) && !DTypeCasting.CanCastTypeTo(@out.dtype, a.dtype, NumSharp.Backends.Iteration.NPY_CASTING.NPY_SAFE_CASTING))
-                    throw new TypeError(
-                        $"Cannot cast array data from {@out.dtype.ToString(true)} to {a.dtype.ToString(true)} according to the rule 'safe'");
-            }
-            else if (@out.GetTypeCode != a.GetTypeCode &&
-                !CanCastTypeCodes(@out.GetTypeCode, a.GetTypeCode, "safe"))
-            {
-                throw new TypeError(
-                    $"Cannot cast array data from dtype('{@out.GetTypeCode.AsNumpyDtypeName()}') to dtype('{a.GetTypeCode.AsNumpyDtypeName()}') according to the rule 'safe'");
+                using var forceCast = @out.astype(a.dtype, copy: true);
             }
 
-            // A read-only out refuses LAST of the three (probed 2.4.2: shape, then castability, then this) — with take's
-            // own text: the writeability check of PyArray_FromArray(..., WRITEBACKIFCOPY) names the writeback base, not
-            // the "output array" the elementwise ufuncs name.
+            // A read-only out refuses after the copy (PyArray_FromArray's SetWritebackIfCopyBase runs once the copy is
+            // made) — with take's own text: the writeability check names the writeback base, not the "output array" the
+            // elementwise ufuncs name.
             NumSharpException.ThrowIfNotWriteable(@out.Shape, "WRITEBACKIFCOPY base");
         }
 

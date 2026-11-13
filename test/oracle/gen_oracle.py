@@ -1,5 +1,5 @@
 """
-gen_oracle.py — emit a committed, bytes-exact NumPy 2.4.2 oracle corpus.
+gen_oracle.py — emit a committed, bytes-exact NumPy oracle corpus from the pinned release (numpy-version.txt, 2.5.4).
 
 The corpus is JSONL (one case per line). C# replays the operand bytes EXACTLY and
 compares its op result to `expected` bit-for-bit (NaN/inf tokenized). No Python at test time.
@@ -26,6 +26,7 @@ import tempfile
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 # Overflow / invalid-value-in-cast warnings ARE the edge cases we want to capture, not errors.
 np.seterr(all="ignore")
@@ -240,7 +241,7 @@ UNARY_EXTRA_OPS = {
 # envelope through the division (and the exponential growth of sinh/cosh) to tens of ULP on
 # interior points — beyond the tight 3-ULP complex-unary gate — so complex128 is EXCLUDED from
 # the byte corpus (computed and allclose, pinned by a unit test instead). Every REAL dtype is
-# bit-exact vs NumPy 2.4.2. Dtype follows `pi*x` (weak-float NEP 50): bool/all-ints/Char ->
+# bit-exact vs NumPy 2.5.4. Dtype follows `pi*x` (weak-float NEP 50): bool/all-ints/Char ->
 # float64, float16/float32/float64 preserved.
 SINC_OP = {"sinc": np.sinc}
 SINC_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
@@ -252,7 +253,7 @@ SINC_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
 # off-Windows. float32 rides NumPy's OWN exp kernel (portable) but shares the tier. complex128 is
 # EXCLUDED: NumPy raises TypeError("i0 not supported for complex values") for it (the rejection is
 # unit-test-pinned). Dtype follows the input float precision (NEP 50): bool/all-ints/Char ->
-# float64, float16/float32/float64 preserved. Every included dtype is BIT-EXACT vs NumPy 2.4.2.
+# float64, float16/float32/float64 preserved. Every included dtype is BIT-EXACT vs NumPy 2.5.4.
 I0_OP = {"i0": np.i0}
 I0_DTYPES = [d for d in ALL_DTYPES if d != "complex128"]
 
@@ -4333,7 +4334,7 @@ def gen_argsort(dtypes):
 
 
 def gen_searchsorted(dtypes):
-    """np.searchsorted differential corpus (NumPy 2.4.2 is the oracle). Families:
+    """np.searchsorted differential corpus (the pinned NumPy, 2.5.4, is the oracle). Families:
 
       base    — sorted DISTINCT a + distinct v, same dtype, left/right (kernel baseline; UNCHANGED).
       dup     — a WITH duplicates + keys below/at/in-gap/above: first-vs-last occurrence (left/right
@@ -5761,7 +5762,7 @@ def gen_weak_scalar():
         return f(x1, x2, out=out, where=where)
 
     def numpy_crashes(route, view, scalar):
-        """NumPy 2.4.2 SEGFAULTS (access violation, probed) on a where= comparison of an integer array with a Python int
+        """NumPy SEGFAULTS (access violation, probed on 2.4.2 and 2.5.4) on a where= comparison of an integer array with a Python int
         outside the array dtype's range — the masked path of special_integer_comparisons.cpp
         (np.equal(np.array([1, 2, 3], np.int8), 128, where=mask)). There is no answer to record; without where= (and
         with where=True) the same comparison is exact and is recorded."""
@@ -6833,6 +6834,69 @@ def gen_sort_special():
     return cases
 
 
+# NumPy 2.5 (gh-31345) — np.sort / np.argsort with descending=True. NumPy runs its SCALAR introsort for the default kind
+# on every x86 host (x86-simd-sort is ascending-only) and timsort / radix for the stable kind, so the output is
+# deterministic EVEN WITH TIES: the corpus deliberately carries duplicate keys (40-element lines, past the 16-element
+# insertion-sort cutoff, so the introsort's partitioning decides the tie order), -0.0 / +0.0 side by side (their value-sort
+# bits land where the introsort puts them), NaNs (last in both directions; their payload bytes are tokenized by BitDiff)
+# and complex NaN classes, over 1-D, 2-D (both axes), axis=None and strided / reversed views.
+def gen_sort_descending(dtypes):
+    cases = []
+    n = 0
+
+    def emit(op, a_base, a_view, axis, stable, tag):
+        nonlocal n
+        kw = {"descending": True}
+        if stable:
+            kw["stable"] = True
+        try:
+            r = np.asarray(np.sort(a_view, axis=axis, **kw) if op == "sort" else np.argsort(a_view, axis=axis, **kw))
+        except Exception:
+            return
+        params = {"axis": axis, "descending": True}
+        if stable:
+            params["stable"] = True
+        cases.append({
+            "id": f"{op}_desc/{tag}/{a_view.dtype.name}/axis={axis}/{'stable' if stable else 'default'}/{n}",
+            "op": op,
+            "params": params,
+            "operands": [describe(a_base, a_view)],
+            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+            "layout": tag,
+            "valueclass": "ties",
+        })
+        n += 1
+
+    def both(a_base, a_view, axis, tag):
+        for op in ("sort", "argsort"):
+            for stable in (False, True):
+                emit(op, a_base, a_view, axis, stable, tag)
+
+    for dt in dtypes:
+        modulus = 2 if dt == "bool" else 5
+        ties = np.array([(i * 7 + 3) % modulus for i in range(40)]).astype(np.dtype(dt))
+        both(ties, ties, -1, "ties_1d")
+        m = np.array([(i * 11 + 4) % modulus for i in range(100)]).astype(np.dtype(dt)).reshape(5, 20)
+        for ax in (0, 1):
+            both(m, m, ax, "ties_2d")
+        both(m, m, None, "ties_flat")
+        wide = np.array([(i * 13 + 1) % modulus for i in range(80)]).astype(np.dtype(dt))
+        both(wide, wide[::2], -1, "ties_strided")
+        both(wide, wide[::-1], -1, "ties_negstride")
+
+    nan = float("nan")
+    for dt in ("float16", "float32", "float64"):
+        special = np.array([-0.0, 0.0, nan, 1.5, -np.inf, 0.0, -0.0, np.inf, -2.5, 1.5] * 4, dtype=np.dtype(dt))
+        special[13] = -special[13] if np.isnan(special[13]) else special[13]
+        both(special, special, -1, "special_1d")
+        both(special, special.reshape(4, 10), 1, "special_2d")
+    cx = np.array([1 + 2j, complex(nan, 1), 1 + 2j, complex(1, nan), complex(nan, nan), 0j, complex(-0.0, 0.0),
+                   2 - 1j, complex(nan, 1), complex(2, nan)] * 4, dtype=np.complex128)
+    both(cx, cx, -1, "special_1d")
+    return cases
+
+
 def gen_unique(dtypes):
     """np.unique -> sorted distinct values, over CONTIGUOUS finite data with duplicates. Contiguous +
     finite on purpose: unique is correct via the public API (verified), but the corpus's raw-offset
@@ -7744,7 +7808,7 @@ CHAR_COPYTO_CROSS = [(_C, "int32"), ("int32", _C), (_C, "float64"), ("float64", 
 # The NumPy-ported float32 kernels - the bit-exact tier.
 #
 # exp/log/sin/cos at a float32 result are no longer "close enough": NDFloatMath ports the kernels
-# NumPy 2.4.2 actually runs (simd_exp_FLOAT, simd_log_FLOAT, simd_sincos_f32), and rad2deg now forms
+# NumPy 2.5.4 actually runs (simd_exp_FLOAT, simd_log_FLOAT, simd_sincos_f32), and rad2deg now forms
 # its constant at float precision the way NumPy's RAD2DEG macro does - so the MisalignedRegistry's
 # blanket "unary ~ULP" excuse is carved out for all of them and every case here must match BIT-for-
 # BIT. The generic unary tier cannot carry that claim: its shared float pool is dominated by huge
@@ -8028,7 +8092,7 @@ def gen_numpy_f64_kernels():
 # When BOTH inputs of an add or a multiply are NaN, the result is one of the two NaNs, and WHICH
 # one is a property of the compiled loop, not of IEEE 754: x86 addpd / mulpd return their FIRST
 # source operand (quieted), and add / multiply are commutative, so the compiler decides which
-# ufunc operand lands in that slot. numpy 2.4.2 win-amd64 (MSVC 19.44), probed on every loop path:
+# ufunc operand lands in that slot. numpy 2.4.2 and 2.5.4 win-amd64 (MSVC 19.44), probed on every loop path:
 #   * add / multiply keep the SECOND operand's NaN — contiguous, strided, reversed, out=, where=,
 #     transposed, buffered 2-D broadcasts and 0-d x 0-d alike;
 #   * except the AVX2 scalar-broadcast SIMD loop (one input stride 0, the other input and the out
@@ -10169,9 +10233,9 @@ def blas_identity():
 #   * complex-HERMITIAN eigh EIGENVECTORS — heevd does not canonicalize the phase
 #     and it is not reproducible across processes; complex-Hermitian eigenVALUES
 #     (eigvalsh, and eigh's [0] slot for REAL-symmetric input) are recorded.
-#   * float32 eig with COMPLEX eigenvalues — NumPy yields complex64, NumSharp
-#     complex128 (no complex64 dtype); float32 eig is recorded only for matrices
-#     with all-REAL eigenvalues.
+#   (float32 eig / eigvals ARE recorded, every matrix: NumPy 2.5 always returns complex64 for them,
+#    which NumSharp carries as complex128 holding the same values, and the replay compares the values
+#    up-cast. NumPy 2.4 returned float32 for all-real eigenvalues, so only those were recorded then.)
 #   * cond/norm ORDERS that are not SVD-based (fro/1/-1/inf) — they compose an
 #     elementwise reduction whose summation order rounds 1 ULP off NumPy; only the
 #     SVD-based orders (cond None/2/-2, norm 2/-2/'nuc') are recorded.
@@ -10372,9 +10436,11 @@ def gen_linalg_parity():
         for nm, a in srcs:
             _lp_arr(cases, "eigvals", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.eigvals(v), dt, "C", rng)
             _lp_tuple(cases, "eig", f"{nm}", cast(a, dt), {}, lambda v: np.linalg.eig(v), dt, "C", rng)
-    # float32: only REAL-eig matrices (complex-eig float32 -> complex64, a dtype divergence).
-    _lp_arr(cases, "eigvals", "realeig", cast(REAL_EIG, "float32"), {}, lambda v: np.linalg.eigvals(v), "float32", "C", rng)
-    _lp_tuple(cases, "eig", "realeig", cast(REAL_EIG, "float32"), {}, lambda v: np.linalg.eig(v), "float32", "C", rng)
+    # float32: every matrix. NumPy 2.5's eig is always complex, complex64 here (geev in double, astype(complex64)), which
+    # NumSharp carries as complex128 holding exactly those values; the replay up-casts and compares them.
+    for nm, a in (("realeig", REAL_EIG), ("cplxeig", CPLX_EIG), ("cplxeig3", CPLX_EIG3)):
+        _lp_arr(cases, "eigvals", nm, cast(a, "float32"), {}, lambda v: np.linalg.eigvals(v), "float32", "C", rng)
+        _lp_tuple(cases, "eig", nm, cast(a, "float32"), {}, lambda v: np.linalg.eig(v), "float32", "C", rng)
     # batched: one complex-eig + one real-eig -> whole result complex on both sides.
     _lp_tuple(cases, "eig", "batch", np.stack([CPLX_EIG, np.array([[2., 0], [0, 3]])]), {},
               lambda v: np.linalg.eig(v), "float64", "C", rng)
@@ -12829,7 +12895,7 @@ OUT_UNARY_UFUNCS = {
     "conjugate": ["complex128"],                          # negate imag — bit op, portable
     "invert": ["int32", "uint8"],
     # Float-classification predicates (bool out). Bit tests (exponent / sign bit), no libm, so
-    # bit-exact AND portable. They expose NumPy 2.4.2's OWN strided-bool-out buffering BUG at
+    # bit-exact AND portable. They expose NumPy's OWN strided-bool-out buffering BUG (2.4.2 and 2.5.4) at
     # rank >= 2 (leaks prior `out` contents into a [..., ::2] view — see MisalignedRegistry K12);
     # NumSharp overwrites correctly, so those specific cells are an excused NumSharp-is-correct
     # divergence, bit-exact everywhere else.
@@ -14850,7 +14916,7 @@ def gen_einsum():
 
 # ============================================================================
 # FFT tier (np.fft.*) — the differential gate for the managed pocketfft engine
-# (src/NumSharp.Core/Fourier/). NumPy 2.4.2 is the oracle.
+# (src/NumSharp.Core/Fourier/). The pinned NumPy (2.5.4) is the oracle.
 #
 # DTYPE POLICY (probed 2.4.2): the forward/complex transforms return complex128
 # for float64/complex128/int/bool input and complex64 for float32/float16;
@@ -18087,7 +18153,7 @@ def gen_polyeval():
                 emit(op2, ["a"] * dims, [describe(q, q) for q in pts] + [describe(cv, cv)],
                      lambda: f(*pts, cv), "c_contiguous", f"{op2}/err/shapes")
 
-        # {p}valnd (numpy main) == polyutils._valnd(val, c, *pts) on 2.4.2
+        # {p}valnd: NumPy 2.5's public function is polyutils._valnd(val, c, *pts), the statement these cases call
         opn = f"{modname}.{p}valnd"
         for npts in (1, 2, 3, 4):
             cshape = tuple([3, 2, 2, 2][:npts])
@@ -24331,7 +24397,7 @@ def _np_resolve_script(script, ndim, shape):
 
 
 # remove_multi_index over a buffered 4-D reduction whose merge is partial: the (op_axes, cast, buffersize) combinations
-# where NumPy 2.4.2's kept setup walks wrong elements and NumSharp, which reruns the setup there, gives the right sums.
+# where NumPy's kept setup (2.4.2 and 2.5.4 alike) walks wrong elements and NumSharp, which reruns the setup there, gives the right sums.
 # Kept out of the corpus; np.nditer.BufferedReduce.Test.cs pins NumPy's answer for one of them.
 #   * axis 1 reduced ([0, -1, 1, 2]): NumPy adds the next block's elements into the sums (or, without the probing walks
 #     of the trace, leaves 36 of the 40 sums at 0), with and without a cast;
@@ -24345,7 +24411,7 @@ _RMI_NUMPY_WRONG = {
 
 
 def _gen_nditer_protocol_buffered(add, red_inputs, red_axes, layouts, base1, base2, base3, fbase2, fbase3):
-    """np.nditer's BUFFERED iteration as NumPy 2.4.2 runs it — nditer_constr.c npyiter_find_buffering_setup,
+    """np.nditer's BUFFERED iteration as NumPy 2.5.4 runs it — nditer_constr.c npyiter_find_buffering_setup,
     nditer_api.c npyiter_copy_to_buffers / npyiter_copy_from_buffers / npyiter_goto_iterindex, nditer_templ.c.src
     npyiter_buffered_iternext / npyiter_buffered_reduce_iternext: the reduce double loop, the external-loop chunking (the
     core, the outer block a fill never crosses, the cap in whole cores, grow_inner), the CONTIG rule, a WRITEMASKED
@@ -24400,7 +24466,7 @@ def _gen_nditer_protocol_buffered(add, red_inputs, red_axes, layouts, base1, bas
 
     # C. Repositioning a buffered reduction inside a core: a seek (iterindex) or a range whose ends are not core
     #    boundaries. NumPy refills from the core offset with a reduce outer size of 0, so a BUFFERED operand's partial
-    #    core is never written back (nor the part of a core a range end cuts off): NumPy 2.4.2's defect, recorded as its
+    #    core is never written back (nor the part of a core a range end cuts off): NumPy's defect (2.4.2 and 2.5.4), recorded as its
     #    answer. A range end inside the SECOND core of a fill stays out: NumPy then runs its inner loop past the core
     #    (the next core's elements land in this core's reduce element, or past the output's end — a heap corruption),
     #    where NumSharp runs one core at a time (np.nditer.BufferedReduce.Test.cs pins both). With buffersize 0 the
@@ -24433,7 +24499,7 @@ def _gen_nditer_protocol_buffered(add, red_inputs, red_axes, layouts, base1, bas
 
     # D. copy() of a buffered reduction at a core boundary (the copy re-buffers from the arrays at the current position),
     #    and delay_bufalloc without a cast: iternext moves the position before the allocating reset (NumPy writes nothing
-    #    there; with a cast operand NumPy 2.4.2 writes through its NULL buffers and crashes, so those stay out).
+    #    there; with a cast operand NumPy (seen on 2.4.2) writes through its NULL buffers and crashes, so those stay out).
     for oname, oaxes in (("inner", [0, -1]), ("outer", [-1, 0])):
         oshape = (3,) if oname == "inner" else (4,)
         for fname, fl in red_buf_flags:
@@ -24851,6 +24917,9 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
     mode = sys.argv[1] if len(sys.argv) > 1 else "smoke"
+    # A corpus written by another NumPy would become NumSharp's contract: refuse before writing a byte. The check sits
+    # in main(), not at import, because fuzz_random.py imports this module as a library.
+    numpy_pin.require(np, f"gen_oracle.py {mode}")
 
     if mode == "conversion":
         cases = gen_conversion(ALL_DTYPES)
@@ -25101,6 +25170,7 @@ def main():
         cases += gen_unary(NZ_OPS, NZ_DTYPES, list(LAYOUTS.keys()))     # Group A B3: flatnonzero/argwhere
         cases += gen_unique(["bool", "int32", "uint8", "int64", "float64", "float32", "complex128"])  # B3: unique
         cases += gen_sort_special()                                     # G11: NaN + strided/negstride
+        cases += gen_sort_descending(SORT_DTYPES)                       # NumPy 2.5: descending=True, ties included
         cases += gen_partition_family(SORT_DTYPES)                      # G12: issue #623 kth-values compare
         cases += gen_partition_nan()                                    # G12: float/complex NaN partition
         cases += gen_lexsort(SORT_DTYPES)                               # G12: stable multi-key indices

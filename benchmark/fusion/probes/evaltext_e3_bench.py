@@ -11,7 +11,7 @@ city names), pinned to the same CPUs, best of 7 rounds after a paused double war
     argmax        np.argmax(names)
     cast_text     age.astype("U2")
 
-Run with the NumPy the oracle pins (numpy==2.4.2), on Windows (the pin is set through kernel32):
+Run with the NumPy the oracle pins (numpy-version.txt; 2.5.4), on Windows (the pin is set through kernel32):
     python benchmark/fusion/probes/evaltext_e3_bench.py > py.out
 NS_PROBE_AFFINITY (hex) overrides the default mask 0x14, as in the C# side.
 Output: one line per cell, kind,layout,n,tree,numpy_us.

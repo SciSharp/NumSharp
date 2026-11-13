@@ -1,5 +1,5 @@
 """
-gen_npy_oracle.py — emit a committed, bytes-exact NumPy 2.4.2 oracle for the .npy/.npz format.
+gen_npy_oracle.py — emit a committed, bytes-exact NumPy 2.5.4 (the pin) oracle for the .npy/.npz format.
 
 NumPy is the oracle. This script writes REAL `np.save` / `np.savez` / `np.savez_compressed`
 output into a single zip; the C# harness (`test/NumSharp.Tests/IO/NpyOracleTests.cs`)
@@ -48,7 +48,7 @@ NEP 55 StringDType cases (section 12; NumPy pickles such an array behind the des
   "tnpz"         an archive with a StringDType member: `t_entries`, every member's own .npy bytes (`t_members`) and
                  the error a StringDType member raises without allow_pickle (`t_member_error`).
 
-Regenerate (deterministic; needs numpy==2.4.2):
+Regenerate (deterministic; needs the numpy in numpy-version.txt):
     python test/oracle/gen_npy_oracle.py
 """
 import io
@@ -62,6 +62,7 @@ import zipfile
 
 import numpy as np
 from numpy.lib import _format_impl as fmt
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")  # the 2.0/3.0 "stored array in format X" warnings are expected here
@@ -1136,6 +1137,7 @@ add_tnpz("tnpz_na_compressed", {"names": _t(["a", None, "bcdefghijklmnopqrstu"],
 # Emit
 # ---------------------------------------------------------------------------------------------
 def main():
+    numpy_pin.require(np, "gen_npy_oracle.py")       # the zip records np.save's bytes: only the pinned NumPy's
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     manifest = []
     # ZIP_DEFLATED + a fixed date_time keeps the committed zip byte-stable across regenerations.

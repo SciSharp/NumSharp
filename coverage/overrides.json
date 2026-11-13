@@ -1,10 +1,6 @@
 {
   "schema_version": 1,
   "aliases": {
-    "numpy.row_stack": {
-      "target": "NumSharp.np.vstack",
-      "notes": "NumPy documents row_stack as an alias of vstack."
-    }
   },
   "support": {
     "numpy.ndarray.data": {

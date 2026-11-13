@@ -640,14 +640,14 @@ namespace NumSharp.Tests.Fourier
         }
 
         [TestMethod]
-        public void Irfft2_Out_IsIgnored_LikeNumpy()
+        public void Irfft2_Out_SameInstance_WritesThrough()
         {
-            // NumPy's irfft2 hard-codes out=None: the provided array is NOT written and NOT returned.
+            // NumPy 2.5's irfft2 hands out to irfftn (2.4 hard-coded out=None): the provided array is written and returned.
             var rn = np.fft.rfftn(np.arange(24).astype(np.float64).reshape(2, 3, 4));
             var o = np.zeros(new Shape(2, 3, 4)).astype(np.float64);
             var r = np.fft.irfft2(rn, @out: o);
-            ReferenceEquals(r, o).Should().BeFalse();
-            foreach (var z in o.Data<double>()) z.Should().Be(0);   // untouched
+            ReferenceEquals(r, o).Should().BeTrue();
+            AssertCloseArraysR(o, np.fft.irfft2(rn), 1e-9);
         }
 
         [TestMethod]
@@ -692,11 +692,11 @@ namespace NumSharp.Tests.Fourier
         }
 
         [TestMethod]
-        public void Rfft_BadNorm_Forward_NoSpaceMessage()
+        public void Rfft_BadNorm_Forward_SpacedMessage()
         {
             Action act = () => np.fft.rfft(Real(1, 2, 3, 4), norm: "bad");
             act.Should().Throw<ValueError>()
-                .WithMessage("Invalid norm value bad; should be \"backward\",\"ortho\" or \"forward\".");
+                .WithMessage("Invalid norm value bad; should be \"backward\", \"ortho\" or \"forward\".");
         }
 
         [TestMethod]

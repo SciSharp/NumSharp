@@ -72,7 +72,7 @@ A view keeps its source's engine (`UnmanagedStorage.Engine`: `Alias`, the new-st
   `ValueError: slice step cannot be zero` (`PySlice_Unpack`; gate `View/Slice.Tests.cs`).
 - Broadcasting aligns shapes from the right; each dimension pair must be equal or contain a 1, which stretches.
   `DefaultEngine.Broadcast` (`Backends/Default/ArrayManipulation/Default.Broadcasting.cs`) resolves the shapes.
-- `np.broadcast_to` views are always read-only. `np.broadcast_arrays` is NumPy 2.4.2's
+- `np.broadcast_to` views are always read-only. `np.broadcast_arrays` is NumPy 2.5.4's
   (`NDArray.BroadcastArraysMember`, `Backends/NDArray.StrideTricks.cs`): an operand already of the broadcast shape comes
   back as itself (a matrix / chararray operand as its plain view), every other result is a view writeable exactly when
   its operand is (`_writeable_no_warn`), so the view of a read-only array or of a broadcast_to view stays read-only.

@@ -60,7 +60,7 @@ Windows' `np.intc` / `np.uintc` (int32 is the C long there), Linux's `np.longlon
 there). Each is a LANE-SHARING `LegacyBuiltinDTypeMeta` (`DTypeRegistry.LongDouble` / `CLongDouble` / `CInt` / `CUInt` /
 `CLongLong` / `CULongLong`; `ownsLane: false`, so `OwnsTypeCode` / `OwnsScalarType` are false): it stores in the owner's
 lane and reports its own type number, character, scalar type and class (`np.dtype('g')` is `num 13, char 'g', name
-'float64', type longdouble, LongDoubleDType`). NumPy's semantics, probed on Windows and Linux NumPy 2.4.2:
+'float64', type longdouble, LongDoubleDType`). NumPy's semantics, probed on Windows and Linux NumPy 2.5.4:
 - `np.issubdtype(np.float64, np.longdouble)` is False; the MROs and `__subclasses__()` lists are NumPy's per model
   (`floating` lists `longdouble`, `complexfloating` `clongdouble`, Windows' `signedinteger` `intc` before `int32`).
 - Equality is `PyArray_EquivTypes`: same-kind same-size NumPy numerics are EQUAL and hash equally
@@ -212,8 +212,9 @@ public. They run once per call or per Python value; bulk moves keep their typed 
   Kernels (`Utilities/NDByteOrder.cs`): a contiguous run copied and swapped in ONE SIMD pass when source and destination
   do not overlap (`CopyReverseRun`; an overlapping source keeps NumPy's memmove, then the swap), a contiguous run in
   place with SIMD (`ReverseRun`), strided items one `BinaryPrimitives.ReverseEndianness` per unit (`ReverseStrided`).
-  `StringDType` refuses a source; in place its swap is the identity (a cell has no byte order; NumPy 2.4.2 crashes the
-  process in `ndarray.byteswap` of one).
+  `StringDType` has no copyswap (a cell has no byte order): `ndarray.byteswap()` of one raises NumPy 2.5's `TypeError:
+  dtype StringDType() does not implement copyswap` at any size, in place too, where a read-only array's in-place call
+  raises the writeability `ValueError` first (`DTypeMeta.HasCopyswapn`; NumPy 2.4.2 crashed the process there).
 - `fill(descr, buffer, length)` is `PyArray_Arange`'s fill, NumPy's `@NAME@_fill` operation for operation (C's promotion
   for the integers, `HALF_fill` in float32, complex numbers by parts, `BOOL_fill`'s TypeError); `HasFill` is NumPy's
   `funcs->fill != NULL` (false for `S`, `U` and `StringDType`).
@@ -307,7 +308,7 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
 
 ## C enums, type characters, `np.find_common_type`
 
-- `NPY_TYPECHAR` (`Creation/np.dtype.cs`) is NumPy 2.4.2's `ndarraytypes.h` enum member for member: `NPY_VSTRINGLTR =
+- `NPY_TYPECHAR` (`Creation/np.dtype.cs`) is NumPy 2.5.4's `ndarraytypes.h` enum member for member: `NPY_VSTRINGLTR =
   'T'` (NEP 55), `NPY_DEPRECATED_STRINGLTR2 = 'a'`, and no `NPY_INTPLTR` / `NPY_UINTPLTR` (intp is `'n'`; `'p'` / `'P'` /
   `'n'` / `'N'` parse but have no member: cast the character, `(NPY_TYPECHAR)'n'`). The kind letters share values with
   type characters as in C (`'b'` is the bool kind and int8, `'c'` the complex kind and NumPy's `S1`): compare values, never
@@ -351,7 +352,7 @@ prefix (`GetCastingImpl`, `DTypePromotion.CommonDType`). PascalCase members (`Na
   C# integer primitive a Python int, `float` and `double` Python floats, `Complex` a Python complex, `Half` / `char` /
   `decimal` NumPy scalars) and promotes them as NumPy's array coercion does: a Python int is discovered as int64, which
   widens a float16 to float64 in either order, so no ordering of these types changes the result; the element order still
-  decides among NumPy scalars. Gate: `Creation/corpus/asanyarray_mixed.numpy242.jsonl`
+  decides among NumPy scalars. Gate: `Creation/corpus/asanyarray_mixed.jsonl`
   (`test/oracle/gen_asanyarray_mixed_oracle.py`).
 
 ## `DType` is the one dtype spelling

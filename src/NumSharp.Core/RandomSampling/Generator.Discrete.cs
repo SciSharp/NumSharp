@@ -7,9 +7,10 @@ namespace NumSharp
     {
         /// <summary>
         ///     The Generator's binomial setup cache (NumPy's <c>self._binomial</c>), shared by <see cref="binomial"/> and
-        ///     <see cref="multinomial(long, double[], Shape)"/> exactly as in NumPy (see <see cref="BinomialState"/>).
+        ///     <see cref="multinomial(long, double[], Shape)"/> exactly as in NumPy (see <see cref="BinomialState"/>). Modern
+        ///     family: both draw through <c>random_binomial</c>, whose BTPE has NumPy 2.5's corrected Stirling bound.
         /// </summary>
-        private readonly BinomialState _binomial = new BinomialState();
+        private readonly BinomialState _binomial = new BinomialState(legacyBtpe: false);
 
         /// <summary>
         ///     NumPy's <c>POISSON_LAM_MAX</c> for the Generator: <c>int64 max - sqrt(int64 max) * 10</c>, the largest mean whose

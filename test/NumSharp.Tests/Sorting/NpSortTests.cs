@@ -112,51 +112,48 @@ namespace NumSharp.Tests.Sorting
 
         /// <summary>
         ///     Pins the BITS of the NaNs a float32 / float64 sort leaves (the 2026-10-05 polynomial re-review found them
-        ///     through <c>polyfromroots</c>). NumPy's default sort (x86-simd-sort) rewrites every NaN of a line longer
-        ///     than one element — negative, signalling or payload-bearing — to the positive quiet NaN
-        ///     (<c>0x7ff8000000000000</c> / <c>0x7fc00000</c>); NumSharp wrote .NET's negative <c>double.NaN</c> /
-        ///     <c>float.NaN</c>. A one-element line is not sorted, so its NaN keeps its bits; float16 NaNs keep theirs
-        ///     (NumPy's float16 sort is a comparison sort). <c>double.IsNaN</c> cannot see any of this: only bits can.
+        ///     through <c>polyfromroots</c>). NumPy 2.5's default sort (x86-simd-sort <c>fa944ef</c>, vendored since 2.5.2)
+        ///     keeps every NaN's bits — negative, signalling or payload-bearing — and leaves them at the end in the order its
+        ///     <c>move_nans_to_end_of_array</c> swap pass puts them (NumPy 2.4.2 rewrote each to the positive quiet NaN). A
+        ///     one-element line is not sorted at all. <c>double.IsNaN</c> cannot see any of this: only bits can.
         /// </summary>
         [TestMethod]
-        public void Sort_FloatNaN_IsNumPysCanonicalQuietNaN()
+        public void Sort_FloatNaN_KeepsItsBits_InX86SimdSortsOrder()
         {
             static double D(ulong bits) => BitConverter.UInt64BitsToDouble(bits);
             static ulong B(object v) => BitConverter.DoubleToUInt64Bits((double)v);
 
-            // np.sort(f64 [nan(payload 5), 1.0, -nan, -1.0]) -> [-1.0, 1.0, 0x7ff8000000000000, 0x7ff8000000000000]
+            // np.sort(f64 [nan(payload 5), 1.0, -nan, -1.0]) -> [-1.0, 1.0, -nan, nan(payload 5)]
             var x = np.array(new[] { D(0x7ff8000000000005UL), 1.0, D(0xfff8000000000000UL), -1.0 });
             var s = np.sort(x);
             B(s.GetAtIndex(0)).Should().Be(0xbff0000000000000UL);
             B(s.GetAtIndex(1)).Should().Be(0x3ff0000000000000UL);
-            B(s.GetAtIndex(2)).Should().Be(0x7ff8000000000000UL, "every NaN becomes NumPy's positive quiet NaN");
-            B(s.GetAtIndex(3)).Should().Be(0x7ff8000000000000UL);
+            B(s.GetAtIndex(2)).Should().Be(0xfff8000000000000UL, "the swap pass met the payload NaN first and moved it to the end");
+            B(s.GetAtIndex(3)).Should().Be(0x7ff8000000000005UL);
 
             // ndarray.sort in place: the same bits.
             var y = x.copy();
             y.sort();
-            B(y.GetAtIndex(2)).Should().Be(0x7ff8000000000000UL);
-            B(y.GetAtIndex(3)).Should().Be(0x7ff8000000000000UL);
+            B(y.GetAtIndex(2)).Should().Be(0xfff8000000000000UL);
+            B(y.GetAtIndex(3)).Should().Be(0x7ff8000000000005UL);
 
             // An axis-0 line of a 2-D array (a strided line): np.sort([[nan5, 1], [-nan, -1]], axis=0)
-            // -> [[0x7ff8.., -1], [0x7ff8.., 1]].
+            // -> [[-nan, -1], [nan5, 1]].
             var m = np.sort(x.reshape(2, 2), 0);
-            B(m.GetAtIndex(0)).Should().Be(0x7ff8000000000000UL);
+            B(m.GetAtIndex(0)).Should().Be(0xfff8000000000000UL);
             B(m.GetAtIndex(1)).Should().Be(0xbff0000000000000UL);
-            B(m.GetAtIndex(2)).Should().Be(0x7ff8000000000000UL);
+            B(m.GetAtIndex(2)).Should().Be(0x7ff8000000000005UL);
             B(m.GetAtIndex(3)).Should().Be(0x3ff0000000000000UL);
 
             // A one-element line is left alone: np.sort(f64 [-nan(payload 5)]) keeps 0xfff8000000000005.
             B(np.sort(np.array(new[] { D(0xfff8000000000005UL) })).GetAtIndex(0)).Should().Be(0xfff8000000000005UL);
 
-            // float32: np.sort([nan(payload 5), 1.0, -sNaN]) -> [1.0, 0x7fc00000, 0x7fc00000].
-            var f = np.sort(np.array(new[]
-            {
-                BitConverter.UInt32BitsToSingle(0x7fc00005U), 1f, BitConverter.UInt32BitsToSingle(0xff800001U),
-            }));
+            // float32: np.sort([nan(payload 5), 1.0, -sNaN]) -> [1.0, -sNaN, nan(payload 5)], the signalling NaN unquieted.
+            // The input is viewed from its bits at run time: RyuJIT folds a constant sNaN through double, quieting it.
+            var f = np.sort(np.array(new uint[] { 0x7fc00005U, 0x3f800000U, 0xff800001U }).view(np.float32));
             BitConverter.SingleToUInt32Bits((float)f.GetAtIndex(0)).Should().Be(0x3f800000U);
-            BitConverter.SingleToUInt32Bits((float)f.GetAtIndex(1)).Should().Be(0x7fc00000U);
-            BitConverter.SingleToUInt32Bits((float)f.GetAtIndex(2)).Should().Be(0x7fc00000U);
+            BitConverter.SingleToUInt32Bits((float)f.GetAtIndex(1)).Should().Be(0xff800001U);
+            BitConverter.SingleToUInt32Bits((float)f.GetAtIndex(2)).Should().Be(0x7fc00005U);
 
             // float16 keeps every NaN's bits, in input order: np.sort(f16 [0x7e05, 1.0, 0xfe00]) -> [1.0, 0x7e05, 0xfe00].
             var h = np.sort(np.array(new[]

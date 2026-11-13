@@ -182,7 +182,7 @@ namespace NumSharp.Tests.DTypes
         [TestMethod]
         public void UnsupportedNumPyTypes_StillRaise()
         {
-            // The fixed-width string spellings (S, S10, U, U32, a, a5, c, str, bytes_) parse since the string dtypes
+            // The fixed-width string spellings (S, S10, U, U32, c, str, bytes_) parse since the string dtypes
             // landed (see StringDTypeGrammar_ParsesNumPysSpellings); void, object, complex64 and structured stay refused.
             foreach (var s in new[] { "V", "V16", "O", "c8", "complex64", "F", "object", "i4,f8", "3f8", "(2,3)f8" })
             {
@@ -332,7 +332,7 @@ namespace NumSharp.Tests.DTypes
         /// <summary>
         ///     NumPy's <c>_convert_from_tuple</c> over a comma string's <c>(dtype, repeats)</c>: a count SIZES an unsized
         ///     string class (a fresh descriptor, byte order kept), and the texts of every refusal are NumPy's. Values from
-        ///     NumPy 2.4.2.
+        ///     NumPy 2.5.4 (which removed the <c>'a'</c> alias of <c>'S'</c>: <c>'2a'</c> is no longer a dtype).
         /// </summary>
         [TestMethod]
         public void CommaString_RepeatsSizeAnUnsizedStringClass()
@@ -345,7 +345,8 @@ namespace NumSharp.Tests.DTypes
             np.dtype(">2U").ToString(true).Should().Be("dtype('>U2')");
             np.dtype("2S").ToString(true).Should().Be("dtype('S2')");
             np.dtype("2>S").ToString(true).Should().Be("dtype('S2')");
-            np.dtype("2a").ToString(true).Should().Be("dtype('S2')");
+            Action alias = () => np.dtype("2a");
+            alias.Should().Throw<TypeError>().WithMessage("data type 'a' not understood");
             // '0U' is a FRESH unsized U (np.dtype('U') is the singleton): NumPy's PyArray_DESCR_REPLACE copies it.
             var u0 = np.dtype("0U");
             u0.ToString(true).Should().Be("dtype('<U')");
@@ -364,7 +365,9 @@ namespace NumSharp.Tests.DTypes
         /// <summary>
         ///     A comma string's sub-array shape is validated as NumPy validates it before NumSharp refuses the sub-array:
         ///     C int dimensions, the byte size in a C int (left to right in <c>npy_intp</c>, so a 0 after an overflow comes
-        ///     too late), at most 64 dimensions, and nothing past <c>npy_intp</c>. Texts from NumPy 2.4.2.
+        ///     too late), at most 64 dimensions, and nothing past <c>npy_intp</c>. A <c>StringDType</c> base is NumPy 2.5's
+        ///     TypeError (<c>arraydescr_new_from_subarray</c>), raised once the shape converts and before its dimensions are
+        ///     validated, so only the converter's own refusals still beat it. Texts from NumPy 2.5.4.
         /// </summary>
         [TestMethod]
         public void CommaString_SubArrayShapes_AreCheckedBeforeTheRefusal()
@@ -376,11 +379,17 @@ namespace NumSharp.Tests.DTypes
             ExpectValueError("(65536,65536)f8", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
             ExpectValueError("300000000f8", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
             ExpectValueError("(2147483647,2147483647,2147483647,0)f8", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
-            ExpectValueError("134217728T", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
+            // NumPy 2.4.2 built StringDType sub-arrays, so '134217728T' failed the byte-size check; NumPy 2.5 refuses the
+            // base first, whatever the dimensions, and NumSharp has no sub-array to refuse after it.
+            const string noStringSubarray = "numpy.dtypes.StringDType is not currently supported within subarray dtypes.";
+            foreach (var s in new[] { "134217728T", "2T", "(2,)T", "1T", "0T", "3000000000T", "(65536,65536)T", "2,T", "T,2T" })
+                ExpectTypeError(s, noStringSubarray);
+            ExpectValueError("99999999999999999999T", "invalid shape in fixed-type tuple.");
+            ExpectValueError("(" + string.Join(",", Enumerable.Repeat("1", 65)) + ")T", "invalid shape in fixed-type tuple.");
             // A dtype NumSharp lacks still has NumPy's item size: complex64 is 8 bytes.
             ExpectValueError("300000000F", "invalid shape in fixed-type tuple: dtype size in bytes must fit into a C int.");
 
-            foreach (var s in new[] { "268435455f8", "(2147483647,2,0)f8", "(" + string.Join(",", Enumerable.Repeat("1", 64)) + ")f8", "2T", "2c", "2>3f8", "2,3f8", "2 ,f8" })
+            foreach (var s in new[] { "268435455f8", "(2147483647,2,0)f8", "(" + string.Join(",", Enumerable.Repeat("1", 64)) + ")f8", "2c", "2>3f8", "2,3f8", "2 ,f8" })
             {
                 Action act = () => np.dtype(s);
                 act.Should().Throw<NotSupportedException>().WithMessage("*(a sub-array dtype) is not supported by NumSharp", s);
@@ -482,8 +491,9 @@ namespace NumSharp.Tests.DTypes
         /// <summary>
         ///     Valid NumPy dtypes NumSharp has no class for (complex64, object, void) are "not supported"; the same spellings
         ///     NumPy itself refuses keep NumPy's "not understood" (a prefixed name - NumPy looks names up by the whole string,
-        ///     so <c>'&lt;str'</c> and <c>'&lt;bytes'</c> too -, the alias <c>'a'</c> with a prefix, <c>'O16'</c>). The string
-        ///     classes are NumSharp's own: <c>'a'</c>, <c>'bytes'</c>, <c>'&gt;S'</c>, <c>'T'</c> and <c>'&lt;T'</c> parse.
+        ///     so <c>'&lt;str'</c> and <c>'&lt;bytes'</c> too -, <c>'O16'</c>, and every spelling of the <c>'a'</c> bytes
+        ///     alias NumPy 2.5 removed: <c>'a'</c>, <c>'|a'</c>, <c>'a5'</c>, <c>'&gt;a4'</c>, <c>'a0'</c>). The string classes
+        ///     are NumSharp's own: <c>'bytes'</c>, <c>'&gt;S'</c>, <c>'T'</c> and <c>'&lt;T'</c> parse.
         /// </summary>
         [TestMethod]
         public void UnsupportedClasses_AreTold_FromInvalidStrings()
@@ -493,12 +503,11 @@ namespace NumSharp.Tests.DTypes
                 Action act = () => np.dtype(s);
                 act.Should().Throw<NotSupportedException>().WithMessage("*is not supported by NumSharp", s);
             }
-            foreach (var s in new[] { "<object", "|a", "O16", "O2", "<csingle", "<str", "<bytes" })
+            foreach (var s in new[] { "<object", "|a", "O16", "O2", "<csingle", "<str", "<bytes", "a", "a5", "|a5", ">a4", "a0" })
             {
                 Action act = () => np.dtype(s);
                 act.Should().Throw<TypeError>().WithMessage($"data type '{s}' not understood", s);
             }
-            np.dtype("a").Should().BeSameAs(DTypeRegistry.Bytes.singleton);
             np.dtype("bytes").Should().BeSameAs(DTypeRegistry.Bytes.singleton);
             np.dtype(">S").Should().BeSameAs(DTypeRegistry.Bytes.singleton);
             np.dtype("T").Meta.Should().BeSameAs(DTypeRegistry.VString);
@@ -508,10 +517,10 @@ namespace NumSharp.Tests.DTypes
         [TestMethod]
         public void StringDTypeGrammar_ParsesNumPysSpellings()
         {
-            // probed 2.4.2: np.dtype(spelling).str
+            // probed 2.5.4: np.dtype(spelling).str (the 'a' / 'a5' alias spellings are gone since 2.5)
             foreach (var (spelling, str) in new[]
                      {
-                         ("S", "|S0"), ("S10", "|S10"), ("U", "<U0"), ("U32", "<U32"), ("a", "|S0"), ("a5", "|S5"),
+                         ("S", "|S0"), ("S10", "|S10"), ("U", "<U0"), ("U32", "<U32"),
                          ("c", "|S1"), ("str", "<U0"), ("bytes_", "|S0"), ("<U3", "<U3"), ("|S3", "|S3"), ("=U2", "<U2"),
                      })
                 np.dtype(spelling).str.Should().Be(str, spelling);

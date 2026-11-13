@@ -4,7 +4,7 @@ NaN parity oracle — "do NumSharp's functions produce NumPy's NaN?"
 
 A dedicated, committed corpus tier (`Fuzz/corpus/nan.jsonl`) that stresses every UNARY op for
 which a NaN output is reachable, over the FULL special-value grid (finite, +-0, +-inf, and BOTH
-NaN signs +-NaN), and records NumPy 2.4.2's EXACT output bytes.
+NaN signs +-NaN), and records the pinned NumPy's (2.5.4) EXACT output bytes.
 
 The C# harness (FuzzCorpusTests.RunCorpus -> CompareArray) replays it with the NaN-contract policy
 already wired there:
@@ -18,13 +18,14 @@ already wired there:
 Standalone, like gen_npy_oracle.py / gen_decimal_oracle.cs: it owns its own case numbering and
 writes ONLY nan.jsonl, so it never renumbers the shared gen_oracle.py corpus.
 
-Run (needs numpy==2.4.2):  python test/oracle/gen_nan_oracle.py
+Run (needs the numpy in numpy-version.txt):  python test/oracle/gen_nan_oracle.py
 """
 import json, os, struct, sys
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
-if np.__version__ != "2.4.2":
-    sys.stderr.write(f"WARNING: numpy {np.__version__}, corpus is pinned to 2.4.2\n")
+if np.__version__ != numpy_pin.NUMPY_VERSION:
+    sys.stderr.write(f"WARNING: numpy {np.__version__}, corpus is pinned to {numpy_pin.NUMPY_VERSION}\n")
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                    "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus", "nan.jsonl")
@@ -99,7 +100,7 @@ for dt in (np.float64, np.float32, np.float16):
 # the cross-operand NaN interactions (nan+finite, ±inf against BOTH NaN signs, 0*inf, inf-inf,
 # 0/0, mod-by-0, copysign-from-NaN, maximum/fmax NaN priority) never occur there; the specials
 # tier forces a curated subset. This grid is EXHAUSTIVE over FLOAT_VALS x FLOAT_VALS — both NaN
-# signs included — with NumPy 2.4.2's exact bytes recorded. Float NaN stays tokenized (the sign
+# signs included — with the pinned NumPy's exact bytes recorded. Float NaN stays tokenized (the sign
 # is non-contractual) while every non-NaN slot — the sign of a produced zero/inf included — is
 # byte-exact. The op sets are per-width: float16 keeps the widen-compute-narrow / bit-level ops
 # whose f16 parity NumSharp pins bit-exactly; power/arctan2/hypot/logaddexp* ride the f32/f64

@@ -4,16 +4,17 @@ using System.Linq;
 namespace NumSharp.Tests.Backends.Strings
 {
     /// <summary>
-    ///     NEP 55 <c>StringDType</c> compares through NumPy's <c>NpyString_cmp</c>, which is <c>strncmp</c> over the shorter
-    ///     length and then the sizes: <c>strncmp</c> stops at the first byte that differs OR at a NUL both texts share, so
-    ///     <c>'a\0c'</c> and <c>'a\0b'</c> are EQUAL (same bytes up to the shared NUL, same size) while <c>'a\0'</c> is smaller
-    ///     than <c>'ab'</c> (the NUL meets <c>'b'</c>). Every family that orders or matches text follows it — the comparisons,
-    ///     the sorts, <c>np.unique</c>, the extremes, the searches, the set routines, <c>np.array_equal</c> — and fixed-width
-    ///     <c>U</c> text does not (it compares every code point). Every expected value here was probed against
-    ///     <c>numpy==2.4.2</c>; the string oracle's randomized soak holds the same contract over random texts and layouts.
+    ///     NEP 55 <c>StringDType</c> compares through NumPy's <c>NpyString_cmp</c>, which is <c>memcmp</c> over the shorter
+    ///     length and then the sizes since NumPy 2.5.0 (gh-31673): every byte counts, an embedded NUL included, so
+    ///     <c>'a\0c'</c> and <c>'a\0b'</c> are DIFFERENT (<c>'a\0b' &lt; 'a\0c'</c>) and <c>'a\0'</c> is smaller than <c>'ab'</c>
+    ///     (the NUL meets <c>'b'</c>). NumPy 2.4's <c>strncmp</c> stopped at a NUL both texts shared and tied such texts.
+    ///     Every family that orders or matches text follows it — the comparisons, the sorts, <c>np.unique</c>, the extremes,
+    ///     the searches, the set routines, <c>np.array_equal</c> — and fixed-width <c>U</c> text compares every code point
+    ///     too. Every expected value here was probed against <c>numpy==2.5.4</c>; the string oracle holds the same contract
+    ///     over its corpus.
     /// </summary>
     [TestClass]
-    public class StringDTypeStrncmpTests
+    public class StringDTypeMemcmpTests
     {
         /// <summary>A fresh <c>StringDType()</c> descriptor.</summary>
         private static DType T => np.dtypes.StringDType();
@@ -24,7 +25,8 @@ namespace NumSharp.Tests.Backends.Strings
         /// <summary>A fresh <c>StringDType(na_object=None)</c> descriptor.</summary>
         private static DType TNone => np.dtypes.StringDType(na_object: null);
 
-        /// <summary>The six texts NumPy's probe orders: two tied pairs and the NUL-against-a-byte case.</summary>
+        /// <summary>The six texts NumPy's probe orders: two pairs that differ only after a shared NUL, and the NUL-against-a-byte
+        ///     case.</summary>
         private static readonly object[] Six = { "a\0c", "a\0b", "a", "a\0", "a\0bb", "ab" };
 
         /// <summary>A 1-D array of the given elements in the given descriptor.</summary>
@@ -60,11 +62,11 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>==</c> and <c>&lt;</c> over every pair of the six texts: the tied pairs are equal and never less than each
-        ///     other, a shorter text equal up to its end is smaller, and a NUL is smaller than any byte it meets.
+        ///     <c>==</c> and <c>&lt;</c> over every pair of the six texts: only identical texts are equal, the bytes after a
+        ///     shared NUL decide, a shorter text equal up to its end is smaller, and a NUL is smaller than any byte it meets.
         /// </summary>
         [TestMethod]
-        public void Comparisons_StopAtASharedNul_ThenCompareTheSizes()
+        public void Comparisons_CompareEveryByte_ThenTheSizes()
         {
             using var a = A(T, Six);
             using var col = a.reshape(6, 1);
@@ -72,47 +74,46 @@ namespace NumSharp.Tests.Backends.Strings
             using var eq = np.equal(col, row);
             M(eq).Should().BeEquivalentTo(new[]
             {
-                new[] { 1, 1, 0, 0, 0, 0 }, new[] { 1, 1, 0, 0, 0, 0 }, new[] { 0, 0, 1, 0, 0, 0 },
+                new[] { 1, 0, 0, 0, 0, 0 }, new[] { 0, 1, 0, 0, 0, 0 }, new[] { 0, 0, 1, 0, 0, 0 },
                 new[] { 0, 0, 0, 1, 0, 0 }, new[] { 0, 0, 0, 0, 1, 0 }, new[] { 0, 0, 0, 0, 0, 1 },
             }, o => o.WithStrictOrdering());
             using var lt = np.less(col, row);
             M(lt).Should().BeEquivalentTo(new[]
             {
-                new[] { 0, 0, 0, 0, 1, 1 }, new[] { 0, 0, 0, 0, 1, 1 }, new[] { 1, 1, 0, 1, 1, 1 },
-                new[] { 1, 1, 0, 0, 1, 1 }, new[] { 0, 0, 0, 0, 0, 1 }, new[] { 0, 0, 0, 0, 0, 0 },
+                new[] { 0, 0, 0, 0, 0, 1 }, new[] { 1, 0, 0, 0, 1, 1 }, new[] { 1, 1, 0, 1, 1, 1 },
+                new[] { 1, 1, 0, 0, 1, 1 }, new[] { 1, 0, 0, 0, 0, 1 }, new[] { 0, 0, 0, 0, 0, 0 },
             }, o => o.WithStrictOrdering());
             using var nulVsByte = np.less(A(T, "a\0"), A(T, "ab"));
             V(nulVsByte).Should().Equal(true);
             using var shorterFirst = np.less(A(T, "x\0y"), A(T, "x\0yz"));
             V(shorterFirst).Should().Equal(true);
-            using var tied = np.equal(A(T, "x\0y"), A(T, "x\0z"));
-            V(tied).Should().Equal(true);
+            using var pastTheNul = np.equal(A(T, "x\0y"), A(T, "x\0z"));
+            V(pastTheNul).Should().Equal(false);
         }
 
         /// <summary>
-        ///     The sorts order tied texts as equal: the stable and the default kind keep <c>'a\0c'</c> before
-        ///     <c>'a\0b'</c> (their input order), and the extremes are <c>'ab'</c> and <c>'a'</c>.
+        ///     The sorts and the extremes order the texts by their bytes: <c>'a\0b' &lt; 'a\0bb' &lt; 'a\0c'</c>, both kinds;
+        ///     <c>np.maximum</c> / <c>np.minimum</c> pick by the bytes past the NUL.
         /// </summary>
         [TestMethod]
-        public void Sorts_AndExtremes_TreatTiedTextsAsEqual()
+        public void Sorts_AndExtremes_OrderByEveryByte()
         {
             using var a = A(T, Six);
-            object[] sorted = { "a", "a\0", "a\0c", "a\0b", "a\0bb", "ab" };
+            object[] sorted = { "a", "a\0", "a\0b", "a\0bb", "a\0c", "ab" };
             using (var s = np.sort(a))
                 V(s).Should().Equal(sorted);
             using (var s = np.sort(a, kind: "stable"))
                 V(s).Should().Equal(sorted);
             using (var o = np.argsort(a))
-                L(o).Should().Equal(2L, 3L, 0L, 1L, 4L, 5L);
+                L(o).Should().Equal(2L, 3L, 1L, 4L, 0L, 5L);
             using (var o = np.argsort(a, kind: "stable"))
-                L(o).Should().Equal(2L, 3L, 0L, 1L, 4L, 5L);
+                L(o).Should().Equal(2L, 3L, 1L, 4L, 0L, 5L);
             using (var mx = np.max(a))
                 mx.GetAtIndex(0).Should().Be("ab");
             using (var mn = np.min(a))
                 mn.GetAtIndex(0).Should().Be("a");
             np.argmax(a).Should().Be(5L);
             np.argmin(a).Should().Be(2L);
-            // maximum keeps its first operand on a tie, minimum its second (NumPy's loops).
             using (var mx = np.maximum(A(T, "a\0c"), A(T, "a\0b")))
                 V(mx).Should().Equal("a\0c");
             using (var mn = np.minimum(A(T, "a\0c"), A(T, "a\0b")))
@@ -120,44 +121,42 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <c>np.unique</c> with counts runs NumPy's sort route, whose <c>!=</c> mask joins the tied texts (the first of
-        ///     the run is kept, counted twice); the values-only route hashes the FULL bytes, so it keeps both tied texts, in
-        ///     NumSharp's input order (NumPy's hash order is unspecified; here it is the same).
+        ///     <c>np.unique</c>'s sort route and its values-only hash route agree now: every byte content is one value, each
+        ///     counted once.
         /// </summary>
         [TestMethod]
-        public void Unique_SortRouteJoinsTiedTexts_HashRouteKeepsBoth()
+        public void Unique_KeepsEveryByteContent()
         {
             using var a = A(T, Six);
             var counted = np.unique(a, return_counts: true);
-            V(counted.values).Should().Equal("a", "a\0", "a\0c", "a\0bb", "ab");
-            L(counted.counts).Should().Equal(1L, 1L, 2L, 1L, 1L);
+            V(counted.values).Should().Equal("a", "a\0", "a\0b", "a\0bb", "a\0c", "ab");
+            L(counted.counts).Should().Equal(1L, 1L, 1L, 1L, 1L, 1L);
             var values = np.unique(a);
-            V(values.values).Should().Equal("a", "a\0", "a\0c", "a\0b", "a\0bb", "ab");
+            V(values.values).Should().Equal("a", "a\0", "a\0b", "a\0bb", "a\0c", "ab");
         }
 
         /// <summary>
-        ///     The searches and the set routines match tied texts: <c>np.isin</c> (any kind) finds <c>'a\0c'</c> in
-        ///     <c>['a\0b']</c>, <c>np.searchsorted</c> places both keys first, <c>np.intersect1d</c> keeps the first operand's
-        ///     text and <c>np.setdiff1d</c> removes it.
+        ///     The searches and the set routines compare every byte: <c>np.isin</c> (any kind) does not find <c>'a\0c'</c> in
+        ///     <c>['a\0b']</c>, <c>np.searchsorted</c> places <c>'a\0c'</c> after <c>'a\0b'</c>, <c>np.intersect1d</c> is empty,
+        ///     <c>np.setdiff1d</c> keeps the text and <c>np.union1d</c> holds both in byte order.
         /// </summary>
         [TestMethod]
-        public void Searches_AndSetRoutines_MatchTiedTexts()
+        public void Searches_AndSetRoutines_CompareEveryByte()
         {
             using var x = A(T, "a\0c");
             using var y = A(T, "a\0b");
             using (var r = np.isin(x, y))
-                V(r).Should().Equal(true);
+                V(r).Should().Equal(false);
             using (var r = np.isin(x, y, kind: "sort"))
-                V(r).Should().Equal(true);
+                V(r).Should().Equal(false);
             using (var r = np.searchsorted(A(T, "a\0b", "b"), A(T, "a\0c", "a\0")))
-                L(r).Should().Equal(0L, 0L);
+                L(r).Should().Equal(1L, 0L);
             using (var r = np.intersect1d(x, y))
-                V(r).Should().Equal("a\0c");
-            using (var r = np.setdiff1d(x, y))
                 V(r).Should().BeEmpty();
-            // union1d keeps both texts (the values-only np.unique: full bytes); their order is NumPy's hash order.
+            using (var r = np.setdiff1d(x, y))
+                V(r).Should().Equal("a\0c");
             using (var r = np.union1d(x, y))
-                V(r).Should().BeEquivalentTo(new object[] { "a\0c", "a\0b" });
+                V(r).Should().Equal("a\0b", "a\0c");
         }
 
         /// <summary>
@@ -174,14 +173,15 @@ namespace NumSharp.Tests.Backends.Strings
 
         /// <summary>
         ///     <c>np.array_equal</c> / <c>np.array_equiv</c> run <c>(a1 == a2).all()</c> through the <c>StringDType</c>
-        ///     comparison: tied texts are equal, <c>U</c> text compares, a pair <c>equal</c> has no loop for (<c>S</c>,
-        ///     numbers) is NumPy's all-False array (True only when empty), a NaN-like NA is never equal unless
+        ///     comparison: texts that differ past a NUL are different, <c>U</c> text compares, a pair <c>equal</c> has no loop
+        ///     for (<c>S</c>, numbers) is NumPy's all-False array (True only when empty), a NaN-like NA is never equal unless
         ///     <c>equal_nan</c> matches the positions, a None-like NA reads as <c>''</c>, and two different NA objects raise.
         /// </summary>
         [TestMethod]
         public void ArrayEqual_AndEquiv_UseTheStringDTypeComparison()
         {
-            np.array_equal(A(T, "a\0c", "x"), A(T, "a\0b", "x")).Should().BeTrue();
+            np.array_equal(A(T, "a\0c", "x"), A(T, "a\0b", "x")).Should().BeFalse();
+            np.array_equal(A(T, "a\0b", "x"), A(T, "a\0b", "x")).Should().BeTrue();
             np.array_equal(A(T, "a", "x"), A(T, "a", "y")).Should().BeFalse();
             np.array_equal(A(T, "a"), A(T, "a", "a")).Should().BeFalse();
             np.array_equal(A(T, "a", "b"), np.array(new[] { "a", "b" })).Should().BeTrue();
@@ -199,35 +199,55 @@ namespace NumSharp.Tests.Backends.Strings
             // equal_nan meets isnan, which refuses S / U text (the first operand first).
             Action isnanU = () => np.array_equal(np.array(new[] { "a" }), A(T, "a"), equal_nan: true);
             isnanU.Should().Throw<TypeError>().WithMessage("ufunc 'isnan' not supported for the input types*");
-            np.array_equiv(A(T, "a\0c", "a\0q"), A(T, "a\0b")).Should().BeTrue();
+            np.array_equiv(A(T, "a\0c", "a\0q"), A(T, "a\0b")).Should().BeFalse();
+            np.array_equiv(A(T, "a\0b", "a\0b"), A(T, "a\0b")).Should().BeTrue();
             np.array_equiv(A(T, "a", "a"), A(T, "a", "b", "c")).Should().BeFalse();
             np.array_equiv(A(TNaN, "a", double.NaN), A(TNaN, "a", double.NaN)).Should().BeFalse();
             np.array_equiv(A(T, "a"), np.array(new[] { "a" }, np.dtype("S1"))).Should().BeFalse();
             np.array_equiv(np.zeros(new Shape(0), T), np.zeros(new Shape(2, 0), np.int64)).Should().BeTrue();
         }
 
-        /// <summary>The byte loop <c>strncmp</c> is: the first index whose bytes differ or whose byte of A is NUL, else n.</summary>
+        /// <summary>
+        ///     <c>np.unique</c>'s NA entries (NumPy 2.5.4's <c>unique_vstring</c>): every NA cell of a descriptor whose NA object
+        ///     is not NaN-like is ONE entry even with <c>equal_nan=False</c> (<c>equal_nulls = equal_nan || !has_nan_na</c>;
+        ///     NumPy 2.4 kept each), a None-like NA among texts is still the sort's refusal, and a NaN-like NA keeps one entry
+        ///     per NA only without <c>equal_nan</c>.
+        /// </summary>
+        [TestMethod]
+        public void Unique_NAEntries_FollowEqualNulls()
+        {
+            using (var none = A(TNone, null, null))
+                V(np.unique(none, equal_nan: false).values).Should().HaveCount(1);
+            Action noneAndText = () => np.unique(A(TNone, null, "a", null), equal_nan: false);
+            noneAndText.Should().Throw<ValueError>().WithMessage("Cannot compare null that is not a nan-like value");
+            using (var nan = A(TNaN, double.NaN, "a", double.NaN))
+            {
+                V(np.unique(nan, equal_nan: false).values).Should().HaveCount(3);
+                V(np.unique(nan).values).Should().HaveCount(2);
+            }
+        }
+
+        /// <summary>The byte loop <c>memcmp</c> answers from: the first index whose bytes differ, else n.</summary>
         /// <param name="a">The first text.</param>
         /// <param name="b">The second text.</param>
         /// <param name="n">The bytes to compare.</param>
-        /// <returns>The stop index.</returns>
-        private static unsafe int ReferenceStop(byte* a, byte* b, int n)
+        /// <returns>The first differing index.</returns>
+        private static unsafe int ReferenceMismatch(byte* a, byte* b, int n)
         {
             for (int i = 0; i < n; i++)
-                if (a[i] != b[i] || a[i] == 0)
+                if (a[i] != b[i])
                     return i;
             return n;
         }
 
         /// <summary>
-        ///     <see cref="NumSharp.Backends.Strings.NDVStringCells.StrncmpStop"/> (its 32- and 16-byte vector steps, the step
-        ///     moved back to end on the last byte, the 8-byte SWAR words) stops where the byte loop stops at every length 0–300:
-        ///     no stop, a difference at every position, a NUL in both texts at every position, a NUL in A alone, a difference
-        ///     next to a NUL — the SWAR zero test flags bytes above a zero byte through its borrow, so a difference ABOVE the
-        ///     first NUL must not win.
+        ///     <see cref="NumSharp.Backends.Strings.NDVStringCells.MismatchIndex"/> (its 32- and 16-byte vector steps, the step
+        ///     moved back to end on the last byte, the 8-byte SWAR words) finds the byte loop's first difference at every length
+        ///     0–300: none, a difference at every position, a NUL in both texts at every position (an ordinary byte: no stop),
+        ///     a NUL in A alone (a difference), and a difference right after a shared NUL.
         /// </summary>
         [TestMethod]
-        public unsafe void StrncmpStop_EqualsTheByteLoop_AtEveryLengthAndStop()
+        public unsafe void MismatchIndex_EqualsTheByteLoop_AtEveryLengthAndPosition()
         {
             var rng = new System.Random(4401);
             var a = new byte[300];
@@ -238,23 +258,23 @@ namespace NumSharp.Tests.Backends.Strings
                 {
                     for (int k = 0; k < 300; k++)
                         a[k] = b[k] = (byte)rng.Next(1, 256);
-                    NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(n, $"length {n}, no stop");
+                    NumSharp.Backends.Strings.NDVStringCells.MismatchIndex(pa, pb, n).Should().Be(n, $"length {n}, equal");
                     for (int p = 0; p < n; p++)
                     {
                         byte keepA = a[p], keepB = b[p];
                         b[p] = (byte)(a[p] ^ (1 << rng.Next(8)));
-                        NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(ReferenceStop(pa, pb, n), $"length {n}, difference at {p}");
+                        NumSharp.Backends.Strings.NDVStringCells.MismatchIndex(pa, pb, n).Should().Be(ReferenceMismatch(pa, pb, n), $"length {n}, difference at {p}");
                         a[p] = b[p] = 0;
-                        NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(ReferenceStop(pa, pb, n), $"length {n}, shared NUL at {p}");
+                        NumSharp.Backends.Strings.NDVStringCells.MismatchIndex(pa, pb, n).Should().Be(n, $"length {n}, shared NUL at {p}");
                         b[p] = 1;
-                        NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(ReferenceStop(pa, pb, n), $"length {n}, NUL in A at {p}");
+                        NumSharp.Backends.Strings.NDVStringCells.MismatchIndex(pa, pb, n).Should().Be(p, $"length {n}, NUL in A at {p}");
                         if (p + 1 < n)
                         {
-                            // A NUL at p (shared) and a byte of value 1 right above it in A: the borrow flags p + 1 too.
+                            // A shared NUL at p and a difference right above it: memcmp reads past the NUL.
                             b[p] = 0;
                             byte above = a[p + 1];
-                            a[p + 1] = 1;
-                            NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(ReferenceStop(pa, pb, n), $"length {n}, NUL then 1 at {p}");
+                            a[p + 1] = (byte)(b[p + 1] ^ 1);
+                            NumSharp.Backends.Strings.NDVStringCells.MismatchIndex(pa, pb, n).Should().Be(p + 1, $"length {n}, NUL then a difference at {p}");
                             a[p + 1] = above;
                         }
                         a[p] = keepA;
@@ -264,12 +284,12 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     <see cref="NumSharp.Backends.Strings.NDVStringCells.StrncmpStop"/> reads nothing outside its texts: two texts of
-        ///     every length to 300 that never stop (equal, NUL-free) placed against inaccessible pages, ending on the last
-        ///     accessible byte and starting on the first.
+        ///     <see cref="NumSharp.Backends.Strings.NDVStringCells.MismatchIndex"/> reads nothing outside its texts: two texts of
+        ///     every length to 300 that never differ placed against inaccessible pages, ending on the last accessible byte and
+        ///     starting on the first.
         /// </summary>
         [TestMethod]
-        public unsafe void StrncmpStop_ReadsOnlyItsTexts()
+        public unsafe void MismatchIndex_ReadsOnlyItsTexts()
         {
             if (!FencedMemory.IsSupported)
                 Assert.Inconclusive("FencedMemory needs Windows (reserved pages).");
@@ -281,11 +301,11 @@ namespace NumSharp.Tests.Backends.Strings
                     byte* a = fa.Place(n, atEnd), b = fb.Place(n, atEnd);
                     for (int k = 0; k < n; k++)
                         a[k] = b[k] = (byte)('a' + k % 26);
-                    NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(a, b, n).Should().Be(n, $"length {n}, at end {atEnd}");
+                    NumSharp.Backends.Strings.NDVStringCells.MismatchIndex(a, b, n).Should().Be(n, $"length {n}, at end {atEnd}");
                     if (n > 0)
                     {
                         b[n - 1] ^= 1;
-                        NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(a, b, n).Should().Be(n - 1, $"length {n}, last byte differs, at end {atEnd}");
+                        NumSharp.Backends.Strings.NDVStringCells.MismatchIndex(a, b, n).Should().Be(n - 1, $"length {n}, last byte differs, at end {atEnd}");
                     }
                 }
         }

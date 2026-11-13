@@ -40,7 +40,8 @@ namespace NumSharp
         /// </exception>
         /// <exception cref="TypeError"><c>Cannot get/set field of an object array</c>: this array or the field holds
         ///     references (a <c>StringDType</c>, whose cells point into its allocator) and the field is not the whole element
-        ///     in this array's own descriptor (NumPy's <c>_getfield_is_safe</c>, checked before the size checks).</exception>
+        ///     through this array's own descriptor object — an equal but separate instance is refused too (NumPy 2.5's
+        ///     <c>_getfield_is_safe</c>, checked before the size checks).</exception>
         /// <exception cref="NotSupportedException">A non-native field descriptor (<c>'&gt;i4'</c> on a little-endian host):
         ///     NumPy reads the field byte-swapped, NumSharp stores every dtype natively and has no such view (raised after
         ///     NumPy's size / offset checks, so <c>getfield('&gt;i8')</c> of an int32 array is still NumPy's ValueError);
@@ -51,11 +52,13 @@ namespace NumSharp
             // array_getfield reads its dtype with PyArray_DescrConverter ("O&"), which reads None as the default float64.
             dtype ??= np.float64;
 
-            // _getfield_is_safe: memory holding references (StringDType's cells: hasobject) may not be reinterpreted, so
-            // either side holding them allows only the whole element in its own descriptor — a view of the same dtype.
+            // _getfield_is_safe (NumPy 2.5): memory holding references (StringDType's cells: hasobject) may not be
+            // reinterpreted, so either side holding them allows only `offset == 0 and _is_view_safe_cast(oldtype, newtype)`:
+            // the whole element through this array's OWN descriptor object (the one that shares its allocator; an equal but
+            // separate instance is refused, where NumPy 2.4 compared by equality — see view(DType)).
             if (this.dtype.hasobject || dtype.hasobject)
             {
-                if (offset == 0 && dtype.Equals(this.dtype))
+                if (offset == 0 && ReferenceEquals(dtype, this.dtype))
                     return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
                 throw new TypeError("Cannot get/set field of an object array");
             }

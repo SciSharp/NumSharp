@@ -514,7 +514,9 @@ namespace NumSharp
         ///     <c>invalid shape in fixed-type tuple: dimension does not fit into a C int.</c>, <c>invalid shape in fixed-type
         ///     tuple: dtype size in bytes must fit into a C int.</c>
         /// </exception>
-        /// <exception cref="TypeError">The item's dtype is not understood.</exception>
+        /// <exception cref="TypeError">The item's dtype is not understood, or a <c>StringDType</c> sub-array
+        ///     (<c>'2T'</c>, <c>'(2,)T'</c>): NumPy 2.5's <c>numpy.dtypes.StringDType is not currently supported within
+        ///     subarray dtypes.</c></exception>
         /// <exception cref="SyntaxError">A nested comma string's repeat group is not a Python literal.</exception>
         private static CommaDescr ConvertCommaTuple(CommaItem item)
         {
@@ -548,6 +550,13 @@ namespace NumSharp
             // if (type, ()) was given it is equivalent to type...
             if (shape.Length == 0 && val.IsTuple)
                 return type;
+
+            // NumPy 2.5's arraydescr_new_from_subarray: a subarray dtype is never attached to an array, so a base with
+            // per-instance state (a finalize slot: StringDType) could never be finalized — refused by the DType class's
+            // tp_name, right after the shape converted and before the dimensions are validated ('134217728T' included).
+            // NumPy 2.4 built the subarray.
+            if (type.Descr?.Meta is VStringDTypeMeta)
+                throw new TypeError("numpy.dtypes.StringDType is not currently supported within subarray dtypes.");
 
             /* validate and set shape */
             foreach (long dim in shape)

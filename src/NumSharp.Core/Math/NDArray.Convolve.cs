@@ -27,7 +27,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands as given, before
         ///     the length swap), then an unknown <paramref name="mode"/> (NumPy's two texts, the bad argument in Python's
         ///     <c>repr</c>), <c>object too deep for desired array</c> for an operand of two or more dimensions, or — for a
-        ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c> (NumPy's
+        ///     fixed-width string operand, after every check above — <c>function not available for this data type</c> (NumPy's
         ///     result allocation for the string type number).</exception>
         /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate.</exception>
         /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not

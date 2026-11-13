@@ -410,10 +410,18 @@ namespace NumSharp.Backends.Strings
         /// <param name="axis">The reduced axis.</param>
         /// <param name="mask">The bool mask of the input's shape, or null.</param>
         /// <param name="initial">The 0-d <c>initial=</c> array, or null.</param>
-        /// <param name="loopDescr">The loop's deciding descriptor (the output's).</param>
-        /// <param name="inputDescr">The input's descriptor (its <c>na_name</c> is the first element's cast text).</param>
+        /// <param name="loopDescr">The accumulator's descriptor (the output's: NumPy's loop slots 0 and 2).</param>
+        /// <param name="inputDescr">The input's descriptor (the loop's slot 1; its <c>na_name</c> is the first element's
+        ///     cast text).</param>
         /// <param name="name">The ufunc name.</param>
         /// <param name="fresh">True when the output is a fresh (all-zero) array.</param>
+        /// <remarks>
+        ///     The NA rule and the default string come from NumPy 2.5's effective NA descriptor of (accumulator, input)
+        ///     (<see cref="NDVStringCells.EffectiveNADescr"/>): the reduction hands its loop the iterator's own descriptors,
+        ///     so an input NA met after the first element follows the input's NA object even into an out without one (a NaN
+        ///     NA propagates as a null the out reads as its empty default string, a <c>None</c>-like NA raises, a string NA
+        ///     is its string); NumPy 2.4 read the out's descriptor alone and took the NA for the empty string.
+        /// </remarks>
         private static void Run(ReduceKind kind, NDArray input, NDArray outLanes, int axis, NDArray mask, NDArray initial,
                                 DType loopDescr, DType inputDescr, string name, bool fresh)
         {
@@ -421,7 +429,9 @@ namespace NumSharp.Backends.Strings
             var inAlloc = input.Storage.VStringSlice.Allocator;
             var outAlloc = outLanes.Storage.VStringSlice.Allocator;
             var initAlloc = initial?.Storage.VStringSlice.Allocator;
-            byte[] defaultText = NDUtf8.Encode(loopDescr.VString.default_string);
+            // stringdtype_effective_na_descr(nin, [accumulator, input]): the first of the two with an NA object.
+            DType ruleDescr = NDVStringCells.EffectiveNADescr(loopDescr, inputDescr);
+            byte[] defaultText = NDUtf8.Encode(ruleDescr.VString.default_string);
             // NumPy's first-element cast: an NA becomes the input's na_name only when the output descriptor has no NA object.
             bool firstNAAsText = inputDescr.VString.HasNAObject && !loopDescr.VString.HasNAObject;
             byte[] naText = firstNAAsText ? NDUtf8.Encode(inputDescr.VString.na_name) : Array.Empty<byte>();
@@ -429,7 +439,7 @@ namespace NumSharp.Backends.Strings
             {
                 In = inAlloc,
                 Out = outAlloc,
-                Rule = NDVStringCells.RuleOf(loopDescr),
+                Rule = NDVStringCells.RuleOf(ruleDescr),
                 DefaultSize = defaultText.Length,
                 FirstNAAsText = firstNAAsText,
                 FirstNASize = naText.Length,
@@ -984,9 +994,9 @@ namespace NumSharp.Backends.Strings
             internal readonly ulong Key;
 
             /// <summary>
-            ///     True when the text has at least eight bytes and none of the first eight is NUL: then against any text of at
-            ///     least eight bytes whose key differs, <c>strncmp</c> stops at the first differing byte (no shared NUL can
-            ///     come first), so the keys' order IS NumPy's <c>NpyString_cmp</c>.
+            ///     True when the text has at least eight bytes: then against any text of at least eight bytes whose key differs,
+            ///     the first differing byte lies in the keys, so their order IS NumPy's <c>NpyString_cmp</c> (<c>memcmp</c>
+            ///     since NumPy 2.5; NumPy 2.4's <c>strncmp</c> also needed the first eight bytes free of NULs).
             /// </summary>
             internal readonly bool KeyDecides;
 
@@ -1006,10 +1016,9 @@ namespace NumSharp.Backends.Strings
                 KeyDecides = false;
                 if (Na == 0 && Size >= 8)
                 {
-                    ulong w = Unsafe.ReadUnaligned<ulong>(Text);
-                    // SWAR zero-byte test: a NUL among the first eight bytes lets a shared NUL end strncmp first.
-                    KeyDecides = ((w - 0x0101_0101_0101_0101UL) & ~w & 0x8080_8080_8080_8080UL) == 0;
-                    Key = System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(w);
+                    // memcmp: any differing byte among the first eight decides, a NUL among them included.
+                    KeyDecides = true;
+                    Key = System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(Text));
                 }
             }
         }
@@ -1273,32 +1282,30 @@ namespace NumSharp.Backends.Strings
         ///     output cast), or null. The caller resolved the loop (<see cref="NDStringUfuncs.VStringReduceLoopAnswer"/>).</param>
         /// <returns><paramref name="out"/> itself, or a fresh array of the input's dimensions (1-D for a flattened input) in
         ///     the input's memory order (NumPy's KEEPORDER allocation).</returns>
-        /// <exception cref="IncorrectShapeException">An out the accumulation cannot write: <c>provided out is the wrong size
-        ///     for the accumulation.</c> on NumPy's direct path, the iterator's texts on its iterator path (see the remarks);
-        ///     NumPy's ValueError texts, the house shape exception.</exception>
+        /// <exception cref="IncorrectShapeException">An out of other dimensions than the accumulation's: the iterator's
+        ///     texts on NumPy's iterator path, then <c>provided out is the wrong size for the accumulation.</c> for every out
+        ///     it accepts and on the direct path (see the remarks); NumPy's ValueError texts, the house shape
+        ///     exception.</exception>
         /// <exception cref="ValueError">A <c>None</c>-like NA met by an addition.</exception>
         /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         /// <remarks>
         ///     <para>
-        ///         NumPy's <c>PyUFunc_Accumulate</c> takes one of two paths, and they check an <c>out=</c> differently. The
-        ///         DIRECT path (a 1-D accumulation into a <c>StringDType</c> out that does not overlap the input, or no out)
-        ///         returns at once for an empty input or an empty out and otherwise demands the input's exact dimensions
-        ///         (<c>provided out is the wrong size for the accumulation.</c>). The ITERATOR path (more than one dimension,
-        ///         an out of another dtype, or an out whose bounds overlap the input's) builds an NpyIter over (out, input)
-        ///         with <c>op_axes</c> naming the input's axes: an out with fewer dimensions is the iterator's
-        ///         <c>op_axes</c> error, an extent that does not broadcast is its remapped-shapes error, an out of extent 1
-        ///         where the input is longer is its non-broadcastable-output error — and an out with MORE dimensions is
-        ///         accepted, its extra trailing axes staying at index 0. The input broadcasts against the out on every
-        ///         axis but the accumulated one, and along that axis only the input's extent is written (an input of
-        ///         extent 1 against a longer out writes the first cell).
+        ///         NumPy's <c>PyUFunc_Accumulate</c> takes one of two paths. The ITERATOR path (more than one dimension, an
+        ///         out of another dtype, or an out whose bounds overlap the input's) builds an NpyIter over (out, input) with
+        ///         <c>op_axes</c> naming the input's axes: an out with fewer dimensions is the iterator's <c>op_axes</c>
+        ///         error, an extent that does not broadcast is its remapped-shapes error, an out of extent 1 where the input
+        ///         is longer is its non-broadcastable-output error. The DIRECT path (a 1-D accumulation into a
+        ///         <c>StringDType</c> out that does not overlap the input, or no out) builds nothing. On both, NumPy 2.5 then
+        ///         demands the input's exact dimensions (<c>provided out is the wrong size for the accumulation.</c>) before
+        ///         its empty-input / empty-out exits (gh-32709): an out with MORE dimensions, or one the input broadcasts
+        ///         against, which 2.4's iterator accepted and wrote into, is refused, and nothing is written.
         ///     </para>
         ///     <para>
         ///         The loop's descriptor is the out's for a <c>StringDType</c> out, the cast's default <c>StringDType()</c>
         ///         for a <c>U</c> out (an NA first element is then written as the input's <c>na_name</c>, NumPy's lossy
-        ///         string-to-string cast), and a fresh descriptor with the input's NA object and coerce without an out.
-        ///         Divergence: a 0-d out over a 1-D input on the direct path crashes NumPy 2.4.2 (it reads the strides of a
-        ///         0-d array, before even its empty-input exit); NumSharp raises the direct path's wrong-size error, an empty
-        ///         input included, as its numeric accumulation does.
+        ///         string-to-string cast), and a fresh descriptor with the input's NA object and coerce without an out. A 0-d
+        ///         out over a 1-D input is the wrong size too (NumPy 2.4 crashed there, reading the strides of a 0-d
+        ///         array).
         ///     </para>
         /// </remarks>
         internal static NDArray CumSum(NDArray a, int? axis, NDArray @out) => CumSum(a, axis, @out, castInput: false);
@@ -1343,12 +1350,12 @@ namespace NumSharp.Backends.Strings
         ///     ITERATOR path (its shape errors, a longer out accepted), and the cast runs after every shape check, on exactly
         ///     the cells the accumulation reads — the iterator's buffered cast.</param>
         /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
-        /// <exception cref="ValueError">The iterator's remapped-shapes error.</exception>
-        /// <exception cref="IncorrectShapeException">The direct path's wrong size, or the iterator's op_axes error.</exception>
+        /// <exception cref="IncorrectShapeException">The iterator's shape errors, then the wrong size of an out of other
+        ///     dimensions.</exception>
         /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
         private static NDArray CumSum(NDArray a, int? axis, NDArray @out, bool castInput)
         {
-            NDArray flat = null, contiguous = null, overlapCopy = null, broadcastInput = null, outView = null, target = null;
+            NDArray flat = null, contiguous = null, overlapCopy = null;
             NDArray castSource = null;
             bool castOut = @out is not null && !NDStringUfuncs.IsVString(@out);
             NDArray result = null;
@@ -1386,23 +1393,16 @@ namespace NumSharp.Backends.Strings
                                 || NDMemOverlap.SolveMayShareMemory(@out, input, maxWork: 0) != MemOverlap.No;
                 if (iterator && AccumulateIteratorShapeError(@out, input) is { } shapeError)
                     throw shapeError;
-                // The direct path reads the out's stride along the axis before anything else (`PyArray_STRIDES(op[0])[axis]`),
-                // which a 0-d out does not have: NumPy 2.4.2 crashes there, for every dtype and an empty input too. NumSharp
-                // reports the wrong-size error instead, as its numeric accumulation does.
-                if (!iterator && @out.ndim == 0)
+                // NumPy 2.5 (gh-32709) compares the out's dimensions with the input's on both paths, before the empty exits:
+                // an out the iterator accepted with other dimensions, a 0-d out included, is refused.
+                if (!SameDims(@out, input))
                     throw new IncorrectShapeException("provided out is the wrong size for the accumulation.");
-                // Nothing to accumulate (NumPy checks these before the direct path's dimensions).
+                // Nothing to accumulate.
                 if (count == 0 || @out.size == 0)
                     return @out;
-                if (!iterator && !SameDims(@out, input))
-                    throw new IncorrectShapeException("provided out is the wrong size for the accumulation.");
-                // The cells the accumulation writes: the out's leading input-rank axes (a longer out's trailing axes stay at
-                // index 0) and, along the axis, as many as the input has.
-                outView = LeadingAxesView(@out, input.ndim);
-                target = outView.Shape.dimensions[ax] == count ? outView : AxisPrefixView(outView, ax, count);
+                // The out has the input's dimensions: the accumulation writes it whole.
+                NDArray target = @out;
                 NDArray src = input;
-                if (!SameDims(target, input))
-                    src = broadcastInput = NDArray.broadcast_to(input, new Shape(target.Shape.dimensions, copy: false));
                 // The iterator's buffered input cast: every shape check passed, so the cells the accumulation reads are cast
                 // to the default StringDType() now (a U input and a StringDType out never share memory).
                 DType inputDescr = a.dtype;
@@ -1442,11 +1442,6 @@ namespace NumSharp.Backends.Strings
             {
                 overlapCopy?.Dispose();
                 castSource?.Dispose();
-                broadcastInput?.Dispose();
-                if (target is not null && !ReferenceEquals(target, outView))
-                    target.Dispose();
-                if (outView is not null && !ReferenceEquals(outView, @out))
-                    outView.Dispose();
                 flat?.Dispose();
                 contiguous?.Dispose();
                 if (castOut && result is not null)
@@ -1471,38 +1466,6 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         internal static IncorrectShapeException AccumulateIteratorShapeError(NDArray @out, NDArray input)
             => DefaultEngine.AccumulateIteratorShapeError(@out.Shape.dimensions ?? Array.Empty<long>(), input.Shape.dimensions);
-
-        /// <summary>
-        ///     The view of an out's leading <paramref name="ndim"/> axes with every later axis at index 0 — the cells NumPy's
-        ///     accumulate iterator walks when the out has more dimensions than its <c>op_axes</c> name.
-        /// </summary>
-        /// <param name="out">The out array (non-empty).</param>
-        /// <param name="ndim">The input's rank.</param>
-        /// <returns><paramref name="out"/> itself when it has exactly <paramref name="ndim"/> axes, else a view (owned by the caller).</returns>
-        internal static NDArray LeadingAxesView(NDArray @out, int ndim)
-        {
-            if (@out.ndim == ndim)
-                return @out;
-            var slices = new Slice[@out.ndim];
-            for (int i = 0; i < slices.Length; i++)
-                slices[i] = i < ndim ? Slice.All : Slice.Index(0);
-            // The storage-level view, not the indexer: for a 0-d input every axis is indexed, which the indexer reads as an
-            // item (NumPy's scalar copy) - the reduction would write into the copy instead of out.
-            return @out.BasicIndexView(slices);
-        }
-
-        /// <summary>The view of the first <paramref name="count"/> cells of an array along one axis.</summary>
-        /// <param name="x">The array.</param>
-        /// <param name="axis">The axis.</param>
-        /// <param name="count">How many leading cells to keep.</param>
-        /// <returns>A view (owned by the caller).</returns>
-        internal static NDArray AxisPrefixView(NDArray x, int axis, long count)
-        {
-            var slices = new Slice[x.ndim];
-            for (int i = 0; i < slices.Length; i++)
-                slices[i] = i == axis ? new Slice(0, count) : Slice.All;
-            return x[slices];
-        }
 
         /// <summary>Whether two arrays have the same dimensions.</summary>
         /// <param name="x">The first array.</param>
@@ -1537,22 +1500,28 @@ namespace NumSharp.Backends.Strings
         /// <param name="input">The input.</param>
         /// <param name="result">The output (the input's dimensions).</param>
         /// <param name="axis">The accumulated axis.</param>
-        /// <param name="loopDescr">The deciding descriptor (the output's).</param>
-        /// <param name="inputDescr">The input's descriptor (its <c>na_name</c> is the first element's cast text).</param>
+        /// <param name="loopDescr">The accumulator's descriptor (the output's: NumPy's loop slots 0 and 2).</param>
+        /// <param name="inputDescr">The input's descriptor (the loop's slot 1; its <c>na_name</c> is the first element's
+        ///     cast text).</param>
         /// <param name="fresh">True for a fresh output.</param>
+        /// <remarks>The NA rule and the default string come from the effective NA descriptor of (accumulator, input), as
+        ///     <see cref="Run"/>'s do: NumPy 2.5's <c>PyUFunc_Accumulate</c> hands its add loop the operands' own
+        ///     descriptors.</remarks>
         private static void RunCumSum(NDArray input, NDArray result, int axis, DType loopDescr, DType inputDescr, bool fresh)
         {
             const int cell = VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
             var inAlloc = input.Storage.VStringSlice.Allocator;
             var outAlloc = result.Storage.VStringSlice.Allocator;
-            byte[] defaultText = NDUtf8.Encode(loopDescr.VString.default_string);
+            // stringdtype_effective_na_descr(nin, [accumulator, input]): the first of the two with an NA object.
+            DType ruleDescr = NDVStringCells.EffectiveNADescr(loopDescr, inputDescr);
+            byte[] defaultText = NDUtf8.Encode(ruleDescr.VString.default_string);
             bool firstNAAsText = inputDescr.VString.HasNAObject && !loopDescr.VString.HasNAObject;
             byte[] naText = firstNAAsText ? NDUtf8.Encode(inputDescr.VString.na_name) : Array.Empty<byte>();
             var ctx = new VStringReduceContext
             {
                 In = inAlloc,
                 Out = outAlloc,
-                Rule = NDVStringCells.RuleOf(loopDescr),
+                Rule = NDVStringCells.RuleOf(ruleDescr),
                 DefaultSize = defaultText.Length,
                 FirstNAAsText = firstNAAsText,
                 FirstNASize = naText.Length,

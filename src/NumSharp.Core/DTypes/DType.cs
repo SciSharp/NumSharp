@@ -58,7 +58,7 @@ namespace NumSharp
     ///     null/Empty (use a <see langword="null"/> <see cref="DType"/> for none).
     /// </para>
     /// <para>
-    ///     <b>NumPy string casing (source of truth: NumPy 2.4.2).</b> Strings are parsed by
+    ///     <b>NumPy string casing (source of truth: NumPy 2.5.4).</b> Strings are parsed by
     ///     <see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/> with NumPy's exact, <b>case-sensitive</b> grammar — the single-character
     ///     codes differ by case:
     ///     <list type="table">

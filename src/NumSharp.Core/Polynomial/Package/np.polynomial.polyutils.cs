@@ -603,7 +603,7 @@ namespace NumSharp
         /// <remarks>
         ///     NumPy's statements (<see cref="NDPolyPrinting.FormatFloat"/>): the thresholds are Python literals, so they
         ///     compare in the value's own dtype (a float16 sees 1e8 as infinity); the digits are NumPy's Dragon4, ported.
-        ///     https://github.com/numpy/numpy/blob/v2.4.2/numpy/polynomial/polyutils.py
+        ///     https://github.com/numpy/numpy/blob/v2.5.4/numpy/polynomial/polyutils.py
         /// </remarks>
         public string format_float(object x, bool parens = false) => NDPolyPrinting.FormatFloat(x, parens);
 

@@ -233,11 +233,12 @@ namespace NumSharp.Tests.LinearAlgebra
                     .Should().Throw<LinAlgError>().WithMessage("Last 2 dimensions of the array must be square");
                 provider.CholeskyCalls.Should().Be(1, "a refused operand never reaches the kernel");
 
-                // eig's tail collapses the kernel's complex result with zero imaginary parts to a real one.
+                // eig's tail keeps the kernel's complex result (NumPy 2.5 dropped the real collapse).
                 var eigenvalues = np.linalg.eigvals(ints);
                 provider.EigCalls.Should().Be(1);
-                eigenvalues.typecode.Should().Be(NPTypeCode.Double);
-                eigenvalues.ToArray<double>().Should().Equal(1.0, 2.0);
+                eigenvalues.typecode.Should().Be(NPTypeCode.Complex);
+                eigenvalues.ToArray<System.Numerics.Complex>().Should().Equal(
+                    new System.Numerics.Complex(1.0, 0), new System.Numerics.Complex(2.0, 0));
 
                 // matrix_rank counts the kernel's singular values above the tolerance; the 2-norm is the largest one.
                 np.linalg.matrix_rank(ints).GetInt64().Should().Be(1);

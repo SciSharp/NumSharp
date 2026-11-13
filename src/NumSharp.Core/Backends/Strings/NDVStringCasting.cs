@@ -51,8 +51,9 @@ namespace NumSharp.Backends.Strings
         ///     destination, or an NA element meets a numeric destination.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="src"/> does not broadcast to <paramref name="dst"/>.</exception>
         /// <exception cref="OverflowError">An integer text outside the destination (NumPy's StringDType texts).</exception>
-        /// <exception cref="TypeError">A <c>U</c> source holds an invalid code point (<c>Invalid unicode code point found</c>).</exception>
-        /// <exception cref="UnicodeDecodeError">An <c>S</c> source element is not UTF-8.</exception>
+        /// <exception cref="TypeError">A <c>U</c> source holds an invalid code point (<c>Invalid unicode code point found</c>),
+        ///     or an <c>S</c> source element is not UTF-8 (NumPy 2.5's <c>Invalid UTF-8 bytes found, cannot convert to
+        ///     StringDType</c>).</exception>
         /// <exception cref="UnicodeEncodeError">A text is not ASCII and the destination is <c>S</c>.</exception>
         /// <exception cref="RuntimeError">A bool source byte is neither 0 nor 1 (<c>invalid value encountered in bool to
         ///     string cast</c>).</exception>
@@ -257,17 +258,28 @@ namespace NumSharp.Backends.Strings
         ///     reserved the arena: a medium / long text is then appended at the bump pointer
         ///     (<see cref="VStringAllocator.AppendFresh"/>) and copied once, the bytes <c>NpyString_pack</c> gives a fresh
         ///     cell. False for any other destination: every element is packed (its old text freed first).</param>
-        /// <exception cref="UnicodeDecodeError">CPython's text for the element's first bad UTF-8 sequence.</exception>
+        /// <exception cref="TypeError">An element that is not valid UTF-8 (an invalid or truncated sequence, an overlong
+        ///     form, a surrogate, a code point past U+10FFFF): NumPy 2.5's <c>Invalid UTF-8 bytes found, cannot convert to
+        ///     StringDType</c>.</exception>
         /// <exception cref="MemoryError"><c>Failed to allocate string in bytes to string cast</c>.</exception>
-        /// <remarks>The bump pointer declines when the reservation is used up or while a test schedules an allocation failure;
-        ///     <c>pack</c> then grows the arena NumPy's way (or fails at the scheduled allocation), so the elements still
-        ///     allocate in the walk's order.</remarks>
+        /// <remarks>
+        ///     NumPy 2.5's <c>bytes_to_string</c> sizes each element with <c>utf8_buffer_size</c> and rejects non-UTF-8
+        ///     input in the cast (gh-32296: "readers of the stored bytes assume validity"); NumPy 2.4 copied the bytes
+        ///     unchecked and failed on a later read, where NumSharp raised CPython's <c>UnicodeDecodeError</c> at the cast.
+        ///     <see cref="System.Text.Unicode.Utf8.IsValid"/> accepts exactly the strict UTF-8 that NumPy's decoder DFA
+        ///     accepts.
+        ///     <para>The bump pointer declines when the reservation is used up or while a test schedules an allocation
+        ///     failure; <c>pack</c> then grows the arena NumPy's way (or fails at the scheduled allocation), so the elements
+        ///     still allocate in the walk's order.</para>
+        /// </remarks>
         private static void BytesRun(byte* s, long ss, int chars, byte* d, long ds, long n, VStringAllocator allocator, bool freshDestination)
         {
             for (long i = 0; i < n; i++, s += ss, d += ds)
             {
                 int len = TrimmedByteLength(s, chars);
-                NDUtf8.ThrowIfInvalid(new ReadOnlySpan<byte>(s, len));
+                // utf8_buffer_size(in, max_in_size) < 0: the element is refused before anything of it is packed.
+                if (!System.Text.Unicode.Utf8.IsValid(new ReadOnlySpan<byte>(s, len)))
+                    throw new TypeError("Invalid UTF-8 bytes found, cannot convert to StringDType");
                 if (freshDestination && len > VStringAllocator.NPY_SHORT_STRING_MAX_SIZE)
                 {
                     byte* slot = allocator.AppendFresh(d, len);

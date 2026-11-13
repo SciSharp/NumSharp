@@ -21,7 +21,7 @@ namespace NumSharp.Tests.Interop
     ///     <para>
     ///     <b>Why this is byte-exact and not merely close.</b> NumSharp's <c>cholesky</c>/<c>qr</c> and
     ///     NumPy's both delegate to LAPACK (<c>potrf</c>/<c>geqrf</c>/<c>orgqr</c>). NumSharp bundles the
-    ///     scipy-openblas build NumPy 2.4.2 itself pins (verified byte-identical), so on a NumPy-2.4.2
+    ///     scipy-openblas build NumPy 2.5.4 itself pins (verified byte-identical), so on a NumPy-2.5.4
     ///     host the two stacks call the SAME binary. The result bits of a BLAS additionally depend on
     ///     the worker-thread count and the dispatched DYNAMIC_ARCH micro-kernel; <see cref="PythonSession"/>
     ///     enables the backend at <c>threads: 1</c> and these matrices are small enough that OpenBLAS

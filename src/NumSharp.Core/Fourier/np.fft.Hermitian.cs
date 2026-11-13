@@ -19,9 +19,10 @@ namespace NumSharp
         /// <param name="n">Length of the transformed axis of the output (default <c>2*(m-1)</c>).</param>
         /// <param name="axis">Axis over which to compute the FFT (default the last axis).</param>
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
-        /// <param name="out">Accepted for signature parity; NumPy passes <c>out=None</c> into irfft.</param>
-        /// <returns>The real result, float64; a plain array for a <c>numpy.matrix</c> or <c>numpy.char.chararray</c>
-        ///     operand too.</returns>
+        /// <param name="out">A pre-allocated real output that irfft writes and returns (NumPy 2.5; 2.4 ignored it), or
+        ///     null.</param>
+        /// <returns>The real result, float64 (<paramref name="out"/> itself when given); a plain array for a
+        ///     <c>numpy.matrix</c> or <c>numpy.char.chararray</c> operand too.</returns>
         /// <exception cref="ValueError">A length below 1, or an unknown <paramref name="norm"/> (the inverse
         ///     transforms' text).</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> out of range with <paramref name="n"/> omitted.</exception>

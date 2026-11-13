@@ -1,7 +1,7 @@
 ---
 name: oracle
 description: >-
-  NumSharp's differential-fuzz pipeline — the NumPy 2.4.2 "oracle" that proves every NDIter-backed
+  NumSharp's differential-fuzz pipeline — the NumPy 2.5.4 "oracle" that proves every NDIter-backed
   op is BIT-IDENTICAL to NumPy across the input space. Use this whenever you add or change an np.*
   op and need fuzz coverage, regenerate the committed corpus, wire an op into OpRegistry, understand
   or debug the FuzzMatrix gate, triage a divergence (bit-diff / MisalignedRegistry / OpenBugs), or
@@ -16,7 +16,7 @@ description: >-
 
 ## Mental model (why this exists)
 
-NumPy 2.4.2 is the **oracle**. Python generates a **committed, bytes-exact corpus** of `(inputs → NumPy output)`
+NumPy 2.5.4 is the **oracle**. Python generates a **committed, bytes-exact corpus** of `(inputs → NumPy output)`
 cases; the C# harness rebuilds the exact operand bytes, runs NumSharp, and **bit-compares** against the recorded
 NumPy output. **No Python runs at test time or in CI** — the corpus is replayed. A green gate means NumSharp is
 byte-for-byte NumPy across every layout × dtype the corpus covers.
@@ -121,7 +121,7 @@ is in **`references/add-op.md`** — read it when adding an op. In brief:
 3. **Add the matching case** to `OpRegistry.cs` — `case "<opname>": return np.<op>(ops[0], ...);` — reading params
    with `p["k"].GetInt32()` / `p["trim"].GetString()` / `ParseIntArray(p["axes"])`. Convention: `"axis"` (scalar int)
    vs `"axes"` (int[]) selects the overload.
-4. **Regenerate** the corpus (needs `numpy==2.4.2`): `python test/oracle/gen_oracle.py <mode>`.
+4. **Regenerate** the corpus (needs `numpy==2.5.4`): `python test/oracle/gen_oracle.py <mode>`.
 5. **Build** (the csproj glob copies the corpus to test output) **and run** the tier: `dotnet build` then
    `dotnet test --no-build -f net10.0 --filter "FullyQualifiedName~FuzzCorpusTests.<Tier>"`.
 6. **Triage** any red (see below). Char coverage is woven automatically via `char_tier(<mode>)` — no extra wiring.
@@ -139,8 +139,11 @@ is in **`references/add-op.md`** — read it when adding an op. In brief:
 
 - **Public-surface completeness is gated.** `OracleSurfaceCoverageTests` reflects `np`/`np.linalg`/
   `np.fft`/`np.random` and fails on a public method with no corpus key or explicit classification.
-- **Pin `numpy==2.4.2`.** A different NumPy version can shift bytes and make the committed corpus wrong. Verify
-  `python -c "import numpy; print(numpy.__version__)"` before regenerating.
+- **Pin `numpy==2.5.4`.** A different NumPy version can shift bytes and make the committed corpus wrong. The version
+  is written once, in `numpy-version.txt` at the repository root; every generator imports `test/oracle/numpy_pin.py`,
+  which exits unless the imported NumPy is that release (so run the generators WITHOUT `python -I`: isolated mode
+  drops the script's folder from `sys.path` and the import fails). Bumping NumPy is one edit of that file, then a full
+  regeneration (`references/regenerate.md`).
 - **The corpus diff is huge but harmless.** Case `id`s carry a global running counter (`{op}/{layout}/{dtype}/{n}`),
   so adding one job renumbers every following id. Expect a large `git diff` on `*.jsonl` — it's renumbering, not
   semantic churn.

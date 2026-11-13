@@ -4,9 +4,9 @@ using NumSharp.Tests.Utilities;
 namespace NumSharp.Tests.LinearAlgebra
 {
     /// <summary>
-    ///     <c>np.cross</c> (main namespace) — every expectation probed against NumPy 2.4.2. Distinct
-    ///     from <c>np.linalg.cross</c> (3-vectors only, single axis): this one takes the 2-vector
-    ///     forms and separate <c>axisa</c>/<c>axisb</c>/<c>axisc</c>.
+    ///     <c>np.cross</c> (main namespace) — every expectation probed against NumPy 2.5.4. Its
+    ///     Array-API twin <c>np.linalg.cross</c> is this function with one <c>axis</c>; both take
+    ///     3-vectors only since NumPy 2.5 (the 2-vector forms deprecated in 2.0 now raise).
     /// </summary>
     [TestClass]
     public class np_cross_test
@@ -19,23 +19,20 @@ namespace NumSharp.Tests.LinearAlgebra
             np.cross(Ints(1, 2, 3), Ints(4, 5, 6)).Should().BeOfValues(-3, 6, -3).And.BeShaped(3);
         }
 
+        /// <summary>
+        ///     NumPy 2.5 expired the 2-vector forms (a missing third component read as zero, a scalar z-component for two
+        ///     2-vectors): any vector length but 3 raises, the lengths read after the axis move. NumPy 2.4 computed
+        ///     <c>[12, -6, -3]</c>, <c>[-15, 12, -3]</c> and <c>-3</c> for these three calls.
+        /// </summary>
         [TestMethod]
-        public void Cross_TwoByThree_MissingComponentIsZero()
+        public void Cross_TwoComponentVectors_RaiseSinceNumPy25()
         {
-            np.cross(Ints(1, 2), Ints(4, 5, 6)).Should().BeOfValues(12, -6, -3).And.BeShaped(3);
-        }
-
-        [TestMethod]
-        public void Cross_ThreeByTwo_MissingComponentIsZero()
-        {
-            np.cross(Ints(1, 2, 3), Ints(4, 5)).Should().BeOfValues(-15, 12, -3).And.BeShaped(3);
-        }
-
-        [TestMethod]
-        public void Cross_TwoByTwo_ReturnsScalarZComponent()
-        {
-            // both 2-D vectors -> the scalar z-component, shape ().
-            np.cross(Ints(1, 2), Ints(4, 5)).Should().BeOfValues(-3).And.BeShaped();
+            new Action(() => np.cross(Ints(1, 2), Ints(4, 5, 6))).Should().Throw<ValueError>().WithMessage(
+                "Both input arrays must be (arrays of) 3-dimensional vectors, but they are 2 and 3 dimensional instead.");
+            new Action(() => np.cross(Ints(1, 2, 3), Ints(4, 5))).Should().Throw<ValueError>().WithMessage(
+                "Both input arrays must be (arrays of) 3-dimensional vectors, but they are 3 and 2 dimensional instead.");
+            new Action(() => np.cross(Ints(1, 2), Ints(4, 5))).Should().Throw<ValueError>().WithMessage(
+                "Both input arrays must be (arrays of) 3-dimensional vectors, but they are 2 and 2 dimensional instead.");
         }
 
         [TestMethod]
@@ -112,8 +109,19 @@ namespace NumSharp.Tests.LinearAlgebra
         [TestMethod]
         public void Cross_BadVectorLength_Raises()
         {
-            new Action(() => np.cross(Ints(1, 2, 3, 4), Ints(1, 2, 3)))
-                .Should().Throw<ValueError>().WithMessage("incompatible dimensions for cross product*");
+            new Action(() => np.cross(Ints(1, 2, 3, 4), Ints(1, 2, 3))).Should().Throw<ValueError>().WithMessage(
+                "Both input arrays must be (arrays of) 3-dimensional vectors, but they are 4 and 3 dimensional instead.");
+        }
+
+        /// <summary>
+        ///     <c>axisc</c> is checked against the broadcast leading shape plus the vector axis for every call now (NumPy 2.4
+        ///     skipped it for two 2-vectors, whose result had no vector axis).
+        /// </summary>
+        [TestMethod]
+        public void Cross_AxiscOutOfBounds_RaisesWithPrefix()
+        {
+            new Action(() => np.cross(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 3)), axisc: 3))
+                .Should().Throw<AxisError>().WithMessage("axisc: axis 3 is out of bounds for array of dimension 2*");
         }
 
         [TestMethod]

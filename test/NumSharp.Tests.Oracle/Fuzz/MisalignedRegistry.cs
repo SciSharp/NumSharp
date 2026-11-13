@@ -553,8 +553,11 @@ namespace NumSharp.Tests.Fuzz
             // radix argsort is STABLE. Excused ONLY when the two index vectors are provably
             // equivalent sorts of the same 1-D operand — element-for-element the indexed values
             // compare IEEE-equal — so a genuinely wrong ordering still fails. The main sort tier
-            // generates distinct values on purpose and never reaches this branch.
+            // generates distinct values on purpose and never reaches this branch. NOT for a
+            // descending case (NumPy 2.5's descending=True): NumSharp reproduces NumPy's descending
+            // introsort permutation exactly, ties included, so its tie order is held bit-exact.
             if (kind == DivergenceKind.Value && c.Op == "argsort" && expected != null && actual != null
+                && !(c.Params?.ContainsKey("descending") ?? false)
                 && c.Operands.Length == 1 && c.Operands[0].Shape.Length == 1
                 && ArgsortPermutationsEquivalent(c.Operands[0], expected, actual))
                 return "argsort tie order under NumPy's unstable default introsort (equivalent permutation verified; NumSharp's radix argsort is stable)";
@@ -1350,7 +1353,7 @@ namespace NumSharp.Tests.Fuzz
 
             // (K12) A unary FLOAT-CLASSIFICATION PREDICATE (isnan / isinf / isfinite / signbit) into
             // a rank>=2 [..., ::2]-STRIDED bool `out`: NumSharp writes the CORRECT full overwrite,
-            // NumPy 2.4.2 does NOT. This is a NumPy BUG, not a NumSharp one (2026-09-18 audit):
+            // NumPy (2.4.2 and 2.5.4) does NOT. This is a NumPy BUG, not a NumSharp one (2026-09-18 audit, re-probed on 2.5.4):
             // np.isnan(x, out=view) leaks the view's PRIOR contents into the gap-strided slots its
             // buffered predicate loop (loops_unary_fp_le) fails to cover on write-back — so with a
             // non-zero prior the result != isnan(x). Probed exhaustively: the leak is confined to
@@ -1365,7 +1368,7 @@ namespace NumSharp.Tests.Fuzz
                 && c.Params != null && c.Params.TryGetValue("ufunc", out var ufEl)
                 && ufEl.GetString() is "isnan" or "isinf" or "isfinite" or "signbit")
                 return "unary float predicate into a rank>=2 skip-strided bool out=: NumSharp "
-                     + "overwrites correctly while NumPy 2.4.2 leaks the out's prior contents "
+                     + "overwrites correctly while NumPy (2.4.2 and 2.5.4) leaks the out's prior contents "
                      + "(its buffered predicate loop bug) — NumSharp is MORE correct [numpy bug]";
 
             // (K13) min/max family (maximum/minimum/fmax/fmin): the SIGN of a ±0 result is

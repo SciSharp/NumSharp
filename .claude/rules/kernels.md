@@ -117,7 +117,7 @@ commutative intrinsics, so NaN priority needs an explicit blend; AVX2 has no 16-
 
 When both operands of a float32/float64 add or multiply are NaN, the result is one operand's NaN, and the compiled loop
 decides which (x86 `addpd`/`mulpd` return their first source operand quieted; the operations are commutative, so the
-compiler picks the order). numpy 2.4.2 win-amd64 (MSVC 19.44):
+compiler picks the order). numpy 2.5.4 win-amd64 (MSVC 19.44, as 2.4.2):
 - add and multiply keep the SECOND operand's NaN on contiguous, strided, reversed, `out=`, `where=` and transposed
   operands, buffered 2-D broadcasts, and 0-d × 0-d;
 - except the AVX2 scalar-broadcast SIMD loop (one input of stride 0, the other input and the out contiguous, longer

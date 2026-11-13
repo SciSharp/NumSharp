@@ -17,8 +17,8 @@ Pythons, and they must not share site-packages:
 
 Each environment is a stdlib `venv` built from the interpreter that RUNS this script, at
 <repo>/.venvs/<name>-py<major><minor>/, so one machine holds the same environment for several
-Pythons side by side: run the script once per interpreter (e.g. `py -3.11 make_env.py parity` and
-`py -3.12 make_env.py parity` on Windows, `python3.11 ...` / `python3.12 ...` elsewhere). Progress
+Pythons side by side: run the script once per interpreter (e.g. `py -3.12 make_env.py parity` and
+`py -3.13 make_env.py parity` on Windows, `python3.12 ...` / `python3.13 ...` elsewhere). Progress
 goes to stderr; stdout carries exactly one line, the environment's interpreter path, so a caller
 can capture it. Point a test run at an environment with NUMSHARP_PYTHONNET_PYTHON (PythonSession
 treats that path as binding and embeds the venv, not its base install):
@@ -67,10 +67,10 @@ ENVIRONMENTS = {
 }
 
 #: The CPython range an environment may be built on. The floor is numpy's (the pinned release
-#: publishes cp311+ wheels only); the ceiling is pythonnet 3.0.5's, which the interop suite pins
-#: and which refuses to drive anything newer. Building outside it would only fail later, and less
-#: legibly, when PythonSession rejects the interpreter.
-MIN_PYTHON = (3, 11)
+#: publishes cp312+ wheels only: NumPy 2.5 dropped 3.11); the ceiling is pythonnet 3.0.5's, which
+#: the interop suite pins and which refuses to drive anything newer. Building outside it would only
+#: fail later, and less legibly, when PythonSession rejects the interpreter.
+MIN_PYTHON = (3, 12)
 MAX_PYTHON = (3, 13)
 
 #: numpy's macOS wheels come in two BLAS flavours: macosx_14_0_* link Apple Accelerate, the older
@@ -103,7 +103,7 @@ def run(command):
 def read_manifest():
     """Read the numpy and OpenBLAS versions the byte-parity tests are pinned to.
 
-    :returns: ``(numpy_version, openblas_version)``, e.g. ``("2.4.2", "0.3.31.dev")``.
+    :returns: ``(numpy_version, openblas_version)``, e.g. ``("2.5.4", "0.3.34.106.0")``.
     :raises SystemExit: when the manifest is missing or lacks either field; every environment
         depends on that pin, so there is nothing sensible to fall back to.
     """
@@ -148,8 +148,8 @@ def create_venv(env_dir, recreate):
         run([sys.executable, "-m", "venv", env_dir])
         return python
 
-    # An existing venv must belong to the same minor Python: `.venvs/parity-py312` built by 3.11
-    # would be a lie in its own name, and pip would install cp311 wheels into it.
+    # An existing venv must belong to the same minor Python: `.venvs/parity-py312` built by 3.13
+    # would be a lie in its own name, and pip would install cp313 wheels into it.
     probe = subprocess.run([str(python), "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
                            capture_output=True, text=True)
     if probe.returncode != 0 or probe.stdout.split() != [str(sys.version_info[0]), str(sys.version_info[1])]:

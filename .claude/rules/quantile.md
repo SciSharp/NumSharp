@@ -10,7 +10,7 @@ paths:
 
 # The quantile family
 
-`np.quantile` / `np.percentile` / `np.median` and their nan forms run NumPy 2.4.2's statements: `_ureduce`
+`np.quantile` / `np.percentile` / `np.median` and their nan forms run NumPy 2.5.4's statements: `_ureduce`
 (`Backends/Default/Statistics/Default.Quantile.UReduce.cs`), `_quantile` and its helpers
 (`Default.Quantile{,.Functions,.Median}.cs`), byte for byte for every dtype; text data: `strings-compute.md`.
 
@@ -81,10 +81,10 @@ one builder per precision (`DirectILKernelGenerator.QuantilePlan`, cached per dt
 ## `weights=`
 
 `NDArray weights = null` on all of `np.quantile` / `np.percentile` / `np.nanquantile` / `np.nanpercentile` runs NumPy
-2.4.2's weighted branch (`inverted_cdf` only) for every dtype, text included (`Statistics/QuantileWeighted.cs`):
+2.5.4's weighted branch (`inverted_cdf` only) for every dtype, text included (`Statistics/QuantileWeighted.cs`):
 - NumPy's check order and texts (the method, the axis with argname `axis`, `_weights_are_valid`, `np.any(weights < 0)`),
   `_ureduce` merging data AND weights, argsort + gathers + `cumsum / last` + the -1 rule + searchsorted-left, NaN slices,
-  the nan forms' `_nanquantile_1d` per position (NumPy 2.4.2's own IndexError for reduced-shape weights over a kept axis
+  the nan forms' `_nanquantile_1d` per position (NumPy 2.5.4's own IndexError for reduced-shape weights over a kept axis
   longer than 1, reproduced).
 - Routes: one line never gathers the whole sorted data (the last element and the picks go through the argsort) and, for
   a float64 search, divides only the cumulative sums its bisection probes (`SearchLazily`; float16 / float32 `q` cast the

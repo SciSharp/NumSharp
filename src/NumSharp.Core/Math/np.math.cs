@@ -159,7 +159,7 @@ namespace NumSharp
         ///     convolve/correlate mode</c> when its first letter names a mode, else <c>mode must be one of 'valid', 'same', or
         ///     'full' (got 'x')</c> with the argument in Python's <c>repr</c>), <c>object too deep for desired array</c> for
         ///     an operand of two or more dimensions (a <c>numpy.matrix</c> operand included, as in NumPy), or — for a
-        ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c>.</exception>
+        ///     fixed-width string operand, after every check above — <c>function not available for this data type</c>.</exception>
         /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate (CPython's UTF-8 encoding
         ///     error, raised before the mode is read).</exception>
         /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not

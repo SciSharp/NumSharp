@@ -139,8 +139,9 @@ namespace NumSharp.Tests.Interop
                     return ('err', ','.join(c.__name__ for c in type(e).__mro__), str(e))
 
             def _eager(r):
-                # numpy's bytes -> StringDType cast copies bytes unchecked and raises UnicodeDecodeError only when an
-                # element is read; reading every element (C order) moves that error to the cast, where NumSharp raises.
+                # numpy 2.4's bytes -> StringDType cast copied bytes unchecked and raised UnicodeDecodeError only when an
+                # element was read; reading every element (C order) moved that error to the cast. numpy 2.5 raises its
+                # TypeError at the cast itself, as NumSharp does, so under the 2.5.4 pin the read is a no-op.
                 if r.dtype.kind == 'T': r.tolist()
                 return r
 

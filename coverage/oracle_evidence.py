@@ -2,10 +2,10 @@
 
 The coverage artifact answers "does NumSharp expose this NumPy API?" from the compiled surface alone.
 That is availability, not parity. Parity is what the committed oracle corpora prove: every contract is
-real NumPy 2.4.2 output that a CI test replays against NumSharp and requires to be bit-exact, or a
-documented, registry-excused divergence (never a silent one). This module turns those corpora into
-per-API evidence, so the dashboard can say "available AND oracle-verified" instead of stopping at
-"available".
+real output of the pinned NumPy (``numpy-version.txt``) that a CI test replays against NumSharp and
+requires to be bit-exact, or a documented, registry-excused divergence (never a silent one). This
+module turns those corpora into per-API evidence, so the dashboard can say "available AND
+oracle-verified" instead of stopping at "available".
 
 Five oracle sources are joined, each replayed by its own test:
 
@@ -652,10 +652,9 @@ def _layout_variant(case: Mapping[str, Any]) -> str:
 
     ``reduce`` keys are named by their leading reduction (``sum_flat`` -> ``reduce:sum``,
     ``percentile50`` -> ``reduce:percentile``); ``copyk`` keys by their trailing verb
-    (``t3d_astype`` -> ``copyk:astype``); ``ufunc`` keys by their leading case name, the source recipe after the last
-    underscore (``add0d_c3`` -> ``ufunc:add0d``, ``around0_bcx`` -> ``ufunc:around0``): the family exercises some 30
-    functions (gen_layout_parity_oracle.py's ``UF`` / ``UF1`` tables), each mapped to its own rows; every other family
-    is its own key.
+    (``t3d_astype`` -> ``copyk:astype``); ``ufunc`` keys by the generator's call name before the source
+    layout (``add0d_c3`` -> ``ufunc:add0d``, ``mediank1_flipf3`` -> ``ufunc:mediank1``), because the family
+    gates some thirty functions, each through its own map entry; every other family is its own key.
 
     :param case: one parsed layout-oracle row.
     :returns: the variant string.
@@ -666,7 +665,9 @@ def _layout_variant(case: Mapping[str, Any]) -> str:
     if family == "copyk":
         return "copyk:" + case["key"].rsplit("_", 1)[1]
     if family == "ufunc":
-        return "ufunc:" + case["key"].rsplit("_", 1)[0]
+        # gen_layout_parity_oracle.py names a ufunc case f"{op}_{source}" (its UF / UF1 tables' keys, and
+        # around0 for the complex round); op names hold no underscore, source layouts may.
+        return "ufunc:" + case["key"].split("_", 1)[0]
     return family
 
 

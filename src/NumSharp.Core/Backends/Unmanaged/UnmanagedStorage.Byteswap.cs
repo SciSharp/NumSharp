@@ -34,13 +34,12 @@ namespace NumSharp.Backends
         //
         //   A NEP 55 StringDType ('T') element has NO byte order (its descriptor's
         //   byteorder is '|': a cell holds UTF-8 text, an arena offset or a heap
-        //   pointer that belong to its buffer's allocator). NumPy 2.4.2 CRASHES the
-        //   process here (its copyswapn for StringDType is not usable), so NumSharp
-        //   takes the owner's decision D14 (docs/plans/strings-phase1-completion.md):
-        //   the swap is the identity, so inplace=True leaves the cells alone and
-        //   returns self (after NumPy's writeable check), and inplace=False returns
-        //   PyArray_NewCopy(self, NPY_ANYORDER), the step NumPy runs before it crashes.
-        //   Swapping a cell's bytes would corrupt its offset or pointer.
+        //   pointer that belong to its buffer's allocator), and NumPy leaves its
+        //   copyswapn slot NULL. NumPy 2.5 tests the slot (raise_missing_copyswap):
+        //   "dtype StringDType() does not implement copyswap", after an in-place
+        //   call's writeable check and before any copy, for an empty array too.
+        //   NumPy 2.4 called the NULL slot and CRASHED, and NumSharp answered the
+        //   identity swap (the owner's decision D14) for a call NumPy gave no answer to.
         //
         //   inplace=False (default): return a fresh COPY (never shares memory) in
         //     NumPy's PyArray_NewCopy(ANYORDER) layout — F iff the source is
@@ -61,15 +60,20 @@ namespace NumSharp.Backends
         /// <returns><paramref name="a"/> when <paramref name="inplace"/>, else the copy.</returns>
         /// <exception cref="ValueError"><paramref name="inplace"/> on a read-only array (<c>array to be byte-swapped is
         ///     read-only</c>).</exception>
+        /// <exception cref="TypeError">A class without a usable <c>copyswapn</c> (<c>StringDType</c>: <c>dtype StringDType()
+        ///     does not implement copyswap</c>), whatever the array's size, after the in-place writeable check.</exception>
         internal static NDArray Byteswap(NDArray a, bool inplace)
         {
             DType descr = a.dtype;
+            // NumPy: `if (inplace && PyArray_FailUnlessWriteable(self, "array to be byte-swapped") < 0)`, then
+            // `if (copyswapn == NULL && raise_missing_copyswap(descr, 1) < 0)` — both before any element is read or copied.
+            if (inplace && !a.Shape.IsWriteable)
+                throw new ValueError("array to be byte-swapped is read-only");
+            if (!descr.Meta.HasCopyswapn)
+                throw DTypeMeta.MissingCopyswap(descr);
             if (inplace)
             {
-                // NumPy: PyArray_FailUnlessWriteable(self, "array to be byte-swapped"), then copyswapn over the array (a
-                // StringDType's is the identity: the owner's decision D14).
-                if (!a.Shape.IsWriteable)
-                    throw new ValueError("array to be byte-swapped is read-only");
+                // copyswapn over the array, in place.
                 if (a.size > 0)
                     SwapInPlace(a, descr);
                 return a;
@@ -77,8 +81,8 @@ namespace NumSharp.Backends
 
             // NumPy: PyArray_NewCopy(self, NPY_ANYORDER), then the copy swapped in place - a copy pass THEN a swap pass. A
             // C-contiguous source whose items hold no references fuses both into ONE pass: copyswapn copies and swaps
-            // straight into an uninitialized C-contiguous result, halving the memory traffic. (A StringDType copy
-            // duplicates its strings through the allocator: the general route below.)
+            // straight into an uninitialized C-contiguous result, halving the memory traffic. (StringDType, the class
+            // that holds references, was refused above.)
             if (a.Shape.IsContiguous && a.size > 0 && !descr.Meta.HasReferences)
             {
                 // The descriptor allocates: a string's width lives on it, not on the storage lane.
@@ -93,7 +97,7 @@ namespace NumSharp.Backends
                 return result;
             }
 
-            // F-contiguous-and-not-C / strided / broadcast / a StringDType: copy in NumPy's ANYORDER layout (F only for an
+            // F-contiguous-and-not-C / strided / broadcast: copy in NumPy's ANYORDER layout (F only for an
             // F-contiguous-and-not-C source, via Shape.Order), then swap the copy in place.
             NDArray copy = a.copy(a.Shape.Order);
             if (copy.size > 0)

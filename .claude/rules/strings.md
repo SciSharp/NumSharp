@@ -12,7 +12,7 @@ paths:
 
 # The string dtypes: storage, conversion, movement
 
-NumPy's three string classes, byte-identical to NumPy 2.4.2: `bytes_` (`S`, one byte a character), `str_` (`U`, one
+NumPy's three string classes, byte-identical to NumPy 2.5.4: `bytes_` (`S`, one byte a character), `str_` (`U`, one
 native UCS-4 code point a character) and NEP 55's `StringDType` (`T`, UTF-8 text in 16-byte cells). Computing on text:
 `strings-compute.md` (comparisons, arithmetic, reductions, ordering) and `strings-methods.md` (the named `np.strings`
 functions); numpy.char and chararray: `char-chararray.md`; numpy.ma over text: `masked-arrays.md`; the classes in the
@@ -167,12 +167,14 @@ block owns the allocator, so views keep it alive. Rules a new route keeps:
 - TRAPS: a short text stored over a freed arena cell keeps the old offset's high bytes past its size
   (`NpyString_newemptysize` writes only byte 15), so every reader masks; `pack_empty` leaves a never-written cell all
   zero; `string_to_bool` reads `default_string.size == 0` for a string NA (`na_object=''` is True).
-- NumPy 2.4.2 defects on `T` that NumSharp does not reproduce (pinned by unit tests, kept out of the corpus):
-  `np.place` and `ndarray.byteswap()` segfault (NumSharp's byteswap returns a copy, or the array itself with
-  `inplace: true`: a cell has no byte order), `np.choose` / `np.put` / `np.putmask` copy cells raw, `bytes → T` skips
-  UTF-8 validation, `T → complex` puts the real part into the imaginary part, a short cell copied onto itself
-  (`a[...] = a[:1]`) becomes `''`, and a buffered `T` input with an allocated `T` output raises MemoryError in
-  `np.nditer` (NumSharp returns the values).
+- NumPy 2.5.4 defects on `T` that NumSharp does not reproduce (pinned by unit tests, kept out of the corpus): a short
+  cell copied onto itself (`a[...] = a[:1]`) becomes `''`; `np.loadtxt` keeps the `StringDType` instance it is given,
+  so a second call with it returns an array NumPy cannot read. NumPy 2.5 fixed what 2.4.2 got wrong, and the corpus
+  records those answers (each guarded by `gen_strings_oracle._NUMPY_2_5`): `np.place` and `ndarray.byteswap()` no longer
+  segfault (byteswap raises NumPy's copyswap `TypeError`, as NumSharp does), `np.choose` / `np.put` / `np.putmask` copy
+  each text (2.4.2 copied cells raw), `bytes → T` validates UTF-8 (`TypeError`), `T → complex` parses both parts, and a
+  buffered `T` input with an allocated `T` output answers. Re-check such a fix with a LOOP of the call before trusting
+  it: a raw copy returns the right values and corrupts the heap, which only a later allocation shows.
 
 ## Text ↔ number
 

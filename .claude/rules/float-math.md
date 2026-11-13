@@ -94,7 +94,7 @@ only AFTER its operand and length checks, as NumPy's `arr_interp` / `arr_interp_
 (+ the Array-API aliases `asinh`/`acosh`/`atanh`, the same ufuncs.) They follow the `arcsin`/`sinh` seam (`ASinh`/
 `ACosh`/`ATanh` → `ExecuteUnaryOp` → `UnaryOp.{Asinh,Acosh,Atanh}`) with the `f(x, out=, where=, dtype=)` surface plus
 positional-dtype convenience overloads.
-- Real float32/float64 are byte-identical to NumPy 2.4.2: `Math.Asinh/Acosh/Atanh` and the `MathF` twins call the same
+- Real float32/float64 are byte-identical to NumPy 2.5.4: `Math.Asinh/Acosh/Atanh` and the `MathF` twins call the same
   MSVC `ucrtbase` CRT as `npy_asinh/acosh/atanh` (specials, ±inf, NaN, subnormals and ±0 included).
 - These are the one arc family NumPy has no active SIMD kernel for on win-amd64 (its SVML `asinh`/`acosh`/`atanh` are
   AVX-512/Linux-gated), so byte parity requires the scalar CRT on both sides, and parity is the speed ceiling. The kernel
@@ -113,7 +113,7 @@ positional-dtype convenience overloads.
 
 ## `np.sinc`
 
-The normalized sinc `sin(pi*x)/(pi*x)`, a port of NumPy 2.4.2's `numpy/lib/_function_base_impl.py::sinc`; a plain
+The normalized sinc `sin(pi*x)/(pi*x)`, a port of NumPy 2.5.4's `numpy/lib/_function_base_impl.py::sinc`; a plain
 function with no `out=`/`where=`/`dtype=`: the facade `Math/np.sinc.cs` calls `TensorEngine.Sinc` (DefaultEngine's fused
 pass in `Backends/Default/Math/Default.Sinc.cs`). NumPy's composition is `y = pi*x; eps = finfo(y.dtype).eps if y.dtype.kind
 == 'f' else 1e-20; y = where(y != 0, y, eps); sin(y)/y`.
@@ -133,7 +133,7 @@ pass in `Backends/Default/Math/Default.Sinc.cs`). NumPy's composition is `y = pi
 ## float32 kernels ported from NumPy
 
 `exp`, `log`, `sin`, `cos` and `tanh` at float32 are bit-exact with NumPy, because `Utilities/NDFloatMath.cs` ports the
-kernels NumPy 2.4.2 runs instead of calling the platform libm: `simd_exp_FLOAT` and `simd_log_FLOAT`
+kernels NumPy 2.5.4 runs instead of calling the platform libm: `simd_exp_FLOAT` and `simd_log_FLOAT`
 (`loops_exponent_log.dispatch.c.src`, the `SIMD_AVX2_FMA3` instantiation; on Windows the AVX-512 variant is
 `!defined(_MSC_VER)`-gated and never compiled) and `simd_sincos_f32` (`loops_trigonometric.dispatch.cpp`,
 `NPY_SIMD_FMA3`). `rad2deg`/`deg2rad` form their constant at the operand's precision, as NumPy's `RAD2DEG`/`DEG2RAD`
@@ -163,9 +163,9 @@ sine polynomial), so `MathF.Exp`/`Log`/`Sin`/`Cos` differ from NumPy on many inp
   for a NaN argument); `sin`/`cos` hand arguments past their Cody-Waite limits (117435.992 and 71476.0625) to the
   platform libm, as NumPy does, so those inputs are libm-dependent by construction. NumPy also raises FP status flags
   (`RuntimeWarning`), which NumSharp does not model.
-- Host pin: each kernel's quadrant uses a FUSED multiply-add, because MSVC 19.44 (the numpy==2.4.2 win-amd64 wheel's
-  compiler) contracts NumPy's separate multiply and add. At `x = 0xc26d0e6c`, `x·log2 e` lands on the exact tie `-85.5`,
-  and the two spellings round `k` to -85 and -86.
+- Host pin: each kernel's quadrant uses a FUSED multiply-add, because MSVC 19.44 (the numpy==2.5.4 win-amd64 wheel's
+  compiler, as 2.4.2's) contracts NumPy's separate multiply and add. At `x = 0xc26d0e6c`, `x·log2 e` lands on the exact
+  tie `-85.5`, and the two spellings round `k` to -85 and -86.
 - `Utilities/NDFloatMath.Simd.cs` carries `Vector{128,256,512}<float>` overloads (each algorithm is elementwise, so lane
   `i` is bit-identical to the scalar call), gated by `DirectILKernelGenerator.NumPyFloatKernelSimdAvailable` on hardware
   FMA as NumPy gates its own; without FMA the scalar entry point runs, same bits. The rarely taken subnormal branches stay
@@ -174,7 +174,7 @@ sine polynomial), so `MathF.Exp`/`Log`/`Sin`/`Cos` differ from NumPy on many inp
 
 ## float32 `exp2`
 
-The numpy 2.4.2 win-amd64 wheel has no vector exp2 (its SVML `simd_exp2` is gated on `NPY_HAVE_AVX512_SKX &&
+The numpy 2.5.4 win-amd64 wheel has no vector exp2 (its SVML `simd_exp2` is gated on `NPY_HAVE_AVX512_SKX &&
 NPY_CAN_LINK_SVML`), so Windows runs the scalar MSVC CRT `exp2f`, and no reproducible NumPy kernel exists to match; a
 pure-float polynomial cannot reach the CRT's near-correctly-rounded result. `NDFloatMath.Exp2` computes
 `2^x = 2^n · 2^r` (`n = rint(x)`, `r ∈ [-0.5, 0.5]`) with `2^r` evaluated in DOUBLE (a degree-8 minimax, 2^-37.7
@@ -250,7 +250,7 @@ excuse).
 
 The complex128 unary ufuncs in `Utilities/NDComplexMath.cs` (sqrt, log, log2, log10, log1p, exp, exp2, expm1, square,
 reciprocal, sin, cos, tan, sinh, cosh, tanh, arcsin, arccos, arctan, arcsinh, arccosh, arctanh, conjugate, negative,
-positive) match NumPy 2.4.2 bit for bit including the NaN SIGN. win-amd64 NumPy runs MSVC UCRT's complex functions, whose
+positive) match NumPy 2.5.4 bit for bit including the NaN SIGN. win-amd64 NumPy runs MSVC UCRT's complex functions, whose
 "produce a NaN" slots emit the positive `NPY_NAN` (`0x7ff8…`), while .NET's `double.NaN` is `0xfff8…`. Per path:
 - a positive-NaN constant where NumPy canonicalises;
 - `hypot`/`cexp`/`ctanh` propagate the input NaN's sign;

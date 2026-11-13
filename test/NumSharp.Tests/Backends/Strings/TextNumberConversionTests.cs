@@ -673,15 +673,18 @@ namespace NumSharp.Tests.Backends.Strings
             np.cov(U("1", "2", "4"), dtype: np.float64).GetDouble().Should().Be(2.333333333333333);   // NumPy's bits (probed)
         }
 
-        /// <summary>numpy.ma's astype converts the stored fill (at allocation) before the data cast; a masked fill value
-        /// prints with its mask in the conversion error.</summary>
+        /// <summary>numpy.ma's astype converts the stored fill (at allocation) before the data cast, and since NumPy 2.5.4 a
+        /// fill that does not convert to the new dtype is DROPPED (<c>_check_fill_value_or_default</c>) instead of raising,
+        /// so the data cast's own error answers; a fill value given explicitly is still validated, and a masked one
+        /// prints with its mask in that error.</summary>
         [TestMethod]
-        public void MaskedAstype_ConvertsTheFillBeforeTheData()
+        public void MaskedAstype_DropsAnUnconvertibleFill_TheDataCastAnswers()
         {
-            // __array_finalize__ runs at allocation, before the data cast: the fill's error wins.
+            // __array_finalize__ runs at allocation, before the data cast: 'zz' does not parse, so the fill is dropped and
+            // the data's 'ab' fails (NumPy 2.4 raised "Cannot convert fill_value zz to dtype float64" first).
             var m = np.ma.array(U("ab", "1", "2"), mask: new[] { false, true, false }, fill_value: "zz");
             Action fill = () => m.astype(np.float64);
-            fill.Should().Throw<TypeError>().WithMessage("Cannot convert fill_value zz to dtype float64");
+            fill.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('ab')");
             var m2 = np.ma.array(U("ab", "1", "2"), mask: new[] { false, true, false }, fill_value: "3");
             Action data = () => m2.astype(np.float64);
             data.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('ab')");

@@ -1,8 +1,8 @@
 # NumPy Strings vs. NumSharp — Compatibility Matrix
 
-> **Reference (target):** NumPy 2.4.2.
+> **Reference (target):** NumPy 2.5.4.
 > **NumSharp:** the `NPTypeCode.String` text lane with NumPy's `S`, `U` and `StringDType` descriptors, `np.strings`,
-> `np.@char`, `NDCharArray` and `NDListArray`. Every row marked ✅ is replayed against NumPy 2.4.2 by the string
+> `np.@char`, `NDCharArray` and `NDListArray`. Every row marked ✅ is replayed against NumPy 2.5.4 by the string
 > oracle (`test/NumSharp.Tests.Oracle/Strings/`, one corpus file per section, every case strict).
 > **Companion to:** [`NUMPY_STRING_TYPES.md`](./NUMPY_STRING_TYPES.md) (NumPy's full spec) · the user guide
 > [Strings, bytes and chararrays](../website-src/docs/fundamentals/strings-and-bytes.md) · tracks
@@ -10,7 +10,7 @@
 
 **Legend:** ✅ present & NumPy's behavior · 🟡 present with a documented difference · ❌ missing
 
-> Two corrections to the spec doc, found against NumPy 2.4.2 (NumSharp follows NumPy):
+> Two corrections to the spec doc, found against NumPy 2.5.4 (NumSharp follows NumPy):
 > 1. `np.dtype('c')` is **not** deprecated or raising: it returns `dtype('S1')`.
 > 2. `S == U` does **not** raise: `==` / `!=` return element-wise `False` / `True`; only the orderings (`<`, `>`) raise.
 
@@ -18,7 +18,7 @@
 
 ## A. Type system / dtypes
 
-| Capability | NumPy 2.4.2 | NumSharp | |
+| Capability | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | `bytes_` `'S'` | fixed-width, 1 B/char, NUL-padded | `np.dtype("S5")`: itemsize 5, kind `'S'`, the `NPTypeCode.String` lane | ✅ |
 | `str_` `'U'` | fixed-width, 4 B/char (UCS-4) | `np.dtype("U5")`: itemsize 20, native UCS-4; `>U` data is byte-swapped on read (`.npy`, pythonnet) | ✅ |
@@ -30,7 +30,7 @@
 
 ## B. Dtype parsing & properties
 
-| Capability | NumPy 2.4.2 | NumSharp | |
+| Capability | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | `dtype('S'/'S10'/'\|S10')` | `bytes_` | the same descriptors (`'S'` is the unsized `\|S0`) | ✅ |
 | `dtype('U'/'U10'/'<U10'/'>U10')` | `str_` (+ byte order) | the same; a non-native order is kept (`np.dtype(">U10").byteorder` is `'>'`) | ✅ |
@@ -42,7 +42,7 @@
 
 ## C. Scalars & type hierarchy
 
-| Capability | NumPy 2.4.2 | NumSharp | |
+| Capability | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | `np.bytes_` / `np.str_` scalar objects | yes | no NumPy scalar objects: an element is a C# `string` (`U`, `T`) or `byte[]` (`S`); a 0-d array is the array scalar | 🟡 |
 | `np.character` / `np.flexible` bases | yes | `NDScalarType` classes | ✅ |
@@ -50,7 +50,7 @@
 
 ## D. Array creation
 
-| Capability | NumPy 2.4.2 | NumSharp | |
+| Capability | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | `np.array([...], dtype='S'/'U'/'T')` | auto-size, truncate, NUL-pad | the same (`np.array(string[])` is `<U{longest}`) | ✅ |
 | from Python `b'...'` bytes | yes | `byte[]` values in an `object[]`, or `NDArray.Scalar(byte[])` | ✅ |
@@ -61,7 +61,7 @@
 
 ## E. Memory layout
 
-| Capability | NumPy 2.4.2 | NumSharp | |
+| Capability | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | Fixed-width NUL-padded buffer (`S`) | yes | the same bytes | ✅ |
 | UCS-4 + byte order (`U`) | yes | the same bytes (native order in memory) | ✅ |
@@ -69,7 +69,7 @@
 
 ## F. Casting / conversion
 
-| Capability | NumPy 2.4.2 | NumSharp | |
+| Capability | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | number → text (`'1'`, `'1.5'`, `'nan'`, `'inf'`) | the scalar's `str()` (`<U21` for int64) | the same text and widths | ✅ |
 | text → number (`'22'` → 22) | Python's `int()` / `float()` / `complex()` | the same parse and error texts | ✅ |
@@ -80,7 +80,7 @@
 
 ## G. Comparisons
 
-| Capability | NumPy 2.4.2 | NumSharp | |
+| Capability | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | `==` / `!=` element-wise on text | bool array | the same | ✅ |
 | `<`, `<=`, `>`, `>=` lexicographic | yes | the same (`T` with NumPy's `strncmp` order) | ✅ |
@@ -90,7 +90,7 @@
 
 ## H. String operations — `np.strings` & `np.char`
 
-| Family | NumPy 2.4.2 | NumSharp | |
+| Family | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | `add` (concatenation), `multiply` (repetition) | yes | over `S`, `U`, `T` | ✅ |
 | `str_len` (code points) | yes | the same | ✅ |
@@ -107,7 +107,7 @@
 
 ## I. Array functions with string support
 
-| Capability | NumPy 2.4.2 | NumSharp | |
+| Capability | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | `sort` / `argsort` / `partition` (lexicographic) | yes | NumPy's order of equal strings for every `kind` | ✅ |
 | `argmax` / `argmin` (lexicographic) | yes | the same | ✅ |
@@ -119,7 +119,7 @@
 
 ## J. File I/O & structured arrays
 
-| Capability | NumPy 2.4.2 | NumSharp | |
+| Capability | NumPy 2.5.4 | NumSharp | |
 |---|---|---|---|
 | `np.save` / `np.load` of a text array | `\|S` / `<U` raw, `StringDType` as a pickle | the same bytes; `StringDType` through NumPy's own pickle (`allow_pickle`) | ✅ |
 | `savez` / `.npz` | yes | the same | ✅ |

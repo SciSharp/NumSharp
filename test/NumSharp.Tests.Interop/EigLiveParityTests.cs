@@ -269,8 +269,22 @@ namespace NumSharp.Tests.Interop
         public void Eig_Float32_RealEigs_ByteExact_ComplexEigs_ValueMatch()
         {
             RequireLapack();
-            // float32 with REAL eigenvalues collapses to float32 on both sides — byte-exact.
-            AssertEigByteExact(np.diag(np.array(new float[] { 1, 2, 3 })), "eig float32 real eigs");
+            // float32 with REAL eigenvalues: NumPy 2.5's eig is always complex (gh-30411), so NumPy gives complex64 and
+            // NumSharp complex128 (no complex64) carrying the same float32-rounded components — up-cast NumPy's result
+            // and compare the bytes. NumPy 2.4 collapsed real eigenvalues to float32 on both sides.
+            var diag = np.diag(np.array(new float[] { 1, 2, 3 }));
+            var (wd, vd) = np.linalg.eig(diag);
+            using (wd)
+            using (vd)
+            using (Gil())
+            {
+                wd.typecode.Should().Be(NPTypeCode.Complex);
+                using PyObject pd = diag.ToNumpy();
+                using PyObject npWd = Python.np.with("np.linalg.eig(a)[0].astype('complex128')", ("a", pd));
+                using PyObject npVd = Python.np.with("np.linalg.eig(a)[1].astype('complex128')", ("a", pd));
+                ByteContract.AssertSameBytes(wd, npWd, "eig float32 real eigs (numpy complex64 up-cast to complex128) [w]");
+                ByteContract.AssertSameBytes(vd, npVd, "eig float32 real eigs (numpy complex64 up-cast to complex128) [v]");
+            }
 
             // float32 with COMPLEX eigenvalues: NumPy → complex64, NumSharp → complex128 (no complex64).
             // Up-cast NumPy's result and compare values (the one documented dtype divergence).

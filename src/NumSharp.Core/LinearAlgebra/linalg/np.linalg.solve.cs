@@ -53,7 +53,8 @@ namespace NumSharp
             /// </param>
             /// <returns>The solution, of NumPy's <c>oldshape = a.shape[-(a.ndim - b.ndim):]</c> (after the axis move): the
             ///     trailing <c>a.ndim - b.ndim</c> axes, or the WHOLE shape of <paramref name="a"/> when the two have as many
-            ///     axes. It owns its data (NumPy's <c>res.shape = oldshape</c>, not a reshape).
+            ///     axes. A view of the 1-D solution (NumPy 2.5's <c>res.reshape(oldshape)</c>: <c>owndata</c> False; NumPy
+            ///     2.4's in-place <c>res.shape = oldshape</c> returned an owning array).
             ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
             ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
             /// <remarks>

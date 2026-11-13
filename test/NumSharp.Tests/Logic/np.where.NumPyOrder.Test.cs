@@ -46,15 +46,33 @@ namespace NumSharp.Tests.Logic
             r.ToArray<Half>().Should().Equal((Half)1.5, (Half)7, (Half)1.5);
         }
 
-        /// <summary>A weak Python int takes the array's dtype and is cast into it unsafely, as NumPy's iterator casts it:
-        ///     np.where([True], 300, int8 array) is int8 44.</summary>
+        /// <summary>
+        ///     A weak Python int takes the array's dtype and is packed into it by the dtype's setitem (NumPy 2.5, gh-30803):
+        ///     a value that does not fit raises NumPy's OverflowError (NumPy 2.4 cast it unsafely, so
+        ///     <c>np.where([True], 300, int8 array)</c> was int8 44), before the operands are broadcast; one that fits is
+        ///     stored exactly.
+        /// </summary>
         [TestMethod]
-        public void WeakLiteral_WrapsIntoTheArrayDtype()
+        public void WeakLiteral_OutOfRange_RaisesOverflowError()
         {
-            // np.where(np.array([True]), 300, np.zeros(1, np.int8)) -> int8 [44]
-            var r = np.where(np.array(new[] { true }), 300, np.zeros(new Shape(1), np.int8));
+            // np.where(np.array([True]), 300, np.zeros(1, np.int8)) -> OverflowError: Python integer 300 out of bounds for int8
+            new Action(() => np.where(np.array(new[] { true }), 300, np.zeros(new Shape(1), np.int8)))
+                .Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
+            new Action(() => np.where(np.array(new[] { true }), np.zeros(new Shape(1), np.uint8), -1))
+                .Should().Throw<OverflowError>().WithMessage("Python integer -1 out of bounds for uint8");
+            // The pack precedes the iterator's broadcast check: (2,3) against (4,) still reports the overflow.
+            new Action(() => np.where(np.ones(new Shape(2, 3), np.@bool), 300, np.zeros(new Shape(4), np.int8)))
+                .Should().Throw<OverflowError>().WithMessage("Python integer 300 out of bounds for int8");
+
+            var r = np.where(np.array(new[] { true, false }), 100, np.zeros(new Shape(2), np.int8));
             r.dtype.Should().Be(np.int8);
-            r.ToArray<sbyte>().Should().Equal((sbyte)44);
+            r.ToArray<sbyte>().Should().Equal((sbyte)100, (sbyte)0);
+            // Two literals promote to the default int64, where both fit.
+            np.where(np.array(new[] { true, false }), 300, 5).ToArray<long>().Should().Equal(300L, 5L);
+            // A Python float has no range check: float32's setitem rounds 1e300 to inf (NumPy 2.5.4 as 2.4.2).
+            var f = np.where(np.array(new[] { true, false }), 1e300, np.zeros(new Shape(2), np.float32));
+            f.dtype.Should().Be(np.float32);
+            f.ToArray<float>().Should().Equal(float.PositiveInfinity, 0f);
         }
 
         /// <summary>A shape that does not broadcast is refused with NumPy's iterator text, every operand's shape listed and a

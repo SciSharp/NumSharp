@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 
 namespace NumSharp
@@ -135,7 +134,8 @@ namespace NumSharp
         /// <remarks>
         ///     The strings are NumPy's and describe NumPy's codes, including the ones NumSharp has no dtype for (<c>F</c>,
         ///     <c>V</c>, <c>O</c>). Read-only, where NumPy's is a plain dict: the table is shared process-wide, and a write
-        ///     would change every reader's answer.
+        ///     would change every reader's answer. A missing key raises NumPy's <see cref="KeyError"/> (<c>'x'</c>), as the
+        ///     dict does.
         /// </remarks>
         public static IReadOnlyDictionary<string, string> typecodes => ScalarTypeTables.TypeCodes;
 
@@ -156,7 +156,7 @@ namespace NumSharp
         ///     </para>
         ///     <para>
         ///     The string names map to the UNSIZED string descriptors, the objects <see cref="bytes_"/> and
-        ///     <see cref="str_"/> are (<c>"bytes_"</c>, <c>"bytes"</c>, <c>"a"</c> to <c>dtype('S')</c>; <c>"str_"</c>,
+        ///     <see cref="str_"/> are (<c>"bytes_"</c>, <c>"bytes"</c> to <c>dtype('S')</c>; <c>"str_"</c>,
         ///     <c>"str"</c>, <c>"unicode"</c> to <c>dtype('&lt;U')</c>), as NumPy's <c>np.dtype(np.sctypeDict["str"])</c> is.
         ///     </para>
         ///     <para>
@@ -167,7 +167,8 @@ namespace NumSharp
         ///     equal to but not the class of <see cref="float64"/>; <c>"intc"</c> is <see cref="intc"/>, its own class on
         ///     Windows). <c>"datetime64"</c> / <c>"timedelta64"</c> map to the generic-unit descriptors
         ///     (<c>dtype('&lt;M8')</c>, the object <c>np.dtype("M")</c> returns). Read-only, for the reason
-        ///     <see cref="typecodes"/> is.
+        ///     <see cref="typecodes"/> is; a missing key — NumPy 2.5's removed <c>'a'</c> included — raises NumPy's
+        ///     <see cref="KeyError"/> (<c>'a'</c>).
         ///     </para>
         /// </remarks>
         public static IReadOnlyDictionary<string, DType> sctypeDict => ScalarTypeTables.SctypeDict;
@@ -203,8 +204,11 @@ namespace NumSharp
         /// </summary>
         private static class ScalarTypeTables
         {
-            /// <summary>NumPy's <c>numpy._core.numerictypes.typecodes</c>, verbatim and in NumPy's order.</summary>
-            internal static readonly IReadOnlyDictionary<string, string> TypeCodes = new ReadOnlyDictionary<string, string>(
+            /// <summary>
+            ///     NumPy's <c>numpy._core.numerictypes.typecodes</c>, verbatim and in NumPy's order; a missing key raises
+            ///     Python's <see cref="KeyError"/> (<see cref="PyReadOnlyDict{TValue}"/>).
+            /// </summary>
+            internal static readonly IReadOnlyDictionary<string, string> TypeCodes = new PyReadOnlyDict<string>(
                 new Dictionary<string, string>
                 {
                     ["Character"] = "c",
@@ -259,7 +263,7 @@ namespace NumSharp
                 keys.AddRange(new[]
                 {
                     "intp", "uintp", "double", "cdouble", "single", "csingle", "half", "bool_", "int_", "uint", "float",
-                    "complex", "object", "bytes", "a", "int", "str", "unicode",
+                    "complex", "object", "bytes", "int", "str", "unicode",
                 });
                 return keys.ToArray();
             }
@@ -326,7 +330,9 @@ namespace NumSharp
                 }
                 // A name with an entry but missing from the key list would vanish silently: the two lists must agree.
                 System.Diagnostics.Debug.Assert(ordered.Count == byName.Count, "every sctypeDict entry must be in NumPySctypeDictKeys");
-                return new ReadOnlyDictionary<string, DType>(ordered);
+                // A Python dict: a missing key (a removed alias such as NumPy 2.5's 'a', or a class NumSharp lacks) raises
+                // NumPy's KeyError with the key's repr, not .NET's KeyNotFoundException.
+                return new PyReadOnlyDict<DType>(ordered);
             }
 
             /// <summary>
@@ -389,7 +395,6 @@ namespace NumSharp
                     ["float"] = DType.Double,
                     ["complex"] = DType.Complex,
                     ["bytes"] = bytes,
-                    ["a"] = bytes,
                     ["int"] = intp,
                     ["str"] = str,
                     ["unicode"] = str,

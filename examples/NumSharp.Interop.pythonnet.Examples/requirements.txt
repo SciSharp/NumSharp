@@ -8,7 +8,7 @@
 # versions the examples were validated against; numpy is the ONLY hard requirement — every
 # third-party section in the examples self-skips when its package is missing.
 
-numpy==2.4.2          # required: the export side builds numpy views; the import side is numpy-agnostic
+numpy==2.5.4          # required: the export side builds numpy views; the import side is numpy-agnostic
 
 # 09-pytorch.cs — any PyTorch >= 2.3 (the release whose torch.from_numpy accepts unsigned 16/32/64-bit
 # dtypes). Validated on 2.13.0+cpu and 2.12.1+cu126. The CPU wheel is enough:

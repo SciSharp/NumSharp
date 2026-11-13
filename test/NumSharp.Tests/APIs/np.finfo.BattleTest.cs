@@ -94,7 +94,7 @@ public class NpFInfoBattleTests
     [TestMethod]
     public void FInfo_HasNoArrayOverload_AsNumPyRefusesAnArray()
     {
-        // NumPy 2.4.2: np.finfo(np.ones(2)) is "data type <class 'numpy.object_'> not inexact" (an array is not a dtype);
+        // NumPy 2.5.4: np.finfo(np.ones(2)) is "data type dtype('O') not compatible with finfo" (an array is not a dtype);
         // API-parity batch 7 removed the NDArray form, so a C# array argument does not compile: pass arr.dtype.
         typeof(np).GetMethods().Where(m => m.Name == "finfo")
             .Any(m => m.GetParameters().Any(p => p.ParameterType == typeof(NDArray))).Should().BeFalse();
@@ -151,15 +151,16 @@ public class NpFInfoBattleTests
     }
 
     /// <summary>
-    ///     An integer type is NumPy's <c>ValueError: data type &lt;class 'numpy.int32'&gt; not inexact</c> (the generic
-    ///     form threw some exception; the dtype form throws NumPy's).
+    ///     An integer type is NumPy 2.5's <c>ValueError: data type dtype('int32') not compatible with finfo</c> (NumPy 2.4
+    ///     named the scalar class, <c>data type &lt;class 'numpy.int32'&gt; not inexact</c>; the generic form threw some
+    ///     exception; the dtype form throws NumPy's).
     /// </summary>
     [TestMethod]
     public void FInfo_TypeofInt_IsNumPysValueError()
     {
-        // NumPy: np.finfo(np.int32) -> ValueError: data type <class 'numpy.int32'> not inexact
+        // NumPy 2.5.4: np.finfo(np.int32) -> ValueError: data type dtype('int32') not compatible with finfo
         new Action(() => np.finfo(typeof(int))).Should().Throw<ValueError>()
-            .WithMessage("data type <class 'numpy.int32'> not inexact");
+            .WithMessage("data type dtype('int32') not compatible with finfo");
     }
 
     #endregion
@@ -185,10 +186,10 @@ public class NpFInfoBattleTests
     [TestMethod]
     public void FInfo_ArrayDtype_Int_Throws()
     {
-        // NumPy 2.4.2: np.finfo(np.int32) names the scalar class.
+        // NumPy 2.5.4: np.finfo(np.int32) names the descriptor (2.4 named the scalar class).
         var arr = np.array(new int[] { 1, 2, 3 });
         new Action(() => np.finfo(arr.dtype)).Should().Throw<ValueError>()
-            .WithMessage("data type <class 'numpy.int32'> not inexact");
+            .WithMessage("data type dtype('int32') not compatible with finfo");
     }
 
     #endregion

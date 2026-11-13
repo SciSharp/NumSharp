@@ -9,6 +9,19 @@ there.
 run. **Observed on:** NumSharp `interop-pythonnet` @ `d970424d` · net8.0 & net10.0; message
 verified against NumPy 2.4.2 source.
 
+**Update 2026-11-09 (NumPy 2.5.4 pin):** NumPy 2.5 reworded the message and added a third embedded
+line break (`shape.c`), and NumSharp follows it:
+
+```text
+cannot resize an array that references or is referenced
+by another object in this way.
+Use the np.resize function to get a new resized copy or
+ set refcheck=False to disable this check
+```
+
+The trap below is unchanged — match fragments, never the rendered sentence — but the fragments to
+match are now `"*by another object in this way*"`; the quotes further down are the 2.4.2 wording.
+
 ---
 
 ## Overview

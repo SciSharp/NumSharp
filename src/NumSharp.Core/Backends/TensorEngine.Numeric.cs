@@ -32,7 +32,7 @@ namespace NumSharp
         ///     any other. Then an operand that is not one-dimensional (<c>object of too small depth for desired array</c> for
         ///     a 0-d one, <c>object too deep for desired array</c> for two or more dimensions, the first operand first), an
         ///     empty one (<c>first array argument cannot be empty</c> / <c>second array argument cannot be empty</c>), or a
-        ///     fixed-width string operand after those checks (<c>data type must provide an itemsize</c>).</exception>
+        ///     text operand after those checks (<c>function not available for this data type</c>).</exception>
         /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate: CPython's UTF-8
         ///     encoding error, raised before the mode is read.</exception>
         /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
@@ -247,7 +247,7 @@ namespace NumSharp
         ///     dtype.</returns>
         /// <exception cref="IndexError">More axes than an operand has (<c>tuple index out of range</c>).</exception>
         /// <exception cref="ValueError">Contracted extents that differ (<c>shape-mismatch for sum</c>), and the final dot's
-        ///     refusals of text (<c>data type must provide an itemsize</c>).</exception>
+        ///     refusals of text (<c>dot not available for this type</c>).</exception>
         /// <exception cref="TypeError">The final dot's refusals of text operands (NumPy's texts).</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand beside a number, which NumPy computes as
         ///     Python objects (an object array NumSharp does not have).</exception>

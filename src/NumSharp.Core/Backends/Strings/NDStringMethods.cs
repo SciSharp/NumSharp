@@ -919,7 +919,7 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     The fixed-width part of NumPy's <c>replace</c> after its T branch, statement for statement where a statement
-        ///     can fail: <c>old.astype(old_dtype or a_dt)</c>, <c>new.astype(...)</c>, <c>_count_ufunc(arr, old, 0, MAX)</c>,
+        ///     can fail: <c>old.astype(old_dtype or a_dt.char)</c>, <c>new.astype(...)</c>, <c>_count_ufunc(arr, old, 0, MAX)</c>,
         ///     <c>np.minimum(counts, count)</c>, <c>str_len(new) - str_len(old)</c>, <c>counts * …</c>,
         ///     <c>str_len(arr) + …</c>, <c>buffersizes.max()</c>, the descriptor, then <c>_replace</c>'s loop resolution and
         ///     the loop. The sizes themselves are one fused pass.
@@ -928,7 +928,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="old">The searched strings (<c>np.asanyarray</c>'d).</param>
         /// <param name="new">The replacements (<c>np.asanyarray</c>'d).</param>
         /// <param name="oldHasDtype">False when the caller's <c>old</c> was a Python str / bytes / number (no
-        ///     <c>dtype</c> attribute): NumPy then casts it to <c>arr</c>'s descriptor, truncating to its width.</param>
+        ///     <c>dtype</c> attribute): NumPy then casts it to <c>arr</c>'s string CLASS (<c>a_dt.char</c>: <c>'U'</c> /
+        ///     <c>'S'</c>, the unsized descriptor), keeping its own width — NumPy 2.5.4 (gh-32600); NumPy 2.4 cast it to
+        ///     <c>arr</c>'s descriptor and truncated it to <c>arr</c>'s width.</param>
         /// <param name="newHasDtype">The same for <c>new</c>.</param>
         /// <param name="count">The integer counts (<c>np.asanyarray</c>'d).</param>
         /// <returns>The replaced strings, laid out like <paramref name="arr"/>.</returns>
@@ -945,9 +947,11 @@ namespace NumSharp.Backends.Strings
             NDArray o = null, n = null, c64 = null;
             try
             {
-                // old = old.astype(old_dtype or a_dt, copy=False); new = new.astype(new_dtype or a_dt, copy=False)
-                o = oldHasDtype || old.dtype == aDt ? old : old.astype(aDt);
-                n = newHasDtype || @new.dtype == aDt ? @new : @new.astype(aDt);
+                // old = old.astype(old_dtype or a_dt.char, copy=False); new = new.astype(new_dtype or a_dt.char, copy=False):
+                // the unsized class descriptor ('U' / 'S'), which the cast adapts to the operand's own width (no truncation).
+                var unsized = aDt.Meta.singleton;
+                o = oldHasDtype || ReferenceEquals(old.dtype.Meta, aDt.Meta) ? old : old.astype(unsized, copy: false);
+                n = newHasDtype || ReferenceEquals(@new.dtype.Meta, aDt.Meta) ? @new : @new.astype(unsized, copy: false);
                 // counts = _count_ufunc(arr, old, 0, max_int64)
                 var loop = ResolvePair(arr, o);
                 if (loop is TextLoop.None or TextLoop.VString)
@@ -1075,7 +1079,8 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     The fixed-width part of NumPy's <c>partition</c> / <c>rpartition</c> after its T branch:
-        ///     <c>sep.astype(a.dtype)</c> (truncated to <paramref name="a"/>'s width), <c>_find_ufunc</c> /
+        ///     <c>sep.astype(a.dtype.char)</c> (<paramref name="a"/>'s string class, the separator keeping its own width:
+        ///     NumPy 2.5.4; 2.4 truncated it to <paramref name="a"/>'s width), <c>_find_ufunc</c> /
         ///     <c>_rfind_ufunc</c>'s resolution and broadcast, the three widths of the structured out= (the before-part's
         ///     maximum, 1 when no separator is found anywhere else the separators' longest, the after-part's maximum), the
         ///     loop's <c>ValueError: empty separator</c>, then the three parts.
@@ -1092,7 +1097,8 @@ namespace NumSharp.Backends.Strings
         ///     at width 0 (<c>'U0'</c>) is width 1.</remarks>
         internal static (NDArray Before, NDArray Separator, NDArray After) Partition(NDArray a, NDArray sep, bool back)
         {
-            var s = sep.dtype == a.dtype ? sep : sep.astype(a.dtype);
+            // sep = sep.astype(a.dtype.char, copy=False): the unsized class descriptor, adapted to sep's own width.
+            var s = ReferenceEquals(sep.dtype.Meta, a.dtype.Meta) ? sep : sep.astype(a.dtype.Meta.singleton, copy: false);
             try
             {
                 string find = back ? "rfind" : "find";

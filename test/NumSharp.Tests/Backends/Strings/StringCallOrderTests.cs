@@ -432,10 +432,11 @@ namespace NumSharp.Tests.Backends.Strings
         // ---------------------------------------------------------------- np.dot's scalar branch
 
         /// <summary>
-        ///     <c>np.dot</c> with a 0-d text operand is NumPy's multiply ufunc of the operands converted to the string class
-        ///     (<c>PyArray_MatrixProduct2</c>'s scalar branch), and the ufunc's argument parsing refuses a read-only out=
-        ///     before it looks for a loop: <c>output array is read-only</c>, where NumSharp raised multiply's no-loop
-        ///     TypeError first. A writeable out, or none, still meets the no-loop answer. Expected texts: NumPy 2.4.2.
+        ///     <c>np.dot</c> with a 0-d text operand is NumPy's multiply ufunc of the operands converted to their common
+        ///     descriptor (<c>PyArray_MatrixProduct2</c>'s scalar branch: NumPy 2.5 converts BOTH into it, so an int32 beside
+        ///     <c>&lt;U2</c> names <c>&lt;U11</c> twice), and the ufunc's argument parsing refuses a read-only out= before it
+        ///     looks for a loop: <c>output array is read-only</c>, where NumSharp raised multiply's no-loop TypeError first.
+        ///     A writeable out, or none, still meets the no-loop answer. Expected texts: NumPy 2.5.4.
         /// </summary>
         [TestMethod]
         public void Dot_ScalarTextOperand_ReadOnlyOut_IsRefusedBeforeTheLoop()
@@ -457,7 +458,46 @@ namespace NumSharp.Tests.Backends.Strings
                 "ufunc 'multiply' did not contain a loop with signature matching types (dtype('<U2'), dtype('<U2')) -> None");
             Action noOut = () => np.dot(np.array("ab"), np.array(3));
             noOut.Should().Throw<TypeError>().WithMessage(
-                "ufunc 'multiply' did not contain a loop with signature matching types (dtype('<U2'), dtype('<U11')) -> None");
+                "ufunc 'multiply' did not contain a loop with signature matching types (dtype('<U11'), dtype('<U11')) -> None");
+        }
+
+        /// <summary>
+        ///     NumPy 2.5's <c>np.dot</c> over fixed-width text past the scalar branch: the result is allocated in the common
+        ///     descriptor (<c>&lt;U32</c> for <c>&lt;U2</c> with float64), so an <c>out=</c> must be EQUIVALENT to it — the
+        ///     same class and width (2.4 accepted any width of the class) —, empty operands zero-fill the result from a bool
+        ///     False first (refused under 'safe' for a text narrower than <c>False</c>; written into a wide enough out
+        ///     before the error), and the descriptor has no dot function (<c>dot not available for this type</c>, where 2.4
+        ///     failed the allocation: <c>data type must provide an itemsize</c>). Expected texts and out contents: NumPy
+        ///     2.5.4.
+        /// </summary>
+        [TestMethod]
+        public void Dot_TextOperands_OutMustBeTheCommonDescriptor_EmptyOperandsZeroFill()
+        {
+            const string notAcceptable =
+                "output array is not acceptable (must have the right datatype, number of dimensions, and be a C-Array)";
+            var text = np.array(new[] { "ab", "cd", "ef", "gh", "ij", "kl" }).reshape(2, 3);
+            var ones = np.ones(new Shape(3, 2));
+
+            Action noOut = () => np.dot(text, ones);
+            noOut.Should().Throw<ValueError>().WithMessage("dot not available for this type");
+            Action sameDescr = () => np.dot(text, ones, np.empty(new Shape(2, 2), np.dtype("U32")));
+            sameDescr.Should().Throw<ValueError>().WithMessage("dot not available for this type");
+            Action narrower = () => np.dot(text, ones, np.empty(new Shape(2, 2), np.dtype("U22")));
+            narrower.Should().Throw<ValueError>().WithMessage(notAcceptable);
+            Action otherClass = () => np.dot(text, ones, np.empty(new Shape(2, 2), np.dtype("S32")));
+            otherClass.Should().Throw<ValueError>().WithMessage(notAcceptable);
+
+            // (2,0) @ (0,3): both operands empty, so the result is zero-filled before the dot-function lookup.
+            Action narrowZero = () => np.dot(np.empty(new Shape(0L), np.dtype("U1")), np.empty(new Shape(0L), np.dtype("U1")));
+            narrowZero.Should().Throw<TypeError>()
+                .WithMessage("Cannot cast scalar from dtype('bool') to dtype('<U1') according to the rule 'safe'");
+            var o = np.empty(new Shape(2, 3), np.dtype("U5"));
+            Action filled = () => np.dot(np.empty(new Shape(2, 0), np.dtype("U5")), np.empty(new Shape(0, 3), np.dtype("U5")), o);
+            filled.Should().Throw<ValueError>().WithMessage("dot not available for this type");
+            NDArray.AsStringArray(o.flatten()).Should().Equal("False", "False", "False", "False", "False", "False");
+            Action wider = () => np.dot(np.empty(new Shape(2, 0), np.dtype("U5")), np.empty(new Shape(0, 3), np.dtype("U5")),
+                np.empty(new Shape(2, 3), np.dtype("U7")));
+            wider.Should().Throw<ValueError>().WithMessage(notAcceptable);
         }
     }
 }

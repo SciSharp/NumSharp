@@ -329,18 +329,20 @@ namespace NumSharp.Tests.APIs
             np.iinfo("i8").max.Should().Be(long.MaxValue);
             np.finfo(dtype: "float32").bits.Should().Be(32);
             np.finfo("f2").bits.Should().Be(16);
-            // A string that names no dtype is NumPy's str VALUE (kind 'U'); None is float64.
+            // A string that names no dtype is NumPy's str VALUE (kind 'U'); None is iinfo's float64 kind 'f' and finfo's
+            // TypeError since NumPy 2.5 (2.4 read it as float64).
             Throws<ValueError>(() => np.iinfo("foo"), "Invalid integer data type 'U'.");
             Throws<ValueError>(() => np.iinfo(""), "Invalid integer data type 'U'.");
             Throws<ValueError>(() => np.iinfo("float32"), "Invalid integer data type 'f'.");
             Throws<ValueError>(() => np.iinfo((string)null), "Invalid integer data type 'f'.");
             Throws<ValueError>(() => np.iinfo(np.float32), "Invalid integer data type 'f'.");
             Throws<ValueError>(() => np.iinfo(np.complex128), "Invalid integer data type 'c'.");
-            Throws<ValueError>(() => np.finfo("int32"), "data type <class 'numpy.int32'> not inexact");
-            Throws<ValueError>(() => np.finfo("foo"), "data type <class 'numpy.str_'> not inexact");
-            Throws<ValueError>(() => np.finfo(""), "data type <class 'numpy.str_'> not inexact");
-            Throws<ValueError>(() => np.finfo(np.int64), "data type <class 'numpy.int64'> not inexact");
-            np.finfo((string)null).bits.Should().Be(64);   // NumPy 2.4.2: float64's (with a DeprecationWarning)
+            // NumPy 2.5.4's texts name the descriptor (2.4 named the scalar class: data type <class 'numpy.int32'> not inexact).
+            Throws<ValueError>(() => np.finfo("int32"), "data type dtype('int32') not compatible with finfo");
+            Throws<ValueError>(() => np.finfo("foo"), "data type dtype('<U') not compatible with finfo");
+            Throws<ValueError>(() => np.finfo(""), "data type dtype('<U') not compatible with finfo");
+            Throws<ValueError>(() => np.finfo(np.int64), "data type dtype('int64') not compatible with finfo");
+            Throws<TypeError>(() => np.finfo((string)null), "dtype must not be None");   // NumPy 2.5.4 (2.4: float64's)
             // NumPy's keyword names, and no array overload (NumPy refuses an array).
             typeof(np).GetMethods().Where(m => m.Name == "iinfo" && !m.IsGenericMethod)
                 .Should().OnlyContain(m => m.GetParameters().Single().Name == "int_type");

@@ -256,9 +256,9 @@ namespace NumSharp.Tests.Manipulation
         // ---- the IndexError NumPy leaks ---------------------------------------------------------------------------------
 
         /// <summary>
-        ///     np.split / np.array_split / np.linalg.cross read <c>a.shape[axis]</c> before anything else, a Python tuple
-        ///     index: an axis out of range is IndexError "tuple index out of range" (NumSharp raised an
-        ///     ArgumentOutOfRangeException / AxisError), checked before the sections.
+        ///     np.split / np.array_split read <c>a.shape[axis]</c> before anything else, a Python tuple index: an axis out
+        ///     of range is IndexError "tuple index out of range" (NumSharp raised an ArgumentOutOfRangeException /
+        ///     AxisError), checked before the sections. np.fft.irfftn's empty <c>axes</c> leaks the same IndexError.
         /// </summary>
         [TestMethod]
         public void ShapeIndexFunctions_RaiseNumPysIndexError()
@@ -266,9 +266,19 @@ namespace NumSharp.Tests.Manipulation
             Expect<IndexError>(() => np.split(A, 1, 2), "tuple index out of range");
             Expect<IndexError>(() => np.split(S, 1), "tuple index out of range");
             Expect<IndexError>(() => np.array_split(A, 0, 5), "tuple index out of range");
-            Expect<IndexError>(() => np.linalg.cross(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 3)), 2),
-                "tuple index out of range");
             Expect<IndexError>(() => np.fft.irfftn(A, axes: new int[0]), "tuple index out of range");
+        }
+
+        /// <summary>
+        ///     np.linalg.cross is NumPy 2.5's <c>_core_cross(x1, x2, axis=axis)</c> and nothing else, so an axis out of range
+        ///     is np.cross's <c>normalize_axis_index(axisa, ..., msg_prefix='axisa')</c> AxisError; NumPy 2.4 read
+        ///     <c>x1.shape[axis]</c> first and leaked a tuple-index IndexError instead.
+        /// </summary>
+        [TestMethod]
+        public void LinalgCross_AxisOutOfRange_IsNpCrossAxisError()
+        {
+            Expect<AxisError>(() => np.linalg.cross(np.ones(new Shape(2, 3)), np.ones(new Shape(2, 3)), 2),
+                "axisa: axis 2 is out of bounds for array of dimension 2");
         }
 
         // ---- NumPy's ValueError / TypeError types in the same checks ------------------------------------------------------

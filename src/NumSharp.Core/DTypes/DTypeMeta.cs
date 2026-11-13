@@ -470,6 +470,26 @@ namespace NumSharp
             => throw NoSlot(nameof(copyswapn));
 
         /// <summary>
+        ///     Whether this class's <see cref="copyswapn"/> is usable: NumPy's <c>PyArray_ArrFuncs.copyswapn != NULL</c>, the
+        ///     test <c>PyArray_Byteswap</c> makes (after an in-place call's writeable check) before it copies or swaps
+        ///     anything, raising <see cref="MissingCopyswap"/> when it fails — for an empty array too. True for every class
+        ///     with element storage but <c>StringDType</c>, whose cells hold references into their buffer's allocator, so
+        ///     NumPy leaves the slot NULL (NumPy 2.4 called the NULL slot and crashed).
+        /// </summary>
+        /// <remarks>A class without element storage keeps <see cref="copyswapn"/>'s NotSupportedException; the question asked
+        ///     here is NumPy's, about a class that has items.</remarks>
+        internal virtual bool HasCopyswapn => true;
+
+        /// <summary>
+        ///     NumPy 2.5's <c>raise_missing_copyswap</c>: the TypeError a caller raises for a class whose
+        ///     <see cref="HasCopyswapn"/> is false — <c>dtype StringDType() does not implement copyswap</c>, the descriptor's
+        ///     <c>str()</c> (its NA object included: <c>StringDType(na_object=None)</c>).
+        /// </summary>
+        /// <param name="descr">The descriptor the swap was asked of.</param>
+        /// <returns>The exception to throw (returned, so the caller's <c>throw</c> keeps its stack).</returns>
+        internal static TypeError MissingCopyswap(DType descr) => new TypeError($"dtype {descr} does not implement copyswap");
+
+        /// <summary>
         ///     NumPy's <c>PyArray_ArrFuncs.fill</c>, which <c>PyArray_Arange</c> fills through: given the first two elements
         ///     of a contiguous buffer, writes the arithmetic progression they start into elements 2 to
         ///     <paramref name="length"/> - 1, in NumPy's arithmetic (<c>start + i * delta</c>, with <c>delta</c> the second

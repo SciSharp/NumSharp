@@ -60,15 +60,20 @@ namespace NumSharp
         /// </summary>
         /// <param name="n_children">The number of children.</param>
         /// <returns>The children, each a <see cref="Generator"/> over a fresh bit generator of the same type.</returns>
+        /// <exception cref="ValueError"><paramref name="n_children"/> is negative: NumPy 2.5's <c>n_children must be
+        /// non-negative</c>, raised first.</exception>
         /// <exception cref="TypeError">The bit generator's seed sequence cannot spawn (a legacy-seeded <see cref="MT19937"/>, a
         /// keyed <see cref="Philox"/>): <c>The underlying SeedSequence does not implement spawning.</c></exception>
-        /// <exception cref="OverflowError">The seed sequence's child count would leave its uint32 range (e.g. a negative count).</exception>
+        /// <exception cref="OverflowError">The seed sequence's child count would leave its uint32 range.</exception>
         /// <remarks>
         ///     Spawning advances the seed sequence's <see cref="SeedSequence.n_children_spawned"/>, so it never repeats a
         ///     child; it does NOT consume this generator's stream (the children are seeded, not drawn).
         /// </remarks>
         public Generator[] spawn(int n_children)
         {
+            // NumPy 2.5 checks here too, before delegating (BitGenerator.spawn repeats the check; the text is the same).
+            if (n_children < 0)
+                throw new ValueError("n_children must be non-negative");
             BitGenerator[] children = _bitGenerator.spawn(n_children);
             var result = new Generator[children.Length];
             for (int i = 0; i < children.Length; i++)

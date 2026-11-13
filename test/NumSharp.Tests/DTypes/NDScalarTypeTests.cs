@@ -348,49 +348,50 @@ namespace NumSharp.Tests.DTypes
 
         /// <summary>
         ///     <c>np.finfo</c> / <c>np.iinfo</c> of an abstract class raise NumPy's ValueErrors (both name the object
-        ///     dtype: NumPy retries with the argument's type, Python's <c>type</c>); a concrete class gives its limits.
+        ///     dtype: NumPy retries with the argument's type, Python's <c>type</c>); a concrete class gives its limits, and
+        ///     a concrete class that is not inexact names its dtype (NumPy 2.5's <c>not compatible with finfo</c>).
         /// </summary>
         [TestMethod]
         public void FinfoIinfo_OfAClass()
         {
-            new Action(() => np.finfo(np.floating)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.object_'> not inexact");
+            new Action(() => np.finfo(np.floating)).Should().Throw<ValueError>().WithMessage("data type dtype('O') not compatible with finfo");
             new Action(() => np.iinfo(np.integer)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'O'.");
             np.finfo((NDScalarType)np.float32).bits.Should().Be(32);
             np.iinfo((NDScalarType)np.int16).max.Should().Be(short.MaxValue);
             new Action(() => np.finfo((NDScalarType)np.int32)).Should().Throw<ValueError>()
-                .WithMessage("data type <class 'numpy.int32'> not inexact");
+                .WithMessage("data type dtype('int32') not compatible with finfo");
         }
 
         /// <summary>
-        ///     <c>np.finfo</c> / <c>np.iinfo</c> of the dtype-less and the built-in classes, NumPy 2.4.2's answers: a complex
+        ///     <c>np.finfo</c> / <c>np.iinfo</c> of the dtype-less and the built-in classes, NumPy 2.5.4's answers: a complex
         ///     class reports its real part's limits (<c>np.finfo(np.complex64)</c> is float32's, which NumSharp has); a
-        ///     built-in class is read as NumPy's class for it (<c>float</c> → float64, <c>int</c> → int64); every refusal
-        ///     names that class, or its dtype's kind character.
+        ///     built-in class is read as NumPy's class for it (<c>float</c> → float64, <c>int</c> → int64); every finfo
+        ///     refusal names that class's dtype (NumPy 2.5), every iinfo refusal its dtype's kind character.
         /// </summary>
         [TestMethod]
         public void FinfoIinfo_DtypelessAndBuiltinClasses()
         {
             np.finfo(np.complex64).dtype.Should().Be(np.float32);
             new Action(() => np.iinfo(np.complex64)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'c'.");
-            new Action(() => np.finfo(np.object_)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.object_'> not inexact");
+            new Action(() => np.finfo(np.object_)).Should().Throw<ValueError>().WithMessage("data type dtype('O') not compatible with finfo");
             new Action(() => np.iinfo(np.object_)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'O'.");
-            new Action(() => np.finfo(np.@void)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.void'> not inexact");
+            new Action(() => np.finfo(np.@void)).Should().Throw<ValueError>().WithMessage("data type dtype('V') not compatible with finfo");
             new Action(() => np.iinfo(np.@void)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'V'.");
 
             np.finfo(NDScalarType.PyFloat).dtype.Should().Be(np.float64);
             np.finfo(NDScalarType.PyComplex).dtype.Should().Be(np.float64);
             np.iinfo(NDScalarType.PyInt).dtype.Should().Be(np.int64);
             new Action(() => np.iinfo(NDScalarType.PyFloat)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'f'.");
-            new Action(() => np.finfo(NDScalarType.PyInt)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.int64'> not inexact");
-            new Action(() => np.finfo(NDScalarType.PyBool)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.bool'> not inexact");
+            new Action(() => np.finfo(NDScalarType.PyInt)).Should().Throw<ValueError>().WithMessage("data type dtype('int64') not compatible with finfo");
+            new Action(() => np.finfo(NDScalarType.PyBool)).Should().Throw<ValueError>().WithMessage("data type dtype('bool') not compatible with finfo");
             new Action(() => np.iinfo(NDScalarType.PyBool)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'b'.");
-            new Action(() => np.finfo(NDScalarType.PyStr)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.str_'> not inexact");
+            new Action(() => np.finfo(NDScalarType.PyStr)).Should().Throw<ValueError>().WithMessage("data type dtype('<U') not compatible with finfo");
             new Action(() => np.iinfo(NDScalarType.PyStr)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'U'.");
-            new Action(() => np.finfo(NDScalarType.PyBytes)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.bytes_'> not inexact");
+            new Action(() => np.finfo(NDScalarType.PyBytes)).Should().Throw<ValueError>().WithMessage("data type dtype('S') not compatible with finfo");
             new Action(() => np.iinfo(NDScalarType.PyBytes)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'S'.");
-            new Action(() => np.finfo(NDScalarType.PyObject)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.object_'> not inexact");
+            new Action(() => np.finfo(NDScalarType.PyObject)).Should().Throw<ValueError>().WithMessage("data type dtype('O') not compatible with finfo");
             new Action(() => np.iinfo(NDScalarType.PyObject)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'O'.");
-            new Action(() => np.finfo(NDScalarType.PyMemoryView)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.void'> not inexact");
+            new Action(() => np.finfo(NDScalarType.PyMemoryView)).Should().Throw<ValueError>().WithMessage("data type dtype('V') not compatible with finfo");
             new Action(() => np.iinfo(NDScalarType.PyMemoryView)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'V'.");
         }
 
@@ -789,8 +790,9 @@ namespace NumSharp.Tests.DTypes
             np.sctypeDict.ContainsKey("object").Should().BeFalse();
             np.sctypeDict.Keys.Take(5).Should().Equal("bool", "float16", "float32", "float64", "longdouble");
             np.sctypeDict.Keys.Skip(7).Take(3).Should().Equal("bytes_", "str_", "datetime64");
-            np.sctypeDict.Keys.TakeLast(5).Should().Equal("bytes", "a", "int", "str", "unicode");
-            foreach (var name in new[] { "bytes_", "bytes", "a" })
+            np.sctypeDict.Keys.TakeLast(4).Should().Equal("bytes", "int", "str", "unicode");
+            np.sctypeDict.ContainsKey("a").Should().BeFalse("NumPy 2.5 removed the 'a' alias");
+            foreach (var name in new[] { "bytes_", "bytes" })
                 ReferenceEquals(np.sctypeDict[name], np.bytes_).Should().BeTrue(name);
             foreach (var name in new[] { "str_", "str", "unicode" })
                 ReferenceEquals(np.sctypeDict[name], np.str_).Should().BeTrue(name);

@@ -76,9 +76,6 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
         /// <exception cref="IndexError">Text data with an empty reduced axis (NumPy's take, or the interpolating methods'
         ///     neighbour lookup).</exception>
-        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0, any dtype:
-        ///     <c>_ureduce</c>'s merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
-        ///     (0,newaxis)</c>), raised before q's rank, the method and the data's refusals.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.percentile.html. NumPy's body is the engine's
         ///     (<see cref="TensorEngine.Percentile"/>): the complex check, q's checks, the weighted branch, the text routes

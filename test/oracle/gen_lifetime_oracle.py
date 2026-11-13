@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-gen_lifetime_oracle.py -- the LIFETIME oracle: NumPy 2.4.2's answers for calls whose operands are TEMPORARIES.
+gen_lifetime_oracle.py -- the LIFETIME oracle: NumPy 2.5.4's answers for calls whose operands are TEMPORARIES.
 
 Every other differential tier replays a case over operand arrays the harness itself holds, so an operand stays
 reachable for the whole call no matter what the library does. A caller that passes a temporary
@@ -46,7 +46,7 @@ its case in the gate with ``pin`` set to the old id, and keeps every one-operand
 the operand it loses. Both files live in ``Fuzz/Lifetime/corpus/`` (see ``CORPUS``). ``--uncarved DIR`` writes every
 case to one gate file in DIR, without carves or pins (how the rules were drawn, and how to re-probe a site).
 
-Run (needs numpy==2.4.2):
+Run (needs the pinned NumPy (numpy-version.txt, 2.5.4)):
     python test/oracle/gen_lifetime_oracle.py [--uncarved DIR]
 """
 import argparse
@@ -58,11 +58,12 @@ import sys
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_lifetime_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 #: The lifetime tier lives in its OWN directory, not Fuzz/corpus: the generic corpus sweeps there (the leak gate, the

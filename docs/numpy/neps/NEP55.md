@@ -1,7 +1,7 @@
 # NEP 55 - UTF-8 Variable-Width String DType
 
 **Status:** Final
-**NumSharp Impact:** Implemented - `np.dtypes.StringDType` / `np.dtype("T")`, byte for byte with NumPy 2.4.2
+**NumSharp Impact:** Implemented - `np.dtypes.StringDType` / `np.dtype("T")`, byte for byte with NumPy 2.5.4
 
 ## Summary
 

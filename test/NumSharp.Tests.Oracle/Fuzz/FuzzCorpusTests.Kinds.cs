@@ -241,8 +241,11 @@ namespace NumSharp.Tests.Fuzz
             // unmappable dtype (verified), so this only fires for the fft float32/float16 cells.
             NPTypeCode tc;
             try { tc = FuzzCorpus.DtypeToTC(exp.Dtype); }
-            catch (NotSupportedException) when (OpRegistry.IsPolynomialOp(c.Op) && exp.Dtype == "complex64")
+            catch (NotSupportedException) when ((OpRegistry.IsPolynomialOp(c.Op) || IsGeevOp(c.Op)) && exp.Dtype == "complex64")
             {
+                // np.linalg.eig / eigvals of a float32 operand are complex64 in NumPy 2.5 (always complex: geev in double,
+                // then astype(complex64)); NumSharp rounds each component to float32 and keeps complex128, so the same
+                // value check holds them to NumPy's complex64 values exactly.
                 // numpy.polynomial makes complex64 values under NEP 50 (a float16/float32 value meeting a Python
                 // complex, or a complex64 NumPy scalar meeting a narrow value): complex64 SCALARS in its scalar code and
                 // complex64 ARRAY loops in mapdomain's `off + scl*x`. NumSharp emulates both in float32 exactly (the
@@ -367,6 +370,14 @@ namespace NumSharp.Tests.Fuzz
                 (diffs.Count > 3 ? $" (+{diffs.Count - 3} more)" : "") +
                 (shrunk != null ? $"\n      minimal repro: {shrunk}" : ""));
         }
+
+        /// <summary>
+        ///     The <c>geev</c> functions, <c>np.linalg.eig</c> and <c>eigvals</c>: NumPy 2.5 returns their float32 results as
+        ///     complex64 (always complex), which NumSharp carries as complex128 with the same values.
+        /// </summary>
+        /// <param name="op">The case's op key.</param>
+        /// <returns>True for <c>eig</c> and <c>eigvals</c>.</returns>
+        private static bool IsGeevOp(string op) => op is "eig" or "eigvals";
 
         /// <summary>
         ///     An fft transform cell where NumSharp promoted the result (complex128/float64) because it

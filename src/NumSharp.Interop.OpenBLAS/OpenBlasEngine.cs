@@ -10,7 +10,7 @@ namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>
     ///     Opt-in byte-parity backend for <c>np.dot</c> / <c>np.matmul</c>: a route-for-route port of
-    ///     NumPy 2.4.2's matrix-product dispatchers that calls the SAME CBLAS binary NumPy calls.
+    ///     NumPy 2.5.4's matrix-product dispatchers that calls the SAME CBLAS binary NumPy calls.
     /// </summary>
     /// <remarks>
     ///     <para>

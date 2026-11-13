@@ -304,10 +304,11 @@ namespace NumSharp.Tests.IO
 
         /// <summary>
         ///     An element whose text is not ASCII raises CPython's <c>UnicodeEncodeError</c> after the elements before it are
-        ///     written. NumPy 2.4.2 crashes the process there (it does not check <c>PyUnicode_AsASCIIString</c>'s NULL).
+        ///     written: NumPy 2.5.4's answer, these exact calls included. NumPy 2.4 crashed the process there (it did not check
+        ///     <c>PyUnicode_AsASCIIString</c>'s NULL), so this was a <c>[Misaligned]</c> pin of NumSharp's answer until the
+        ///     bump.
         /// </summary>
         [TestMethod]
-        [Misaligned]
         public void ToFile_NonAsciiText_IsUnicodeEncodeError()
         {
             using var ms = new MemoryStream();

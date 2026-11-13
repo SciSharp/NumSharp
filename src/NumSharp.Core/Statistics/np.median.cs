@@ -32,10 +32,9 @@ namespace NumSharp
         ///     the result is longer (parity QA-31).</exception>
         /// <exception cref="IncorrectShapeException">An <paramref name="out"/> whose axes do not broadcast with the
         ///     result's: the prologue's iterator text over the partition's middle slice (<c>operands could not be broadcast
-        ///     together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>), NumPy's ValueError; several
-        ///     reduced axes beside a kept axis of length 0, any dtype: <c>_ureduce</c>'s merge cannot resolve its -1
-        ///     (NumPy's ValueError <c>cannot reshape array of size 0 into shape (0,newaxis)</c>), raised before the text
-        ///     refusals.</exception>
+        ///     together with remapped shapes [original-&gt;remapped]: (3,)-&gt;(3) (1,4) </c>), NumPy's ValueError. (Several
+        ///     reduced axes beside a kept axis of length 0 give an empty result since NumPy 2.5, whose <c>_ureduce</c>
+        ///     merges them into an explicit-product length; NumPy 2.4's -1 raised a reshape ValueError.)</exception>
         /// <exception cref="TypeError">Text data or a text <paramref name="out"/>: NumPy's closing <c>mean</c> refuses (its
         ///     verbatim text). A NEP 55 <c>StringDType</c> array is sorted first (NumPy's partition of a <c>StringDType</c>
         ///     line), then its mean's divide refuses the concatenated text.</exception>

@@ -19,13 +19,15 @@ namespace NumSharp
         /// <exception cref="ValueError">
         ///     When <paramref name="inplace"/> is <c>true</c> and the array is not writeable (e.g. a broadcast view).
         /// </exception>
+        /// <exception cref="TypeError">
+        ///     A NEP 55 <c>StringDType</c> array, whatever its size: <c>dtype StringDType() does not implement copyswap</c>
+        ///     (raised after the in-place writeable check).
+        /// </exception>
         /// <remarks>
         ///     <para>
-        ///     A NEP 55 <c>StringDType</c> array has no byte order to toggle, so the swap is the identity: <c>inplace</c>
-        ///     returns this instance with its strings untouched (a read-only array still raises NumPy's
-        ///     <see cref="ValueError"/>), and the default returns a copy in NumPy's <c>ANYORDER</c> layout (F only for an
-        ///     F-contiguous-and-not-C source), each string duplicated into the copy's own allocator. NumPy 2.4.2
-        ///     crashes the process on this call (a segmentation fault); NumSharp returns the identity swap instead.
+        ///     A NEP 55 <c>StringDType</c> array has no byte order to toggle: its cells point into its buffer's allocator, and
+        ///     NumPy leaves the class's <c>copyswapn</c> NULL, which NumPy 2.5 reports as a TypeError. NumPy 2.4 crashed the
+        ///     process on this call, and NumSharp then answered the identity swap (a copy, or this instance in place).
         ///     </para>
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.byteswap.html</para>
         /// </remarks>

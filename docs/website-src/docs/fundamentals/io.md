@@ -33,7 +33,7 @@ np.savez_compressed("bundle.npz", a, b);         // deflate-compressed .npz
 np.savez("bundle.npz", new Dictionary<string, NDArray> { ["weights"] = w, ["bias"] = bias });
 ```
 
-The writer is a port of NumPy 2.4.2's `_format_impl.py`, so a saved file is **exactly** what `np.save` would produce - format versions 1.0/2.0/3.0, 64-byte data alignment (mmap-ready), `fortran_order`, and the same header bytes. NumPy can read NumSharp's output and vice versa.
+The writer is a port of NumPy 2.5.4's `_format_impl.py`, so a saved file is **exactly** what `np.save` would produce - format versions 1.0/2.0/3.0, 64-byte data alignment (mmap-ready), `fortran_order`, and the same header bytes. NumPy can read NumSharp's output and vice versa.
 
 ### Reading
 
@@ -85,7 +85,7 @@ np.savetxt("out.csv", arr, fmt: "%.3f", delimiter: ",");     // 2-D → one row 
 np.savetxt("out.csv", arr, fmt: "%d", header: "x,y", comments: "# ");
 ```
 
-A port of NumPy 2.4.2's `savetxt`, **byte-identical to NumPy's output**. A 1-D array writes one value per line; a 2-D array one row per line; 0-D/≥3-D raise `ValueError`. `fmt` is a Python `%`-format spec (single spec repeated per column, a multi-`%` template, or a per-column list); a `StringDType` array's elements are formatted as the Python objects NumPy's `getitem` returns (a `str`, or the NA object). Targets:
+A port of NumPy 2.5.4's `savetxt`, **byte-identical to NumPy's output**. A 1-D array writes one value per line; a 2-D array one row per line; 0-D/≥3-D raise `ValueError`. `fmt` is a Python `%`-format spec (single spec repeated per column, a multi-`%` template, or a per-column list); a `StringDType` array's elements are formatted as the Python objects NumPy's `getitem` returns (a `str`, or the NA object). Targets:
 
 - a filename: created first, then written gzip-compressed when its extension is exactly `.gz`, every `\n` translated to the platform's line separator before it is encoded (UTF-8 by default);
 - a `Stream`: each write encoded on its own, Latin-1 by default, as NumPy's `WriteWrap` encodes it;
@@ -171,7 +171,7 @@ byte[] buf = File.ReadAllBytes("data.bin");
 var view = np.frombuffer(buf, np.float32);    // reinterpret bytes (no copy of the format)
 ```
 
-`tofile`/`fromfile` are the headerless raw path - you must know the dtype and byte order yourself (there is no self-describing header, unlike `.npy`). With a `sep`, `tofile` writes text instead: `format % (item,)` for each element, where `item` is the Python object NumPy's `getitem` returns. So every float dtype formats as a Python `float` (a `float32` 0.1 writes `0.10000000149011612`), and a `bool` is an `int` (`'%x'` of `true` writes `1`). Each element's text must be ASCII (`UnicodeEncodeError` otherwise, where NumPy 2.4.2 crashes); `sep` and `format` may not hold a NUL or a lone surrogate, which is checked before the file is opened. `np.frombuffer` reinterprets an existing .NET buffer as an array of a given dtype and is the general bridge for interop - see [Any library via np.frombuffer](../interop/np-frombuffer.md).
+`tofile`/`fromfile` are the headerless raw path - you must know the dtype and byte order yourself (there is no self-describing header, unlike `.npy`). With a `sep`, `tofile` writes text instead: `format % (item,)` for each element, where `item` is the Python object NumPy's `getitem` returns. So every float dtype formats as a Python `float` (a `float32` 0.1 writes `0.10000000149011612`), and a `bool` is an `int` (`'%x'` of `true` writes `1`). Each element's text must be ASCII (NumPy's `UnicodeEncodeError` otherwise, after the elements before it are written; NumPy 2.4.2 crashed there); `sep` and `format` may not hold a NUL or a lone surrogate, which is checked before the file is opened. `np.frombuffer` reinterprets an existing .NET buffer as an array of a given dtype and is the general bridge for interop - see [Any library via np.frombuffer](../interop/np-frombuffer.md).
 
 ---
 
