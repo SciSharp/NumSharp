@@ -5,16 +5,18 @@ namespace NumSharp
     public static partial class np
     {
         // =============================================================================================================
-        // np.row_stack - NumPy 2.4's deprecated alias of np.vstack (numpy/_core/shape_base.py: `warnings.warn(
-        // "`row_stack` alias is deprecated. Use `np.vstack` directly.", DeprecationWarning)` then `return vstack(tup,
-        // dtype=dtype, casting=casting)`). NumSharp has no warnings channel, so the alias answers exactly as np.vstack
-        // and its remarks carry the deprecation. The three forms are vstack's: the params form the owner kept for
-        // vstack / hstack, NumPy's keyword form, and the object-array-of-lists form.
+        // np.row_stack - np.vstack under its other name, kept on purpose. NumPy 2.4 and earlier have it
+        // (numpy/_core/shape_base.py: a DeprecationWarning since NumPy 2.0, then `return vstack(tup, dtype=dtype,
+        // casting=casting)`); NumPy 2.5 removed it ("AttributeError: module 'numpy' has no attribute 'row_stack'").
+        // NumSharp keeps it, as it keeps the NumPy 1.x names NumPy 2.0 removed, so code written against NumPy 2.4 or
+        // earlier compiles and runs unchanged: it answers exactly as np.vstack, with no warning and no [Obsolete] (the
+        // owner, 2026-11-13, when NumPy 2.5.4 became the pin: keep it, "no obsoletion"). The three forms are vstack's:
+        // the params form the owner kept for vstack / hstack, NumPy's keyword form, and the object-array-of-lists form.
         // =============================================================================================================
 
         /// <summary>
-        ///     NumPy's <c>row_stack(tup)</c>, the deprecated alias of <see cref="vstack(NDArray[])"/>: stacks the arrays in
-        ///     sequence vertically (1-D arrays become rows) - concatenation along the first axis after <c>atleast_2d</c>.
+        ///     NumPy 2.4's <c>row_stack(tup)</c>, <see cref="vstack(NDArray[])"/> under its other name: stacks the arrays
+        ///     in sequence vertically (1-D arrays become rows) - concatenation along the first axis after <c>atleast_2d</c>.
         /// </summary>
         /// <param name="tup">The arrays: the same shape along all but the first axis; 1-D arrays the same length.</param>
         /// <returns>The stacked array, at least 2-D (np.vstack's: a <c>numpy.matrix</c> operand gives a matrix, a chararray
@@ -23,9 +25,10 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="tup"/> is empty (<c>need at least one array to concatenate</c>);
         ///     arrays whose other axes differ; a <c>numpy.matrix</c> result of more than two long axes.</exception>
         /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.row_stack.html - DEPRECATED in NumPy 2.0 (NumPy warns
-        ///     "`row_stack` alias is deprecated. Use `np.vstack` directly."; NumSharp has no warnings channel): prefer
-        ///     <see cref="vstack(NDArray[])"/>. API-parity batch 12.
+        ///     https://numpy.org/doc/1.26/reference/generated/numpy.row_stack.html (NumPy 2.x's documentation has no page
+        ///     for it). NumPy 2.5 removed <c>np.row_stack</c> (<c>AttributeError: module 'numpy' has no attribute
+        ///     'row_stack'</c>); NumSharp keeps it on purpose, with no warning and no <c>[Obsolete]</c>, so code written
+        ///     against NumPy 2.4 or earlier compiles and runs unchanged. API-parity batch 12.
         /// </remarks>
         public static NDArray row_stack(params NDArray[] tup)
         {
@@ -37,9 +40,9 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>row_stack(tup, *, dtype=None, casting='same_kind')</c>, the deprecated alias of
-        ///     <see cref="vstack(NDArray[], DType, string)"/>: the arrays stacked vertically with np.concatenate's
-        ///     <c>dtype</c> / <c>casting</c>.
+        ///     NumPy 2.4's <c>row_stack(tup, *, dtype=None, casting='same_kind')</c>,
+        ///     <see cref="vstack(NDArray[], DType, string)"/> under its other name: the arrays stacked vertically with
+        ///     np.concatenate's <c>dtype</c> / <c>casting</c>.
         /// </summary>
         /// <param name="tup">The arrays (NumPy's sequence).</param>
         /// <param name="dtype">The result dtype handed to np.concatenate, or null for the arrays' promoted dtype.</param>
@@ -51,7 +54,8 @@ namespace NumSharp
         ///     axes.</exception>
         /// <exception cref="InvalidCastException">An array that does not cast to <paramref name="dtype"/> under
         ///     <paramref name="casting"/> (np.vstack's refusal with NumPy's text; NumPy's type is TypeError).</exception>
-        /// <remarks>DEPRECATED in NumPy 2.0: prefer <see cref="vstack(NDArray[], DType, string)"/>. API-parity batch 12.</remarks>
+        /// <remarks>NumPy 2.5 removed <c>np.row_stack</c>; NumSharp keeps it on purpose, with no warning and no
+        ///     <c>[Obsolete]</c> (see <see cref="row_stack(NDArray[])"/>). API-parity batch 12.</remarks>
         public static NDArray row_stack(NDArray[] tup, DType dtype = null, string casting = "same_kind")
         {
             if (tup == null)
@@ -62,8 +66,8 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>row_stack(tup)</c> over object arrays of Python lists (<see cref="NDListArray"/>): the deprecated
-        ///     alias of <see cref="vstack(NDListArray[])"/>, the lists shared as NumPy's object pointers are.
+        ///     NumPy 2.4's <c>row_stack(tup)</c> over object arrays of Python lists (<see cref="NDListArray"/>):
+        ///     <see cref="vstack(NDListArray[])"/> under its other name, the lists shared as NumPy's object pointers are.
         /// </summary>
         /// <param name="tup">The list arrays (NumPy's sequence).</param>
         /// <returns>A new object array of the lists, at least 2-D.</returns>
@@ -71,9 +75,10 @@ namespace NumSharp
         /// <exception cref="ValueError">No array; arrays whose other axes differ.</exception>
         /// <exception cref="NotSupportedException">A bytes list beside str lists.</exception>
         /// <exception cref="ObjectDisposedException">One of the arrays was disposed.</exception>
-        /// <remarks>DEPRECATED in NumPy 2.0: prefer <see cref="vstack(NDListArray[])"/>. A sequence parameter, as vstack's
-        ///     (a second params form would make <c>np.row_stack()</c> ambiguous). API-parity batch 12 (the owner: "support
-        ///     that too").</remarks>
+        /// <remarks>NumPy 2.5 removed <c>np.row_stack</c>; NumSharp keeps it on purpose, with no warning and no
+        ///     <c>[Obsolete]</c> (see <see cref="row_stack(NDArray[])"/>). A sequence parameter, as vstack's (a second
+        ///     params form would make <c>np.row_stack()</c> ambiguous). API-parity batch 12 (the owner: "support that
+        ///     too").</remarks>
         public static NDListArray row_stack(NDListArray[] tup) => NDListArray.VStack(tup);
     }
 }

@@ -356,9 +356,12 @@ numpy.matrix / numpy.char.chararray rules and the null checks; `np.apply_over_ax
 plain statements would not apply.
 - `concat` is NumPy 2.0's alias of `concatenate`, with every overload (array form with `axis`/`out`/`dtype`/`casting`,
   tuple-arity forms).
-- `row_stack` is NumPy 2.4's deprecated alias of `vstack` (NumPy warns; NumSharp has no warnings channel, the remarks
-  say it), with vstack's three forms: the kept `params NDArray[]` form, `(NDArray[] tup, DType dtype, string casting)`, and
-  `(NDListArray[] tup)`. `np.vstack(NDListArray[])` / `np.row_stack(NDListArray[])` stack `np.char.split`'s object arrays
+- `row_stack` is `vstack` under NumPy 2.4's other name, kept on purpose: NumPy 2.0 deprecated it and NumPy 2.5 removed
+  it (`AttributeError`), and NumSharp keeps it with no warning and no `[Obsolete]` (the owner, 2026-11-13: keep it, "no
+  obsoletion"), as it keeps the NumPy 1.x names NumPy 2.0 removed (`np.maximum_sctype`, `np.issctype`, ...: "keep them,
+  document that they are okay"). It has vstack's three forms: the kept `params NDArray[]` form,
+  `(NDArray[] tup, DType dtype, string casting)`, and `(NDListArray[] tup)`. `np.vstack(NDListArray[])` /
+  `np.row_stack(NDListArray[])` stack `np.char.split`'s object arrays
   of lists (`NDListArray.VStack`): the ids of every part in the FIRST part's heap (`IdsInThisHeap`: the same lists, as
   NumPy's object pointers; another family's lists appended there once), `np.vstack` of the int64 ids (NumPy's shape rule
   and texts), a new array sharing the heap. A sequence parameter, not `params`: a second params form would make
