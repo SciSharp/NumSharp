@@ -86,7 +86,7 @@ namespace NeuralNetwork.NumSharp.Serialization
             // NpzFile is lazy and holds the archive open — it MUST be disposed.
             using (var npz = np.load_npz(path))
             {
-                var available = new HashSet<string>(npz.Files);
+                var available = new HashSet<string>(npz.files);
                 var loaded = new Dictionary<string, NDArray>();
 
                 for (int i = 0; i < layers.Count; i++)
@@ -96,7 +96,7 @@ namespace NeuralNetwork.NumSharp.Serialization
                         if (!available.Contains(key))
                             throw new InvalidOperationException(
                                 $"Checkpoint '{path}' has no entry '{key}'. It holds " +
-                                $"[{string.Join(", ", npz.Files)}] — the archive was written from a " +
+                                $"[{string.Join(", ", npz.files)}] — the archive was written from a " +
                                 "different architecture, or the layers are in a different order.");
 
                         loaded[key] = npz[key];

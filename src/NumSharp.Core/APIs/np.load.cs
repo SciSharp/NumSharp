@@ -227,7 +227,7 @@ namespace NumSharp
             try
             {
                 CheckIsNpz(stream, file);
-                return new NpzFile(stream, ownStream: true, allow_pickle, max_header_size);
+                return new NpzFile(stream, own_fid: true, allow_pickle, max_header_size);
             }
             catch
             {
@@ -262,7 +262,7 @@ namespace NumSharp
             try
             {
                 CheckIsNpz(stream, "bytes");
-                return new NpzFile(stream, ownStream: true, allow_pickle, max_header_size);
+                return new NpzFile(stream, own_fid: true, allow_pickle, max_header_size);
             }
             catch
             {

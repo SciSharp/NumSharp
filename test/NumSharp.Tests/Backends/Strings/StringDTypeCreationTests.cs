@@ -216,9 +216,9 @@ namespace NumSharp.Tests.Backends.Strings
                 V(r).Should().Equal(new object[] { "a", "x", "b" });
             using (var r = np.insert(t, 1, 5))
                 V(r).Should().Equal(new object[] { "a", "5", "b" });
-            using (var r = np.insert(t, 1, (object)"x"))
+            using (var r = np.insert(t, 1, "x"))
                 V(r).Should().Equal(new object[] { "a", "x", "b" });
-            using (var r = np.insert(t, 1L, (object)5))
+            using (var r = np.insert(t, 1L, 5))
                 V(r).Should().Equal(new object[] { "a", "5", "b" });
         }
 

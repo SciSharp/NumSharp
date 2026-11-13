@@ -3,7 +3,6 @@ paths:
   - "src/NumSharp.Core/View/Shape.Axes.cs"
   - "src/NumSharp.Core/View/NDAxis.cs"
   - "src/NumSharp.Core/Exceptions/AxisError.cs"
-  - "src/NumSharp.Core/Exceptions/AxisOutOfRangeException.cs"
   - "src/NumSharp.Core/Backends/Default/Math/Reduction/ReductionArguments.cs"
   - "test/NumSharp.Tests/Manipulation/AxisArgumentParity.Test.cs"
   - "test/NumSharp.Tests/APIs/KeptAxisOverloads.cs"
@@ -24,7 +23,13 @@ type-strict, zero-excuse `axis_args.jsonl` oracle tier, the `evaluate.jsonl` tie
 - `Shape.normalize_axis_tuple(axis, ndim, argname, allow_duplicate)` is NumPy's function: a NEW array (the caller's is
   never rewritten), every axis range-checked before the repeat check, a repeat NumPy's `ValueError "repeated axis"` /
   `"repeated axis in \`{argname}\` argument"` (never silently removed).
-- `AxisOutOfRangeException` is `[Obsolete]` and derives from `AxisError`: nothing in NumSharp raises it.
+- `AxisError` is the only axis exception: the legacy `AxisOutOfRangeException` (parenthesized text, never raised) is
+  deleted, as is every removed member (no `[Obsolete]` shims).
+- `np.lib.array_utils` (`APIs/np.lib.array_utils.cs`) is NumPy's public module over these ports:
+  `normalize_axis_index(axis, ndim, msg_prefix)` is `Shape.check_and_adjust_axis`, `normalize_axis_tuple(axis, ndim,
+  argname, allow_duplicate)` `Shape.normalize_axis_tuple` (an `NDAxis`, with the kept `int` and `int[]` forms), and
+  `byte_bounds(a)` the `(low, high)` byte addresses NumPy derives from `__array_interface__` (a C-contiguous array's
+  `size * itemsize`, else `(n - 1) * stride` per axis to the low or the high end, then one item).
 - `NDAxis` (`View/NDAxis.cs`, the owner's OD1) is NumPy's axis argument as one type: a function whose NumPy default is
   `axis=None` takes `NDAxis? axis = null`, one whose axis is required `NDAxis axis` (np.expand_dims, np.moveaxis). It
   converts implicitly from `int` (lifted: an `int?` too, null = None), `int[]` (a null array is None for `NDAxis?` and an

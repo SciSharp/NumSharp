@@ -127,7 +127,7 @@ double y = a.GetDouble(1, 2);           // 6.0: the int64 element, converted as 
 
 The typed reads are fastest when `T` is the dtype's own type (`long` for int64): the element is then read as stored, with no conversion.
 
-> `.item()` with **no arguments** unwraps any size-1 array (0-d, 1-element 1-D, 1×1 2-D) to a scalar, and throws `IncorrectSizeException` otherwise - the NumPy 2.x replacement for the removed `np.asscalar()`.
+> `.item()` with **no arguments** unwraps any size-1 array (0-d, 1-element 1-D, 1×1 2-D) to a scalar, and throws NumPy's `ValueError` otherwise (`can only convert an array of size 1 to a Python scalar`) - the NumPy 2.x replacement for the removed `np.asscalar()`.
 
 ### Reading flat, in order
 

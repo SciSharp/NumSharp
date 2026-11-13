@@ -622,7 +622,7 @@ namespace NumSharp.Tests.Fuzz
         ///     NumPy's exception classes and the .NET types NumSharp is allowed to answer them
         ///     with. The taxonomies genuinely do not align 1:1 (NumPy's ValueError covers what .NET
         ///     splits across ArgumentException / InvalidOperationException / FormatException, and
-        ///     NumSharp deliberately raises its own IncorrectShapeException / AxisOutOfRangeException),
+        ///     NumSharp deliberately raises its own IncorrectShapeException),
         ///     so the TYPE check is a class-level sanity net and the MESSAGE carries the contract.
         /// </summary>
         private static readonly Dictionary<string, string[]> ErrorTypeMap = new()
@@ -630,10 +630,10 @@ namespace NumSharp.Tests.Fuzz
             ["ValueError"] = new[]
             {
                 "ArgumentException", "ArgumentNullException", "ArgumentOutOfRangeException",
-                "IncorrectShapeException", "AxisOutOfRangeException", "InvalidOperationException",
+                "IncorrectShapeException", "InvalidOperationException",
                 "FormatException", "OverflowException", "NotSupportedException",
-                // ndarray.item's size guard (NumPy: ValueError "can only convert an array of
-                // size 1 to a Python scalar") is the house IncorrectSizeException.
+                // The house size guards (IncorrectSizeException) answer NumPy's ValueError; ndarray.item's
+                // raises NumPy's ValueError itself since API-parity batch 13.
                 "IncorrectSizeException"
             },
             ["TypeError"] = new[]
@@ -648,12 +648,10 @@ namespace NumSharp.Tests.Fuzz
             ["IndexError"] = new[]
             {
                 "IndexOutOfRangeException", "ArgumentOutOfRangeException", "ArgumentException",
-                "AxisOutOfRangeException"
             },
             ["AxisError"] = new[]
             {
-                "AxisOutOfRangeException", "ArgumentOutOfRangeException", "ArgumentException",
-                "IndexOutOfRangeException"
+                "ArgumentOutOfRangeException", "ArgumentException", "IndexOutOfRangeException"
             },
             // NumPy's OverflowError / ZeroDivisionError / MemoryError / UFuncTypeError are NumSharp classes of the same name
             // (Exceptions/), matched through the class chain (ClassChainHas). An EMPTY entry pins the class: a key absent

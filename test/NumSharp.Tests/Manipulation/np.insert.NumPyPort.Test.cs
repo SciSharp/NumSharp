@@ -20,39 +20,39 @@ namespace NumSharp.Tests.Manipulation
         public void ObjectValue_IsConvertedAfterTheAxisAndIndexChecks()
         {
             // >>> np.insert(np.zeros(3, np.int8), 10, 1000)  IndexError: index 10 is out of bounds for axis 0 with size 3
-            Action oobLiteral = () => np.insert(np.zeros(new Shape(3), np.int8), 10, (object)1000);
+            Action oobLiteral = () => np.insert(np.zeros(new Shape(3), np.int8), 10, 1000);
             oobLiteral.Should().Throw<IndexOutOfRangeException>().WithMessage("index 10 is out of bounds for axis 0 with size 3");
             // >>> np.insert(np.zeros(3, np.uint8), 1, 1000, axis=1)  AxisError: axis 1 is out of bounds for array of dimension 1
-            Action axisLiteral = () => np.insert(np.zeros(new Shape(3), np.uint8), 1, (object)1000, axis: 1);
+            Action axisLiteral = () => np.insert(np.zeros(new Shape(3), np.uint8), 1, 1000, axis: 1);
             axisLiteral.Should().Throw<AxisError>().WithMessage("axis 1 is out of bounds for array of dimension 1*");
             // >>> np.insert(np.zeros(3, np.int32), 10, 'x')  IndexError (not int()'s ValueError)
-            Action oobText = () => np.insert(np.zeros(new Shape(3), np.int32), 10, (object)"x");
+            Action oobText = () => np.insert(np.zeros(new Shape(3), np.int32), 10, "x");
             oobText.Should().Throw<IndexOutOfRangeException>().WithMessage("index 10 is out of bounds for axis 0 with size 3");
             // >>> np.insert(np.zeros(3, np.int32), 10, [7, 'x'])  IndexError
             Action oobList = () => np.insert(np.zeros(new Shape(3), np.int32), 10, new object[] { 7, "x" });
             oobList.Should().Throw<IndexOutOfRangeException>().WithMessage("index 10 is out of bounds for axis 0 with size 3");
             // >>> np.insert(np.zeros(3), 10, 1+2j)  IndexError (not float()'s TypeError)
-            Action oobComplex = () => np.insert(np.zeros(new Shape(3)), 10, (object)new System.Numerics.Complex(1, 2));
+            Action oobComplex = () => np.insert(np.zeros(new Shape(3)), 10, new System.Numerics.Complex(1, 2));
             oobComplex.Should().Throw<IndexOutOfRangeException>().WithMessage("index 10 is out of bounds for axis 0 with size 3");
 
             // Within bounds the conversion errors stay NumPy's.
             // >>> np.insert(np.zeros(3, np.int8), 1, 1000)  OverflowError: Python integer 1000 out of bounds for int8
-            Action overflow = () => np.insert(np.zeros(new Shape(3), np.int8), 1, (object)1000);
+            Action overflow = () => np.insert(np.zeros(new Shape(3), np.int8), 1, 1000);
             overflow.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
             // >>> np.insert(np.zeros(3, np.int32), 1, 'x')  ValueError: invalid literal for int() with base 10: 'x'
-            Action badText = () => np.insert(np.zeros(new Shape(3), np.int32), 1, (object)"x");
+            Action badText = () => np.insert(np.zeros(new Shape(3), np.int32), 1, "x");
             badText.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: 'x'");
             // >>> np.insert(np.zeros(3, np.int8), [], 1000)  OverflowError: the empty index still converts the values
-            Action emptyIndex = () => np.insert(np.zeros(new Shape(3), np.int8), Array.Empty<int>(), (object)1000);
+            Action emptyIndex = () => np.insert(np.zeros(new Shape(3), np.int8), Array.Empty<int>(), 1000);
             emptyIndex.Should().Throw<OverflowError>().WithMessage("Python integer 1000 out of bounds for int8");
 
             // And a value that converts is stored as NumPy stores it.
             // >>> np.insert(np.zeros(3, np.int8), 1, 7)  array([0, 7, 0, 0], dtype=int8)
-            var r = np.insert(np.zeros(new Shape(3), np.int8), 1, (object)7);
+            var r = np.insert(np.zeros(new Shape(3), np.int8), 1, 7);
             r.dtype.Should().Be(np.int8);
             r.array_equal(np.array(new sbyte[] { 0, 7, 0, 0 })).Should().BeTrue();
             // >>> np.insert(np.zeros(3, np.float64), 2, '1.5')  array([0. , 0. , 1.5, 0. ])
-            np.insert(np.zeros(new Shape(3)), 2, (object)"1.5").array_equal(np.array(new[] { 0.0, 0.0, 1.5, 0.0 }))
+            np.insert(np.zeros(new Shape(3)), 2, "1.5").array_equal(np.array(new[] { 0.0, 0.0, 1.5, 0.0 }))
                 .Should().BeTrue();
         }
 
@@ -83,7 +83,7 @@ namespace NumSharp.Tests.Manipulation
             np.insert(a, np.array(new[] { false, true }), np.array(new long[] { 7, 8 }))
                 .array_equal(np.array(new long[] { 0, 7, 8, 1, 2, 3 })).Should().BeTrue();
             // >>> np.insert(np.arange(4), np.array([False, False, False, False, True]), 9)  array([0, 1, 2, 3, 9])
-            np.insert(a, np.array(new[] { false, false, false, false, true }), (object)9)
+            np.insert(a, np.array(new[] { false, false, false, false, true }), 9)
                 .array_equal(np.array(new long[] { 0, 1, 2, 3, 9 })).Should().BeTrue();
         }
 
@@ -203,7 +203,7 @@ namespace NumSharp.Tests.Manipulation
                 "NumPy boolean array indexing assignment cannot assign 2 input values to the 3 output values where the mask is true");
             // >>> np.insert(np.arange(6).reshape(2, 3), [-7, 0, 1, 2], 9, axis=1)
             // ValueError: shape mismatch: value array of shape (2,3) could not be broadcast to indexing result of shape (2,4)
-            Action collide2d = () => np.insert(np.arange(6L).reshape(2, 3), new long[] { -7, 0, 1, 2 }, (object)9, axis: 1);
+            Action collide2d = () => np.insert(np.arange(6L).reshape(2, 3), new long[] { -7, 0, 1, 2 }, 9, axis: 1);
             collide2d.Should().Throw<ValueError>().WithMessage(
                 "shape mismatch: value array of shape (2,3) could not be broadcast to indexing result of shape (2,4)");
             // >>> np.insert(np.arange(1), [-3, 0, 1, 1], [100, 200, 300, 400])  (one slab fills both free slots; the
@@ -278,7 +278,7 @@ namespace NumSharp.Tests.Manipulation
             emptyIndex2d.Should().Throw<ValueError>().WithMessage(
                 "shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (2,0)");
             // >>> np.insert(np.arange(12), [], 7)  is a copy (a 0-d value fits (0,))
-            np.insert(a, new long[0], (object)7).array_equal(a).Should().BeTrue();
+            np.insert(a, new long[0], 7).array_equal(a).Should().BeTrue();
             // >>> np.insert(b, [1, 3], [[7], [8]], axis=1)  array([[0, 7, 1, 2, 7], [3, 8, 4, 5, 8]])
             np.insert(b, new long[] { 1, 3 }, np.array(new long[] { 7, 8 }).reshape(2, 1), axis: 1)
                 .array_equal(np.array(new long[,] { { 0, 7, 1, 2, 7 }, { 3, 8, 4, 5, 8 } })).Should().BeTrue();

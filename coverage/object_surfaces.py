@@ -129,14 +129,11 @@ OBJECT_SURFACES = (
 OBJECT_SURFACE_PATHS = tuple("numpy." + surface.path for surface in OBJECT_SURFACES)
 
 # Reviewed spelling adapters, not case-folded matching. Method/property shape must
-# still agree. Mapping-like Keys/Values properties cannot satisfy keys()/values().
+# still agree. Mapping-like Keys/Values properties cannot satisfy keys()/values(). (NpzFile's adapters went with
+# API-parity batch 13: its members carry NumPy's names - files, zip, fid, allow_pickle, max_header_size, keys(),
+# values(), items(), get(), close() - and match exactly.)
 MEMBER_ALIASES = {
     ("flatiter", "base"): "Base",
-    ("lib.npyio.NpzFile", "files"): "Files",
-    ("lib.npyio.NpzFile", "allow_pickle"): "AllowPickle",
-    ("lib.npyio.NpzFile", "max_header_size"): "MaxHeaderSize",
-    ("lib.npyio.NpzFile", "zip"): "Zip",
-    ("lib.npyio.NpzFile", "close"): "Close",
 }
 
 

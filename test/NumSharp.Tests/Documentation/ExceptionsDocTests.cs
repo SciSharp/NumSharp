@@ -35,7 +35,6 @@ namespace NumSharp.Tests.Documentation
             typeof(LinAlgError).BaseType.Should().Be(typeof(ValueError));
             typeof(LookupError).BaseType.Should().Be(typeof(ArgumentException));
             typeof(AxisError).BaseType.Should().Be(typeof(ArgumentOutOfRangeException));
-            typeof(AxisOutOfRangeException).BaseType.Should().Be(typeof(AxisError));
             typeof(OSError).BaseType.Should().Be(typeof(System.IO.IOException));
             typeof(OpenBlasMissingBackendException).BaseType.Should().Be(typeof(MissingBackendException));
             typeof(MissingBackendException).BaseType.Should().Be(typeof(NotSupportedException));
@@ -154,7 +153,7 @@ namespace NumSharp.Tests.Documentation
             Action singular = () => np.linalg.inv(np.zeros((2, 2)));
             singular.Should().Throw<LinAlgError>().WithMessage("Singular matrix");
             Action item = () => np.array(new[] { 1, 2 }).item();
-            item.Should().Throw<IncorrectSizeException>().WithMessage("can only convert an array of size 1 to a Python scalar");
+            item.Should().Throw<ValueError>().WithMessage("can only convert an array of size 1 to a Python scalar");
             Action cast = () => _ = (int)np.array(new[] { 1, 2 });
             cast.Should().Throw<TypeError>().WithMessage("only 0-dimensional arrays can be converted to Python scalars");
             Action truth = () => _ = (bool)np.array(new[] { 1, 2 });

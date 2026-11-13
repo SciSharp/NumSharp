@@ -548,6 +548,61 @@ namespace NumSharp.Tests.Fuzz
             // as_strided: a view over the operand's buffer (byte strides; API-parity batch 12).
             E(l, "np.lib.stride_tricks.as_strided", "overlapping windows", f =>
                 np.lib.stride_tricks.as_strided(f.V, new Shape(4, 3), new long[] { 8, 8 }));
+            // np.lib.array_utils (API-parity batch 13): the axis normalizers over Shape's ports, byte_bounds' address
+            // arithmetic over a view (no array is made).
+            E(l, "np.lib.array_utils.byte_bounds", "a transposed view", f => Box(np.lib.array_utils.byte_bounds(f.MT)));
+            E(l, "np.lib.array_utils.normalize_axis_index", "a negative axis", f => Box(np.lib.array_utils.normalize_axis_index(-1, 3)));
+            E(l, "np.lib.array_utils.normalize_axis_tuple", "two axes", f => np.lib.array_utils.normalize_axis_tuple(new[] { 0, -1 }, 3));
+            // np.lib.format (API-parity batch 13): NumPy's .npy module over NpyFormat; each entry writes into a stream of
+            // its own, so the only arrays are the operand's views and read_array's result.
+            E(l, "np.lib.format.magic", "version 1.0", f => np.lib.format.magic(1, 0));
+            E(l, "np.lib.format.read_magic", "a version 2.0 prefix", f =>
+                Box(np.lib.format.read_magic(new MemoryStream(np.lib.format.magic(2, 0)))));
+            E(l, "np.lib.format.dtype_to_descr", "float64", f => np.lib.format.dtype_to_descr(f.M.dtype));
+            E(l, "np.lib.format.descr_to_dtype", "'<f8'", f => np.lib.format.descr_to_dtype("<f8"));
+            E(l, "np.lib.format.drop_metadata", "float64", f => np.lib.format.drop_metadata(f.M.dtype));
+            E(l, "np.lib.format.header_data_from_array_1_0", "a transposed view", f => np.lib.format.header_data_from_array_1_0(f.MT));
+            E(l, "np.lib.format.write_array_header_1_0", "the matrix's header", f =>
+            {
+                var header = new MemoryStream();
+                np.lib.format.write_array_header_1_0(header, np.lib.format.header_data_from_array_1_0(f.M));
+                return Box(header.Length);
+            });
+            E(l, "np.lib.format.write_array_header_2_0", "the matrix's header", f =>
+            {
+                var header = new MemoryStream();
+                np.lib.format.write_array_header_2_0(header, np.lib.format.header_data_from_array_1_0(f.M));
+                return Box(header.Length);
+            });
+            E(l, "np.lib.format.read_array_header_1_0", "a written header", f =>
+            {
+                var header = new MemoryStream();
+                np.lib.format.write_array_header_1_0(header, np.lib.format.header_data_from_array_1_0(f.M));
+                header.Position = 0;
+                np.lib.format.read_magic(header);
+                return Box(np.lib.format.read_array_header_1_0(header));
+            });
+            E(l, "np.lib.format.read_array_header_2_0", "a written header", f =>
+            {
+                var header = new MemoryStream();
+                np.lib.format.write_array_header_2_0(header, np.lib.format.header_data_from_array_1_0(f.M));
+                header.Position = 0;
+                np.lib.format.read_magic(header);
+                return Box(np.lib.format.read_array_header_2_0(header));
+            });
+            E(l, "np.lib.format.write_array", "a transposed view", f =>
+            {
+                var file = new MemoryStream();
+                np.lib.format.write_array(file, f.MT);
+                return Box(file.Length);
+            });
+            E(l, "np.lib.format.read_array", "a written matrix", f =>
+            {
+                var file = new MemoryStream();
+                np.lib.format.write_array(file, f.M);
+                file.Position = 0;
+                return np.lib.format.read_array(file);
+            });
             E(l, "np.get_printoptions", "read", f => np.get_printoptions());
             E(l, "np.getbufsize", "read", f => Box(np.getbufsize()));
             E(l, "np.histogram", "int bins", f => (NDArray[])np.histogram(f.V, 10));
@@ -1266,10 +1321,10 @@ namespace NumSharp.Tests.Fuzz
             });
 
             // ---- NpzFile ----
-            E(l, "NpzFile.Close", "close", f =>
+            E(l, "NpzFile.close", "close", f =>
             {
                 var z = np.load_npz(f.NpzBytes);
-                z.Close();
+                z.close();
                 return null;
             });
             E(l, "NpzFile.ContainsKey", "probe", f =>
@@ -1301,6 +1356,28 @@ namespace NumSharp.Tests.Fuzz
             {
                 using var z = np.load_npz(f.NpzBytes);
                 return Box(z.IsArray("m"));
+            });
+            // NumPy's Mapping members (API-parity batch 13): the arrays they hand out are the indexer's cached members,
+            // returned (once) for the result disposer as the indexer entry returns its member.
+            E(l, "NpzFile.keys", "names", f =>
+            {
+                using var z = np.load_npz(f.NpzBytes);
+                return z.keys().ToList();
+            });
+            E(l, "NpzFile.values", "load every member", f =>
+            {
+                using var z = np.load_npz(f.NpzBytes);
+                return z.values().ToList();
+            });
+            E(l, "NpzFile.items", "walk name / array pairs", f =>
+            {
+                using var z = np.load_npz(f.NpzBytes);
+                return z.items().Select(p => p.value).ToList();
+            });
+            E(l, "NpzFile.get", "a member and a missing one", f =>
+            {
+                using var z = np.load_npz(f.NpzBytes);
+                return new object[] { z.get("m"), Box(z.get("zz") is null) };
             });
             E(l, "NpzFile.Item", "lazy load + cache, both key spellings", f =>
             {

@@ -340,17 +340,22 @@ namespace NumSharp.Tests.Fuzz
             ScopeAudit.Settle();
             var m = np.arange(2000).astype(np.float64).reshape(40, 50);
             var mt = m.T;   // transposed => non-contiguous => np.ravel copies
+            // The index array is the caller's, built outside the measurement: since API-parity batch 13 a long[] obj
+            // converts to np.delete's NDArray form at the call site, and that conversion is the CALLER's temporary (left
+            // to the finalizer like every implicit conversion), not one of delete's intermediates this pin measures.
+            var indices = np.array(new long[] { 1, 2, 3 });
             try
             {
                 long? escaped = ScopeAudit.Measure(() =>
                 {
-                    using var r = np.delete(mt, new long[] { 1, 2, 3 }, null);
+                    using var r = np.delete(mt, indices, null);
                 });
                 Assert.AreEqual(0L, escaped,
                     "np.delete(non-contiguous, axis=null) must reclaim its ravel work-copy ([NDScoped] pin)");
             }
             finally
             {
+                indices.Dispose();
                 m.Dispose();
             }
         }

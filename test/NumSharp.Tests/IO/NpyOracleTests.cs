@@ -288,8 +288,8 @@ namespace NumSharp.Tests.IO
                     var expected = c.FilesOverride?.ToList()
                                    ?? new List<string>((c.Entries?.Keys ?? Enumerable.Empty<string>())
                                        .Concat(c.RawEntries?.Keys ?? Enumerable.Empty<string>()));
-                    if (npz.Files.Count != expected.Count || expected.Any(k => !npz.Files.Contains(k)))
-                        f.Add(c, $".files: expected [{string.Join(", ", expected)}], got [{string.Join(", ", npz.Files)}]");
+                    if (npz.files.Count != expected.Count || expected.Any(k => !npz.files.Contains(k)))
+                        f.Add(c, $".files: expected [{string.Join(", ", expected)}], got [{string.Join(", ", npz.files)}]");
 
                     foreach (KeyValuePair<string, NpyMember> kv in c.Entries ?? new Dictionary<string, NpyMember>())
                     {

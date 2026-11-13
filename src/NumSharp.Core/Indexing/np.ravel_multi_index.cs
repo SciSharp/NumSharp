@@ -10,15 +10,16 @@ namespace NumSharp
         /// <summary>
         ///     Converts a tuple of coordinate arrays into an array of flat indices, applying boundary modes per axis —
         ///     NumPy's <c>arr_ravel_multi_index</c> (<c>numpy/_core/src/multiarray/compiled_base.c</c>), statement for
-        ///     statement. Inverse of <see cref="unravel_index(NDArray, int[], char)"/>.
+        ///     statement. Inverse of <see cref="unravel_index(NDArray, Shape, char)"/>.
         /// </summary>
         /// <param name="multi_index">
         ///     The coordinate arrays, one per dimension of <paramref name="dims"/>: integer or bool, any layout; they
         ///     broadcast against each other, and the broadcast shape is the result's shape. A null entry is NumPy's
         ///     <c>None</c>, which is refused (<see cref="TypeError"/>).
         /// </param>
-        /// <param name="dims">The shape of the array the coordinates index. An empty shape (NumPy's <c>()</c>) takes no
-        ///     coordinate array and gives the flat index 0.</param>
+        /// <param name="dims">The shape of the array the coordinates index (<c>a.shape</c>, <c>a.Shape</c>, an
+        ///     <c>int[]</c>, a tuple). An empty shape (NumPy's <c>()</c>) takes no coordinate array and gives the flat index
+        ///     0.</param>
         /// <param name="mode">
         ///     Boundary mode for every axis: <c>"raise"</c> (default — an out-of-range coordinate raises),
         ///     <c>"wrap"</c> (modulo with sign correction) or <c>"clip"</c> (saturate).
@@ -33,7 +34,7 @@ namespace NumSharp
         ///     same permutation, mixed or broadcast ones C order). Coordinates that are all 0-d give NumPy's scalar: a
         ///     fresh read-only 0-d array.
         /// </returns>
-        /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> or <paramref name="dims"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> is null.</exception>
         /// <exception cref="ValueError">
         ///     In NumPy's order: an order letter that is not C / F / A / K (<c>order must be one of 'C', 'F', 'A', or 'K'
         ///     (got 'X')</c>); a bad <paramref name="mode"/> (NumPy's <c>clipmode_parser</c> texts, see
@@ -62,14 +63,16 @@ namespace NumSharp
         ///     ravel_multi_index</c>, its fixed iterator operand limit); NumSharp has no dimension cap.</para>
         ///     <para>The body is <see cref="TensorEngine.RavelMultiIndex"/> (the np-layer dtype plan): this facade computes a
         ///     <c>numpy.matrix</c> operand as a plain array and calls the first coordinate array's engine.</para>
+        ///     <para><paramref name="dims"/> is a <see cref="Shape"/> since API-parity batch 13 (parity QA-56): it was an
+        ///     <c>int[]</c>, which neither <c>a.shape</c> nor <c>a.Shape</c> converted to.</para>
         /// </remarks>
-        public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string mode = "raise", char order = 'C')
+        public static NDArray<long> ravel_multi_index(NDArray[] multi_index, Shape dims, string mode = "raise", char order = 'C')
         {
             // The engine of the first coordinate array computes the call, its argument checks included; an empty, null or
             // null-led list has no operand to decide, so TensorEngine.Default's member reports NumPy's error for it. One
-            // mode string serves every dimension.
+            // mode string serves every dimension; the engine reads the shape's dimensions (never writes them).
             TensorEngine engine = multi_index is { Length: > 0 } && multi_index[0] is { } first ? first.TensorEngine : TensorEngine.Default;
-            return engine.RavelMultiIndex(multi_index, dims, mode, order);
+            return engine.RavelMultiIndex(multi_index, dims.dimensions, mode, order);
         }
 
         /// <summary>
@@ -84,9 +87,9 @@ namespace NumSharp
         ///     compile-time ambiguity: write <c>(string[])null</c> or <c>(string)null</c>, both NumPy's None); <c>null</c> is NumPy's
         ///     <c>None</c>, which raises on every dimension.</param>
         /// <param name="order"><c>'C'</c> (default) or <c>'F'</c>, in either case.</param>
-        /// <returns>The flat indices, laid out as <see cref="ravel_multi_index(NDArray[], int[], string, char)"/> lays them
+        /// <returns>The flat indices, laid out as <see cref="ravel_multi_index(NDArray[], Shape, string, char)"/> lays them
         ///     out.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> or <paramref name="dims"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> is null.</exception>
         /// <exception cref="ValueError">In NumPy's order: a bad order letter; a mode count that differs from the dimensions
         ///     (<c>list of clipmodes has wrong length (1 instead of 2)</c>) or a bad mode (<see cref="ClipModes.ClipmodeConverter"/>);
         ///     an <c>'A'</c> / <c>'K'</c> order; a dims product overflow; a coordinate count that differs from
@@ -98,13 +101,13 @@ namespace NumSharp
         ///     text).</exception>
         /// <exception cref="NotSupportedException">The IL kernel cannot be emitted.</exception>
         /// <remarks>The body is <see cref="TensorEngine.RavelMultiIndex"/>, as for the single-mode overload.</remarks>
-        public static NDArray<long> ravel_multi_index(NDArray[] multi_index, int[] dims, string[] mode, char order = 'C')
+        public static NDArray<long> ravel_multi_index(NDArray[] multi_index, Shape dims, string[] mode, char order = 'C')
         {
             // The engine of the first coordinate array computes the call (TensorEngine.Default's for an empty, null or
             // null-led list, which has no operand to decide); the mode array is NumPy's mode tuple (null is NumPy's
             // None, which raises on every dimension).
             TensorEngine engine = multi_index is { Length: > 0 } && multi_index[0] is { } first ? first.TensorEngine : TensorEngine.Default;
-            return engine.RavelMultiIndex(multi_index, dims, mode, order);
+            return engine.RavelMultiIndex(multi_index, dims.dimensions, mode, order);
         }
 
         /// <summary>
@@ -114,36 +117,38 @@ namespace NumSharp
         /// </summary>
         /// <param name="multi_index">One coordinate per dimension (NumPy's keyword name; named <c>coords</c> before
         ///     API-parity batch 7).</param>
-        /// <param name="dims">The shape the coordinates index; an empty shape takes no coordinate and gives 0.</param>
+        /// <param name="dims">The shape the coordinates index (<c>a.shape</c>, <c>a.Shape</c>, an <c>int[]</c>); an empty
+        ///     shape takes no coordinate and gives 0.</param>
         /// <param name="mode"><c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>, for every axis.</param>
         /// <param name="order"><c>'C'</c> (default) or <c>'F'</c>, in either case.</param>
         /// <returns>The flat index.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> or <paramref name="dims"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="multi_index"/> is null.</exception>
         /// <exception cref="ValueError">In NumPy's order: a bad order letter; a bad mode; an <c>'A'</c> / <c>'K'</c> order;
         ///     a dims product overflow; a coordinate count that differs from <paramref name="dims"/>' length
         ///     (<c>parameter multi_index must be a sequence of length N</c>); a zero dimension (<c>cannot unravel if shape
         ///     has zero entries (is empty).</c>); (mode <c>raise</c>) a coordinate out of range (<c>invalid entry in
         ///     coordinates array</c>).</exception>
-        public static long ravel_multi_index(long[] multi_index, int[] dims, string mode = "raise", char order = 'C')
+        public static long ravel_multi_index(long[] multi_index, Shape dims, string mode = "raise", char order = 'C')
         {
             if (multi_index == null) throw new ArgumentNullException(nameof(multi_index));
-            if (dims == null) throw new ArgumentNullException(nameof(dims));
+            // The shape's own dimension array, read only (shapes share theirs).
+            long[] sizes = dims.dimensions;
             // NumPy's order, as in the array form: the order letter, the mode, the ravel strides, then the coordinates.
             NPY_ORDER npyOrder = OrderResolver.Convert(order);
             int modeInt = ClipModes.ClipmodeConverter(mode);
-            var ravelStrides = Backends.DefaultEngine.RavelStrides(dims, npyOrder);
-            if (multi_index.Length != dims.Length)
-                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"parameter multi_index must be a sequence of length {dims.Length}"));
+            var ravelStrides = Backends.DefaultEngine.RavelStrides(sizes, npyOrder);
+            if (multi_index.Length != sizes.Length)
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"parameter multi_index must be a sequence of length {sizes.Length}"));
 
-            int ndim = dims.Length;
+            int ndim = sizes.Length;
             // A scalar tuple is one coordinate to fold, so NumPy's zero-dimension check applies (in every mode).
-            Backends.DefaultEngine.ThrowIfZeroDimension(dims);
+            Backends.DefaultEngine.ThrowIfZeroDimension(sizes);
 
             long raveled = 0;
             for (int d = 0; d < ndim; d++)
             {
                 long j = multi_index[d];
-                long m = dims[d];
+                long m = sizes[d];
                 j = ApplyMode(j, m, modeInt, d);
                 raveled += j * ravelStrides[d];
             }

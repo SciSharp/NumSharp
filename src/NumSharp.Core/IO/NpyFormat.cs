@@ -301,6 +301,27 @@ namespace NumSharp.IO
         }
 
         /// <summary>
+        ///     NumPy's <c>dtype_to_descr(dtype)</c> as <c>np.lib.format</c> exposes it: <c>dtype.str</c> for every legacy
+        ///     descriptor, so a NON-native one keeps its byte order (<c>'&gt;f4'</c>, <c>'&gt;U3'</c>), and <c>'|O'</c> for a
+        ///     NEP 55 <c>StringDType</c>. <see cref="DtypeToDescr(DType)"/> is the writer's form, which names the native
+        ///     descr because NumSharp writes native bytes; for a native descriptor the two agree.
+        /// </summary>
+        /// <param name="dtype">The descriptor.</param>
+        /// <returns>The descr string NumPy's function returns.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="NotSupportedException">A dtype with no NumPy descr (decimal).</exception>
+        internal static string DescrOf(DType dtype)
+        {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            // A StringDType has no byte order at all ('|O' either way); every other descriptor is NumPy's `dtype.str` when
+            // it is not native, and the writer's native mapping otherwise.
+            if (dtype.Meta is not VStringDTypeMeta && !dtype.isnative)
+                return dtype.str;
+            return DtypeToDescr(dtype);
+        }
+
+        /// <summary>
         ///     Turn a header's <c>descr</c> into the dtype NumSharp will materialize — NumPy's
         ///     <c>descr_to_dtype</c>.
         /// </summary>
@@ -561,8 +582,10 @@ namespace NumSharp.IO
             int padlen = ArrayAlign - ((prefixSize + hlen) % ArrayAlign);
             long totalHeaderLen = (long)hlen + padlen;
 
+            // NumPy's `_wrap_header` raises ValueError here (struct.pack overflowing the length field); the guess-version
+            // writer catches it to try the next version.
             if (totalHeaderLen > version.MaxHeaderLength)
-                throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Header length {hlen} too big for version={version}"));
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"Header length {hlen} too big for version={version}"));
 
             var result = new byte[prefixSize + totalHeaderLen];
             int pos = 0;
@@ -607,9 +630,9 @@ namespace NumSharp.IO
             {
                 return WrapHeader(header, FormatVersion.V1_0); // most compatible
             }
-            catch (InvalidOperationException)
+            catch (ValueError)
             {
-                // Header exceeds the 2-byte length field -> needs v2.0.
+                // Header exceeds the 2-byte length field -> needs v2.0 (NumPy's `except ValueError: pass`).
             }
             catch (UnicodeEncodeException)
             {
@@ -634,6 +657,13 @@ namespace NumSharp.IO
         /// <param name="stream">Target stream.</param>
         /// <param name="d">Header dict: <c>descr</c>, <c>fortran_order</c> and <c>shape</c>.</param>
         /// <param name="version">The version to write, or null to pick the oldest that fits.</param>
+        /// <exception cref="ArgumentException"><paramref name="d"/> has no <c>shape</c>, or one that is not a
+        ///     <c>long[]</c> / <c>int[]</c>.</exception>
+        /// <exception cref="FormatException"><paramref name="version"/> is not (1,0), (2,0) or (3,0).</exception>
+        /// <exception cref="ValueError">The header does not fit <paramref name="version"/>'s length field (NumPy's
+        ///     <c>Header length N too big for version=(1, 0)</c>).</exception>
+        /// <exception cref="InvalidOperationException">The header is not latin-1 encodable and
+        ///     <paramref name="version"/> is below (3, 0).</exception>
         public static void WriteArrayHeader(Stream stream, Dictionary<string, object> d, FormatVersion? version = null)
         {
             string header = FormatHeaderDict(d);
@@ -695,11 +725,25 @@ namespace NumSharp.IO
             public readonly bool FortranOrder;
             public readonly DtypeInfo Dtype;
 
-            public HeaderData(long[] shape, bool fortranOrder, DtypeInfo dtype)
+            /// <summary>
+            ///     The header's <c>descr</c> string as the file spells it (<c>'&gt;f4'</c>, <c>'&lt;c8'</c>, <c>'|O'</c>):
+            ///     what NumPy's <c>read_array_header_*</c> turns into its dtype (<c>np.lib.format</c> does the same).
+            ///     <see cref="Dtype"/> is the storage plan instead, which folds a byte order and complex64 into
+            ///     NumSharp's lanes.
+            /// </summary>
+            public readonly string DescrText;
+
+            /// <summary>Records one validated header.</summary>
+            /// <param name="shape">The declared dimensions.</param>
+            /// <param name="fortranOrder">The declared <c>fortran_order</c>.</param>
+            /// <param name="dtype">The storage plan the descr parsed into.</param>
+            /// <param name="descrText">The descr string itself.</param>
+            public HeaderData(long[] shape, bool fortranOrder, DtypeInfo dtype, string descrText)
             {
                 Shape = shape;
                 FortranOrder = fortranOrder;
                 Dtype = dtype;
+                DescrText = descrText;
             }
 
             /// <summary>Element count. A 0-d array holds exactly one element, not zero.</summary>
@@ -775,7 +819,9 @@ namespace NumSharp.IO
             for (int i = 0; i < shapeTuple.Count; i++)
                 shape[i] = (long)shapeTuple[i];
 
-            return new HeaderData(shape, fortranOrder, DescrToDtype(d["descr"]));
+            // DescrToDtype refuses every descr that is not a string (structured / subarray), so the cast holds once it returns.
+            DtypeInfo dtypeInfo = DescrToDtype(d["descr"]);
+            return new HeaderData(shape, fortranOrder, dtypeInfo, (string)d["descr"]);
         }
 
         #endregion

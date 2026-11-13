@@ -1414,7 +1414,8 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for a 1-D or higher shape.</exception>
         /// <remarks>
         ///     A negative axis is NumPy's normalization (<c>-2</c> is the second-to-last axis). This helper used to map
-        ///     EVERY negative axis to the last one and raise the legacy parenthesized AxisOutOfRangeException; its callers
+        ///     EVERY negative axis to the last one and raise the legacy parenthesized axis exception (deleted in API-parity
+        ///     batch 13); its callers
         ///     pass normalized axes, so only a direct caller ever saw the difference.
         /// </remarks>
         public static long[] GetAxis(long[] dims, int axis)

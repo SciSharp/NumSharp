@@ -1154,7 +1154,7 @@ namespace NumSharp.Tests.Strings
             {
                 "IndexError", "IndexOutOfRangeException", "ArgumentOutOfRangeException", "ArgumentException",
             },
-            ["AxisError"] = new[] { "AxisError", "AxisOutOfRangeException" },
+            ["AxisError"] = new[] { "AxisError" },
             ["DTypePromotionError"] = new[] { "DTypePromotionError" },
             ["UnicodeEncodeError"] = new[] { "UnicodeEncodeError" },
             ["UnicodeDecodeError"] = new[] { "UnicodeDecodeError" },

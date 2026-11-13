@@ -55,7 +55,8 @@ the text classes included. The masked reductions' statistics (`ma.mean` / `ma.va
   the common call keeps its 0-d route) are NumPy's signatures.
 - More of NumPy's signatures: `ma.array(data, dtype, copy, order, mask, fill_value, keep_mask, hard_mask, shrink, ndmin)`
   (the dtype SECOND, the mask fifth; `ndmin must be <= ndmax (64)`) and `masked_array(data, mask, dtype, copy, ndmin,
-  fill_value, keep_mask, hard_mask, shrink, order)` (NumPy's MaskedArray order without subok; the data stays required);
+  fill_value, keep_mask, hard_mask, shrink, order)` (NumPy's MaskedArray order without subok; the data stays required),
+  and `np.ma.MaskedArray(...)` is the same call under the class's name (NumPy's `ma.MaskedArray is ma.masked_array`);
   `asarray(a, dtype, order)` is `order or 'C'`; `stack(arrays, axis, dtype, casting)` / `vstack` / `hstack(tup, dtype,
   casting)` join the masks with the same keywords, then read them back as bool; `reshape(a, Shape new_shape, order)` and
   `MaskedArray.reshape(shape, order, copy)`; `squeeze(a, NDAxis axis, fill_value, hardmask)` and `expand_dims(a, NDAxis)`;

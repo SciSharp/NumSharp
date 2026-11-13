@@ -64,7 +64,6 @@ Exception
 |   +-- LookupError
 |   +-- ArgumentOutOfRangeException
 |       +-- AxisError                   numpy.exceptions.AxisError
-|           +-- AxisOutOfRangeException legacy, no longer raised
 +-- ArithmeticException
 |   +-- ArithmeticError
 |       +-- OverflowError
@@ -143,7 +142,7 @@ Python's `OSError(errno, ...)` and `BaseExceptionGroup(message, excs)` return a 
 | Non-ASCII text cast to `S` | `UnicodeEncodeError` | `UnicodeEncodeError` | `'ascii' codec can't encode character '\xe9' in position 0: ...` |
 | An unknown codec name | `LookupError` | `LookupError` | `unknown encoding: nope` |
 | A singular matrix | `LinAlgError` | `LinAlgError` | `Singular matrix` |
-| `item()` of an array with several elements | `IncorrectSizeException` | `ValueError` | `can only convert an array of size 1 to a Python scalar` |
+| `item()` of an array with several elements | `ValueError` | `ValueError` | `can only convert an array of size 1 to a Python scalar` |
 | A C# numeric cast of a non-0-d array to a scalar | `TypeError` | `TypeError` | `only 0-dimensional arrays can be converted to Python scalars` |
 | A `(bool)` cast of an array with several elements, or none | `ValueError` | `ValueError` | `The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()` (empty: ``The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.``) |
 | An unknown dtype string | `TypeError` | `TypeError` | `data type 'xyz' not understood` |
@@ -242,5 +241,5 @@ NumSharp's own build keeps it that way with the analyzer rule **NDW020**: in Num
 
 ## Legacy exception types
 
-- **`AxisOutOfRangeException`** is the old axis exception, with a parenthesized text (`axis (5) is out of bounds for array of dimension (2)`) NumPy never prints. NumSharp no longer raises it: every axis check raises `AxisError`. It derives from `AxisError`, so a `catch (AxisOutOfRangeException)` still compiles but no longer catches anything; catch `AxisError`.
+- **`AxisOutOfRangeException`**, the old axis exception with a parenthesized text (`axis (5) is out of bounds for array of dimension (2)`) NumPy never prints, is gone: every axis check raises `AxisError`, so catch `AxisError`.
 - **`IncorrectShapeException`**, **`IncorrectSizeException`** and **`IncorrectTypeException`** are raised today, with NumPy's message text. NumPy raises a `ValueError` (or a `TypeError`) for the same failures. `IncorrectTypeException` is a `TypeError`, so `catch (TypeError)` catches it; the shape and size exceptions are `NumSharpException`s only.

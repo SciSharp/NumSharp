@@ -188,6 +188,27 @@ np.histogram_bin_edges keep their four `bins` forms ("C keep four"), so their [O
 `OpenBugs.ApiParity.cs`: `np.array("x")` is an unmarked 0-d array (a NumPy scalar to NumSharp), and np.concatenate
 reports a later 0-d array with the 0-d text where NumPy reports the rank mismatch.
 
+**Refresh 2026-11-13 (API-parity batch 13 on `journey5` at `dc78dad7`).** Regenerated on the batch's tree: 1315 → 1336
+NumPy names with a C# spelling, 1029 → 1047 with NumPy's signature, 286 → 289 to change (the two new modules bring
+their own entries); O 249 → 250, M 43 → 44, X 48 → 47, L 17 → 16, B 13 → 12, T 15 and Q 3 unchanged; the absent names
+69 → 63; the public modules with no facade 14 → 12 (138 → 115 names: np.lib.array_utils and np.lib.format have theirs).
+The coverage artifact does not move (headline 539 / 560, 368 exact; all NumPy APIs 2742 / 3902, 70.3%): it leaves
+every `numpy.lib` row out by the owner's dashboard rule. Fixed: `np.array(string)` is an explicit array;
+np.concatenate checks the first array for 0-d, then each rank; np.delete / np.insert keep NumPy's Slice and NDArray
+forms plus one `long obj` form (a C# int converts to Slice and NDArray alike, CS0121 without it), insert's values an
+NDArray; `new np.Broadcast(params NDArray[])` is public (NumPy's class call; no operand is the 0-d broadcast), with
+np.broadcast over `NDListArray`; NpzFile carries NumPy's names; new np.lib.array_utils and np.lib.format;
+np.ma.MaskedArray; np.arange's NumPy signature (`NDArray start / stop / step`, `PyArray_ArangeObj` over the arguments'
+own arithmetic) beside the kept overloads, whose float forms are NumPy's float64 (QB02) and which gained `ulong`
+forms; NumPy's repeat / item ValueErrors (QB03, QB04); NDArray.Normalize and AxisOutOfRangeException deleted; Shape
+dims for np.unravel_index / np.ravel_multi_index, long[] in the engines (QB56). The owner's decisions from this round:
+np.arange keeps its existing overloads ("but keep existing overloads"), so its [O14] entry is on purpose; np.broadcast
+takes NDListArray too ("Also NDListArray"); NpzFile's members are NumPy's lower-case names. Not taken: np.where without
+its object forms, np.save without its Array form. Left deliberately in the list: np.delete / np.insert [O3] (the C#
+integer form), np.broadcast [O3], np.lib.format read_array / write_array and NpzFile's `pickle_kwargs` [M] (no Python
+unpickler keywords), np.ma.MaskedArray [B] (masked_array's required data and the excluded `subok` slot). Pinned:
+NumPy's integer setitem range-checks a NumPy scalar element np.arange stores (stage S3).
+
 ---
 
 ## Contents
@@ -886,13 +907,13 @@ void dtype; [`dtype-system.md`](dtype-system.md)).
 
 ## 7. NumPy modules without a facade
 
-15 public modules (the coverage tool's list, which follows NumPy's `test_public_api.py`) have no `[ModuleName]` type:
+15 public modules (the coverage tool's list, which follows NumPy's `test_public_api.py`) had no `[ModuleName]` type when the map was first drawn; the three marked **Done** have one now:
 
 | module | names | action |
 |---|---|---|
-| `np.lib.stride_tricks` | `as_strided`, `sliding_window_view` | **Implement**: both are views (`Shape` with given strides; a windowed view with a stride-0-free layout); much used |
-| `np.lib.array_utils` | `byte_bounds`, `normalize_axis_index`, `normalize_axis_tuple` | **Expose**: the axis normalization exists internally (the `normalize_axis` port, plan X36); `byte_bounds` from `Shape` |
-| `np.lib.format` | `ARRAY_ALIGN`, `BUFFER_SIZE`, `EXPECTED_KEYS`, `GROWTH_AXIS_MAX_DIGITS`, `MAGIC_LEN`, `MAGIC_PREFIX`, `descr_to_dtype`, `drop_metadata`, `dtype_to_descr`, `header_data_from_array_1_0`, `isfileobj`, `magic`, `open_memmap`, `read_array`, `read_array_header_1_0`, `read_array_header_2_0`, `read_magic`, `write_array`, `write_array_header_1_0`, `write_array_header_2_0` | **Expose**: `IO.NpyFormat` implements them in PascalCase (`ReadArray`, `WriteArray`, `OpenMemmap`, ...; the NumPy-name audit lists them); NumPy's `__all__` is empty, but the module's documented API is these names |
+| `np.lib.stride_tricks` | `as_strided`, `sliding_window_view` | **Done** (`sliding_window_view` in batch 7, `as_strided` in batch 12) |
+| `np.lib.array_utils` | `byte_bounds`, `normalize_axis_index`, `normalize_axis_tuple` | **Done** (API-parity batch 13: `APIs/np.lib.array_utils.cs`, over `Shape`'s axis ports) |
+| `np.lib.format` | `ARRAY_ALIGN`, `BUFFER_SIZE`, `EXPECTED_KEYS`, `GROWTH_AXIS_MAX_DIGITS`, `MAGIC_LEN`, `MAGIC_PREFIX`, `descr_to_dtype`, `drop_metadata`, `dtype_to_descr`, `header_data_from_array_1_0`, `isfileobj`, `magic`, `open_memmap`, `read_array`, `read_array_header_1_0`, `read_array_header_2_0`, `read_magic`, `write_array`, `write_array_header_1_0`, `write_array_header_2_0` | **Done** (API-parity batch 13: `APIs/np.lib.format.cs` over `IO.NpyFormat`); not offered: `open_memmap` (no `np.memmap`) and `isfileobj` (a CPython file-object test) |
 | `np.exceptions` | `AxisError`, `ComplexWarning`, `DTypePromotionError`, `ModuleDeprecationWarning`, `TooHardError`, `VisibleDeprecationWarning` | **Expose** the exceptions that exist (`AxisError`, `TooHardError`, the dtype promotion error); the three warnings: N/A (no warnings model); decision OD9 |
 | `np.version` | `full_version`, `git_revision`, `release`, `short_version`, `version` | **Decide** with `np.__version__` (OD9) |
 | `np.rec` | `array`, `find_duplicate`, `format_parser`, `fromarrays`, `fromfile`, `fromrecords`, `fromstring`, `recarray`, `record` | **Structured** |

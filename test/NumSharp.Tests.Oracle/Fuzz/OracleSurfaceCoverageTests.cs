@@ -534,6 +534,8 @@ namespace NumSharp.Tests.Fuzz
             ["innerproduct"] = "ma.inner",
             ["outerproduct"] = "ma.outer",
             ["asanyarray"] = "ma.asarray",
+            // NumPy's ma.MaskedArray IS ma.masked_array (API-parity batch 13's class call).
+            ["MaskedArray"] = "ma.masked_array",
             // (average_returned retired with API-parity batch 11: NumPy's returned=True is ma.average's own parameter
             // now, so the ma.average op covers the one member.)
         };

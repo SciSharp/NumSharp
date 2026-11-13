@@ -671,9 +671,9 @@ namespace NumSharp.Tests.APIs
         public void Insert_ValuesKeyword_OnTheObjectForms()
         {
             var a6 = np.arange(6L);
-            np.insert(a6, 1, values: (object)99).ToArray<long>().Should().Equal(0L, 99L, 1L, 2L, 3L, 4L, 5L);
-            np.insert(a6, 1L, values: (object)99).ToArray<long>().Should().Equal(0L, 99L, 1L, 2L, 3L, 4L, 5L);
-            np.insert(a6, new[] { 1, 3 }, values: (object)new[] { 7, 8 }).ToArray<long>().Should().Equal(0L, 7L, 1L, 2L, 8L, 3L, 4L, 5L);
+            np.insert(a6, 1, values: 99).ToArray<long>().Should().Equal(0L, 99L, 1L, 2L, 3L, 4L, 5L);
+            np.insert(a6, 1L, values: 99).ToArray<long>().Should().Equal(0L, 99L, 1L, 2L, 3L, 4L, 5L);
+            np.insert(a6, new[] { 1, 3 }, values: new[] { 7, 8 }).ToArray<long>().Should().Equal(0L, 7L, 1L, 2L, 8L, 3L, 4L, 5L);
         }
     }
 }

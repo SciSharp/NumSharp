@@ -206,10 +206,11 @@ Tested against NumPy 2.4.2. Each line: the `np.*` names, then the rule that hold
   `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`,
   `uniform`, `vonmises`, `wald`, `weibull`, `zipf`, plus `Generator`/`default_rng` → `random.md`.
 - File I/O: `fromfile`, `fromstring`, `load`, `load_npy`, `load_npz`, `loadtxt`, `save`, `savetxt`, `savez`,
-  `savez_compressed`, `tofile`; printing: `array2string`, `array_repr`, `array_str`, `format_float_positional`,
+  `savez_compressed`, `tofile`, the `np.lib.format` module; printing: `array2string`, `array_repr`, `array_str`, `format_float_positional`,
   `format_float_scientific`, `get_printoptions`, `printoptions`, `set_printoptions` → `io-printing.md` (the text
   functions: `text-io.md`).
-- Other: `around`, `asscalar`, `copyto` (`creation-manipulation.md`), `ndim`, `round`, `shape`, `size`, `multithreading`.
+- Other: `around`, `asscalar`, `copyto` (`creation-manipulation.md`), `ndim`, `round`, `shape`, `size`, `multithreading`,
+  the `np.lib.array_utils` module (`axis-arguments.md`).
 - Operators: arithmetic `+`, `-`, `*`, `/`, `%`, unary `-`; comparison `==`, `!=`, `<`, `>`, `<=`, `>=` (they return
   `NDArray<bool>`); logical `&`, `|`, `!`.
 - Indexing: integers and slice strings (`nd[0]`, `nd["1:3"]`, `nd["::-1"]`), boolean masks (`nd[mask]`, and

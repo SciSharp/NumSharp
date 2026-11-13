@@ -173,18 +173,18 @@ namespace NumSharp.Tests.Strings
         private static NDArray NoneInsert(NDArray a, JsonElement obj, int? axis)
         {
             if (obj.TryGetProperty("int", out var i))
-                return np.insert(a, i.GetInt32(), (object)null, axis);
+                return np.insert(a, i.GetInt32(), (NDArray)null, axis);
             if (obj.TryGetProperty("list", out var list))
-                return np.insert(a, list.EnumerateArray().Select(x => x.GetInt32()).ToArray(), (object)null, axis);
+                return np.insert(a, list.EnumerateArray().Select(x => x.GetInt32()).ToArray(), (NDArray)null, axis);
             if (obj.TryGetProperty("slice", out var s))
             {
                 var f = s.EnumerateArray().Select(x => x.ValueKind == JsonValueKind.Null ? (long?)null : x.GetInt64()).ToArray();
-                return np.insert(a, new Slice(f[0], f[1], f[2] ?? 1), (object)null, axis);
+                return np.insert(a, new Slice(f[0], f[1], f[2] ?? 1), (NDArray)null, axis);
             }
             if (obj.TryGetProperty("arr", out var arr))
-                return np.insert(a, np.array(Longs(arr)), (object)null, axis);
+                return np.insert(a, np.array(Longs(arr)), (NDArray)null, axis);
             if (obj.TryGetProperty("mask", out var mask))
-                return np.insert(a, RawArray(mask), (object)null, axis);
+                return np.insert(a, RawArray(mask), (NDArray)null, axis);
             throw new InvalidOperationException($"none_store insert has no position {obj}");
         }
 
@@ -264,7 +264,7 @@ namespace NumSharp.Tests.Strings
                 }
                 catch (Exception e)
                 {
-                    return (r.Route, Value: (object)null, Error: e);
+                    return (r.Route, Value: (NDArray)null, Error: e);
                 }
             }).ToList();
 

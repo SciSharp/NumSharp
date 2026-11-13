@@ -11,7 +11,7 @@ namespace NumSharp.Tests.Manipulation
         public void ScalarObj_ScalarValue()
         {
             var arr = np.array(new long[] { 1, 2, 3, 4 });
-            np.insert(arr, 1, (object)99L)
+            np.insert(arr, 1, 99L)
                 .array_equal(np.array(new long[] { 1, 99, 2, 3, 4 })).Should().BeTrue();
         }
 
@@ -29,7 +29,7 @@ namespace NumSharp.Tests.Manipulation
             var arr = np.array(new long[] { 1, 2, 3, 4 });
             // index == N is the append-at-end position (NumPy allows it for insert,
             // unlike delete which raises).
-            np.insert(arr, 4, (object)99L)
+            np.insert(arr, 4, 99L)
                 .array_equal(np.array(new long[] { 1, 2, 3, 4, 99 })).Should().BeTrue();
         }
 
@@ -37,7 +37,7 @@ namespace NumSharp.Tests.Manipulation
         public void ScalarObj_Negative()
         {
             var arr = np.array(new long[] { 1, 2, 3, 4 });
-            np.insert(arr, -1, (object)99L)
+            np.insert(arr, -1, 99L)
                 .array_equal(np.array(new long[] { 1, 2, 3, 99, 4 })).Should().BeTrue();
         }
 
@@ -45,7 +45,7 @@ namespace NumSharp.Tests.Manipulation
         public void ScalarObj_OutOfBounds_Throws()
         {
             var arr = np.array(new long[] { 1, 2, 3, 4 });
-            Action act = () => np.insert(arr, 5, (object)99L);
+            Action act = () => np.insert(arr, 5, 99L);
             act.Should().Throw<IndexOutOfRangeException>();
         }
 
@@ -113,7 +113,7 @@ namespace NumSharp.Tests.Manipulation
         {
             // axis=None ravels the 2-D arr first.
             var arr2d = np.arange(6).reshape(3, 2);
-            np.insert(arr2d, 1, (object)6)
+            np.insert(arr2d, 1, 6)
                 .array_equal(np.array(new int[] { 0, 6, 1, 2, 3, 4, 5 })).Should().BeTrue();
         }
 
@@ -121,7 +121,7 @@ namespace NumSharp.Tests.Manipulation
         public void TwoD_Axis0_ScalarBroadcast()
         {
             var arr2d = np.arange(6).reshape(3, 2);
-            np.insert(arr2d, 1, (object)6, axis: 0)
+            np.insert(arr2d, 1, 6, axis: 0)
                 .array_equal(np.array(new int[,] { { 0, 1 }, { 6, 6 }, { 2, 3 }, { 4, 5 } })).Should().BeTrue();
         }
 
@@ -129,7 +129,7 @@ namespace NumSharp.Tests.Manipulation
         public void TwoD_Axis1_ScalarBroadcast()
         {
             var arr2d = np.arange(6).reshape(3, 2);
-            np.insert(arr2d, 1, (object)6, axis: 1)
+            np.insert(arr2d, 1, 6, axis: 1)
                 .array_equal(np.array(new int[,] { { 0, 6, 1 }, { 2, 6, 3 }, { 4, 6, 5 } })).Should().BeTrue();
         }
 
@@ -165,7 +165,7 @@ namespace NumSharp.Tests.Manipulation
         public void TwoD_MultiObj_Axis1_ScalarBroadcast()
         {
             var arr2d = np.arange(12).reshape(3, 4);
-            np.insert(arr2d, new long[] { 1, 3 }, (object)99, axis: 1)
+            np.insert(arr2d, new long[] { 1, 3 }, 99, axis: 1)
                 .array_equal(np.array(new int[,]
                 {
                     { 0, 99, 1, 2, 99, 3 },
@@ -247,40 +247,39 @@ namespace NumSharp.Tests.Manipulation
         [TestMethod]
         public void Dtype_Double()
         {
-            np.insert(np.array(new double[] { 1.0, 2.0, 3.0 }), 1, (object)99.5)
+            np.insert(np.array(new double[] { 1.0, 2.0, 3.0 }), 1, 99.5)
                 .array_equal(np.array(new double[] { 1.0, 99.5, 2.0, 3.0 })).Should().BeTrue();
         }
 
         [TestMethod]
         public void Dtype_Byte()
         {
-            np.insert(np.array(new byte[] { 1, 2, 3 }), 1, (object)(byte)99)
+            np.insert(np.array(new byte[] { 1, 2, 3 }), 1, (byte)99)
                 .array_equal(np.array(new byte[] { 1, 99, 2, 3 })).Should().BeTrue();
         }
 
         // ---------------- lifetime: an NDArray reaching the object-value overloads ----------------
 
         /// <summary>
-        ///     Every object-value <c>insert</c> overload (int, long, Slice, int[], long[] and NDArray obj) used to
-        ///     dispose its value conversion unconditionally, but <c>ScalarValueAsArray</c> returns an
-        ///     <see cref="NDArray"/> value as-is, so the caller's array was released. The overloads are now
-        ///     <c>[NDScoped]</c>; the caller's array was built before the scope opened and survives. NumPy 2.4.2:
-        ///     <c>np.insert([1, 2, 3], obj, [9])</c> → <c>[1, 9, 2, 3]</c> for obj = <c>1</c>, <c>slice(1, 2)</c>,
-        ///     <c>[1]</c> and <c>np.array([1])</c>.
+        ///     The object-value <c>insert</c> overloads used to dispose their value conversion unconditionally, which
+        ///     released a caller's <see cref="NDArray"/> value. API-parity batch 13 removed them: every form takes an
+        ///     <see cref="NDArray"/> value and is <c>[NDScoped]</c>, so the caller's array (built before the scope opened)
+        ///     survives whichever form an obj binds. NumPy 2.4.2: <c>np.insert([1, 2, 3], obj, [9])</c> →
+        ///     <c>[1, 9, 2, 3]</c> for obj = <c>1</c>, <c>slice(1, 2)</c>, <c>[1]</c> and <c>np.array([1])</c>.
         /// </summary>
         [TestMethod]
-        public void ObjectValueOverloads_NDArrayValue_SurvivesTheCall()
+        public void EveryForm_NDArrayValue_SurvivesTheCall()
         {
             var arr = np.array(new long[] { 1, 2, 3 });
             var expected = np.array(new long[] { 1, 9, 2, 3 });
             var calls = new (string name, Func<NDArray, NDArray> call)[]
             {
-                ("int obj", v => np.insert(arr, 1, (object)v)),
-                ("long obj", v => np.insert(arr, 1L, (object)v)),
-                ("Slice obj", v => np.insert(arr, new Slice(1, 2), (object)v)),
-                ("int[] obj", v => np.insert(arr, new[] { 1 }, (object)v)),
-                ("long[] obj", v => np.insert(arr, new long[] { 1 }, (object)v)),
-                ("NDArray obj", v => np.insert(arr, np.array(new long[] { 1 }), (object)v)),
+                ("int obj", v => np.insert(arr, 1, v)),
+                ("long obj", v => np.insert(arr, 1L, v)),
+                ("Slice obj", v => np.insert(arr, new Slice(1, 2), v)),
+                ("int[] obj", v => np.insert(arr, new[] { 1 }, v)),
+                ("long[] obj", v => np.insert(arr, new long[] { 1 }, v)),
+                ("NDArray obj", v => np.insert(arr, np.array(new long[] { 1 }), v)),
             };
 
             foreach (var (name, call) in calls)
@@ -288,7 +287,7 @@ namespace NumSharp.Tests.Manipulation
                 var values = np.array(new long[] { 9 });
                 var r = call(values);
 
-                LeakGuards.StillUsable(values, $" — insert({name}, object) must not dispose the caller's NDArray");
+                LeakGuards.StillUsable(values, $" — insert({name}) must not dispose the caller's NDArray");
                 r.array_equal(expected).Should().BeTrue(name);
                 // A second call reads the same live array, not a recycled buffer.
                 call(values).array_equal(expected).Should().BeTrue(name + " (second call)");

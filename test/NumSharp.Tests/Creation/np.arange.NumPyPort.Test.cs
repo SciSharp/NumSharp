@@ -46,8 +46,9 @@ namespace NumSharp.Tests.Creation
                 1036831949u, 1053609165u, 1060320052u, 1065353216u, 1067869799u, 1070386381u, 1072902964u);
             np.arange(0.1, 0.55, 0.1, np.float16).ToArray<Half>().Select(BitConverter.HalfToUInt16Bits).Should().Equal(
                 (ushort)11878, (ushort)12902, (ushort)13516, (ushort)13926, (ushort)14336);
-            // a C# float overload is the double overload with dtype float32
-            np.arange(0.1f, 2f, 0.3f).dtype.Should().Be(np.float32);
+            // A C# float is a Python float (API-parity batch 13, parity QA-02): NumPy's dtype for float arguments is
+            // float64 (np.arange(np.float32(0.1), np.float32(2), np.float32(0.3)) is float64 too); float32 takes the dtype.
+            np.arange(0.1f, 2f, 0.3f).dtype.Should().Be(np.float64);
         }
 
         /// <summary>

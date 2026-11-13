@@ -148,6 +148,8 @@ The module, the class and the object path, byte-identical to NumPy 2.4.2 (the st
   for the object array. `np.vstack(NDListArray[])` / `np.row_stack(NDListArray[])` (`NDListArray.VStack`) stack the ids of
   every part mapped into the FIRST part's heap (its own lists keep their identity; another family's are appended there
   once) with `np.vstack` of the ids, so NumPy's shape rule and texts hold and the result shares the heap.
+  `np.broadcast(NDListArray[])` broadcasts the ids the same way and steps through tuples of the lists (a new
+  `List<object>` of the pieces each, NumPy's Python list); its `iters` are refused (they would read ids as numbers).
 - The members that read and write the lists' VALUES (`Char/NDListArray.{Engine,Compare,Sort,Reduce,Arithmetic,Assign,TextOperands}.cs`)
   are NumPy's object loops over CPython's list semantics: `list_richcompare` (ordering a str item against a bytes item is
   CPython's TypeError), the truth members over non-emptiness, `astype` (object converts only under `'unsafe'`), the sorts

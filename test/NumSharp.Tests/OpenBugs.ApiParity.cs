@@ -232,15 +232,16 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.array("5")</c> / <c>np.asarray("5")</c> are NumPy ndarrays, but NumSharp leaves their 0-d text arrays
-        ///     unmarked (<c>np.array(string)</c> returns <c>FromAnyScalar</c> without <c>MarkExplicitZeroDimArray</c>, which
-        ///     <c>np.array&lt;T&gt;(T)</c> calls), so they read as NumPy SCALARS (<c>np.str_</c>):
+        ///     Regression pin (fixed 2026-11-13 by API-parity batch 13: <c>np.array(string)</c> marks its 0-d result an
+        ///     explicit array, as <c>np.array&lt;T&gt;(T)</c> does). <c>np.array("5")</c> / <c>np.asarray("5")</c> are NumPy
+        ///     ndarrays, but NumSharp left their 0-d text arrays unmarked (<c>np.array(string)</c> returned
+        ///     <c>FromAnyScalar</c> without <c>MarkExplicitZeroDimArray</c>), so they read as NumPy SCALARS (<c>np.str_</c>):
         ///     <c>np.isscalar(np.array('x'))</c> is True (NumPy: False), and np.interp's fill conversion refuses
         ///     <c>left=np.array('5')</c> as an <c>np.str_</c> (<c>must be real number, not numpy.str_</c>) where NumPy's
         ///     <c>float()</c> of the 0-d array parses it to 5.0 (and <c>np.array('x')</c> is <c>could not convert string to
         ///     float: 'x'</c>). Found by API-parity batch 12's validation (scratchpad dbg12/marks12.cs).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-12")]
+        [TestMethod]
         public void ApiParity_ArrayOfString_IsAnExplicitArray()
         {
             np.isscalar(np.array("x")).Should().BeFalse();
@@ -253,23 +254,55 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.concatenate((a2d, a0d), axis=0)</c>: NumPy's <c>PyArray_ConcatenateArrays</c> refuses a 0-d FIRST array
-        ///     (<c>zero-dimensional arrays cannot be concatenated</c>) and reports a later 0-d one as a rank mismatch
-        ///     (<c>all the input arrays must have same number of dimensions, but the array at index 0 has 2 dimension(s) and the
-        ///     array at index 1 has 0 dimension(s)</c>); NumSharp's concatenate checks every array for 0-d first and raises the
-        ///     0-d text for both. Reached through <c>np.append(a2d, 5, axis: 0)</c>. Found by API-parity batch 12's validation.
+        ///     Regression pin (fixed 2026-11-13 by API-parity batch 13: the 0-d check reads the first array only, then the
+        ///     per-array rank check runs, in NumPy's order). <c>np.concatenate((a2d, a0d), axis=0)</c>: NumPy's
+        ///     <c>PyArray_ConcatenateArrays</c> refuses a 0-d FIRST array (<c>zero-dimensional arrays cannot be
+        ///     concatenated</c>) and reports a later 0-d one as a rank mismatch (<c>all the input arrays must have same number
+        ///     of dimensions, but the array at index 0 has 2 dimension(s) and the array at index 1 has 0 dimension(s)</c>);
+        ///     NumSharp's concatenate checked every array for 0-d first and raised the 0-d text for both. Reached through
+        ///     <c>np.append(a2d, 5, axis: 0)</c>. The rank mismatch is NumSharp's <see cref="IncorrectShapeException"/> (the
+        ///     house type of that ValueError, as for every other rank mismatch) with NumPy's text. Found by API-parity batch
+        ///     12's validation.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-12")]
+        [TestMethod]
         public void ApiParity_Concatenate_LaterZeroDimArray_IsTheRankMismatch()
         {
             var a2d = np.array(new long[,] { { 1, 2 } });
-            new Action(() => np.concatenate(new[] { a2d, np.array(5L) }, 0)).Should().Throw<ValueError>().Which.Message.Should()
+            new Action(() => np.concatenate(new[] { a2d, np.array(5L) }, 0)).Should().Throw<IncorrectShapeException>().Which.Message.Should()
                 .Be("all the input arrays must have same number of dimensions, but the array at index 0 has 2 dimension(s) and the array at index 1 has 0 dimension(s)");
-            new Action(() => np.append(np.array(new long[,] { { 1, 2 }, { 3, 4 } }), 5, 0)).Should().Throw<ValueError>().Which.Message
+            new Action(() => np.append(np.array(new long[,] { { 1, 2 }, { 3, 4 } }), 5, 0)).Should().Throw<IncorrectShapeException>().Which.Message
                 .Should().Be("all the input arrays must have same number of dimensions, but the array at index 0 has 2 dimension(s) and the array at index 1 has 0 dimension(s)");
+            // The first mismatch in order is reported: the 1-D array at index 1, before the 0-d one at index 2.
+            new Action(() => np.concatenate(new[] { np.zeros(new Shape(1, 2)), np.zeros(new Shape(2)), np.array(5.0) }, 0))
+                .Should().Throw<IncorrectShapeException>().Which.Message.Should()
+                .Be("all the input arrays must have same number of dimensions, but the array at index 0 has 2 dimension(s) and the array at index 1 has 1 dimension(s)");
             // The first array's 0-d check keeps NumPy's text.
             new Action(() => np.concatenate(new[] { np.array(5L), a2d }, 0)).Should().Throw<ValueError>().Which.Message.Should()
                 .Be("zero-dimensional arrays cannot be concatenated");
+        }
+
+        /// <summary>
+        ///     <c>np.arange</c> stores its first two elements through the dtype's setitem, and NumPy's integer setitem
+        ///     int()-converts a NumPy SCALAR with the range check: <c>np.arange(np.int64(1000), 1002, dtype=np.int8)</c> is
+        ///     <c>OverflowError: Python integer 1000 out of bounds for int8</c>, <c>np.arange(np.float64(300.5), 302,
+        ///     dtype=np.int8)</c> <c>... 300 ...</c>, <c>np.arange(0, np.int64(1000), np.int64(999), dtype=np.int8)</c>
+        ///     <c>... 999 ...</c> (its second element <c>0 + np.int64(999)</c> is a NumPy scalar), and with a 0-d ARRAY start
+        ///     (<c>np.array(1000)</c>, cast without a check) the second element's <c>... 1001 ...</c>. NumSharp's store casts
+        ///     a NumPy scalar (a class-call scalar, an operation's 0-d result), wrapping to <c>[-24, -23]</c>: the scalar-store
+        ///     range check is the NumPy-scalars plan's stage S3. Found by API-parity batch 13's port of
+        ///     <c>PyArray_ArangeObj</c> (scratchpad dbg13/arange13*.txt rows A39-A41, B05).
+        /// </summary>
+        [TestMethod, OpenBugs(IssueUrl = "api-parity-batch-13")]
+        public void ApiParity_Arange_NumPyScalarStores_AreRangeChecked()
+        {
+            new Action(() => np.arange(np.int64(1000), 1002, dtype: np.int8)).Should().Throw<OverflowError>()
+                .Which.Message.Should().Be("Python integer 1000 out of bounds for int8");
+            new Action(() => np.arange(np.float64(300.5), 302, dtype: np.int8)).Should().Throw<OverflowError>()
+                .Which.Message.Should().Be("Python integer 300 out of bounds for int8");
+            new Action(() => np.arange(0, np.int64(1000), np.int64(999), dtype: np.int8)).Should().Throw<OverflowError>()
+                .Which.Message.Should().Be("Python integer 999 out of bounds for int8");
+            new Action(() => np.arange(np.array(1000), 1002, dtype: np.int8)).Should().Throw<OverflowError>()
+                .Which.Message.Should().Be("Python integer 1001 out of bounds for int8");
         }
     }
 }

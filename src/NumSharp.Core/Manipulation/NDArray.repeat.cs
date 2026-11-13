@@ -9,7 +9,9 @@ namespace NumSharp
         /// <param name="repeats">Per-element repetition counts, broadcast to the shape along the given axis.</param>
         /// <param name="axis">The axis along which to repeat values. The default (null) flattens the input array and returns a flat output array.</param>
         /// <returns>Output array which has the same shape as this array, except along the given axis.</returns>
-        /// <exception cref="ArgumentException">A negative count, or counts that do not match the axis.</exception>
+        /// <exception cref="ValueError">A negative entry of a per-element count array (<c>repeats may not contain negative
+        ///     values.</c>).</exception>
+        /// <exception cref="ArgumentException">A negative broadcast count, or counts that do not match the axis.</exception>
         /// <exception cref="TypeError">Counts that do not cast 'safely' to int64.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.repeat.html

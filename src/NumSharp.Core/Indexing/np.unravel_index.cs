@@ -10,7 +10,7 @@ namespace NumSharp
         /// <summary>
         ///     Converts a flat index or an array of flat indices into a tuple of coordinate arrays — NumPy's
         ///     <c>arr_unravel_index</c> (<c>numpy/_core/src/multiarray/compiled_base.c</c>), statement for statement.
-        ///     Inverse of <see cref="ravel_multi_index(NDArray[], int[], string, char)"/>.
+        ///     Inverse of <see cref="ravel_multi_index(NDArray[], Shape, string, char)"/>.
         /// </summary>
         /// <param name="indices">
         ///     An integer (or bool) array of flat indices into an array of dimensions <paramref name="shape"/>, of any
@@ -18,8 +18,10 @@ namespace NumSharp
         ///     NumPy's same_kind cast to intp makes it.
         /// </param>
         /// <param name="shape">
-        ///     The dimensions to unravel into. An empty shape (NumPy's <c>()</c>) is legal: its one valid index is 0, and
-        ///     only a 0-d index array may use it.
+        ///     The dimensions to unravel into: NumPy's idiom <c>np.unravel_index(np.argmax(a), a.shape)</c> passes
+        ///     <c>a.shape</c> (a <c>long[]</c>) or <c>a.Shape</c> as it is, and an <c>int[]</c>, a tuple or a collection
+        ///     expression converts. An empty shape (NumPy's <c>()</c>) is legal: its one valid index is 0, and only a 0-d
+        ///     index array may use it. Negative dimensions are kept (NumPy multiplies them in).
         /// </param>
         /// <param name="order"><c>'C'</c> (row-major, the default) or <c>'F'</c> (column-major), in either case.</param>
         /// <returns>
@@ -32,7 +34,7 @@ namespace NumSharp
         ///     scalars instead — fresh read-only 0-d arrays that own their value. An empty <paramref name="shape"/> with a
         ///     0-d index gives an empty array (NumPy's <c>()</c>).
         /// </returns>
-        /// <exception cref="ArgumentNullException"><paramref name="indices"/> or <paramref name="shape"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is null.</exception>
         /// <exception cref="ValueError">
         ///     In NumPy's order: <paramref name="order"/> is not one of C / F / A / K in either case (<c>order must be one of
         ///     'C', 'F', 'A', or 'K' (got 'X')</c>, the argument parse's error); the dimensions' product overflows int64 or
@@ -64,12 +66,15 @@ namespace NumSharp
         ///     strides and the out-of-range index that is reported first are NumPy's.</para>
         ///     <para>The body is <see cref="TensorEngine.UnravelIndex"/> (the np-layer dtype plan): this facade computes
         ///     a <c>numpy.matrix</c> operand as a plain array and calls the operand's engine.</para>
+        ///     <para><paramref name="shape"/> is a <see cref="Shape"/> since API-parity batch 13 (parity QA-56): it was an
+        ///     <c>int[]</c>, which neither <c>a.shape</c> (<c>long[]</c>) nor <c>a.Shape</c> converted to.</para>
         /// </remarks>
         [NDScoped]
-        public static NDArray<long>[] unravel_index(NDArray indices, int[] shape, char order = 'C')
+        public static NDArray<long>[] unravel_index(NDArray indices, Shape shape, char order = 'C')
         {
             if (indices is null) throw new ArgumentNullException(nameof(indices));
-            return indices.TensorEngine.UnravelIndex(indices, shape, order);
+            // The engine reads the dimensions only (NumPy's intp sequence); the shape's own array is never written.
+            return indices.TensorEngine.UnravelIndex(indices, shape.dimensions, order);
         }
 
         /// <summary>
@@ -77,12 +82,11 @@ namespace NumSharp
         ///     <c>np.unravel_index(indices, shape, order)</c> returns as a tuple of scalars, without NDArray wrapping.
         /// </summary>
         /// <param name="indices">The flat index (NumPy's keyword name, <c>indices</c>, which also takes an array: an
-        ///     array binds <see cref="unravel_index(NDArray, int[], char)"/>).</param>
-        /// <param name="shape">The dimensions to unravel into; an empty shape (NumPy's <c>()</c>) accepts the index 0 and
-        ///     returns no coordinate.</param>
+        ///     array binds <see cref="unravel_index(NDArray, Shape, char)"/>).</param>
+        /// <param name="shape">The dimensions to unravel into (<c>a.shape</c>, <c>a.Shape</c>, an <c>int[]</c>, a tuple);
+        ///     an empty shape (NumPy's <c>()</c>) accepts the index 0 and returns no coordinate.</param>
         /// <param name="order"><c>'C'</c> (row-major, the default) or <c>'F'</c> (column-major), in either case.</param>
         /// <returns>One coordinate per dimension of <paramref name="shape"/>.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="shape"/> is null.</exception>
         /// <exception cref="ValueError">In NumPy's order: an order letter that is not C / F / A / K; a dimensions' product
         ///     that overflows int64 or is exactly -1; an <c>'A'</c> or <c>'K'</c> order (<c>only 'C' or 'F' order is
         ///     permitted</c>); an index outside <c>[0, prod(shape))</c> (<c>index N is out of bounds for array with size
@@ -91,18 +95,19 @@ namespace NumSharp
         ///     <c>unravel_index(indices: 5L, shape: s)</c> binds THIS overload since the rename (a <c>long</c> argument beats
         ///     its conversion to <see cref="NDArray"/>) and returns <c>long[]</c>; before, it bound the array form and returned
         ///     <c>NDArray&lt;long&gt;[]</c>.</remarks>
-        public static long[] unravel_index(long indices, int[] shape, char order = 'C')
+        public static long[] unravel_index(long indices, Shape shape, char order = 'C')
         {
-            if (shape is null) throw new ArgumentNullException(nameof(shape));
             NPY_ORDER npyOrder = OrderResolver.Convert(order);
-            long unravelSize = Backends.DefaultEngine.UnravelSize(shape);
+            // The shape's own dimension array, read only (shapes share theirs, so nothing here writes into it).
+            long[] dims = shape.dimensions;
+            long unravelSize = Backends.DefaultEngine.UnravelSize(dims);
             bool cOrder = OrderResolver.RequireCOrFOrder(npyOrder);
 
             // NumPy's text names the value as "index" whatever the keyword is called.
             if (indices < 0 || indices >= unravelSize)
                 throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"index {indices} is out of bounds for array with size {unravelSize}"));
 
-            int ndim = shape.Length;
+            int ndim = dims.Length;
             // shape=(): index 0 (the only valid one) has no coordinate — NumPy's empty tuple.
             if (ndim == 0)
                 return Array.Empty<long>();
@@ -115,7 +120,7 @@ namespace NumSharp
                 long val = indices;
                 for (int d = ndim - 1; d > 0; d--)
                 {
-                    long m = shape[d];
+                    long m = dims[d];
                     coords[d] = val % m;
                     val /= m;
                 }
@@ -126,7 +131,7 @@ namespace NumSharp
                 long val = indices;
                 for (int d = 0; d < ndim - 1; d++)
                 {
-                    long m = shape[d];
+                    long m = dims[d];
                     coords[d] = val % m;
                     val /= m;
                 }

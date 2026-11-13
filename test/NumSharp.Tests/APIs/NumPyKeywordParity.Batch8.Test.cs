@@ -731,7 +731,7 @@ namespace NumSharp.Tests.APIs
             Convert.ToDouble(m23.item(4)).Should().Be(4.0);
             Convert.ToDouble(m23.item(-1)).Should().Be(5.0);
             np.ma.array(np.array(new long[] { 5 }), mask: new[] { true }).item().Should().Be(5L);
-            Throws<IncorrectSizeException>(() => m23.item(), "can only convert an array of size 1 to a Python scalar");
+            Throws<ValueError>(() => m23.item(), "can only convert an array of size 1 to a Python scalar");
             Throws<IndexOutOfRangeException>(() => m23.item(9), "index 9 is out of bounds for size 6");
         }
 
