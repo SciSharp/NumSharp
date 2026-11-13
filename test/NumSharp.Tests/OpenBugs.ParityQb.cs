@@ -1677,8 +1677,12 @@ namespace NumSharp.Tests
         ///     call is CS0121, ambiguous, <c>0L</c> included; only a C# array index (<c>new[] {0, 2}</c>) binds, and
         ///     <c>ndarray.put(0, 300)</c> works. The runtime binder (<c>dynamic</c>) repeats the compile-time resolution, so the
         ///     pin asserts NumPy's answer through it (q164, q165).
+        ///     <para>FIXED 2026-11-11 by API-parity batch 1: np.put is ONE signature, NumPy's <c>(a, ind, v, mode)</c> with
+        ///     NDArray <c>ind</c> and <c>v</c>, so a C# integer index and value both convert to it and the call binds. The
+        ///     [OpenBugs] tag stayed behind until the 0.81.0 release check found the pin passing (2026-11-13); it stays as
+        ///     the regression test.</para>
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "parity-qa-QB59")]
+        [TestMethod]
         public void ParityQb_QB59_PutWithAScalarIndex_Binds()
         {
             using var a = np.array(new[] { 1.0, 2.0, 3.0, 4.0 });
