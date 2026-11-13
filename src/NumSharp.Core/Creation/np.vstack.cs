@@ -55,5 +55,27 @@ namespace NumSharp
             // NumPy's statements (atleast_2d(*tup), then concatenate along axis 0 with dtype / casting) are the array object's.
             return NDArray.vstack_(tup, dtype, casting);
         }
+
+        /// <summary>
+        ///     NumPy's <c>vstack(tup)</c> over object arrays of Python lists - <c>np.char.split</c>'s <see cref="NDListArray"/>
+        ///     results: <c>atleast_2d</c> of each, then a concatenation along the first axis, the lists SHARED as NumPy's
+        ///     object pointers are (<c>np.vstack(new[] { a, b })</c> of two split results is the <c>(2, n)</c> object array of
+        ///     their lists).
+        /// </summary>
+        /// <param name="tup">The list arrays (NumPy's sequence), the same shape along all but the first axis after
+        ///     <c>atleast_2d</c>.</param>
+        /// <returns>A new object array of the lists, at least 2-D, owning its pointers.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="tup"/> or one of its arrays is null.</exception>
+        /// <exception cref="ValueError">No array (<c>need at least one array to concatenate</c>); arrays whose other axes
+        ///     differ (np.concatenate's text).</exception>
+        /// <exception cref="NotSupportedException">A bytes list beside str lists (NumSharp's lists hold one class per
+        ///     family).</exception>
+        /// <exception cref="ObjectDisposedException">One of the arrays was disposed.</exception>
+        /// <remarks>
+        ///     A sequence parameter, not <c>params</c>: a second <c>params</c> form would make NumPy's <c>np.vstack()</c>
+        ///     (an empty tuple) ambiguous in C#. NumPy's <c>dtype</c> / <c>casting</c> only raise over lists (or turn them
+        ///     into truth values), so this form has neither. API-parity batch 12, with np.row_stack.
+        /// </remarks>
+        public static NDListArray vstack(NDListArray[] tup) => NDListArray.VStack(tup);
     }
 }

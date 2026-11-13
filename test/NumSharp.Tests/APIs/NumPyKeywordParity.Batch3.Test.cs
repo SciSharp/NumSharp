@@ -278,14 +278,20 @@ namespace NumSharp.Tests.APIs
 
         // ------------------------------------------------------------------ fix 11: hstack / vstack
 
-        /// <summary>np.hstack / np.vstack keep the params form beside NumPy's (tup, dtype, casting).</summary>
+        /// <summary>np.hstack / np.vstack keep the params form beside NumPy's (tup, dtype, casting); np.vstack and its
+        ///     deprecated alias np.row_stack also take np.char.split's object arrays of lists (one <c>NDListArray[]</c>
+        ///     sequence form, API-parity batch 12).</summary>
         [TestMethod]
         public void HVStack_Signatures()
         {
-            foreach (var name in new[] { "hstack", "vstack" })
+            foreach (var name in new[] { "hstack", "vstack", "row_stack" })
             {
                 var forms = NpForms(name);
-                forms.Should().HaveCount(2, name);
+                // The NDListArray[] form is vstack's (and row_stack's) third, typed by its sequence of list arrays.
+                var listForms = forms.Where(m => m.GetParameters().Length == 1
+                                                 && m.GetParameters()[0].ParameterType == typeof(NDListArray[])).ToList();
+                listForms.Should().HaveCount(name == "hstack" ? 0 : 1, name);
+                forms.Should().HaveCount(2 + listForms.Count, name);
                 forms.Should().Contain(m => Names(m).SequenceEqual(new[] { "tup", "dtype", "casting" }), name);
                 forms.Should().Contain(m => m.GetParameters().Length == 1 && m.GetParameters()[0].GetCustomAttribute<ParamArrayAttribute>() != null, name);
             }

@@ -27,13 +27,13 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 
 | module | C# names | C# overloads | with a NumPy counterpart | identical | more than one overload | closest overload differs | one overload, differs | missing | in another overload only | renamed | extra | slot | C# requires | default | varargs | only null defaults | only policy | not compared | NumSharp-only names | NumPy names absent |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `np` | 397 | 740 | 382 | 171 | 95 | 21 | 8 | 6 | 1 | 3 | 0 | 6 | 5 | 2 | 6 | 10 | 116 | 0 | 15 | 30 |
+| `np` | 398 | 742 | 383 | 173 | 94 | 21 | 8 | 6 | 1 | 3 | 0 | 6 | 5 | 2 | 6 | 10 | 116 | 0 | 15 | 29 |
 | `ndarray` | 140 | 250 | 57 | 38 | 13 | 8 | 6 | 3 | 1 | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 83 | 3 |
 | `np.char` | 54 | 54 | 53 | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 12 | 11 | 0 | 1 | 0 |
 | `np.dtypes` | 1 | 2 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `np.emath` | 9 | 9 | 9 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.fft` | 18 | 18 | 18 | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 |
-| `np.lib.stride_tricks` | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 |
+| `np.lib.stride_tricks` | 2 | 2 | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 |
 | `np.linalg` | 31 | 33 | 31 | 28 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 1 |
 | `np.ma` | 214 | 227 | 211 | 112 | 12 | 35 | 31 | 3 | 0 | 24 | 0 | 5 | 4 | 0 | 0 | 2 | 55 | 0 | 3 | 6 |
 | `np.polynomial` | 7 | 7 | 7 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -50,13 +50,13 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.typing` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ndarray (NDArray<T>)` | 5 | 20 | 2 | 0 | 2 | 1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 |
 | `np.matrix` | 58 | 72 | 54 | 29 | 12 | 15 | 13 | 10 | 0 | 1 | 0 | 3 | 4 | 0 | 0 | 0 | 0 | 0 | 4 | 0 |
-| `np.char.chararray` | 65 | 74 | 61 | 43 | 5 | 3 | 2 | 1 | 0 | 1 | 0 | 1 | 1 | 0 | 0 | 11 | 0 | 0 | 4 | 0 |
-| `np.ma.MaskedArray` | 62 | 66 | 60 | 54 | 3 | 4 | 3 | 2 | 0 | 0 | 0 | 3 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 17 |
+| `np.char.chararray` | 65 | 75 | 61 | 43 | 6 | 2 | 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0 | 0 | 11 | 0 | 0 | 4 | 0 |
+| `np.ma.MaskedArray` | 65 | 69 | 63 | 57 | 3 | 4 | 3 | 2 | 0 | 0 | 0 | 3 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 12 |
 | `np.dtype` | 9 | 18 | 4 | 3 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 |
-| `np.nditer` | 12 | 12 | 9 | 8 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `np.nditer` | 12 | 12 | 9 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `np.broadcast` | 5 | 5 | 2 | 1 | 0 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `np.flatiter` | 4 | 4 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 1 |
-| `np.ndindex` | 5 | 5 | 1 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 4 | 0 |
+| `np.ndindex` | 5 | 5 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `np.ndenumerate` | 4 | 4 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `np.poly1d` | 8 | 10 | 3 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 5 | 0 |
 | `np.vectorize` | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 |
@@ -70,7 +70,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.random.PCG64DXSM` | 13 | 21 | 3 | 1 | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `np.random.Philox` | 13 | 22 | 3 | 1 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `np.random.SFC64` | 11 | 18 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 10 | 0 |
-| **total** | 1546 | 2324 | 1310 | 748 | 249 | 111 | 66 | 29 | 3 | 33 | 2 | 20 | 38 | 2 | 7 | 68 | 200 | 0 | 236 | 76 |
+| **total** | 1551 | 2331 | 1315 | 756 | 249 | 108 | 63 | 28 | 3 | 32 | 2 | 20 | 37 | 2 | 6 | 68 | 200 | 0 | 236 | 69 |
 
 *closest overload differs* counts names whose closest overload has a hard difference (missing, in another
 overload only, renamed, extra, slot, C# requires, default, varargs); each kind is counted again in its own
@@ -128,7 +128,7 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 - lacking `subok`: `broadcast_arrays`
 - lacking `subok, signature`: `matvec`, `vecdot`, `vecmat`
 
-### More than one overload (95; NumPy has one signature each)
+### More than one overload (94; NumPy has one signature each)
 
 - `all`: NumPy `all(a, axis=None, out=None, keepdims=<no value>, *, where=<no value>)`
 
@@ -141,12 +141,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   ```csharp
   bool any(NDArray a)
   NDArray any(NDArray a, NDAxis? axis = null, NDArray out = null, bool keepdims = false, NDArray where = null)
-  ```
-- `append`: NumPy `append(arr, values, axis=None)`
-
-  ```csharp
-  NDArray append(NDArray arr, NDArray values, int? axis = null)
-  NDArray append(NDArray arr, object values, int? axis = null)
   ```
 - `apply_along_axis`: NumPy `apply_along_axis(func1d, axis, arr, *args, **kwargs)`
 
@@ -587,12 +581,6 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray insert(NDArray arr, NDArray obj, object values, int? axis = null)
   NDArray insert(NDArray arr, NDArray obj, NDArray values, int? axis = null)
   ```
-- `interp`: NumPy `interp(x, xp, fp, left=None, right=None, period=None)`
-
-  ```csharp
-  NDArray interp(NDArray x, NDArray xp, NDArray fp, double? left = null, double? right = null, double? period = null)
-  NDArray interp(NDArray x, NDArray xp, NDArray fp, Complex? left, Complex? right = null, double? period = null)
-  ```
 - `isdtype`: NumPy `isdtype(dtype, kind)`
 
   ```csharp
@@ -819,6 +807,13 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   DType result_type(Type type1, Type type2)
   DType result_type(NDArray arr1, NDArray arr2)
   ```
+- `row_stack`: NumPy `row_stack(tup, *, dtype=None, casting='same_kind')`
+
+  ```csharp
+  NDArray row_stack(params NDArray[] tup)
+  NDArray row_stack(NDArray[] tup, DType dtype = null, string casting = "same_kind")
+  NDListArray row_stack(NDListArray[] tup)
+  ```
 - `save`: NumPy `save(file, arr, allow_pickle=True)`
 
   ```csharp
@@ -915,6 +910,7 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   ```csharp
   NDArray vstack(params NDArray[] tup)
   NDArray vstack(NDArray[] tup, DType dtype = null, string casting = "same_kind")
+  NDListArray vstack(NDListArray[] tup)
   ```
 - `where`: NumPy `where(condition, x=None, y=None, /)`
 
@@ -926,17 +922,17 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray where(NDArray condition, object x, object y)
   ```
 
-### Identical to NumPy (171)
+### Identical to NumPy (173)
 
-`allclose`, `amax`, `amin`, `angle`, `apply_over_axes`, `argsort`, `argwhere`, `around`, `array_equal`, `array_equiv`, `array_repr`, `array_str`, `asarray_chkfinite`, `astype`, `average`, `bartlett`, `base_repr`, `binary_repr`, `bincount`, `blackman`, `block`, `broadcast_shapes`, `clip`, `column_stack`, `common_type`, `compress`, `convolve`, `copy`, `corrcoef`, `correlate`, `cov`, `cross`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `datetime_data`, `diag`, `diag_indices`, `diag_indices_from`, `diagflat`, `diagonal`, `diff`, `digitize`, `dot`, `dstack`, `ediff1d`, `expand_dims`, `extract`, `fill_diagonal`, `fix`, `flatnonzero`, `flip`, `fliplr`, `flipud`, `format_float_positional`, `format_float_scientific`, `geomspace`, `get_printoptions`, `getbufsize`, `hamming`, `hanning`, `i0`, `imag`, `indices`, `inner`, `intersect1d`, `isclose`, `iscomplex`, `iscomplexobj`, `isfortran`, `isin`, `isneginf`, `isposinf`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `ix_`, `kaiser`, `kron`, `logspace`, `mask_indices`, `matrix_transpose`, `max`, `may_share_memory`, `mean`, `median`, `min`, `min_scalar_type`, `mintypecode`, `moveaxis`, `nancumprod`, `nancumsum`, `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`, `nansum`, `nanvar`, `ndim`, `nonzero`, `outer`, `packbits`, `percentile`, `permute_dims`, `poly`, `polyadd`, `polyder`, `polydiv`, `polymul`, `polysub`, `prod`, `promote_types`, `ptp`, `put`, `put_along_axis`, `quantile`, `ravel`, `real`, `real_if_close`, `require`, `reshape`, `resize`, `roll`, `rollaxis`, `roots`, `round`, `setbufsize`, `setdiff1d`, `setxor1d`, `shape`, `shares_memory`, `sinc`, `size`, `sort`, `sort_complex`, `squeeze`, `stack`, `std`, `sum`, `swapaxes`, `take`, `take_along_axis`, `tile`, `trace`, `transpose`, `trapezoid`, `tril`, `tril_indices`, `tril_indices_from`, `trim_zeros`, `triu`, `triu_indices`, `triu_indices_from`, `typename`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unpackbits`, `unstack`, `vander`, `var`, `vdot`
+`allclose`, `amax`, `amin`, `angle`, `append`, `apply_over_axes`, `argsort`, `argwhere`, `around`, `array_equal`, `array_equiv`, `array_repr`, `array_str`, `asarray_chkfinite`, `astype`, `average`, `bartlett`, `base_repr`, `binary_repr`, `bincount`, `blackman`, `block`, `broadcast_shapes`, `clip`, `column_stack`, `common_type`, `compress`, `convolve`, `copy`, `corrcoef`, `correlate`, `cov`, `cross`, `cumprod`, `cumsum`, `cumulative_prod`, `cumulative_sum`, `datetime_data`, `diag`, `diag_indices`, `diag_indices_from`, `diagflat`, `diagonal`, `diff`, `digitize`, `dot`, `dstack`, `ediff1d`, `expand_dims`, `extract`, `fill_diagonal`, `fix`, `flatnonzero`, `flip`, `fliplr`, `flipud`, `format_float_positional`, `format_float_scientific`, `geomspace`, `get_printoptions`, `getbufsize`, `hamming`, `hanning`, `i0`, `imag`, `indices`, `inner`, `interp`, `intersect1d`, `isclose`, `iscomplex`, `iscomplexobj`, `isfortran`, `isin`, `isneginf`, `isposinf`, `isreal`, `isrealobj`, `isscalar`, `iterable`, `ix_`, `kaiser`, `kron`, `logspace`, `mask_indices`, `matrix_transpose`, `max`, `may_share_memory`, `mean`, `median`, `min`, `min_scalar_type`, `mintypecode`, `moveaxis`, `nancumprod`, `nancumsum`, `nanmax`, `nanmean`, `nanmedian`, `nanmin`, `nanpercentile`, `nanprod`, `nanquantile`, `nanstd`, `nansum`, `nanvar`, `ndim`, `nonzero`, `outer`, `packbits`, `percentile`, `permute_dims`, `poly`, `polyadd`, `polyder`, `polydiv`, `polymul`, `polysub`, `prod`, `promote_types`, `ptp`, `put`, `put_along_axis`, `quantile`, `ravel`, `real`, `real_if_close`, `require`, `reshape`, `resize`, `roll`, `rollaxis`, `roots`, `round`, `setbufsize`, `setdiff1d`, `setxor1d`, `shape`, `shares_memory`, `sinc`, `size`, `sort`, `sort_complex`, `squeeze`, `stack`, `std`, `sum`, `swapaxes`, `take`, `take_along_axis`, `tile`, `trace`, `transpose`, `trapezoid`, `tril`, `tril_indices`, `tril_indices_from`, `trim_zeros`, `triu`, `triu_indices`, `triu_indices_from`, `typename`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unpackbits`, `unstack`, `vander`, `var`, `vdot`
 
 ### NumSharp-only names (15 NumPy-style, 0 PascalCase C# members)
 
 `are_broadcastable`, `asscalar`, `common_type_code`, `evaluate`, `find_common_type`, `flat`, `issctype`, `issubsctype`, `load_npy`, `load_npz`, `maximum_sctype`, `multithreading`, `nditer_chunks`, `save_version`, `sctype2char`
 
-### NumPy public names that `np` lacks (30)
+### NumPy public names that `np` lacks (29)
 
-`__array_namespace_info__`, `__version__`, `busday_count`, `busday_offset`, `busdaycalendar`, `datetime64`, `datetime_as_string`, `errstate`, `flatiter`, `from_dlpack`, `fromregex`, `genfromtxt`, `get_include`, `geterr`, `geterrcall`, `info`, `is_busday`, `isnat`, `memmap`, `poly1d`, `recarray`, `record`, `row_stack`, `seterr`, `seterrcall`, `show_config`, `show_runtime`, `test`, `timedelta64`, `ufunc`
+`__array_namespace_info__`, `__version__`, `busday_count`, `busday_offset`, `busdaycalendar`, `datetime64`, `datetime_as_string`, `errstate`, `flatiter`, `from_dlpack`, `fromregex`, `genfromtxt`, `get_include`, `geterr`, `geterrcall`, `info`, `is_busday`, `isnat`, `memmap`, `poly1d`, `recarray`, `record`, `seterr`, `seterrcall`, `show_config`, `show_runtime`, `test`, `timedelta64`, `ufunc`
 
 ## `ndarray`
 
@@ -1153,7 +1149,7 @@ PascalCase: `ToString`
 
 - lacking `subok`: `sliding_window_view`
 
-### NumPy public names that `np.lib.stride_tricks` lacks (1)
+### Identical to NumPy (1)
 
 `as_strided`
 
@@ -2352,13 +2348,12 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
 
 ## `np.char.chararray`
 
-### Signature differences (3)
+### Signature differences (2)
 
 | name | NumPy | closest C# overload | differences |
 |---|---|---|---|
 | `astype` | `chararray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | `NDCharArray astype(DType dtype, char order = 'K', string casting = "unsafe", bool copy = true)` | **slot**: `copy: NumPy #4, C# #3`<br>**policy**: `subok` |
 | `view` | `chararray.view(dtype=<optional>, type=<optional>)` | `NDArray view(DType dtype, Type type)`<br>(+2 more overloads, below) | **C# requires**: `dtype`, `type` |
-| `(constructor)` | `chararray(shape, itemsize=1, unicode=False, buffer=None, offset=0, strides=None, order='C')` | `NDCharArray (constructor)(UnmanagedStorage storage)` | **missing**: `itemsize`, `unicode`, `buffer`, `offset`, `strides`, `order`<br>**renamed**: `shape -> storage` |
 
 ### Only null defaults (11)
 
@@ -2376,7 +2371,7 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
 | `rjust` | `chararray.rjust(width, fillchar=' ')` | `NDCharArray rjust(object width, object fillchar = null)` | **null default**: `fillchar: ' ' vs null` |
 | `startswith` | `chararray.startswith(prefix, start=0, end=None)` | `NDArray startswith(object prefix, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 
-### More than one overload (5; NumPy has one signature each)
+### More than one overload (6; NumPy has one signature each)
 
 - `argmax`: NumPy `chararray.argmax(axis=None, out=None, *, keepdims=False)`
 
@@ -2411,6 +2406,12 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
   NDCharArray view(DType dtype = null)
   NDArray view(Type type)
   NDArray view(DType dtype, Type type)
+  ```
+- `(constructor)`: NumPy `chararray(shape, itemsize=1, unicode=False, buffer=None, offset=0, strides=None, order='C')`
+
+  ```csharp
+  NDCharArray (constructor)(UnmanagedStorage storage)
+  NDCharArray (constructor)(Shape shape, long itemsize = 1, bool unicode = false, object buffer = null, long offset = 0, long[] strides = null, char order = 'C')
   ```
 
 ### Identical to NumPy (43)
@@ -2453,9 +2454,9 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
   NDMaskedArray reshape(Shape shape, char order = 'C', bool? copy = null)
   ```
 
-### Identical to NumPy (54)
+### Identical to NumPy (57)
 
-`all`, `anom`, `any`, `argmax`, `argmin`, `argpartition`, `byteswap`, `choose`, `clip`, `compress`, `compressed`, `conj`, `conjugate`, `copy`, `count`, `cumprod`, `cumsum`, `diagonal`, `dot`, `fill`, `filled`, `flatten`, `harden_mask`, `ids`, `iscontiguous`, `item`, `max`, `mean`, `min`, `nonzero`, `prod`, `product`, `ptp`, `put`, `ravel`, `repeat`, `resize`, `round`, `searchsorted`, `shrink_mask`, `soften_mask`, `sort`, `squeeze`, `std`, `sum`, `swapaxes`, `take`, `tobytes`, `tofile`, `tolist`, `trace`, `transpose`, `unshare_mask`, `var`
+`all`, `anom`, `any`, `argmax`, `argmin`, `argpartition`, `byteswap`, `choose`, `clip`, `compress`, `compressed`, `conj`, `conjugate`, `copy`, `count`, `cumprod`, `cumsum`, `diagonal`, `dot`, `fill`, `filled`, `flatten`, `getfield`, `harden_mask`, `ids`, `iscontiguous`, `item`, `max`, `mean`, `min`, `nonzero`, `prod`, `product`, `ptp`, `put`, `ravel`, `repeat`, `resize`, `round`, `searchsorted`, `setfield`, `shrink_mask`, `soften_mask`, `sort`, `squeeze`, `std`, `sum`, `swapaxes`, `take`, `to_device`, `tobytes`, `tofile`, `tolist`, `trace`, `transpose`, `unshare_mask`, `var`
 
 ### NumSharp-only names (1 NumPy-style, 1 PascalCase C# members)
 
@@ -2463,9 +2464,9 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
 
 PascalCase: `ToString`
 
-### NumPy public names that `np.ma.MaskedArray` lacks (17)
+### NumPy public names that `np.ma.MaskedArray` lacks (12)
 
-`base`, `ctypes`, `device`, `dump`, `dumps`, `flags`, `get_fill_value`, `get_imag`, `get_real`, `getfield`, `set_fill_value`, `setfield`, `setflags`, `sharedmask`, `to_device`, `toflex`, `torecords`
+`ctypes`, `dump`, `dumps`, `flags`, `get_fill_value`, `get_imag`, `get_real`, `set_fill_value`, `setflags`, `sharedmask`, `toflex`, `torecords`
 
 ## `np.dtype`
 
@@ -2494,15 +2495,9 @@ PascalCase: `Equals`, `From`, `GetHashCode`, `GetTypeCode`, `ToString`
 
 ## `np.nditer`
 
-### Signature differences (1)
+### Identical to NumPy (9)
 
-| name | NumPy | closest C# overload | differences |
-|---|---|---|---|
-| `(constructor)` | `nditer(op, flags=None, op_flags=None, op_dtypes=None, order='K', casting='safe', op_axes=None, itershape=None, buffersize=0)` | `np.NDIterator (constructor)(NDArray[] op, string[] flags, string[][] op_flags, DType[] op_dtypes, char order, string casting, int[][] op_axes, long[] itershape, long buffersize)` | **C# requires**: `flags`, `op_flags`, `op_dtypes`, `order`, `casting`, `op_axes`, `itershape`, `buffersize` |
-
-### Identical to NumPy (8)
-
-`close`, `copy`, `debug_print`, `enable_external_loop`, `iternext`, `remove_axis`, `remove_multi_index`, `reset`
+`close`, `copy`, `debug_print`, `enable_external_loop`, `iternext`, `remove_axis`, `remove_multi_index`, `reset`, `(constructor)`
 
 ### NumSharp-only names (0 NumPy-style, 3 PascalCase C# members)
 
@@ -2542,11 +2537,9 @@ PascalCase: `AsTyped`, `GetEnumerator`
 
 ## `np.ndindex`
 
-### Signature differences (1)
+### Identical to NumPy (1)
 
-| name | NumPy | closest C# overload | differences |
-|---|---|---|---|
-| `(constructor)` | `ndindex(*shape)` | `np.NDIndex (constructor)(long[] shape)` | **varargs**: `*shape as long[] shape (no params array)` |
+`(constructor)`
 
 ### NumSharp-only names (0 NumPy-style, 4 PascalCase C# members)
 

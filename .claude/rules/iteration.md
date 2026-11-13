@@ -44,7 +44,8 @@ are `long` (intp), and every step yields a fresh index array.
   takes both spellings (`np.ndindex(3, 2)`, `np.ndindex(arr.shape)`); an `int[]` overload exists because array covariance
   will not widen it (not `params`, or `np.ndindex()` would be ambiguous). `ndindex()` and an empty shape yield ONE empty
   index; a zero-length dimension yields nothing; a negative dimension raises `ArgumentException "negative dimensions are
-  not allowed"` at construction. Not NDIter-backed (NumPy's ndindex is `itertools.product`). `.AsSpans()` →
+  not allowed"` at construction. The class constructor takes the dimensions the same way (`new np.NDIndex(2, 3)` is
+  `params long[]`). Not NDIter-backed (NumPy's ndindex is `itertools.product`). `.AsSpans()` →
   `np.NDIndexSpans` is the allocation-free form: a `ref struct` enumerator yielding the index as a `ReadOnlySpan<long>`
   over a reused buffer (valid until the next step); it restarts on each `foreach`. `Indexing/np.ndindex.cs`.
 - `np.ndenumerate(arr)` → `np.NDEnumerate` yields `(index, value)` in LOGICAL C order whatever the layout (NumPy's
@@ -64,7 +65,8 @@ are `long` (intp), and every step yields a fresh index array.
   zero-sized operands is not enabled`, `Must provide at least one operand`). Properties `nop`, `ndim`, `shape`,
   `itersize`, `operands`, `dtypes`, `value`, `it[i]`, `index`, `multi_index`, `iterindex`, `iterrange`, `itviews`,
   `finished`, `has_index`, `has_multi_index`, `has_delayed_bufalloc`, `iterationneedsapi`; methods `iternext`, `reset`,
-  `close`, `copy`, `remove_axis`, `remove_multi_index`, `enable_external_loop`, `debug_print`. `APIs/np.nditer.cs`.
+  `close`, `copy`, `remove_axis`, `remove_multi_index`, `enable_external_loop`, `debug_print`. The class constructor
+  has NumPy's defaults after `op` (`new np.NDIterator(new[] { a })` is `np.nditer([a])`). `APIs/np.nditer.cs`.
   - An ALLOCATE operand with no `op_dtypes` entry infers its dtype by promoting the operands that have one
     (`np.nditer([a, null])` allocates int64 for an int64 input; `np.nditer([int_a, float_b, null])` float64); the
     inference lives in the wrapper, where NumPy puts it.

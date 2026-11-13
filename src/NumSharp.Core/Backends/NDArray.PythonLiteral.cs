@@ -211,6 +211,34 @@ namespace NumSharp
             => value is null ? asanyarray(value, null, 'K') : FromPythonOperand(value);
 
         /// <summary>
+        ///     The ARRAY NumPy's <c>np.asanyarray(obj)</c> makes of the Python number a C# number literal stands for
+        ///     (<see cref="WasPythonLiteral"/>): the Python number's default dtype - int64 (uint64 for an integer past the
+        ///     int64 range), float64, complex128 - whatever the literal's C# width. Any other array is returned as it is.
+        /// </summary>
+        /// <param name="a">The operand (not null).</param>
+        /// <returns><paramref name="a"/> itself, unless it is a literal whose C# dtype differs from the Python number's
+        ///     default: then a new 0-d array of that dtype holding the same value, unmarked (the caller owns it; an
+        ///     <c>[NDScoped]</c> caller's scope reclaims it).</returns>
+        /// <remarks>
+        ///     For a function whose NumPy body converts an argument with <c>asanyarray</c> (or <c>ravel</c>) and then reads
+        ///     it as an ARRAY, its dtype taking part in the result: <c>np.append(int32_array, 5)</c> concatenates with the
+        ///     int64 array of 5, so NumPy's result is int64 where the int32 literal kept int32. Footgun: never for an
+        ///     operand NumPy reads as a WEAK scalar (the ufuncs, NEP 50 promotion), which must see the literal itself. A
+        ///     literal already in its default dtype (a C# long, double or Complex) comes back unchanged, mark included: a
+        ///     ravel, a copy or an operation result is unmarked anyway. A bool, a string, a <see cref="Half"/> /
+        ///     <c>char</c> and a <c>decimal</c> already hold the dtype NumPy's array of them has.
+        /// </remarks>
+        internal static NDArray PythonScalarAsArray(NDArray a)
+        {
+            if (!a.WasPythonLiteral)
+                return a;
+            // np.result_type of a lone Python scalar is the dtype of np.asarray(scalar), its discover_descr_from_pyobject:
+            // an integer's VALUE decides (a ulong past long.MaxValue is uint64, as 2**63 is in NumPy).
+            DType discovered = DTypePromotion.ResultType(a.Nep50Operand);
+            return discovered.typecode == a.typecode ? a : a.astype(discovered);
+        }
+
+        /// <summary>
         ///     Creates the 0-d bool array of a C# <c>bool</c> literal, marked <see cref="WasPythonBool"/>. The implicit
         ///     <c>bool → NDArray</c> conversion calls it.
         /// </summary>

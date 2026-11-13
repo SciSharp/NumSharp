@@ -251,17 +251,19 @@ namespace NumSharp
             /// <exception cref="MemoryError">A <c>StringDType</c> copy or buffer transfer cannot allocate a string
             ///     (NumPy's <c>MemoryError</c> texts).</exception>
             /// <remarks>NumPy's <c>np.nditer(...)</c> constructor, the one <c>np.nditer</c> calls; a subclass of the iterator
-            ///     chains to it. The iterator holds native buffers: dispose it (or use it in a <c>using</c>) when done.</remarks>
+            ///     chains to it. Every parameter after <paramref name="op"/> has NumPy's default (since API-parity batch 12),
+            ///     so <c>new np.NDIterator(new[] { a })</c> is NumPy's <c>np.nditer([a])</c>. The iterator holds native
+            ///     buffers: dispose it (or use it in a <c>using</c>) when done.</remarks>
             public NDIterator(
                 NDArray[] op,
-                string[] flags,
-                string[][] op_flags,
-                DType[] op_dtypes,
-                char order,
-                string casting,
-                int[][] op_axes,
-                long[] itershape,
-                long buffersize)
+                string[] flags = null,
+                string[][] op_flags = null,
+                DType[] op_dtypes = null,
+                char order = 'K',
+                string casting = "safe",
+                int[][] op_axes = null,
+                long[] itershape = null,
+                long buffersize = 0)
             {
                 // PyArg_ParseTupleAndKeywords' converters, in NumPy's argument order. They run while NumPy parses the
                 // arguments, before npyiter_prepare_ops looks at the operand list, so a bad flag, order or casting is the

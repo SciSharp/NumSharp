@@ -15,8 +15,9 @@ namespace NumSharp
             /// <summary>
             ///     NumPy's <c>numpy.lib.stride_tricks</c>: views that re-read an array's memory with other strides.
             ///     <see cref="sliding_window_view(NDArray, Shape, NDAxis?, bool)"/> is the safe one (every window lies inside
-            ///     the array); NumPy's <c>as_strided</c>, which reads whatever memory the given strides reach, is not part of
-            ///     NumSharp (a bounds-checked form would be a decision of its own).
+            ///     the array); <see cref="as_strided"/> takes any shape and byte strides, and where NumPy reads whatever
+            ///     memory they reach, NumSharp refuses a view that leaves the array's buffer (the bounds-checked form the owner
+            ///     approved in API-parity batch 12).
             /// </summary>
             [ModuleName("np.lib.stride_tricks")]
             public static class stride_tricks
@@ -159,6 +160,54 @@ namespace NumSharp
                 /// <exception cref="AxisError">An axis is out of range.</exception>
                 public static NDArray sliding_window_view(NDArray x, Shape window_shape, int[] axis, bool writeable = false)
                     => sliding_window_view(x, window_shape, (NDAxis?)axis, writeable);
+
+                /// <summary>
+                ///     A VIEW of <paramref name="x"/>'s memory with any shape and strides - NumPy's
+                ///     <c>as_strided(x, shape=None, strides=None, subok=False, writeable=True)</c>: element <c>(i, j, ...)</c>
+                ///     is the item <c>i*strides[0] + j*strides[1] + ...</c> bytes past <paramref name="x"/>'s first element
+                ///     (<c>as_strided(np.arange(6L), new Shape(4, 3), new long[] { 8, 8 })</c> is the overlapping windows
+                ///     <c>[[0, 1, 2], [1, 2, 3], [2, 3, 4], [3, 4, 5]]</c>).
+                /// </summary>
+                /// <param name="x">The array whose memory is viewed (any layout; the view starts at its first element).</param>
+                /// <param name="shape">The view's shape; null keeps <paramref name="x"/>'s.</param>
+                /// <param name="strides">The view's strides in BYTES (NumPy's), one per dimension; null keeps
+                ///     <paramref name="x"/>'s - for a C-contiguous <paramref name="x"/> the C-contiguous strides of the view's
+                ///     shape, as NumPy's array interface reports no strides for it.</param>
+                /// <param name="subok">Keep <paramref name="x"/>'s class (a <c>numpy.matrix</c> stays a matrix, its finalize
+                ///     rule applied); false (the default) gives a plain array.</param>
+                /// <param name="writeable">False makes the view read-only; true keeps <paramref name="x"/>'s writeability (a
+                ///     read-only array's view stays read-only).</param>
+                /// <returns>The view: it shares <paramref name="x"/>'s memory (OWNDATA false), and a write through it reaches
+                ///     every element that reads the same item.</returns>
+                /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+                /// <exception cref="ValueError">NumPy's: strides of another length than the shape (<c>mismatch in length of
+                ///     strides and shape</c>), a negative dimension (<c>negative dimensions are not allowed</c>); NumSharp's
+                ///     refusals where NumPy reads arbitrary memory: a stride that is not a multiple of the item size
+                ///     (NumSharp's strides count whole items) or a view reaching outside <paramref name="x"/>'s buffer.</exception>
+                /// <exception cref="ValueError">A <c>numpy.matrix</c> view (<paramref name="subok"/>) of more than two long
+                ///     axes (<c>shape too large to be a matrix.</c>).</exception>
+                /// <remarks>
+                ///     <para>NumPy's statements: <c>np.array(x, copy=None, subok=subok)</c>, its <c>__array_interface__</c>
+                ///     with the given shape / strides, <c>np.asarray(DummyArray(interface, base=x))</c> (strides of another
+                ///     length than the shape are refused there, before a negative dimension), the subclass view, then
+                ///     <c>if view.flags.writeable and not writeable: view.flags.writeable = False</c>.</para>
+                ///     <para>[Misaligned] by design: NumPy's own documentation calls such calls unsafe (it reads past the
+                ///     array, or misaligned items); NumSharp refuses them instead of reading foreign memory. A zero stride
+                ///     (a broadcast-like view) and negative strides are fine. API-parity batch 12.</para>
+                ///     <para>Footgun, as in NumPy: a zero or overlapping stride makes several elements read ONE item, and the
+                ///     view is still writeable (unlike <c>np.broadcast_to</c>'s), so a single write changes all of them; pass
+                ///     <c>writeable: false</c> unless the writes are meant.</para>
+                /// </remarks>
+                public static NDArray as_strided(NDArray x, Shape? shape = null, long[] strides = null, bool subok = false,
+                                                 bool writeable = true)
+                {
+                    if (x is null)
+                        throw new ArgumentNullException(nameof(x));
+
+                    // NumPy's statements are the array object's: a [SubclassAware] computation, because subok reads the
+                    // CALLER's class (a woven function would hand it a plain view of a matrix).
+                    return NDArray.as_strided(x, shape, strides, subok, writeable);
+                }
             }
         }
     }

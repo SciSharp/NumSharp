@@ -2249,6 +2249,94 @@ namespace NumSharp
             return MaskedArrayModule.Yield(scope, r);
         }
 
+        /// <summary>
+        ///     NumPy's <c>MaskedArray.getfield(dtype, offset=0)</c>: a masked VIEW of a field of each element - the data
+        ///     reinterpreted as <paramref name="dtype"/> at <paramref name="offset"/> bytes (<see cref="NDArray.getfield"/>),
+        ///     carrying this array's mask (shared: a masked write through either array reaches the other), hard-mask flag
+        ///     and a copy of its stored fill value, as NumPy's <c>__array_finalize__</c> carries them onto any view.
+        /// </summary>
+        /// <param name="dtype">The field's dtype; null is NumPy's default float64.</param>
+        /// <param name="offset">The field's byte offset within an element (not negative).</param>
+        /// <returns>A masked array over the field view, of this array's shape.</returns>
+        /// <exception cref="ValueError"><see cref="NDArray.getfield"/>'s refusals: a negative offset (<c>offset is
+        ///     negative</c>), a field past the element (<c>new type plus offset is larger than original type</c>).</exception>
+        /// <exception cref="TypeError"><see cref="NDArray.getfield"/>'s <c>Cannot get/set field of an object array</c>.</exception>
+        /// <exception cref="NotSupportedException"><see cref="NDArray.getfield"/>'s refusal of a non-native field
+        ///     descriptor.</exception>
+        /// <remarks>
+        ///     The stored fill is copied at THIS array's dtype and read back at the field's (a float64 fill 7.0 reads
+        ///     <c>np.float32(7.0)</c> on a float32 field, as NumPy's getter converts it); setting the field's fill leaves this
+        ///     array's alone. Scoped by hand: the field view is built before the mask is attached, and handed back through
+        ///     <see cref="MaskedArrayModule.Yield"/>. API-parity batch 12.
+        /// </remarks>
+        public NDMaskedArray getfield(DType dtype, int offset = 0)
+        {
+            using var scope = NDScope.Open();
+            var field = _data.getfield(dtype, offset);
+            // __array_finalize__ -> _update_from(self): the hard mask and a stored fill (a converted COPY, so a later set on
+            // the field leaves this array's fill alone); the mask is the same memory over the same shape (a getfield never
+            // changes the shape), so it rides along as a view.
+            var fillCopy = _fill_value is null ? null : MaskedArrayModule.StoreFill(_fill_value, _data.dtype);
+            var r = new NDMaskedArray(field, _mask?.view(), fillCopy) { _hardmask = _hardmask };
+            return MaskedArrayModule.Yield(scope, r);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>MaskedArray.setfield(val, dtype, offset=0)</c>: writes <paramref name="val"/> into the field
+        ///     <c>getfield(dtype, offset)</c> of every element - ndarray's setfield on the data, so masked slots are written
+        ///     too (a hard mask included) and the mask is unchanged.
+        /// </summary>
+        /// <param name="val">The value(s), broadcast to this array's shape and stored by NumPy's setitem (an unsafe cast: 1.5
+        ///     into an int64 field stores 1, a text <c>"7"</c> parses to 7). A C# number or string converts implicitly; a
+        ///     masked array's values go in as its <see cref="data"/>.</param>
+        /// <param name="dtype">The field's dtype; null is NumPy's default float64.</param>
+        /// <param name="offset">The field's byte offset within an element (not negative).</param>
+        /// <exception cref="ValueError">The data is read-only (<c>assignment destination is read-only</c>);
+        ///     <see cref="NDArray.getfield"/>'s dtype / offset refusals; a value that does not broadcast (<c>could not
+        ///     broadcast input array from shape (2,) into shape (3,)</c>).</exception>
+        /// <exception cref="TypeError"><see cref="NDArray.setfield"/>'s refusals (None into an integer field, an object
+        ///     field).</exception>
+        /// <exception cref="NotSupportedException">A non-native field descriptor.</exception>
+        /// <remarks>API-parity batch 12: NumPy's MaskedArray inherits ndarray.setfield, which writes the data alone.</remarks>
+        public void setfield(NDArray val, DType dtype, int offset = 0) => _data.setfield(val, dtype, offset);
+
+        /// <summary>
+        ///     The array this masked array is a view of (NumPy's <c>MaskedArray.base</c>): a NumPy masked array is an ndarray
+        ///     VIEW of its data, so its base is that data - the very array passed to <c>np.ma.array(d)</c> when no copy was
+        ///     made (<c>ReferenceEquals(np.ma.array(d).@base, d)</c>, NumPy's <c>ma.array(d).base is d</c>), the masked
+        ///     array's own data array otherwise. Never null, unlike an owning <see cref="NDArray"/>'s <c>@base</c>.
+        /// </summary>
+        /// <remarks>
+        ///     Footgun: it is the stored data object itself, not a view of it (identity is NumPy's point): disposing it
+        ///     releases this masked array's data. API-parity batch 12.
+        /// </remarks>
+        public NDArray @base => _data;
+
+        /// <summary>The device the masked array lives on: always <c>"cpu"</c> (NumPy's <c>MaskedArray.device</c>, inherited
+        ///     from ndarray; NumSharp is single-device and CPU-resident). API-parity batch 12.</summary>
+        public string device => "cpu";
+
+        /// <summary>
+        ///     Array-API device transfer (NumPy's <c>MaskedArray.to_device</c>, inherited from ndarray): <c>"cpu"</c> returns
+        ///     this same masked array, with no copy; any other device, or a stream, raises as
+        ///     <see cref="NDArray.to_device"/> does.
+        /// </summary>
+        /// <param name="device">The target device; must be <c>"cpu"</c>.</param>
+        /// <param name="stream">Accepted for the Array-API signature; must be null (NumSharp models no streams).</param>
+        /// <returns>This masked array, unchanged.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="device"/> is null (NumPy's TypeError: <c>to_device()
+        ///     argument 1 must be str, not None</c>).</exception>
+        /// <exception cref="ValueError">A stream (<c>The stream argument in to_device() is not supported</c>), or another
+        ///     device (<c>Unsupported device: gpu. Only 'cpu' is accepted.</c>), in that order.</exception>
+        /// <remarks>API-parity batch 12.</remarks>
+        public NDMaskedArray to_device(string device, object stream = null)
+        {
+            // ndarray.to_device's checks in NumPy's order (the device's type, the stream, the device's value), run on the
+            // data, which returns itself for "cpu"; the masked array is returned as NumPy returns self.
+            _data.to_device(device, stream);
+            return this;
+        }
+
         /// <summary>The addresses of the data and mask buffers (NumPy's <c>MaskedArray.ids</c>); the mask address
         /// is 0 when there is no mask (NumPy returns <c>id(nomask)</c> there — an arbitrary sentinel either way).</summary>
         /// <returns>A <c>(data, mask)</c> tuple of buffer addresses as <see cref="long"/>s.</returns>

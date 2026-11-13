@@ -55,6 +55,9 @@ namespace NumSharp.Tests.Fuzz
             ["radians"] = "deg2rad",
             ["remainder"] = "mod",
             ["result_type"] = "result_type_arrays",
+            // np.row_stack is NumPy 2.4's deprecated alias of vstack (shape_base.py returns vstack(tup, dtype=dtype,
+            // casting=casting)); NumSharp's forwards to vstack's statements (API-parity batch 12).
+            ["row_stack"] = "vstack",
             ["true_divide"] = "divide",
         };
 
