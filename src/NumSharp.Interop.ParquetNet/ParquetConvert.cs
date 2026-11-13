@@ -195,7 +195,7 @@ namespace NumSharp.Interop.ParquetNet
         /// <returns>The column as an <see cref="NDArray"/> of <paramref name="total"/> elements.</returns>
         /// <exception cref="InvalidOperationException">A null under <see cref="NullHandling.Raise"/>.</exception>
         /// <exception cref="ValueError">The fill cannot be packed into the dtype at a null (NumPy's setitem texts).</exception>
-        /// <exception cref="OverflowException">The fill is out of the dtype's range at a null (NumPy's OverflowError texts).</exception>
+        /// <exception cref="OverflowError">The fill is out of the dtype's range at a null (NumPy's OverflowError texts).</exception>
         private static async ValueTask<NDArray> ReadTypedAsync<T>(ParquetReader reader, DataField field, long total, ParquetLoadOptions options, CancellationToken ct)
             where T : unmanaged
         {
@@ -265,7 +265,7 @@ namespace NumSharp.Interop.ParquetNet
         /// <returns>This row group's slice of the column.</returns>
         /// <exception cref="InvalidOperationException">A null under <see cref="NullHandling.Raise"/>.</exception>
         /// <exception cref="ValueError">The fill cannot be packed into the dtype at a null.</exception>
-        /// <exception cref="OverflowException">The fill is out of the dtype's range at a null.</exception>
+        /// <exception cref="OverflowError">The fill is out of the dtype's range at a null.</exception>
         private static async ValueTask<NDArray> ReadOneGroupTypedAsync<T>(ParquetRowGroupReader rg, DataField field, ParquetLoadOptions options, CancellationToken ct)
             where T : unmanaged
         {
@@ -430,7 +430,7 @@ namespace NumSharp.Interop.ParquetNet
         /// <returns>A task that completes when the group is decoded.</returns>
         /// <exception cref="InvalidOperationException">A null under <see cref="NullHandling.Raise"/>.</exception>
         /// <exception cref="ValueError">The fill cannot be packed into the dtype at a null.</exception>
-        /// <exception cref="OverflowException">The fill is out of the dtype's range at a null.</exception>
+        /// <exception cref="OverflowError">The fill is out of the dtype's range at a null.</exception>
         private static async ValueTask ReadGroupIntoAsync<T>(ParquetRowGroupReader rg, DataField field, UnmanagedMemoryBlock<T> block, long off, int n, bool nullable, ParquetLoadOptions options, CancellationToken ct)
             where T : unmanaged
         {
@@ -468,7 +468,7 @@ namespace NumSharp.Interop.ParquetNet
         /// <param name="field">The column (named by a Raise refusal).</param>
         /// <exception cref="InvalidOperationException">A null under <see cref="NullHandling.Raise"/>.</exception>
         /// <exception cref="ValueError">The fill cannot be packed into the dtype (NaN into an integer, unparsable text).</exception>
-        /// <exception cref="OverflowException">The fill is out of the dtype's range, or an infinity into an integer.</exception>
+        /// <exception cref="OverflowError">The fill is out of the dtype's range, or an infinity into an integer.</exception>
         private static unsafe void ScatterFill<T>(T?[] src, UnmanagedMemoryBlock<T> block, long off, ParquetLoadOptions options, DataField field)
             where T : unmanaged
         {
@@ -506,7 +506,7 @@ namespace NumSharp.Interop.ParquetNet
         /// <typeparam name="T">The column's element type.</typeparam>
         /// <param name="options">The resolved load options; a null fill means <c>default(T)</c>.</param>
         /// <returns>The fill as a <typeparamref name="T"/>.</returns>
-        /// <exception cref="OverflowException">An integer the dtype cannot hold, or an infinity into an integer (NumPy's
+        /// <exception cref="OverflowError">An integer the dtype cannot hold, or an infinity into an integer (NumPy's
         ///     <c>OverflowError</c> texts).</exception>
         /// <exception cref="ValueError">NaN into an integer, or text that does not parse (NumPy's <c>ValueError</c> texts).</exception>
         private static unsafe T ResolveFill<T>(ParquetLoadOptions options) where T : unmanaged

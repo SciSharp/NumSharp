@@ -58,8 +58,10 @@ namespace NumSharp.Backends
     ///     </list>
     ///     </para>
     ///     <para>
-    ///     Exception types follow the house map: NumPy's <c>OverflowError</c> is <see cref="OverflowException"/>, its
-    ///     <c>ValueError</c> is <see cref="ValueError"/>, its <c>TypeError</c> is <see cref="TypeError"/>.
+    ///     Exception types are NumPy's Python classes: its <c>OverflowError</c> is <see cref="OverflowError"/> (a sibling
+    ///     of .NET's <see cref="OverflowException"/> under <see cref="ArithmeticException"/>, so a <c>catch
+    ///     (OverflowException)</c> does not see it), its <c>ValueError</c> is <see cref="ValueError"/>, its <c>TypeError</c>
+    ///     is <see cref="TypeError"/>.
     ///     </para>
     /// </remarks>
     internal static class ReductionInitial

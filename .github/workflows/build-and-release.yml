@@ -748,7 +748,8 @@ jobs:
     #     every managed member the floor-compiled package binds (the Tensor.to overloads that changed in
     #     between are why the package never calls them). Its sparse, quantized and libtorch-uint16 tests
     #     are Inconclusive on the floor leg (those APIs arrived later) and run here.
-    # UNRELEASED, so nothing packs it and this suite is its only CI gate; same OpenBugs filter.
+    # Released from 0.81.0 (build-nuget packs it); this suite is still its only test gate, with the same
+    # OpenBugs filter. On macOS the current leg needs Homebrew's libomp first (the step below says why).
     - name: "TorchSharp: Build (floor)"
       id: torchsharp_build_floor
       if: ${{ !cancelled() && matrix.os != 'macos-latest' }}
@@ -771,6 +772,16 @@ jobs:
         dotnet test test/NumSharp.Tests.Interop.TorchSharp/NumSharp.Tests.Interop.TorchSharp.csproj \
           --configuration Release --no-build --framework net10.0 --filter "TestCategory!=OpenBugs" \
           --logger "trx;LogFileName=torchsharp-floor-net10.0.trx"
+
+    # libtorch's osx-arm64 libtorch_cpu.dylib links OpenMP by Homebrew's ABSOLUTE path
+    # (/opt/homebrew/opt/libomp/lib/libomp.dylib, its LC_LOAD_DYLIB in libtorch 2.10.0), so the libomp.dylib the
+    # libtorch-cpu-osx-arm64 package ships beside it is never found, and TorchSharp's native load fails ("Failed to
+    # load native component ... libLibTorchSharp.dylib") on a runner without Homebrew's libomp: every test of the
+    # current leg failed that way on macos-26-arm64 (PR #635, 2026-11-13). A macOS TorchSharp user needs the same
+    # step (docs/website-src/docs/interop/torchsharp.md, "TorchSharp versions").
+    - name: "TorchSharp: libomp (macOS)"
+      if: ${{ !cancelled() && matrix.os == 'macos-latest' }}
+      run: brew list libomp >/dev/null 2>&1 || brew install libomp
 
     - name: "TorchSharp: Build (current)"
       id: torchsharp_build_current
