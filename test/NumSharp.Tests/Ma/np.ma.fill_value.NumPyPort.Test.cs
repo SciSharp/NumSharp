@@ -125,8 +125,10 @@ namespace NumSharp.Tests.Ma
             Raises<ValueError>(() => Ma(I8(), 5).fill_value = np.array(new long[] { 1, 2 }), "setting an array element with a sequence.");
         }
 
-        /// <summary>astype re-checks a STORED fill against the new dtype (an array cast: never raising); an unread array
-        /// stores nothing, so the result reads its own default.</summary>
+        /// <summary>astype re-checks a STORED fill against the new dtype under <c>errstate(invalid='raise')</c> (NumPy
+        /// 2.5.4's <c>_check_fill_value_or_default</c>): a fill that converts is stored converted, one that does not (the
+        /// materialized 1e20 into an integer) is dropped, and an unread array stores nothing — both read the result's own
+        /// default. NumPy 2.4 stored MSVC's out-of-range cast (<c>long.MinValue</c>, 0).</summary>
         [TestMethod]
         public void Astype_ConvertsTheStoredFill_DependingOnReads()
         {
@@ -134,8 +136,8 @@ namespace NumSharp.Tests.Ma
             Exactly(Ma(F64()).astype(np.int64).fill_value, 999999L, "nothing stored: the result's own default");
             var read = Ma(F64());
             _ = read.fill_value;
-            Exactly(read.astype(np.int64).fill_value, long.MinValue, "1e20 cast into int64 (MSVC's out-of-range cast)");
-            Exactly(read.astype(np.int8).fill_value, (sbyte)0);
+            Exactly(read.astype(np.int64).fill_value, 999999L, "1e20 does not fit int64: dropped, the default is read");
+            Exactly(read.astype(np.int8).fill_value, 999999L, "the integer default is NumPy's int64 999999 at every width");
         }
 
         /// <summary>A view of the _arraymethod family SHARES the stored object (a set reaches both); a copy-based
@@ -162,8 +164,9 @@ namespace NumSharp.Tests.Ma
         }
 
         /// <summary>filled() casts the stored fill into the data under 'same_kind' (the int64 default 999999 into int8 is
-        /// 63); a fill of another kind shared with a derived array is NumPy's object-array fallback, which NumSharp
-        /// refuses.</summary>
+        /// 63). A derived array no longer shares a fill of another kind: NumPy 2.5.4's <c>_update_from</c> converts it to
+        /// the result's dtype, so filled() writes the converted fill. A stored fill that still cannot reach the data is
+        /// NumPy's object-array fallback, which NumSharp refuses.</summary>
         [TestMethod]
         public void Filled_CastsSameKind_AndRefusesTheObjectFallback()
         {
@@ -171,14 +174,25 @@ namespace NumSharp.Tests.Ma
             Ma(I8()).filled(2.5).ToArray<sbyte>().Should().Equal(1, 2, 3, 4);
             Raises<TypeError>(() => Ma(I8()).filled(300), "Cannot convert fill_value 300 to dtype int8");
 
-            // ma.absolute of a complex array shares its complex fill with the float result: NumPy returns
+            // ma.absolute of a complex array converts the complex fill to its float64 result (NumPy 2.5.4: array(1.)), so
+            // filled() is a float64 array; NumPy 2.4.2 shared the complex fill and fell back to
             // array([2.23606797749979, np.complex128(1+1j)], dtype=object).
             var c = np.ma.array(np.array(new[] { new Complex(1, 2), new Complex(3, 0) }), mask: np.array(new[] { false, true }),
                                 fill_value: new Complex(1, 1));
-            Action objectFallback = () => np.ma.absolute(c).filled();
+            var abs = np.ma.absolute(c);
+            Exactly(abs.fill_value, 1.0, "the complex fill converted to the float64 result");
+            abs.filled().ToArray<double>().Should().Equal(2.23606797749979, 1.0);
+
+            // The fallback itself, from the state NumPy 2.5.4's deprecated dtype setter still leaves: `x.dtype = np.uint8`
+            // on an int8 array whose int64 default was read keeps that fill, and filled() returns
+            // array([1, np.int64(999999), 3, 4], dtype=object). NumSharp has no dtype setter; the stale fill is stored
+            // directly.
+            var stale = Ma(np.array(new byte[] { 1, 2, 3, 4 }));
+            stale._fill_value = NDArray.Scalar(999999L);
+            Action objectFallback = () => stale.filled();
             objectFallback.Should().Throw<NotSupportedException>().WithInnerException<InvalidCastException>();
             Raises<NotSupportedException>(objectFallback,
-                "filled(): the fill value of dtype complex128 cannot be cast to the data dtype float64 under the 'same_kind' " +
+                "filled(): the fill value of dtype int64 cannot be cast to the data dtype uint8 under the 'same_kind' " +
                 "rule, so NumPy returns an object array (np.choose over the data as objects); NumSharp has no object dtype. " +
                 "Pass a fill_value of the data's kind.");
         }
@@ -195,11 +209,12 @@ namespace NumSharp.Tests.Ma
             Ma(np.array(new float[] { 1, 2, 3, 4 })).ToString(true).Should().Contain("fill_value=np.float64(1e+20)");
             Ma(np.array(new long[] { 1, 2, 3, 4 })).ToString(true).Should().Contain("fill_value=999999)");
             Ma(np.array(new[] { true, false, true, false }), true).ToString(true).Should().Contain("fill_value=True)");
-            // ma.sqrt of an int8 array keeps the int8 fill object: np.int8(7) beside float16 data, which prints as the
+            // ma.sqrt of an int8 array converts the inherited fill to its float16 dtype (NumPy 2.5.4; 2.4 kept the int8
+            // object, printed np.int8(7)): the data's own dtype, so the plain str 7.0, beside data that prints as the
             // Python floats astype(object) makes of it.
             np.ma.sqrt(Ma(I8(), 7)).ToString(true).Should().Be(
                 "masked_array(data=[1.0, --, 1.732421875, 2.0],\n             mask=[False,  True, False, False],\n" +
-                "       fill_value=np.int8(7),\n            dtype=float16)");
+                "       fill_value=7.0,\n            dtype=float16)");
         }
 
         /// <summary>The masked singleton stores nothing and refuses the getter's write, as NumPy's MaskedConstant does.</summary>

@@ -1163,8 +1163,9 @@ namespace NumSharp
         ///     dtype natively — decode them into a native copy with <c>np.frombuffer(a.tobytes(), '&gt;i4')</c>), raised once
         ///     NumPy's itemsize checks pass (a view NumPy itself refuses raises its <see cref="ValueError"/>); or a dtype
         ///     without storage (<c>datetime64</c> before Stage C).</exception>
-        /// <exception cref="TypeError">A view from or to a NEP 55 <c>StringDType</c> descriptor that is not equal to this array's
-        ///     (NumPy's <c>Cannot change data-type for array of references.</c>).</exception>
+        /// <exception cref="TypeError">A view from or to a NEP 55 <c>StringDType</c> descriptor other than this array's own
+        ///     descriptor object — an equal but separate instance such as a fresh <c>np.dtype("T")</c> included, as NumPy 2.5
+        ///     refuses it (NumPy's <c>Cannot change data-type for array of references.</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html
         ///     <para>A fixed-width string carries its width on the DESCRIPTOR, so a view from or to a string dtype reinterprets
@@ -1176,13 +1177,16 @@ namespace NumSharp
         {
             if (dtype is null)
                 return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
-            // numpy._core._internal._view_is_safe: equal descriptors view each other; any other view from or to a dtype that
-            // holds references (StringDType's hasobject) is refused. An equal StringDType view shares this buffer's allocator
-            // (NumPy 2.4.2 gives the view a fresh descriptor instance with an EMPTY allocator, so its arena strings read as
-            // NULs — a NumPy bug this does not reproduce).
+            // numpy._core._internal._view_is_safe (NumPy 2.5): `if _is_view_safe_cast(oldtype, newtype): return`, else a dtype
+            // that holds references (StringDType's hasobject) refuses the view. For StringDType the cast is a view only
+            // between descriptors that SHARE AN ALLOCATOR (stringdtype_to_stringdtype_resolve_descriptors), i.e. through the
+            // array's own descriptor object: an equal but separate instance (a fresh np.dtype("T"), StringDType()) is
+            // refused, where NumPy 2.4 compared by equality. NumSharp keeps the allocator on the buffer and shares one
+            // descriptor object among the arrays built from it (NumPy finalizes a new instance per array), so a view
+            // through ANOTHER array's descriptor that is this same object is allowed here, where NumPy refuses it.
             if (Storage.IsVString || dtype.Meta is VStringDTypeMeta)
             {
-                if (dtype.Equals(this.dtype))
+                if (ReferenceEquals(dtype, this.dtype))
                     return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
                 throw new TypeError(ViewOfReferencesText);
             }

@@ -333,7 +333,7 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
     <h2 class="bench-title">Unit Tests &amp; Oracle Dashboard</h2>
     <p class="bench-subtitle">
       A correctness inventory with unlike units kept separate: reflected unit tests and unit-test
-      classes, committed NumPy 2.4.2 Oracle test cases, specialized flags/layout/format cases,
+      classes, committed NumPy 2.5.4 Oracle test cases, specialized flags/layout/format cases,
       execution gates, and live interoperability suites.
     </p>
     <div class="snapshot-strip" aria-label="Inventory details">

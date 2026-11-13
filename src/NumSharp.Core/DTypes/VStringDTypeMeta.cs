@@ -36,7 +36,7 @@ namespace NumSharp
     ///     <para>
     ///     <b>The slots</b> are ports of <c>numpy/_core/src/multiarray/stringdtype/dtype.c</c>: <c>common_dtype</c> (only
     ///     <c>StrDType</c> promotes to it — <c>T</c> + <c>U</c> is <c>T</c>, <c>T</c> + <c>S</c> or a number has no common
-    ///     DType), <c>common_instance</c> (compatible missing-data objects, the FIRST descriptor's <c>coerce</c>),
+    ///     DType), <c>common_instance</c> (compatible missing-data objects, <c>coerce</c> only when both have it),
     ///     <c>string_discover_descriptor_from_pyobject</c>, <c>stringdtype_ensure_canonical</c> (a descriptor is always
     ///     canonical), <c>stringdtype_is_known_scalar_type</c> and the default descriptor <c>StringDType()</c>.
     ///     </para>
@@ -133,9 +133,11 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>common_instance</c>: the two descriptors' missing-data objects must be compatible
-        ///     (<see cref="VStringParameters.CompatibleNA"/>); the result takes the present one and the FIRST descriptor's
-        ///     <c>coerce</c> (NumPy's <c>dtype1-&gt;coerce &amp;&amp; dtype1-&gt;coerce</c>, which reads the first operand twice).
+        ///     NumPy's <c>common_instance</c> (2.5.2's <c>stringdtype_common_na_coerce</c>): the two descriptors' missing-data
+        ///     objects must be compatible (<see cref="VStringParameters.CompatibleNA"/>); the result takes the present one,
+        ///     and <c>coerce</c> only when BOTH descriptors coerce (<c>StringDType()</c> with
+        ///     <c>StringDType(coerce=False)</c> is <c>StringDType(coerce=False)</c> in either order). NumPy 2.4 read the first
+        ///     descriptor's flag twice (<c>dtype1-&gt;coerce &amp;&amp; dtype1-&gt;coerce</c>), gh-31901.
         /// </summary>
         /// <param name="descr1">A descriptor of this class.</param>
         /// <param name="descr2">A descriptor of this class.</param>
@@ -153,7 +155,7 @@ namespace NumSharp
             var p2 = descr2.VString ?? throw new ArgumentException($"{descr2.ToString(true)} is not a StringDType descriptor.", nameof(descr2));
             if (!VStringParameters.CompatibleNA(p1, p2, out bool hasNA, out object na))
                 throw new TypeError($"Cannot find common instance for incompatible dtypes '{descr1}' and '{descr2}'");
-            return Descr(hasNA, na, p1.coerce && p1.coerce);
+            return Descr(hasNA, na, p1.coerce && p2.coerce);
         }
 
         /// <summary>
@@ -255,20 +257,28 @@ namespace NumSharp
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     A cell points into its buffer's allocator, so it has no byte order and no meaning outside its buffer. With no
-        ///     source (in place) the swap is the identity, as <c>ndarray.byteswap</c> answers, where
-        ///     NumPy 2.4.2 crashes the process: swapping a cell's bytes would corrupt its offset or pointer. A source is
-        ///     refused: cells cannot be copied as raw bytes (NumPy refuses a buffer for a dtype that holds references, and
-        ///     a copy of the array duplicates its strings through the allocator instead).
+        ///     A cell points into its buffer's allocator, so it has no byte order and no meaning outside its buffer:
+        ///     NumPy's slot is NULL (<see cref="HasCopyswapn"/> is false). In place (no source) this is NumPy 2.5's
+        ///     <c>raise_missing_copyswap</c>, the TypeError <c>ndarray.byteswap</c> raises (NumPy 2.4 crashed there, and
+        ///     NumSharp answered the identity swap, the owner's decision D14 for a call NumPy gave no answer to). A source is
+        ///     refused as before: cells cannot be copied as raw bytes (NumPy refuses a buffer for a dtype that holds
+        ///     references, and a copy of the array duplicates its strings through the allocator instead).
         /// </remarks>
+        /// <exception cref="TypeError">No source (<paramref name="src"/> null): <c>dtype StringDType() does not implement
+        ///     copyswap</c>.</exception>
         /// <exception cref="NotSupportedException">A source (<paramref name="src"/> not null).</exception>
         internal override unsafe void copyswapn(DType descr, byte* dst, long dstride, byte* src, long sstride, long n, bool swap)
         {
             if (src == null)
-                return;
+                throw MissingCopyswap(descr);
             throw new NotSupportedException(
                 "StringDType cells hold references into their buffer's allocator: they cannot be copied or byte-swapped as raw bytes.");
         }
+
+        /// <inheritdoc/>
+        /// <remarks>False: NumPy leaves StringDType's <c>copyswapn</c> NULL, so <c>ndarray.byteswap</c> raises
+        ///     <see cref="DTypeMeta.MissingCopyswap"/> before it copies anything.</remarks>
+        internal override bool HasCopyswapn => false;
 
         /// <inheritdoc/>
         /// <remarks>NumPy's <c>nonzero</c> of <c>stringdtype/dtype.c</c>: an NA cell of a descriptor with an NA object is

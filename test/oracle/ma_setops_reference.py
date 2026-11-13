@@ -1,6 +1,6 @@
 """
 ma_setops_reference.py — numpy.ma's arraysetops (numpy/ma/extras.py: unique / in1d / isin / intersect1d / setxor1d /
-union1d / setdiff1d) copied statement for statement from NumPy 2.4.2, with every sort made STABLE. Used by
+union1d / setdiff1d) copied statement for statement from NumPy 2.5.4 (unchanged since 2.4.2), with every sort made STABLE. Used by
 gen_ma_oracle.py's `setops` tier to decide which cases the corpus can hold.
 
 NumPy's 'quicksort' (np.unique's argsort with return_inverse, MaskedArray.sort's default kind, ndarray.sort) is not

@@ -1,4 +1,4 @@
-"""ndarray.flags / ndarray.setflags differential oracle — NumPy 2.4.2 is the source of truth.
+"""ndarray.flags / ndarray.setflags differential oracle — NumPy 2.5.4 (the pin) is the source of truth.
 
 Emits test/NumSharp.Tests/Backends/corpus/flags_oracle.jsonl: one JSON object per case.
 Replayed (no Python) by FlagsOracleTests.cs, whose FlagsOracleRecipes builds the IDENTICAL
@@ -28,7 +28,7 @@ Encoding notes:
   * ops stop at the first error, which is recorded verbatim; the post-state after an error pins
     NumPy's flagback rollback semantics.
 
-Regenerate:  python test/oracle/gen_flags_oracle.py   (requires numpy==2.4.2)
+Regenerate:  python test/oracle/gen_flags_oracle.py   (requires the pinned NumPy (numpy-version.txt, 2.5.4))
 """
 import gc
 import json
@@ -37,8 +37,9 @@ import tempfile
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
-assert np.__version__ == "2.4.2", f"oracle must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_flags_oracle.py")
 warnings.simplefilter("ignore")  # broadcast_arrays writeable FutureWarning
 
 HERE = os.path.dirname(os.path.abspath(__file__))

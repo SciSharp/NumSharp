@@ -13,7 +13,7 @@ paths:
 
 ## `.npy` / `.npz`
 
-A port of NumPy 2.4.2's `numpy/lib/_format_impl.py` (NEP-01) in `IO/{NpyFormat,NpzFile,PyLiteral}.cs`, with
+A port of NumPy 2.5.4's `numpy/lib/_format_impl.py` (NEP-01) in `IO/{NpyFormat,NpzFile,PyLiteral}.cs`, with
 `APIs/np.{save,load}.cs`. The writer is byte-for-byte identical to NumPy's own `np.save`, not merely readable by it:
 format versions 1.0 / 2.0 / 3.0 (2- or 4-byte header length; latin-1 or UTF-8), 64-byte `ARRAY_ALIGN` data alignment
 (mmap-ready), `fortran_order` both ways (write through the transpose; read through reshape-reversed + transpose), and
@@ -137,7 +137,7 @@ lifts it.
 
 ## Printing
 
-`NDArray.ToString()` is a byte-exact port of NumPy 2.4.2's array printing (`numpy/_core/arrayprint.py` + `dragon4.c`;
+`NDArray.ToString()` is a byte-exact port of NumPy 2.5.4's array printing (`numpy/_core/arrayprint.py` + `dragon4.c`;
 `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`,
 `Casting/NDArray.ToString.cs`): `ToString()` / `ToString(false)` → `np.array_str` (`[0 1 2]`), `ToString(true)` →
 `np.array_repr` (`array([0, 1, 2], dtype=…)`). It covers decimal-point float alignment, the maxprec/unique/fixed float

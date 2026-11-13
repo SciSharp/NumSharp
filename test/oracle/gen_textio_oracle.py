@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NumPy 2.4.2 oracle for NumSharp's text readers and writers: ``np.fromstring``, ``np.fromfile``, ``np.loadtxt``,
+"""NumPy 2.5.4 (the pin) oracle for NumSharp's text readers and writers: ``np.fromstring``, ``np.fromfile``, ``np.loadtxt``,
 ``np.savetxt`` and ``ndarray.tofile`` over every dtype (strings phase 1, the validation pass of P1.7c).
 
 Writes ``test/NumSharp.Tests.Oracle/TextIO/corpus/textio_<section>.jsonl``, one file per section, replayed by
@@ -30,10 +30,10 @@ Writes ``test/NumSharp.Tests.Oracle/TextIO/corpus/textio_<section>.jsonl``, one 
 Each file starts with a header record (``{"header": {...}}``: the generator, NumPy and Python versions, the seed and
 the case count, which the replay checks), then one case per line.
 
-**Run it with Linux NumPy 2.4.2** (WSL), from a directory outside ``refs/numpy`` (whose sources would shadow the
-installed package)::
+**Run it with Linux NumPy at the pinned release** (``numpy-version.txt``; WSL), from a directory outside
+``refs/numpy`` (whose sources would shadow the installed package)::
 
-    wsl -e bash -lc 'cd ~ && ~/np242/bin/python /mnt/k/source/NumSharp/test/oracle/gen_textio_oracle.py'
+    wsl -e bash -lc 'cd ~ && ~/np254/bin/python /mnt/k/source/NumSharp/test/oracle/gen_textio_oracle.py'
 
 then ``dotnet build`` the oracle project to copy the corpus. ``--sections fromtext,loadtxt`` regenerates a subset;
 ``--out DIR`` writes somewhere else (a dry run).
@@ -53,7 +53,8 @@ wrapper and file disagree (it reports the count, which must be zero). The replay
 **What the corpus leaves out**, because NumSharp documents the divergence and unit-tests it instead: results NumPy
 builds with zero-width string elements (NumSharp cannot hold one); a non-native dtype's TEXT read, which NumPy
 byte-swaps after its scanner wrote a native value (the case records NumPy's answer for the native dtype, which is
-NumSharp's); and ``ndarray.tofile`` of an element whose text is not ASCII, which crashes NumPy 2.4.2's process.
+NumSharp's). ``ndarray.tofile`` of an element whose text is not ASCII crashed NumPy 2.4.2's process and was left out
+then; NumPy 2.5 raises the ``UnicodeEncodeError`` NumSharp raises, so the corpus records it (``st_tofile_crashes``).
 
 Strings travel as JSON strings, or as ``{"u16": hex}`` (UTF-16LE) when they hold a lone surrogate (System.Text.Json
 refuses one); bytes as ``{"utf8": str}`` when they are strict UTF-8, else ``{"hex": ...}``. The files are raw UTF-8.
@@ -76,6 +77,7 @@ import warnings
 from pathlib import Path
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 GENERATOR_VERSION = 1
 ROOT = Path(__file__).resolve().parents[2]
@@ -109,12 +111,12 @@ INLINE_TEXT = 8192
 def check_host():
     """Refuses to run anywhere but NumSharp's pinned platform model.
 
-    :raises SystemExit: NumPy is not 2.4.2, Python is not 3.12, the C ``long`` is not 64 bits, the C library is not
-        glibc, the locale encoding is not UTF-8, or ``os.linesep`` is not ``"\\n"``.
+    :raises SystemExit: NumPy is not the pinned release (numpy-version.txt), Python is not 3.12, the C ``long`` is not
+        64 bits, the C library is not glibc, the locale encoding is not UTF-8, or ``os.linesep`` is not ``"\\n"``.
     """
     problems = []
-    if np.__version__ != "2.4.2":
-        problems.append(f"NumPy {np.__version__}, not 2.4.2")
+    if np.__version__ != numpy_pin.NUMPY_VERSION:
+        problems.append(f"NumPy {np.__version__}, not {numpy_pin.NUMPY_VERSION} (numpy-version.txt)")
     if sys.version_info[:2] != (3, 12):
         problems.append(f"Python {sys.version.split()[0]}, not 3.12 (CPython's int() / float() texts and grammar)")
     if ctypes.sizeof(ctypes.c_long) != 8:
@@ -126,7 +128,8 @@ def check_host():
     if os.linesep != "\n":
         problems.append("os.linesep is not \\n")
     if problems:
-        raise SystemExit("gen_textio_oracle.py must run with Linux NumPy 2.4.2: " + "; ".join(problems))
+        raise SystemExit(f"gen_textio_oracle.py must run with Linux NumPy {numpy_pin.NUMPY_VERSION}: "
+                         + "; ".join(problems))
 
 
 def S(s):
@@ -1684,13 +1687,17 @@ def gen_savetxt(rng, tmpdir, n):
 
 
 def st_tofile_crashes(view, kw):
-    """Whether NumPy 2.4.2's ndarray.tofile would crash on this call: a text-mode element whose ``str`` / ``format``
-    text is not ASCII (``PyUnicode_AsASCIIString``'s NULL is not checked).
+    """Whether the running NumPy's ndarray.tofile would crash on this call. NumPy 2.4 did on a text-mode element whose
+    ``str`` / ``format`` text is not ASCII (it did not check ``PyUnicode_AsASCIIString``'s NULL); NumPy 2.5 checks it and
+    raises the ``UnicodeEncodeError`` after writing the elements before it, as NumSharp does, so under the 2.5.4 pin no
+    call is skipped and the section records those errors and partial files.
 
     :param view: the array.
     :param kw: tofile's keyword arguments.
-    :returns: True when the call must not run.
+    :returns: True when the call must not run (only under a NumPy older than 2.5).
     """
+    if tuple(int(p) for p in np.__version__.split(".")[:2]) >= (2, 5):
+        return False
     if kw.get("sep", "") == "":
         return False
     fmt = kw.get("format", "%s")

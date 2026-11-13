@@ -281,7 +281,7 @@ namespace NumSharp.Tests.Fourier
                 new Action(() => np.fft.fft(v, 0)).Should().Throw<ValueError>()
                     .WithMessage("Invalid number of FFT data points (0) specified.");
                 new Action(() => np.fft.fft(v, norm: "Ortho")).Should().Throw<ValueError>()
-                    .WithMessage("Invalid norm value Ortho; should be \"backward\",\"ortho\" or \"forward\".");
+                    .WithMessage("Invalid norm value Ortho; should be \"backward\", \"ortho\" or \"forward\".");
                 new Action(() => np.fft.rfft(c)).Should().Throw<TypeError>()
                     .WithMessage("ufunc 'rfft_n_even' not supported for the input types*");
                 new Action(() => np.fft.fft(v, null, 3)).Should().Throw<IndexError>()

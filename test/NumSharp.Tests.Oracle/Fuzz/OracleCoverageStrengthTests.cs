@@ -176,7 +176,8 @@ namespace NumSharp.Tests.Fuzz
             // carved all of them, and the index a step reports does not depend on the dtype.
             ["nditer.multi_index"] = "iteration-protocol probe: the multi_index after k next() calls is dtype-independent; the protocol section's one float32 operand carries it",
             // finfo.minexp / resolution / smallest_normal / tiny left this ledger when API-parity batch 7 fixed gaps
-            // SU11, SU12 and SU14 (their carved cases joined surface.jsonl): each now spreads past the floor.
+            // SU11, SU12 and SU14 (their carved cases joined surface.jsonl): each now spreads past the floor, and a
+            // non-inexact dtype's refusal is NumPy 2.5's text, which NumSharp raises.
 
             // The scalar-type section's relatives (gen_scalar_types): single NumPy objects and name tables, whose case
             // axis is the facet or the key, not an operand dtype.

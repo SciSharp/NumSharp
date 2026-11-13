@@ -1,4 +1,4 @@
-"""Layout-parity oracle: NumPy 2.4.2 differential corpus for the modelled numpy-internal
+"""Layout-parity oracle: NumPy 2.5.4 (the pin) differential corpus for the modelled numpy-internal
 representations (the formerly-[Misaligned] set, fixed on journey3):
 
   reshape   _reshape_with_copy_arg + _attempt_nocopy_reshape: nocopy strided VIEWS,
@@ -29,7 +29,7 @@ source, and the result VALUES as base64(tobytes(order='C')) — so the C# replay
 where a surface is knowingly not byte-comparable (partition's between-anchor arrangement)
 or where a PRE-EXISTING unrelated divergence would otherwise leak in.
 
-Regenerate:  python test/oracle/gen_layout_parity_oracle.py   (needs numpy==2.4.2)
+Regenerate:  python test/oracle/gen_layout_parity_oracle.py   (needs the pinned NumPy (numpy-version.txt, 2.5.4))
 Twin:        test/NumSharp.Tests/Backends/LayoutParityOracleTests.cs (builders keyed 1:1)
 """
 import base64
@@ -37,8 +37,9 @@ import json
 import os
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_layout_parity_oracle.py")
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                    "..", "NumSharp.Tests", "Backends", "corpus", "layout_parity_oracle.jsonl")

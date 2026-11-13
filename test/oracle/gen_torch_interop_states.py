@@ -16,11 +16,15 @@ The bridge differs from torch.from_numpy / t.numpy() ON PURPOSE in a few places 
 array copies under Auto and throws under View; an expanded tensor is a read-only NumSharp view; a tensor that requires
 grad is a read-only view; complex64 / bfloat16 widen); the C# suite names each divergence where it asserts it.
 
-    "C:/Users/ELI/.claude/python/python.exe" -I test/oracle/gen_torch_interop_states.py
+    <python with the pinned numpy and torch> test/oracle/gen_torch_interop_states.py
         # writes test/NumSharp.Tests.Interop.TorchSharp/Fixtures/torch_interop_states.json
+        # e.g. the interop ecosystem venv test/NumSharp.Tests.Interop/python-envs/make_env.py builds (numpy + torch-cpu)
 
-Requires: numpy (2.4.2 pinned by the repository), torch (2.3 or later, for the unsigned dtypes). The fixture is COMMITTED,
-so the C# suite needs no Python at test time. Values are not recorded: the C# suite compares the two sides' own copies.
+Requires: numpy - exactly the release the repository pins (numpy-version.txt, read through numpy_pin.py; the script
+exits under any other) - and torch (2.3 or later, for the unsigned dtypes). Run it WITHOUT `python -I`: isolated mode
+drops this folder from sys.path, so `import numpy_pin` fails. The fixture is COMMITTED, so the C# suite needs no Python
+at test time; StateCatalogSyncTests.Fixture_IsThePinnedNumPy fails until the fixture is regenerated after a NumPy bump.
+Values are not recorded: the C# suite compares the two sides' own copies.
 """
 from __future__ import annotations
 
@@ -30,7 +34,11 @@ import sys
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 import torch
+
+# A fixture recorded under another NumPy would hold the bridge to that release's flags; refuse before writing a byte.
+numpy_pin.require(np, "gen_torch_interop_states.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "NumSharp.Tests.Interop.TorchSharp", "Fixtures", "torch_interop_states.json")

@@ -7,7 +7,7 @@ using NumSharp.Utilities;
 namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>
-    ///     <c>np.linalg.lstsq</c> — a route-for-route port of NumPy 2.4.2's <c>lstsq</c> gufunc
+    ///     <c>np.linalg.lstsq</c> — a route-for-route port of NumPy 2.5.4's <c>lstsq</c> gufunc
     ///     (<c>umath_linalg.cpp</c>) calling the SAME LAPACK <c>gelsd</c> the bundled scipy-openblas
     ///     ships: the minimum-norm least-squares solution of <c>A x = B</c> plus the residuals, the
     ///     effective rank and the singular values.
@@ -28,6 +28,13 @@ namespace NumSharp.Interop.OpenBLAS
     ///     workspace, integer-workspace and (complex) real-workspace sizes are all queried the way
     ///     <c>init_gelsd</c> queries them. Non-convergence raises
     ///     <see cref="LinAlgError"/>("SVD did not converge in Linear Least Squares"), NumPy's message.
+    ///     </para>
+    ///     <para>
+    ///     The gufunc's one 2.5 addition is not here: NumPy 2.5 checks <c>a</c> for an inf or a NaN before
+    ///     <c>gelsd</c> (<c>all_finite</c>, gh-32719), because LAPACK's SVD drivers can loop forever on an
+    ///     inf, and raises that same <see cref="LinAlgError"/>. Core's <c>LstsqKernel</c> makes the check
+    ///     before it asks any backend, so <c>np.linalg.lstsq</c> raises it with or without this package; a
+    ///     caller of <see cref="IBlasBackend.TryLstsq"/> itself must keep non-finite input away.
     ///     </para>
     ///     <para>
     ///     Unlike the other factorisations this does NOT stack: <c>np.linalg.lstsq</c> is 2-D only

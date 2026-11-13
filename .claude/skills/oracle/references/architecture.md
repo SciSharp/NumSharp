@@ -109,7 +109,7 @@ deterministic NumSharp kernel, green on every platform by construction; only the
 ## 6. The `ndarray.flags` oracle (sibling, in the MAIN test project)
 
 - `test/oracle/gen_flags_oracle.py` → `test/NumSharp.Tests/Backends/corpus/flags_oracle.jsonl` (~1100 cases of REAL
-  NumPy 2.4.2 flag records over a 13-dtype × layout sweep + a result-flags matrix for order= producers / stacking /
+  NumPy 2.5.4 flag records over a 13-dtype × layout sweep + a result-flags matrix for order= producers / stacking /
   reductions / creation). Replayed by `Backends/FlagsOracleTests.cs` — a 1:1 twin of the generator's recipe tokens.
   Gates `C/F/O/W/A/X` (contiguity, owndata, writeable, aligned, writebackifcopy) rather than op VALUES, so it is NOT
   in `TestCategory=FuzzMatrix`.

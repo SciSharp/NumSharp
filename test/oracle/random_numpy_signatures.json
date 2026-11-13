@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "numpy": "2.4.2",
+ "numpy": "2.5.4",
  "note": "NumPy's parameter names per random-API member (gen_random_oracle.py); read by RandomApiCoverageTests' parameter-name gate.",
  "members": {
   "BitGenerator.random_raw": {

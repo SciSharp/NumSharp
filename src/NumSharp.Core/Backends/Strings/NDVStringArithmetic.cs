@@ -25,7 +25,8 @@ namespace NumSharp.Backends.Strings
         /// <summary>The output's allocator.</summary>
         internal VStringAllocator Out;
 
-        /// <summary>The NA rule of the deciding descriptor (NumPy's <c>s1descr</c> / <c>idescr</c> / <c>in1_descr</c>).</summary>
+        /// <summary>The NA rule of the deciding descriptor (NumPy 2.5.2's effective NA descriptor of a two-text loop, the input's
+        ///     own of a one-text loop: <c>s1descr</c> / <c>idescr</c>).</summary>
         internal VStringNARule Rule;
 
         /// <summary>The deciding descriptor's default string as UTF-8 (pinned by the caller for the call), or null when empty.</summary>
@@ -154,7 +155,9 @@ namespace NumSharp.Backends.Strings
                 t1 = NDStringUfuncs.IsVString(x1) ? x1 : NDVStringComparison.ToDefaultVString(x1);
                 t2 = NDStringUfuncs.IsVString(x2) ? x2 : NDVStringComparison.ToDefaultVString(x2);
                 var resultDescr = BinaryOutputDescr(t1.dtype, t2.dtype);
-                return Run(WriteOp.Add, WriteOp.AddSize, x1, x2, t1, t2, @out, where, resultDescr, t1.dtype, "add", textIndex: 0);
+                // NumPy 2.5.2: the null handling is the effective NA descriptor's (the first operand with an NA object).
+                return Run(WriteOp.Add, WriteOp.AddSize, x1, x2, t1, t2, @out, where, resultDescr,
+                           NDVStringCells.EffectiveNADescr(t1.dtype, t2.dtype), "add", textIndex: 0);
             }
             finally
             {
@@ -166,9 +169,9 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's <c>binary_resolve_descriptors</c> (add, maximum, minimum): a fresh descriptor with the two NA objects'
-        ///     compatible one (the present one, the first when both are) and — NumPy reads <c>descr1-&gt;coerce</c> twice — the
-        ///     FIRST descriptor's <c>coerce</c>.
+        ///     NumPy's <c>binary_resolve_descriptors</c> (add, maximum, minimum; NumPy 2.5.2's <c>stringdtype_common_na_coerce</c>):
+        ///     a fresh descriptor with the two NA objects' compatible one (the present one, the first when both are) and
+        ///     <c>coerce</c> only when BOTH descriptors coerce (NumPy 2.4 read <c>descr1-&gt;coerce</c> twice).
         /// </summary>
         /// <param name="d1">The first (promoted) descriptor.</param>
         /// <param name="d2">The second (promoted) descriptor.</param>
@@ -182,7 +185,7 @@ namespace NumSharp.Backends.Strings
                 throw new TypeError(
                     $"Cannot find a compatible null string value for null strings '{NDPyObject.Repr(p1.na_object)}' and " +
                     $"'{NDPyObject.Repr(p2.na_object)}'");
-            return DTypeRegistry.VString.Descr(hasNA, na, p1.coerce && p1.coerce);
+            return DTypeRegistry.VString.Descr(hasNA, na, p1.coerce && p2.coerce);
         }
 
         /// <summary>
@@ -451,8 +454,9 @@ namespace NumSharp.Backends.Strings
         /// <summary>
         ///     Computes <c>np.multiply(x1, x2, out=out, where=where)</c> for a <c>StringDType</c> text and an integer count
         ///     (either order) after <see cref="NDStringUfuncs.BinaryGuard"/> accepted the call. NumPy's promoter reads every
-        ///     integer type but <c>uint64</c> as int64 (a negative count is then a huge <c>size_t</c>: NumPy's overflow error
-        ///     for any non-empty text); <c>uint64</c> has its own loop.
+        ///     integer type but <c>uint64</c> as int64; a count below 1 repeats nothing (NumPy 2.5.4: an empty result, where
+        ///     NumPy 2.4 read a negative count as a huge <c>size_t</c> and raised its overflow error); <c>uint64</c> has its own
+        ///     loop.
         /// </summary>
         /// <param name="x1">The first operand.</param>
         /// <param name="x2">The second operand.</param>
@@ -463,10 +467,8 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">An NA under the <c>None</c>-like rule (<c>Cannot multiply null that is not a nan-like
         ///     value</c>).</exception>
         /// <exception cref="OverflowError"><c>Overflow encountered in string multiply</c>: <c>size * count</c> past
-        ///     <c>2^63 - 1</c> as unsigned 64-bit arithmetic.</exception>
+        ///     <c>2^63 - 1</c> as unsigned 64-bit arithmetic (a uint64 count past <c>2^63 - 1</c> with a non-empty text).</exception>
         /// <exception cref="MemoryError">NumPy's <c>MemoryError</c> texts.</exception>
-        /// <remarks>An EMPTY text with a negative count makes NumPy's copy loop run <c>2^64 - k</c> times copying nothing (it
-        ///     never returns); NumSharp writes the empty string at once (<c>[Misaligned]</c>).</remarks>
         internal static NDArray Multiply(NDArray x1, NDArray x2, NDArray @out, NDArray where, DType output)
         {
             int textIndex = NDStringUfuncs.IsVString(x1) ? 0 : 1;
@@ -506,7 +508,18 @@ namespace NumSharp.Backends.Strings
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void MultiplyElement(byte* s, byte* i, byte* o, VStringWriteContext ctx, bool unsigned)
         {
-            ulong factor = unsigned ? Unsafe.ReadUnaligned<ulong>(i) : (ulong)Unsafe.ReadUnaligned<long>(i);
+            // NumPy 2.5.4's `if (factor < 1 || cursize == 0) factor = 0;`: a count below 1 repeats nothing (an empty result;
+            // NumPy 2.4 read a negative int64 as 2^64 + count and raised its overflow error). A uint64 count is never
+            // below 1 except 0; one past PY_SSIZE_T_MAX still overflows below (size * count), and an empty text repeats
+            // to an empty result whatever the count.
+            ulong factor;
+            if (unsigned)
+                factor = Unsafe.ReadUnaligned<ulong>(i);
+            else
+            {
+                long count = Unsafe.ReadUnaligned<long>(i);
+                factor = count < 1 ? 0UL : (ulong)count;
+            }
             ulong h = Unsafe.ReadUnaligned<ulong>(s + 8);
             uint f = (uint)(h >> 56);
             if (ctx.FreshOut && (f & VStringAllocator.NPY_STRING_FLAG_MASK) == ShortFlags)
@@ -643,7 +656,8 @@ namespace NumSharp.Backends.Strings
         ///     and <c>NpyString_pack</c> in place) filled with the copies (doubling, the same bytes as NumPy's copy loop).
         /// </summary>
         /// <param name="s">The text cell.</param>
-        /// <param name="factor">The count as NumPy's <c>size_t</c> (a negative int64 is <c>2^64 + count</c>).</param>
+        /// <param name="factor">The count as NumPy's <c>size_t</c> (a count below 1 was already mapped to 0 by
+        ///     <see cref="MultiplyElement"/>, NumPy 2.5.4's rule).</param>
         /// <param name="o">The output cell.</param>
         /// <param name="ctx">The call's context.</param>
         /// <exception cref="TypeError">An NA under the <c>None</c>-like rule: <c>Cannot multiply null that is not a nan-like value</c>.</exception>
@@ -744,7 +758,8 @@ namespace NumSharp.Backends.Strings
         /// <summary>
         ///     Computes <c>np.maximum</c> / <c>np.minimum(x1, x2, out=out, where=where)</c> over two <c>StringDType</c> operands
         ///     after <see cref="NDStringUfuncs.BinaryGuard"/> accepted the call: per element the winner of NumPy's
-        ///     <c>_compare</c> (the first operand's NA rule) is duplicated into the output; a tie takes the first operand under
+        ///     <c>_compare</c> (the effective NA descriptor's rule, NumPy 2.5.2: the first operand with an NA object) is
+        ///     duplicated into the output; a tie takes the first operand under
         ///     <c>maximum</c> and the second under <c>minimum</c> (NumPy's <c>(cmp &lt; 0) ^ invert</c>).
         /// </summary>
         /// <param name="isMax">True for <c>maximum</c>.</param>
@@ -762,7 +777,7 @@ namespace NumSharp.Backends.Strings
             var resultDescr = BinaryOutputDescr(x1.dtype, x2.dtype);
             string name = isMax ? "maximum" : "minimum";
             return Run(isMax ? WriteOp.Maximum : WriteOp.Minimum, WriteOp.MaxMinSize, x1, x2, x1, x2, @out, where, resultDescr,
-                       x1.dtype, name, textIndex: 0);
+                       NDVStringCells.EffectiveNADescr(x1.dtype, x2.dtype), name, textIndex: 0);
         }
 
         /// <summary>
@@ -878,14 +893,13 @@ namespace NumSharp.Backends.Strings
         /// <param name="fb">B's byte 15.</param>
         /// <param name="hb">B's high word.</param>
         /// <returns>-1, 0 or 1.</returns>
-        /// <remarks>A NUL inside A's text can end NumPy's <c>strncmp</c> before the masked cells' first difference (the sizes
-        ///     then decide, see <see cref="NDVStringCells.Order"/>): that pair, rare in real text, takes the exact order.</remarks>
+        /// <remarks>Exact for every pair, embedded NULs included: NumPy 2.5's <c>NpyString_cmp</c> is <c>memcmp</c> then the
+        ///     sizes (see <see cref="NDVStringCells.Order"/>; NumPy 2.4's <c>strncmp</c> stopped at a NUL both texts shared,
+        ///     which the masked cells cannot see).</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static int ShortOrder(byte* a, uint fa, ulong ha, byte* b, uint fb, ulong hb)
         {
             int sa = (int)(fa & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK), sb = (int)(fb & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK);
-            if (NDVStringCells.ShortHasNul(a, ha, sa))
-                return NDVStringCells.Order(a, sa, b, sb);
             ulong la = Unsafe.ReadUnaligned<ulong>(a) & s_masks[sa], lb = Unsafe.ReadUnaligned<ulong>(b) & s_masks[sb];
             if (la != lb)
                 return System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(la) < System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(lb) ? -1 : 1;

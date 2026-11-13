@@ -315,7 +315,7 @@ NumPy's float_power loop has none, so `float_power(757.7617475757002, 2.0)` is p
 
 ## `np.power`'s float loops
 
-NumPy 2.4.2's DOUBLE_power / FLOAT_power test the exponent's STEP in each inner-loop call: with `steps[1] == 0` they read
+NumPy 2.5.4's DOUBLE_power / FLOAT_power test the exponent's STEP in each inner-loop call: with `steps[1] == 0` they read
 the exponent once and write `1.0/x`, `1.0`, `sqrt(x)`, `x` (raw bits; a signalling NaN kept) or `x*x` for -1, 0, 0.5,
 1, 2 (compared in the loop dtype: -0.0 takes the 0 branch, NaN none); any other exponent or a nonzero step is pow. The
 answers differ (`757.7617475757002 ** 2`: `x*x` `...03c1`, pow `...03c2`; `-0.0 ** 0.5`: sqrt -0.0, pow +0.0;

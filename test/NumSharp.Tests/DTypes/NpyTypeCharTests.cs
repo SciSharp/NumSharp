@@ -6,11 +6,13 @@ using System.Runtime.InteropServices;
 namespace NumSharp.Tests.DTypes
 {
     /// <summary>
-    ///     NumPy's type characters: the <see cref="NPY_TYPECHAR"/> mirror of NumPy 2.4.2's header, the two mappings
+    ///     NumPy's type characters: the <see cref="NPY_TYPECHAR"/> mirror of NumPy 2.5.4's header, the two mappings
     ///     <see cref="NPTypeCodeExtensions.ToTypeCode(NPY_TYPECHAR)"/> / <see cref="NPTypeCodeExtensions.ToTYPECHAR"/> and the
-    ///     single-character dtype strings of <c>np.dtype</c>. Every expectation is NumPy 2.4.2's, probed on Windows (C long is
-    ///     32-bit) and Linux (64-bit): <c>np.dtype(c)</c> for every printable ASCII character and <c>np.dtype(t).char</c> for
-    ///     every builtin dtype. The full header comparison of the enum is <see cref="DTypeOracleTests.CEnums_MirrorNumPysHeader"/>.
+    ///     single-character dtype strings of <c>np.dtype</c>. Every expectation is NumPy 2.5.4's, probed on Windows (C long is
+    ///     32-bit) and Linux (64-bit): <c>np.dtype(c)</c> for every printable ASCII and control character and
+    ///     <c>np.dtype(t).char</c> for every builtin dtype (NumPy 2.4.2 answers the same everywhere but <c>'a'</c>, its
+    ///     deprecated alias of <c>'S'</c>). The full header comparison of the enum is
+    ///     <see cref="DTypeOracleTests.CEnums_MirrorNumPysHeader"/>.
     /// </summary>
     [TestClass]
     public class NpyTypeCharTests
@@ -19,8 +21,8 @@ namespace NumSharp.Tests.DTypes
         private static readonly bool CLongIs32 = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || IntPtr.Size != 8;
 
         /// <summary>
-        ///     The characters NumPy 2.4.2 resolves to a dtype NumSharp stores, with that storage code on this host: the string
-        ///     classes ('S' / 'a' / 'c' bytes, 'U' str, 'T' StringDType) share the String lane. Every other printable ASCII
+        ///     The characters NumPy 2.5.4 resolves to a dtype NumSharp stores, with that storage code on this host: the string
+        ///     classes ('S' / 'c' bytes, 'U' str, 'T' StringDType) share the String lane. Every other printable ASCII
         ///     character is refused: NumPy does not know it ("data type 'x' not understood"), or NumSharp has no such dtype
         ///     ('F' complex64, 'V' void, 'O' object), or the dtype has no storage yet ('M'/'m' datetimes).
         /// </summary>
@@ -48,7 +50,7 @@ namespace NumSharp.Tests.DTypes
             ['D'] = NPTypeCode.Complex,
             ['G'] = NPTypeCode.Complex,
             ['S'] = NPTypeCode.String,
-            ['a'] = NPTypeCode.String,
+            // 'a' is gone: NumPy 2.5 removed the deprecated alias of 'S' (TypeError: data type 'a' not understood).
             ['c'] = NPTypeCode.String,
             ['U'] = NPTypeCode.String,
             ['T'] = NPTypeCode.String,
@@ -80,7 +82,7 @@ namespace NumSharp.Tests.DTypes
                 }
                 else if (got != null)
                 {
-                    problems.Add($"'{c}': NumPy 2.4.2 gives no NumSharp dtype, got {got}");
+                    problems.Add($"'{c}': NumPy 2.5.4 gives no NumSharp dtype, got {got}");
                 }
             }
 
@@ -106,7 +108,7 @@ namespace NumSharp.Tests.DTypes
         }
 
         /// <summary>
-        ///     Being the parser's answer, a control character below '\x18' is a TYPE NUMBER, as in NumPy 2.4.2 (probed:
+        ///     Being the parser's answer, a control character below '\x18' is a TYPE NUMBER, as in NumPy 2.4.2 and 2.5.4 (probed:
         ///     np.dtype('\x00') is bool, '\x0c' float64, '\x0f' complex128, '\x17' float16, '\x18' "not understood"), so a
         ///     value that is no type character can still resolve. The platform-free numbers only: '\x07' is C long.
         /// </summary>
@@ -243,17 +245,17 @@ namespace NumSharp.Tests.DTypes
         }
 
         /// <summary>
-        ///     The members this fix changed, beside the full header comparison of the oracle: NumPy 2.4.2 has
-        ///     <see cref="NPY_TYPECHAR.NPY_VSTRINGLTR"/> and spells the 'a' alias <see cref="NPY_TYPECHAR.NPY_DEPRECATED_STRINGLTR2"/>,
-        ///     and removed <c>NPY_INTPLTR</c>/<c>NPY_UINTPLTR</c>.
+        ///     The members NumPy 2 changed, beside the full header comparison of the oracle: NumPy 2.5.4 has
+        ///     <see cref="NPY_TYPECHAR.NPY_VSTRINGLTR"/>, removed <c>NPY_INTPLTR</c>/<c>NPY_UINTPLTR</c> (2.0), and removed the
+        ///     'a' alias's member <c>NPY_DEPRECATED_STRINGLTR2</c> with the alias itself (2.5; 2.0-2.4 had it).
         /// </summary>
         [TestMethod]
         public void Enum_HasNumPy2sMembers()
         {
             ((char)NPY_TYPECHAR.NPY_VSTRINGLTR).Should().Be('T');
-            ((char)NPY_TYPECHAR.NPY_DEPRECATED_STRINGLTR2).Should().Be('a');
             var names = Enum.GetNames(typeof(NPY_TYPECHAR));
-            names.Should().NotContain(new[] { "NPY_INTPLTR", "NPY_UINTPLTR", "NPY_STRINGLTR2" });
+            names.Should().NotContain(new[] { "NPY_INTPLTR", "NPY_UINTPLTR", "NPY_STRINGLTR2", "NPY_DEPRECATED_STRINGLTR2" });
+            Enum.IsDefined(typeof(NPY_TYPECHAR), (int)'a').Should().BeFalse("'a' is no type character since NumPy 2.5");
             Enum.IsDefined(typeof(NPY_TYPECHAR), (int)'p').Should().BeFalse("'p' is a valid character with no member since NumPy 2.0");
         }
 

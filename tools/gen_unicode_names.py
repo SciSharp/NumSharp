@@ -3,7 +3,7 @@
 np.strings.encode(a, encoding, 'namereplace') calls CPython's namereplace error handler (PyCodec_NameReplaceErrors),
 which writes an unencodable character as \\N{NAME} — the name unicodedata's C API returns for it, WITH aliases and named
 sequences (getname(code, buffer, size, with_alias_and_seq=1)) — and as \\xNN / \\uNNNN / \\UNNNNNNNN when it has none.
-NumSharp reproduces those names from a table pinned to the CPython the NumPy 2.4.2 oracle runs (3.12, Unicode 15.0.0);
+NumSharp reproduces those names from a table pinned to the CPython the NumPy oracle runs (3.12, Unicode 15.0.0);
 .NET has no character-name API at all.
 
 What the script records, read from the RUNNING interpreter's behavior (the handler itself, called for every code point,
@@ -25,7 +25,7 @@ not the UCD files), so the table is what CPython does:
 The generated file also carries a SHA-256 over every code point's answer (the name's bytes then '\\n', or '\\n' alone),
 which NumSharp's pin test recomputes from its runtime lookups.
 
-Run with the CPython the oracles run (3.12, the NumPy 2.4.2 oracle interpreter):  python tools/gen_unicode_names.py
+Run with the CPython the oracles run (3.12, the pinned NumPy's interpreter):  python tools/gen_unicode_names.py
 """
 import base64
 import codecs

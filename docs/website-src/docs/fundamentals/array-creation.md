@@ -234,7 +234,7 @@ var fromFile = np.fromfile("data.bin", np.int16);
 
 ## 6. Special library functions
 
-`np.random` produces arrays from distributions, with **byte-identical seed/state parity** to NumPy 2.4.2 (MT19937 bit generator):
+`np.random` produces arrays from distributions, with **byte-identical seed/state parity** to NumPy 2.5.4 (MT19937 bit generator):
 
 ```csharp
 np.random.seed(42);

@@ -12,7 +12,8 @@ For each requested type it (re)generates the data, then publishes it into the re
 
 ``benchmark`` is NOT re-run here (it is heavy — use ``run_benchmark.py``); with ``--type benchmark``
 or ``all`` the EXISTING ``benchmark/history/latest`` is published if present. Regeneration needs
-``numpy==2.4.2`` (inventory) and the .NET SDK (tests-oracle builds a reflection tool).
+the pinned NumPy (``numpy==$(cat numpy-version.txt)``, inventory) and the .NET SDK (tests-oracle
+builds a reflection tool).
 """
 from __future__ import annotations
 

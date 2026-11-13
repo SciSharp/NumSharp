@@ -94,7 +94,7 @@ block is that list's §7A elaboration.
   Numbers are the credibility currency of this changelog - never invent them, quote the body.
 - Parity vocabulary is precise and load-bearing - use the strongest the body supports:
   - **byte-identical / bit-exact** - output bytes equal NumPy's (the strongest claim).
-  - **parity / matches NumPy 2.4.2** - behavior/values match, bytes not asserted.
+  - **parity / matches NumPy 2.5.4** (the pinned release) - behavior/values match, bytes not asserted.
   - **verbatim errors** - exception messages reproduced exactly.
 
 ---
@@ -171,7 +171,7 @@ enriched from the **actual package source** (`.csproj` metadata + the public API
 
 Per package:
 - **Top line:** `` **`Package.Id`** `` - one-clause value proposition (what changes for the user),
-  with the strongest honest claim (e.g. *byte-identical to NumPy 2.4.2*).
+  with the strongest honest claim (e.g. *byte-identical to NumPy 2.5.4*).
 - **Capability sub-lists**, grouped by logical proximity, code-coloring every function/API name
   exactly like §5/§7. For a package that *serves existing APIs* (a backend), **enumerate the served
   functions** - do not hand-wave "and more"; read the seam (e.g. the `IBlasBackend.Try*` members and

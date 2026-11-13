@@ -218,7 +218,7 @@ a copy) in `Backends/Unmanaged/UnmanagedStorage.Buffer.cs`.
 
 ## `np.linspace` / `np.logspace` / `np.geomspace`
 
-NumPy 2.4.2's `numpy/_core/function_base.py`: `Creation/np.{linspace,logspace,geomspace}.cs` are the facades,
+NumPy 2.5.4's `numpy/_core/function_base.py`: `Creation/np.{linspace,logspace,geomspace}.cs` are the facades,
 `TensorEngine.Linspace` / `Logspace` / `Geomspace` (`Backends/TensorEngine.CoreFunctionBase.cs`) the members,
 DefaultEngine's fills in `Backends/Default/Creation/Default.CoreFunctionBase.cs`. `linspace` and `geomspace` take
 NumPy's array_like ends (`NDArray`, a C# number converts); `logspace` takes scalar `start`, `stop` and `base`
@@ -356,9 +356,12 @@ numpy.matrix / numpy.char.chararray rules and the null checks; `np.apply_over_ax
 plain statements would not apply.
 - `concat` is NumPy 2.0's alias of `concatenate`, with every overload (array form with `axis`/`out`/`dtype`/`casting`,
   tuple-arity forms).
-- `row_stack` is NumPy 2.4's deprecated alias of `vstack` (NumPy warns; NumSharp has no warnings channel, the remarks
-  say it), with vstack's three forms: the kept `params NDArray[]` form, `(NDArray[] tup, DType dtype, string casting)`, and
-  `(NDListArray[] tup)`. `np.vstack(NDListArray[])` / `np.row_stack(NDListArray[])` stack `np.char.split`'s object arrays
+- `row_stack` is `vstack` under NumPy 2.4's other name, kept on purpose: NumPy 2.0 deprecated it and NumPy 2.5 removed
+  it (`AttributeError`), and NumSharp keeps it with no warning and no `[Obsolete]` (the owner, 2026-11-13: keep it, "no
+  obsoletion"), as it keeps the NumPy 1.x names NumPy 2.0 removed (`np.maximum_sctype`, `np.issctype`, ...: "keep them,
+  document that they are okay"). It has vstack's three forms: the kept `params NDArray[]` form,
+  `(NDArray[] tup, DType dtype, string casting)`, and `(NDListArray[] tup)`. `np.vstack(NDListArray[])` /
+  `np.row_stack(NDListArray[])` stack `np.char.split`'s object arrays
   of lists (`NDListArray.VStack`): the ids of every part in the FIRST part's heap (`IdsInThisHeap`: the same lists, as
   NumPy's object pointers; another family's lists appended there once), `np.vstack` of the int64 ids (NumPy's shape rule
   and texts), a new array sharing the heap. A sequence parameter, not `params`: a second params form would make
@@ -485,7 +488,7 @@ Ported from NumPy's C (gates `Backends/AllocationGuardTests.cs`, `Manipulation/R
   The axis errors of this family (`split(..., axis=oob)`'s leaked `IndexError`, `squeeze`) are NumPy's
   (`axis-arguments.md`).
 - No `NPY_MAXDIMS` (a documented divergence, `[Misaligned]`): an array may have more than NumPy's 64 dimensions. Where
-  NumPy 2.4.2 refuses the 65th (`maximum supported dimension for an ndarray is currently 64, found 65` from
+  NumPy 2.5.4 refuses the 65th (`maximum supported dimension for an ndarray is currently 64, found 65` from
   `np.zeros` / `np.ones` / `reshape` / `np.expand_dims` / `np.broadcast_to`; `number of dimensions must be within [0, 64],
   indexing result would have 65` from `[np.newaxis]` and a 64-d × 65-d broadcast; `ndmin must be <= ndmax (64)`),
   NumSharp builds the array, and creation, `expand_dims`, new axes, reductions, elementwise ops, indexing, reshape,

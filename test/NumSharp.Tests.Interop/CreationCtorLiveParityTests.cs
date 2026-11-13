@@ -10,7 +10,7 @@ namespace NumSharp.Tests.Interop
 {
     /// <summary>
     ///     <b>Live parity of the seven AuditV2 Tier-1 creation/ctor fixes against embedded CPython
-    ///     numpy 2.4.2.</b> Each case computes a value in NumSharp and again in the SAME in-process
+    ///     numpy 2.5.4.</b> Each case computes a value in NumSharp and again in the SAME in-process
     ///     numpy over identical bytes, and asserts them <see cref="ByteContract">byte-identical</see>
     ///     — the strongest equality (it catches dtype width, endianness and layout linearization a
     ///     value compare silently accepts). The companion offline unit gate is

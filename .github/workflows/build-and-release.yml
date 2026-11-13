@@ -312,7 +312,7 @@ jobs:
   #   FAILS the ecosystem install instead of silently moving the oracle. The collision is not
   #   hypothetical: onnxruntime==1.16.0 — the Python twin of the ORT floor below — publishes no
   #   cp312 wheel and was compiled against NumPy 1.x ("A module that was compiled using NumPy 1.x
-  #   cannot be run in NumPy 2.4.2"), so a Python that needs it must be a different interpreter.
+  #   cannot be run in NumPy 2.5.4"), so a Python that needs it must be a different interpreter.
   #   make_env.py builds each environment per interpreter (.venvs/<name>-py<maj><min>), so one
   #   machine holds several side by side; the .NET suites here need none of them.
   #   PythonSession embeds the environment named by NUMSHARP_PYTHONNET_PYTHON — binding (never falls
@@ -371,7 +371,7 @@ jobs:
 
     # The BASE interpreter the Python environments are built from (make_env.py builds from the
     # interpreter that runs it). 3.12 sits inside pythonnet 3.0.5's range (PythonSession rejects
-    # anything outside 3.7-3.13) and numpy 2.4.2's (cp311+). "Stage OpenBLAS" and the "Package
+    # anything outside 3.7-3.13) and numpy 2.5.4's (cp312+). "Stage OpenBLAS" and the "Package
     # consumer:" steps use it directly — they are stdlib-only (fetch_openblas.py, the nupkg listing,
     # the macOS realpath compares). The pip cache is keyed on exactly the files that decide what the
     # environments hold (the requirement files + the numpy pin in the OpenBLAS manifest), so torch's

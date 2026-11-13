@@ -25,22 +25,22 @@ namespace NumSharp.Backends
             a = MoveAxis(a, new[] { normA }, new[] { -1 });   // np.moveaxis(a, normA, -1)'s statement
             b = MoveAxis(b, new[] { normB }, new[] { -1 });
 
+            // NumPy 2.5 expired the 2-vector forms (deprecated in 2.0): both vectors must have 3 components, with the
+            // lengths after the axis move in the text.
             long aLen = a.Shape.dimensions[a.ndim - 1];
             long bLen = b.Shape.dimensions[b.ndim - 1];
-            if ((aLen != 2 && aLen != 3) || (bLen != 2 && bLen != 3))
-                throw new ValueError(
-                    "incompatible dimensions for cross product\n(dimension must be 2 or 3)");
-            // NumPy warns on 2-vectors (deprecated 2.0); NumSharp does not model warnings.
+            if (aLen != 3 || bLen != 3)
+                throw new ValueError(string.Create(CultureInfo.InvariantCulture,
+                    $"Both input arrays must be (arrays of) 3-dimensional vectors, but they are {aLen} and {bLen} dimensional instead."));
 
-            // NumPy creates the output before it touches a value: `shape = broadcast(a[..., 0], b[..., 0]).shape`, so
+            // NumPy creates the output before it touches a value: `shape = *broadcast(a[..., 0], b[..., 0]).shape, 3`, so
             // leading axes that do not broadcast raise np.broadcast's own "shape mismatch: objects cannot be broadcast to
-            // a single shape. ..." ValueError, and for a 3-vector result `axisc` is checked against that shape plus the
-            // vector axis — both before the dtype promotion and the multiplies (a text operand meets them first too).
+            // a single shape. ..." ValueError, and `axisc` is checked against that shape plus the vector axis — both
+            // before the dtype promotion and the multiplies (a text operand meets them first too).
             // np.broadcast_shapes(...)'s last statement; its first two (no shapes -> (), a negative dimension -> ValueError)
             // cannot fire for two arrays' shapes.
             Shape leading = Shape.BroadcastShape(LeadingShape(a), LeadingShape(b));
-            if (aLen == 3 || bLen == 3)
-                NormalizeCrossAxis(axisc, leading.NDim + 1, "axisc");
+            NormalizeCrossAxis(axisc, leading.NDim + 1, "axisc");
 
             // recast both operands to the promoted dtype, exactly as NumPy does, so every
             // intermediate product/difference runs in that dtype (integer inputs stay integer, etc.).
@@ -56,49 +56,18 @@ namespace NumSharp.Backends
             a = a.astype(dtype);
             b = b.astype(dtype);
 
-            // Component slices along the (now last) axis. A 2-vector has no [..., 2] component; its
-            // contribution to the formula is zero, reproduced by NumPy's branch structure below.
-            NDArray a0 = a["..., 0"], a1 = a["..., 1"];
-            NDArray b0 = b["..., 0"], b1 = b["..., 1"];
+            // Component slices along the (now last) axis.
+            NDArray a0 = a["..., 0"], a1 = a["..., 1"], a2 = a["..., 2"];
+            NDArray b0 = b["..., 0"], b1 = b["..., 1"], b2 = b["..., 2"];
 
-            // The products below are np.multiply / np.subtract / np.negative's statements (this engine's Multiply, Subtract
-            // and Negate). np.negative also copies an F-contiguous operand's result into F order when the result is not
-            // F already; Negate allocates such a result in F order, so that copy never fires.
-            if (aLen == 2)
-            {
-                if (bLen == 2)
-                    // both 2-D: only the z-component, returned as a scalar (per leading position).
-                    return Subtract(Multiply(a0, b1), Multiply(a1, b0));
-
-                // a is 2-D (a2 == 0), b is 3-D.
-                NDArray b2 = b["..., 2"];
-                return StackCross(
-                    Multiply(a1, b2),                              // a1*b2 - 0
-                    Negate(Multiply(a0, b2)),                    // 0 - a0*b2
-                    Subtract(Multiply(a0, b1), Multiply(a1, b0)),  // a0*b1 - a1*b0
-                    axisc);
-            }
-
-            {
-                // a is 3-D.
-                NDArray a2 = a["..., 2"];
-                if (bLen == 3)
-                {
-                    NDArray b2 = b["..., 2"];
-                    return StackCross(
-                        Subtract(Multiply(a1, b2), Multiply(a2, b1)),
-                        Subtract(Multiply(a2, b0), Multiply(a0, b2)),
-                        Subtract(Multiply(a0, b1), Multiply(a1, b0)),
-                        axisc);
-                }
-
-                // a is 3-D, b is 2-D (b2 == 0).
-                return StackCross(
-                    Negate(Multiply(a2, b1)),                    // 0 - a2*b1
-                    Multiply(a2, b0),                              // a2*b0 - 0
-                    Subtract(Multiply(a0, b1), Multiply(a1, b0)),  // a0*b1 - a1*b0
-                    axisc);
-            }
+            // NumPy's `cp0 = a1*b2 - a2*b1; cp1 = a2*b0 - a0*b2; cp2 = a0*b1 - a1*b0` (each product rounded, then the
+            // in-place difference rounded: the same two roundings as Subtract of two Multiply results), through this
+            // engine's Multiply / Subtract, the members np.multiply / np.subtract dispatch to.
+            return StackCross(
+                Subtract(Multiply(a1, b2), Multiply(a2, b1)),
+                Subtract(Multiply(a2, b0), Multiply(a0, b2)),
+                Subtract(Multiply(a0, b1), Multiply(a1, b0)),
+                axisc);
         }
 
         /// <summary>

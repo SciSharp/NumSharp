@@ -32,8 +32,10 @@ namespace NumSharp.Tests.Fuzz
         ///     The <c>np.*</c> function form of an op key whose ordinary entry is an operator.
         /// </summary>
         /// <param name="op">The op key.</param>
-        /// <param name="p">The case params (none of these keys reads one here: a case with a <c>dtype</c> param
-        ///     already takes the function form in the ordinary entry).</param>
+        /// <param name="p">The case params. The operator keys read none (a case with a <c>dtype</c> param already
+        ///     takes the function form in the ordinary entry); <c>mean</c> reads <c>axis</c> / <c>keepdims</c>, and
+        ///     <c>argsort</c> reads <c>axis</c> (JSON null is NumPy's <c>None</c> in the keyword cases) with
+        ///     NumPy 2.5's <c>stable</c> / <c>descending</c>.</param>
         /// <param name="ops">The reconstructed operands.</param>
         /// <param name="result">The function's result when the key has an operator entry.</param>
         /// <returns>True when <paramref name="op"/> is one of the operator keys and <paramref name="result"/> is set.</returns>
@@ -70,8 +72,15 @@ namespace NumSharp.Tests.Fuzz
                 case "less_equal": result = np.less_equal(ops[0], ops[1]); return true;
                 case "greater_equal": result = np.greater_equal(ops[0], ops[1]); return true;
                 // The ordinary entry calls the typed np.argsort<T>, a NumSharp-only spelling; NumPy's function is
-                // the untyped one.
-                case "argsort": result = np.argsort(ops[0], p["axis"].GetInt32()); return true;
+                // the untyped one. NumPy 2.5's keyword-only stable= / descending= cases (gen_oracle.py's
+                // gen_sort_descending, which gen_matrix_operand_oracle.py re-emits with matrix operands since the
+                // NumPy 2.5.4 merge) record axis=None as JSON null: reading it as an int threw, so those cases take
+                // both keywords and the flattening axis exactly as the base entry does.
+                case "argsort":
+                    result = p.ContainsKey("descending") || p.ContainsKey("stable")
+                        ? np.argsort(ops[0], ParseAxis(p), stable: VfOptBool(p, "stable"), descending: VfOptBool(p, "descending"))
+                        : np.argsort(ops[0], p["axis"].GetInt32());
+                    return true;
                 default: return false;
             }
         }

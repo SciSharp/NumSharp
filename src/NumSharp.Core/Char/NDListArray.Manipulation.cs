@@ -503,7 +503,8 @@ namespace NumSharp
         // =============================================================================================================
 
         /// <summary>
-        ///     NumPy's <c>np.vstack(tup)</c> (and its deprecated alias <c>np.row_stack</c>) over object arrays of lists:
+        ///     NumPy's <c>np.vstack(tup)</c> (and <c>np.row_stack</c>, its other name, which NumSharp keeps after NumPy 2.5
+        ///     removed it) over object arrays of lists:
         ///     <c>atleast_2d</c> of every array (a 0-d one is <c>(1, 1)</c>, a 1-d one a row), then a concatenation along the
         ///     first axis. Like NumPy's, it moves POINTERS: the result's elements are the same lists (a list of the first
         ///     array keeps its identity), in a new array that owns its pointers.

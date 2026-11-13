@@ -330,10 +330,10 @@ namespace NumSharp.Tests.Backends.Strings
         [Misaligned]
         public void NumericLoopIntoStringDTypeOut_ComputesWhereNumPyRaisesItsClearLoopMemoryError()
         {
-            // NumPy 2.4.2 answers a numeric loop reduced into a StringDType out with its own bug, MemoryError("String
-            // deallocation failed in clear loop"): the buffered cast back into the out releases StringDType cells it never
-            // allocated. The string oracle leaves those cases out; NumSharp computes what the call means — here the float64
-            // sum's str() written into the out.
+            // NumPy answers a numeric loop reduced into a StringDType out with its own bug, MemoryError("String
+            // deallocation failed in clear loop") — NumPy 2.4.2, and 2.5.4 still: the buffered cast back into the out
+            // releases StringDType cells it never allocated. The string oracle leaves those cases out; NumSharp computes what
+            // the call means — here the float64 sum's str() written into the out.
             var o = np.array("", T);
             np.trace(np.array(new long[,] { { 3, 1 }, { 1, 2 } }), 0, 0, 1, np.float64, o);
             ((string)o.GetAtIndex(0)).Should().Be("5.0");

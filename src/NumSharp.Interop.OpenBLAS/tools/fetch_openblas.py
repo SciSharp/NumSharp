@@ -10,9 +10,9 @@ is only meaningful with respect to ONE SPECIFIC BINARY.  NumPy 2.x does not buil
 its wheels bundle the prebuilt `scipy-openblas32` / `scipy-openblas64` artifacts published on PyPI
 by the openblas-libs project (https://github.com/MacPython/openblas-libs).  So bundling *those*
 artifacts, at the version NumPy pins, means shipping literally the binary NumPy calls -- verified:
-the DLL inside `scipy_openblas64-0.3.31.22.0-py3-none-win_amd64.whl` is byte-for-byte the DLL in
-numpy 2.4.2's `numpy.libs/` (sha256 74a408729250596b0973e69fdd954eea07a70ff527a1dbaccf9ae21247b8037
--- which is also where NumPy's mangled filename suffix comes from; delvewheel names it by its hash).
+the DLL inside `scipy_openblas64-0.3.34.106.0-py3-none-win_amd64.whl` is byte-for-byte the DLL in
+numpy 2.5.4's `numpy.libs/` (`libscipy_openblas64_-ed4f167a5330424524f45258e7ca2c8d.dll`: delvewheel
+names the copy by a hash of its content).
 
 The pin comes from NumPy's own build requirements, `requirements/ci_requirements.txt`, consumed by
 `tools/wheels/cibw_before_build.sh`.  win-arm64 is deliberately `scipy-openblas32`, because that is
@@ -23,8 +23,10 @@ USAGE
     python fetch_openblas.py                  # download + verify + extract into ../runtimes/
     python fetch_openblas.py --check          # verify only; non-zero exit if anything is missing
     python fetch_openblas.py --clean          # remove the staged runtime assets
-    python fetch_openblas.py --refresh-manifest --distribution-version 0.3.31.22.0
-                                              # re-derive openblas-manifest.json from PyPI
+    python fetch_openblas.py --refresh-manifest --distribution-version 0.3.34.106.0
+                                              # re-derive openblas-manifest.json from PyPI (the NumPy
+                                              # release defaults to numpy-version.txt, the version
+                                              # numpy.show_config() reports to --distribution-version)
 
 Nothing here runs during an ordinary `dotnet build`.  The staged binaries are gitignored; the
 MANIFEST is checked in, and it is the pin: every download is verified against it twice (the wheel's
@@ -51,6 +53,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import urllib.request
@@ -58,6 +61,8 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_ROOT = os.path.dirname(HERE)
+#: The repository's one NumPy pin (numpy-version.txt): the release whose bundled OpenBLAS this package must ship.
+NUMPY_PIN_PATH = os.path.normpath(os.path.join(PKG_ROOT, "..", "..", "numpy-version.txt"))
 MANIFEST_PATH = os.path.join(HERE, "openblas-manifest.json")
 RUNTIMES_DIR = os.path.join(PKG_ROOT, "runtimes")
 CACHE_DIR = os.path.join(HERE, ".wheel-cache")
@@ -68,6 +73,9 @@ NOTICES_PATH = os.path.join(PKG_ROOT, "THIRD-PARTY-NOTICES.txt")
 # Mirrors NumPy's own selection in tools/wheels/cibw_before_build.sh: scipy-openblas64 everywhere
 # except Windows on ARM64, which NumPy builds against scipy-openblas32.  Matching that matters --
 # the two have different symbol schemes AND different BLAS integer widths (see OpenBlasNative.Bind).
+# The glibc Linux tags name the PLATFORM, not one tag spelling: wheel_matches() accepts any manylinux
+# tag of the same architecture (openblas-libs moved from manylinux2014 to manylinux_2_27/2_28 with
+# 0.3.33.0.0, the release line NumPy 2.5 pins).
 RID_MAP = {
     "win-x64":          ("scipy-openblas64", "win_amd64"),
     "win-arm64":        ("scipy-openblas32", "win_arm64"),
@@ -84,6 +92,91 @@ NATIVE_SUFFIXES = (".dll", ".so", ".dylib")
 
 def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
+
+
+#: The glibc platform tags: PEP 513/571/599's aliases (manylinux1 = glibc 2.5, manylinux2010 = 2.12,
+#: manylinux2014 = 2.17) and PEP 600's perennial manylinux_<major>_<minor>_<arch>.
+_MANYLINUX = re.compile(r"^manylinux(?:1|2010|2014|_[0-9]+_[0-9]+)_(?P<arch>.+)$")
+
+
+def wheel_platform_tags(filename):
+    """The compound platform tag of a scipy-openblas wheel file name, split into its components.
+
+    The wheels are named ``<dist>-<version>-py3-none-<platform>.whl``, and ``<platform>`` may join
+    several tags with dots (``manylinux_2_27_x86_64.manylinux_2_28_x86_64``).
+
+    :param filename: the wheel's file name.
+    :returns: the platform tag components, in file-name order.
+    :raises SystemExit: the name is not a ``py3-none`` wheel, the only shape openblas-libs publishes;
+        guessing at another shape could stage a library built for a different platform.
+    """
+    sep = "-py3-none-"
+    i = filename.find(sep)
+    if i < 0 or not filename.endswith(".whl"):
+        raise SystemExit("unexpected wheel name: %s" % filename)
+    return filename[i + len(sep):-len(".whl")].split(".")
+
+
+def glibc_arch(tag):
+    """The CPU architecture a glibc (manylinux) platform tag names.
+
+    :param tag: one platform tag component, e.g. ``manylinux2014_aarch64``.
+    :returns: the architecture (``x86_64``, ``aarch64``, ...), or None for a tag that is not a glibc
+        manylinux tag (Windows, macOS and musllinux tags are matched exactly, never by family).
+    """
+    m = _MANYLINUX.match(tag)
+    return m.group("arch") if m else None
+
+
+def wheel_matches(filename, anchor):
+    """Whether a wheel serves the platform a RID's anchor tag names.
+
+    A wheel matches when one of its platform tag components IS the anchor, or -- for glibc Linux only --
+    when one of them is a manylinux tag of the anchor's architecture. The family rule exists because
+    openblas-libs retagged its Linux wheels from ``manylinux2014_<arch>`` (glibc 2.17) to
+    ``manylinux_2_27_<arch>.manylinux_2_28_<arch>`` with 0.3.33.0.0: the RID is the same glibc
+    platform either way, and an exact match found no wheel at all for any release NumPy 2.5 pins.
+
+    :param filename: the candidate wheel's file name.
+    :param anchor: the RID's platform tag from RID_MAP (or the first component of a manifest wheel's tag).
+    :returns: True when the wheel is built for that platform.
+    """
+    tags = wheel_platform_tags(filename)
+    if anchor in tags:
+        return True
+    arch = glibc_arch(anchor)
+    return arch is not None and any(glibc_arch(t) == arch for t in tags)
+
+
+def select_wheel(files, anchor):
+    """The wheels of a PyPI release that serve a RID (the caller requires exactly one).
+
+    An exact tag match wins when there is exactly one (the behaviour before the family rule, unchanged
+    for every platform that never retagged); otherwise the family match of wheel_matches() decides. A
+    release that ships two glibc wheels for one architecture therefore returns both, and the caller
+    fails loudly instead of staging an arbitrary one.
+
+    :param files: the release's file records from the PyPI JSON API (``filename``, ``url``, ``digests``).
+    :param anchor: the RID's platform tag.
+    :returns: the matching file records.
+    """
+    wheels = [f for f in files if f["filename"].endswith(".whl")]
+    exact = [f for f in wheels if anchor in wheel_platform_tags(f["filename"])]
+    if len(exact) == 1:
+        return exact
+    return [f for f in wheels if wheel_matches(f["filename"], anchor)]
+
+
+def read_numpy_pin():
+    """The repository's NumPy pin (numpy-version.txt), the default --numpy-version of a refresh.
+
+    :returns: the pinned version string, or None outside a repository checkout (a copied package folder).
+    """
+    try:
+        with open(NUMPY_PIN_PATH, encoding="utf-8") as fh:
+            return fh.read().strip() or None
+    except OSError:
+        return None
 
 
 def load_manifest():
@@ -135,8 +228,16 @@ def download(url, expect_sha=None):
     return data
 
 
-def refresh_manifest(distribution_version, numpy_version):
-    """Re-derive the pin from PyPI. Downloads every wheel to record the EXTRACTED library's hash."""
+def refresh_manifest(distribution_version, numpy_version, openblas_version):
+    """Re-derive the pin from PyPI. Downloads every wheel to record the EXTRACTED library's hash.
+
+    :param distribution_version: the scipy-openblas32/64 release NumPy pins in requirements/ci_requirements.txt.
+    :param numpy_version: the NumPy release that pins it (numpy-version.txt).
+    :param openblas_version: what that NumPy's ``numpy.show_config()`` reports as its BLAS version, which
+        make_env.py verifies (``0.3.31.dev`` for NumPy 2.4.2, ``0.3.34.106.0`` for NumPy 2.5.4).
+    :returns: the manifest written to openblas-manifest.json.
+    :raises SystemExit: a RID has no wheel (or more than one) in that release, or a download fails its hash.
+    """
     print("refreshing manifest for %s ..." % distribution_version)
     index = {}
     for dist in sorted({d for d, _ in RID_MAP.values()}):
@@ -147,10 +248,9 @@ def refresh_manifest(distribution_version, numpy_version):
     runtimes = {}
     for rid in RID_MAP:
         dist, tag = RID_MAP[rid]
-        # Platform tags can be compound, e.g.
-        # "...-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", so anchor on the
-        # separator before the tag and the dot after it rather than on the end of the name.
-        matches = [u for u in index[dist]["urls"] if ("-%s." % tag) in u["filename"]]
+        # Platform tags can be compound ("...-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"),
+        # and glibc Linux is matched by family: see select_wheel / wheel_matches.
+        matches = select_wheel(index[dist]["urls"], tag)
         if len(matches) != 1:
             raise SystemExit("expected exactly one %s wheel for %s, got %d"
                              % (dist, tag, len(matches)))
@@ -192,7 +292,7 @@ def refresh_manifest(distribution_version, numpy_version):
             "makes NumSharp's matrix products bit-identical to that NumPy's." % numpy_version),
         "numpy_version": numpy_version,
         "distribution_version": distribution_version,
-        "openblas_version": "0.3.31.dev",
+        "openblas_version": openblas_version,
         # SPDX ids only from the OSI/FSF-approved list: nuget.org rejects a package whose license
         # expression (NumSharp.Interop.OpenBLAS.csproj mirrors these) carries anything else, and it
         # does so at push time. 'BSD-3-Clause-Attribution' is a DIFFERENT, unapproved license and
@@ -383,8 +483,12 @@ def main():
     ap.add_argument("--check", action="store_true", help="verify only, do not download")
     ap.add_argument("--clean", action="store_true", help="delete staged runtime assets")
     ap.add_argument("--refresh-manifest", action="store_true", help="re-derive the pin from PyPI")
-    ap.add_argument("--distribution-version", default="0.3.31.22.0")
-    ap.add_argument("--numpy-version", default="2.4.2")
+    ap.add_argument("--distribution-version", default=None,
+                    help="the scipy-openblas release to pin (default: the manifest's current one)")
+    ap.add_argument("--numpy-version", default=None,
+                    help="the NumPy release that pins it (default: numpy-version.txt)")
+    ap.add_argument("--openblas-version", default=None,
+                    help="the BLAS version that NumPy's show_config() reports (default: --distribution-version)")
     args = ap.parse_args()
 
     if args.clean:
@@ -394,7 +498,15 @@ def main():
         return 0
 
     if args.refresh_manifest:
-        manifest = refresh_manifest(args.distribution_version, args.numpy_version)
+        # Defaults re-derive the CURRENT pin: the manifest's own distribution and the repository's NumPy pin.
+        current = load_manifest() if os.path.isfile(MANIFEST_PATH) else {}
+        distribution_version = args.distribution_version or current.get("distribution_version")
+        numpy_version = args.numpy_version or read_numpy_pin() or current.get("numpy_version")
+        if not distribution_version or not numpy_version:
+            raise SystemExit("--refresh-manifest needs --distribution-version and --numpy-version "
+                             "(no manifest or numpy-version.txt to default them from)")
+        manifest = refresh_manifest(distribution_version, numpy_version,
+                                    args.openblas_version or distribution_version)
     else:
         manifest = load_manifest()
         write_notices(manifest)

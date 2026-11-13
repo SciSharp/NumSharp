@@ -7,7 +7,7 @@ using NumSharp.Utilities;
 namespace NumSharp.Interop.OpenBLAS
 {
     /// <summary>
-    ///     <c>np.linalg.qr</c> — a route-for-route port of NumPy 2.4.2's <c>qr_r_raw</c> (LAPACK
+    ///     <c>np.linalg.qr</c> — a route-for-route port of NumPy 2.5.4's <c>qr_r_raw</c> (LAPACK
     ///     <c>geqrf</c>) plus <c>qr_reduced</c>/<c>qr_complete</c> (LAPACK <c>orgqr</c>/<c>ungqr</c>)
     ///     gufuncs, calling the SAME LAPACK the bundled scipy-openblas ships.
     /// </summary>

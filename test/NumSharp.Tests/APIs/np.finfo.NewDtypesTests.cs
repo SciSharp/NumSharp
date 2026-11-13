@@ -224,21 +224,21 @@ namespace NumSharp.Tests.APIs
         }
 
         // ---------------------------------------------------------------------
-        // Integer types STILL throw "not inexact"
+        // Integer types throw NumPy 2.5's "data type dtype('...') not compatible with finfo" (ValueError)
         // ---------------------------------------------------------------------
 
         [TestMethod]
         public void FInfo_SByte_Throws()
         {
             Action act = () => np.finfo(NPTypeCode.SByte);
-            act.Should().Throw<ArgumentException>().WithMessage("*not inexact*");
+            act.Should().Throw<ValueError>().WithMessage("data type dtype('*') not compatible with finfo");
         }
 
         [TestMethod]
         public void FInfo_Int32_Throws()
         {
             Action act = () => np.finfo(NPTypeCode.Int32);
-            act.Should().Throw<ArgumentException>().WithMessage("*not inexact*");
+            act.Should().Throw<ValueError>().WithMessage("data type dtype('*') not compatible with finfo");
         }
 
         [TestMethod]

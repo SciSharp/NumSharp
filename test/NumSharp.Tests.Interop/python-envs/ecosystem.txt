@@ -6,7 +6,7 @@
 # reviewed commit instead of changing the environment underneath an unrelated PR. numpy is NOT
 # listed: make_env.py installs the OpenBLAS-manifest pin first and holds it with a constraint, so
 # a release that needs a different numpy fails this install rather than replacing the oracle's.
-# Resolved together with numpy 2.4.2 on win_amd64, manylinux_2_28 x86_64 and macOS 14 arm64.
+# Resolved together with numpy 2.5.4 on win_amd64, manylinux_2_28 x86_64 and macOS 14 arm64.
 
 pandas==3.0.5                   # PandasTestGate pins the adapter claims to exactly this release
 scipy==1.16.3                   # scipy.signal references in GistSignal*LiveParityTests

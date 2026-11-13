@@ -27,10 +27,10 @@ namespace NumSharp.Backends
         /// <returns>A fresh 1-D array of the common dtype.</returns>
         /// <exception cref="ValueError">An unknown <paramref name="mode"/> (NumPy's two texts, see
         ///     <see cref="SlidingDot.ParseSlidingMode"/>), then an operand that is not one-dimensional, an empty operand, or a
-        ///     fixed-width string operand (NumPy's texts, in its order).</exception>
+        ///     text operand (<c>function not available for this data type</c>; NumPy's texts, in its order).</exception>
         /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate.</exception>
-        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>), or a <c>StringDType</c>
-        ///     operand's refusal or first-product error.</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>), a <c>U</c> operand beside
+        ///     <c>StringDType</c> (the 'safe' conversion's refusal), or an OBJECT product's first-product error.</exception>
         /// <exception cref="System.NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy
         ///     computes.</exception>
         /// <remarks>The materialized operands and the conjugate are temporaries: the [NDScoped] weaver returns their
@@ -42,14 +42,25 @@ namespace NumSharp.Backends
             // array_correlate(2) parses the mode during argument parsing, before it touches the arrays.
             var m = SlidingDot.ParseSlidingMode(mode);
 
-            // PyArray_ObjectType over both operands: a StringDType operand has no legacy type number, so its answers (the
-            // legacy-only refusal, or the OBJECT fallback's own checks and first product) come before every check below.
-            if (NDStringUfuncs.IsVString(a) || NDStringUfuncs.IsVString(v))
-                throw NDStringUfuncs.VStringSlidingAnswer(a, v, (int)m, correlate2 ? "correlate" : "convolve");
+            // PyArray_DTypeFromObject over both operands (NumPy 2.5): the common descriptor of a text pair, or none when a
+            // StringDType operand has no common descriptor with the other — then NumPy correlates Python objects, whose own
+            // checks and first product answer before every check below.
+            DType textDescr = null;
+            if (NDStringUfuncs.IsText(a) || NDStringUfuncs.IsText(v))
+            {
+                textDescr = NDStringUfuncs.ProductDescriptor(a, v);
+                if (textDescr is null)
+                    throw NDStringUfuncs.VStringSlidingAnswer(a, v, (int)m, correlate2 ? "correlate" : "convolve");
+            }
 
-            // PyArray_FromAny(op, typec, 1, 1, ...): exactly one dimension each, with its two texts, the first operand first.
+            // PyArray_FromAny(op, typec, 1, 1, ...): exactly one dimension each, with its two texts, then the 'safe' cast
+            // into the common descriptor (only a U operand beside StringDType fails it), the first operand first.
             ThrowIfNotOneDimensional(a);
+            if (textDescr is not null)
+                NDStringUfuncs.ThrowIfUnsafeProductCast(a, textDescr);
             ThrowIfNotOneDimensional(v);
+            if (textDescr is not null)
+                NDStringUfuncs.ThrowIfUnsafeProductCast(v, textDescr);
 
             // _pyarray_correlate's emptiness checks, on the operands before its swap, so "first" / "second" always name the
             // arguments as given (behind np.convolve they never fire: its Python body checked already).
@@ -58,9 +69,10 @@ namespace NumSharp.Backends
             if (v.size == 0)
                 throw new ValueError("second array argument cannot be empty");
 
-            // _pyarray_correlate then allocates its result for the type number, which a string type cannot size.
-            if (NDStringUfuncs.IsString(a) || NDStringUfuncs.IsString(v))
-                throw NDStringUfuncs.NoItemsize();
+            // _pyarray_correlate then allocates its result in the common descriptor and looks up its dot function, which
+            // no string descriptor has (NumPy 2.4 failed the allocation instead: "data type must provide an itemsize").
+            if (textDescr is not null)
+                throw NDStringUfuncs.FunctionNotAvailable();
 
             // PyArray_ObjectType(op1) then (op2, typenum): the promotion of two arrays with dimensions, which is NumPy's
             // promote_types for every pair of the 15 storage dtypes (the frozen array-array table np._FindCommonType reads

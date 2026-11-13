@@ -4,7 +4,7 @@
 
 // Dumps the public surface of EVERY NumPy module NumSharp exposes — each type annotated [ModuleName("...")]: np,
 // ndarray, np.linalg, np.fft, np.random, np.ma, np.emath, np.char, np.strings, np.dtypes, np.typing, np.polynomial
-// and its bases — as structured JSON, so signature_diff.py can compare every overload with NumPy 2.4.2's
+// and its bases — as structured JSON, so signature_diff.py can compare every overload with the pinned NumPy's
 // inspect.signature. The module list is DISCOVERED (the ApiInventory rule), never hardcoded: a new facade joins the
 // comparison by its annotation alone. One object API is added by hand: np.random.Generator (see below).
 //

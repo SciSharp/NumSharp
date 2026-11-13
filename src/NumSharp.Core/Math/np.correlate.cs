@@ -53,7 +53,7 @@ namespace NumSharp
         ///     'full' (got 'x')</c> with the argument in Python's <c>repr</c>); then <c>object of too small depth for desired
         ///     array</c> (a 0-d operand) or <c>object too deep for desired array</c> (two or more dimensions), <c>first array
         ///     argument cannot be empty</c> / <c>second array argument cannot be empty</c>, or — for a fixed-width string
-        ///     operand, after every check above — <c>data type must provide an itemsize</c>.</exception>
+        ///     operand, after every check above — <c>function not available for this data type</c>.</exception>
         /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate (CPython's UTF-8 encoding
         ///     error, raised before the mode is read).</exception>
         /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not

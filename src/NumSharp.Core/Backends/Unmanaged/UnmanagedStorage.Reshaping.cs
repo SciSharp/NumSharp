@@ -205,8 +205,9 @@ namespace NumSharp.Backends
                 if (refcheck && !self.Storage.InternalArray.IsUniquelyReferenced)
                     throw new IncorrectShapeException(
                         "cannot resize an array that references or is referenced\n" +
-                        "by another array in this way.\n" +
-                        "Use the np.resize function or refcheck=False");
+                        "by another object in this way.\n" +
+                        "Use the np.resize function to get a new resized copy or\n" +
+                        " set refcheck=False to disable this check");
 
                 // Allocate the fresh buffer (uninitialized), copy the surviving prefix of the raw
                 // memory (dtype-agnostic — resize operates on the contiguous byte buffer, which is

@@ -64,12 +64,12 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's one statement <c>return irfftn(a, s, axes, norm, out=None)</c> with <c>axes=(-2, -1)</c> for null: this
-        ///     engine's <see cref="FftEngine.Irfftn"/> (the member np.fft.irfftn dispatches to), without the provided out.
-        ///     It opens no scope.
+        ///     NumPy's one statement <c>return irfftn(a, s, axes, norm, out=out)</c> with <c>axes=(-2, -1)</c> for null: this
+        ///     engine's <see cref="FftEngine.Irfftn"/> (the member np.fft.irfftn dispatches to), with the provided out (NumPy
+        ///     2.5; 2.4 passed <c>out=None</c>). It opens no scope.
         /// </remarks>
         public override NDArray Irfft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
-            => Irfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out: null);
+            => Irfftn(a, s, axes ?? new[] { -2, -1 }, norm, @out);
 
         /// <inheritdoc/>
         /// <remarks>

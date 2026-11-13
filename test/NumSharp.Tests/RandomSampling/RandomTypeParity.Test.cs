@@ -278,8 +278,8 @@ namespace NumSharp.Tests.RandomSampling
 
         /// <summary>
         ///     <c>tuple(spawn_key)</c> as NumPy's coercion reads it: any iterable (a string is one of one-character strings),
-        ///     nested sequences and integer arrays flattening to the same pool, strings by NumPy's decimal/hex rule, bools as
-        ///     ints — and the coercion's refusals verbatim.
+        ///     a 1-D integer array element by element, strings by NumPy's decimal/hex rule, bools as ints — and the coercion's
+        ///     refusals verbatim, NumPy 2.5's refusal of nested sequences (an inner list, the rows of a 2-D array) included.
         /// </summary>
         [TestMethod]
         public void SeedSequence_SpawnKeyCoercion_MatchesNumPy()
@@ -289,10 +289,9 @@ namespace NumSharp.Tests.RandomSampling
             var fromString = new SeedSequence(1, "12"); // tuple("12") == ('1', '2')
             fromString.spawn_key.Should().Equal(new BigInteger(1), new BigInteger(2));
             U(fromString.generate_state(2)).Should().Equal(oneTwo);
-            var nested = new SeedSequence(1, new object[] { new long[] { 1, 2 } }); // ((1, 2),) coerces like (1, 2)
-            nested.spawn_key.Should().Equal(new BigInteger(1), new BigInteger(2));
-            U(nested.generate_state(2)).Should().Equal(oneTwo);
-            U(new SeedSequence(1, np.array(new long[,] { { 1, 2 }, { 3, 4 } })).generate_state(2)).Should().Equal(1734719507UL, 602822885UL);
+            // NumPy 2.5: ((1, 2),) and the rows of a 2-D array are nested sequences (NumPy 2.4 flattened them).
+            Throws<TypeError>(() => new SeedSequence(1, new object[] { new long[] { 1, 2 } }), "SeedSequence does not accept nested sequences.");
+            Throws<TypeError>(() => new SeedSequence(1, np.array(new long[,] { { 1, 2 }, { 3, 4 } })), "SeedSequence does not accept nested sequences.");
             U(new SeedSequence(1, new long[] { 1, 2, 3, 4 }).generate_state(2)).Should().Equal(1734719507UL, 602822885UL);
             U(new SeedSequence(1, new object[] { true }).generate_state(2)).Should().Equal(1454127163UL, 941260221UL);
             new SeedSequence(1, np.array(new uint[] { 1, 2 })).spawn_key.Should().Equal(new BigInteger(1), new BigInteger(2));
@@ -317,7 +316,9 @@ namespace NumSharp.Tests.RandomSampling
             Throws<ValueError>(() => new SeedSequence(1, new long[] { -1 }), "expected non-negative integer");
             Throws<TypeError>(() => new SeedSequence(1, np.array(new[] { true })), "object of type 'numpy.bool' has no len()");
             Throws<TypeError>(() => new SeedSequence(1, NDArray.Scalar(5L)), "iteration over a 0-d array");
-            Throws<TypeError>(() => new SeedSequence(1, new object[] { NDArray.Scalar(5L) }), "len() of unsized object");
+            // A 0-d ARRAY element is an ndarray, so NumPy 2.5 refuses it as nested before reading it (2.4: "len() of
+            // unsized object").
+            Throws<TypeError>(() => new SeedSequence(1, new object[] { NDArray.Scalar(5L) }), "SeedSequence does not accept nested sequences.");
         }
 
         /// <summary>
@@ -606,18 +607,22 @@ namespace NumSharp.Tests.RandomSampling
         }
 
         /// <summary>
-        ///     The module <c>seed</c>'s engine branch leaves the cached Gaussian alone (only the engine state is replaced), so
-        ///     the next normal is the cached second half of the previous pair — NumPy's observable behaviour.
+        ///     The module <c>seed</c>'s engine branch resets the cached Gaussian (NumPy 2.5's
+        ///     <c>_rand.set_state(type(engine)(seed).state)</c>: the fresh state dict has no <c>has_gauss</c>), so the next
+        ///     normal is the first of a fresh pair from the re-seeded engine. NumPy 2.4 only replaced the engine state and
+        ///     returned the cached second half of the previous pair (-0.22915539468468876 here).
         /// </summary>
         [TestMethod]
-        public void ModuleSeed_OnASwappedEngine_KeepsTheCachedGaussian()
+        public void ModuleSeed_OnASwappedEngine_ResetsTheCachedGaussian()
         {
             WithSingleton(() =>
             {
                 np.random.set_bit_generator(new PCG64(3));
                 ((double)np.random.standard_normal()).Should().Be(-0.14555610235430483);
                 np.random.seed(9);
-                ((double)np.random.standard_normal()).Should().Be(-0.22915539468468876);
+                ((double)np.random.standard_normal()).Should().Be(-0.39576329981686187);
+                np.random.RandomState(new PCG64(9)).standard_normal(new Shape(2)).ToArray<double>()
+                    .Should().Equal(-0.39576329981686187, 0.6873493216342598);
                 np.random.RandomState(new PCG64(3)).standard_normal(new Shape(2)).ToArray<double>()
                     .Should().Equal(-0.14555610235430483, -0.22915539468468876);
             });

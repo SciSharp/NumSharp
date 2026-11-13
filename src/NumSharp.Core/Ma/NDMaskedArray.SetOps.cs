@@ -399,7 +399,7 @@ namespace NumSharp
         ///     does not apply.
         /// </summary>
         /// <param name="a">The masked operand.</param>
-        /// <returns>The same permutation <see cref="argsort(object,bool,object,string,object,bool?)"/> returns, or null.</returns>
+        /// <returns>The same permutation <see cref="argsort(object,bool,object,string,object,bool?,bool?)"/> returns, or null.</returns>
         /// <remarks>
         ///     NumPy keys every masked slot of an integer dtype by the dtype MAXIMUM (<c>minimum_fill_value</c>), so a
         ///     stable sort puts the masked slots after every smaller value, in input order. Unless an unmasked value equals

@@ -8,7 +8,7 @@ namespace NumSharp.Backends
         // =====================================================================================
         // Layer-3 port of numpy/fft/_pocketfft.py: _raw_fft, _raw_fftnd, _cook_nd_args,
         // _swap_direction, plus the axis/shape helpers (normalize_axis_index and the a.shape[axis]
-        // tuple-index used before _raw_fft). NumPy 2.4.2 is the source of truth. Until phase PE's E3
+        // tuple-index used before _raw_fft). NumPy 2.5.4, the pin, is the source of truth. Until phase PE's E3
         // these were FourierModule's private statements (Fourier/np.fft.RawFft.cs); _raw_fft now ends
         // in this engine's c2c / r2c / c2r kernels instead of calling PocketFFTDriver itself.
         //
@@ -24,15 +24,15 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Port of <c>_swap_direction</c>. Maps a norm to its opposite direction
         ///     (<c>backward/None ↔ forward</c>, <c>ortho ↔ ortho</c>); an invalid value raises
-        ///     NumPy's KeyError-path message (note the space after the first comma — this is the
-        ///     message the INVERSE transforms and <c>hfft/ihfft</c> surface for a bad norm).
+        ///     NumPy's KeyError-path message (with a space after the first comma; since NumPy 2.5 the forward transforms'
+        ///     own text has it too).
         /// </summary>
         /// <param name="norm">The caller's normalization mode: null, <c>"backward"</c>, <c>"ortho"</c> or
         ///     <c>"forward"</c>.</param>
         /// <returns>The mode of the opposite direction: <c>"forward"</c> for null / <c>"backward"</c>,
         ///     <c>"ortho"</c> for <c>"ortho"</c>, <c>"backward"</c> for <c>"forward"</c>.</returns>
         /// <exception cref="ValueError">Any other value: <c>Invalid norm value {norm}; should be "backward", "ortho" or
-        ///     "forward".</c> (with a space after the first comma, unlike the forward transforms' text).</exception>
+        ///     "forward".</c></exception>
         internal static string SwapDirection(string norm)
         {
             if (norm == null || norm == "backward") return "forward";
@@ -187,9 +187,9 @@ namespace NumSharp.Backends
             else if (effNorm == "forward")
                 fct = FftFct(n, realKind, ortho: false);
             else
-                // Only reachable for a FORWARD transform with a bad norm (the inverse path already
-                // threw in SwapDirection above). NumPy's forward message has NO space after "backward,".
-                throw new ValueError($"Invalid norm value {norm}; should be \"backward\",\"ortho\" or \"forward\".");
+                // Only reachable for a FORWARD transform with a bad norm (the inverse path already threw in SwapDirection
+                // above). NumPy 2.5 added the space after "backward," that 2.4's forward text lacked.
+                throw new ValueError($"Invalid norm value {norm}; should be \"backward\", \"ortho\" or \"forward\".");
 
             int nOut = n;
             if (isReal && isForward)

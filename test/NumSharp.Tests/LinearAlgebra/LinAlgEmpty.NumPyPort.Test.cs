@@ -91,10 +91,11 @@ namespace NumSharp.Tests.LinearAlgebra
         [TestMethod]
         public void Eigensolvers_And_Cholesky_OfEmpties()
         {
+            // NumPy 2.5's eig / eigvals are complex whatever the input (complex64 for float32, which NumSharp widens).
             var (w, v) = np.linalg.eig(np.zeros(new Shape(0, 0)));
-            Is(w, np.float64, 0);
-            Is(v, np.float64, 0, 0);
-            Is(np.linalg.eigvals(np.zeros(new Shape(0, 3, 3), np.float32)), np.float32, 0, 3);
+            Is(w, np.complex128, 0);
+            Is(v, np.complex128, 0, 0);
+            Is(np.linalg.eigvals(np.zeros(new Shape(0, 3, 3), np.float32)), np.complex128, 0, 3);
             Is(np.linalg.eigvals(np.zeros(new Shape(2, 0, 0), np.complex128)), np.complex128, 2, 0);
 
             var (wh, vh) = np.linalg.eigh(np.zeros(new Shape(0, 0), np.complex128));
@@ -153,16 +154,15 @@ namespace NumSharp.Tests.LinearAlgebra
 
         /// <summary>
         ///     The composites follow NumPy's own statements over the empty factorisations: matrix_rank of an empty matrix
-        ///     raises <c>S.max()</c>'s zero-size ValueError (with tol= it counts 0), the 2-norm is 0 through
+        ///     is 0 (NumPy 2.4.5's explicit branch; 2.4.2 raised <c>S.max()</c>'s zero-size ValueError), the 2-norm is 0 through
         ///     <c>amax(initial=0)</c> while -2 raises <c>amin</c>'s, cond refuses an empty matrix, pinv of an empty matrix
         ///     keeps the operand's dtype, and a zero-size batch gives empty results.
         /// </summary>
         [TestMethod]
         public void Composites_OfEmpties()
         {
-            Action rank = () => np.linalg.matrix_rank(np.zeros(new Shape(0, 3)));
-            rank.Should().Throw<ValueError>().Which.Message.Should().Be(
-                "zero-size array to reduction operation maximum which has no identity");
+            Convert.ToInt64(np.linalg.matrix_rank(np.zeros(new Shape(0, 3))).GetAtIndex(0)).Should().Be(0);
+            Convert.ToInt64(np.linalg.matrix_rank(np.zeros(new Shape(0, 0))).GetAtIndex(0)).Should().Be(0);
             Convert.ToInt64(np.linalg.matrix_rank(np.zeros(new Shape(0, 3)), tol: 0.5).GetAtIndex(0)).Should().Be(0);
             Is(np.linalg.matrix_rank(np.zeros(new Shape(0, 3, 3))), np.int64, 0);
 

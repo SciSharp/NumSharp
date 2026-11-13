@@ -613,8 +613,9 @@ namespace NumSharp
                 if (refcheck && !Ids.Storage.InternalArray.IsUniquelyReferenced)
                     throw new IncorrectShapeException(
                         "cannot resize an array that references or is referenced\n" +
-                        "by another array in this way.\n" +
-                        "Use the np.resize function or refcheck=False");
+                        "by another object in this way.\n" +
+                        "Use the np.resize function to get a new resized copy or\n" +
+                        " set refcheck=False to disable this check");
             }
             return newSize;
         }

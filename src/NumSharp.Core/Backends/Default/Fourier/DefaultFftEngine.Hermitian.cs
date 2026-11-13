@@ -9,7 +9,8 @@ namespace NumSharp.Backends
         /// <inheritdoc/>
         /// <remarks>
         ///     NumPy's statements: <c>n = (a.shape[axis] - 1) * 2</c> when n is None, <c>new_norm = _swap_direction(norm)</c>,
-        ///     then <c>irfft(conjugate(a), n, axis, norm=new_norm, out=None)</c>: <c>conjugate</c> is the operand engine's
+        ///     then <c>irfft(conjugate(a), n, axis, norm=new_norm, out=out)</c> (NumPy 2.5 hands the out on; 2.4 passed
+        ///     <c>out=None</c> and returned a fresh array): <c>conjugate</c> is the operand engine's
         ///     <see cref="TensorEngine.Conjugate"/> (np.conjugate's body without its class-boundary test: the np.fft facade
         ///     applied that before it called this member, so <paramref name="a"/> is plain), and <c>irfft</c> is this
         ///     engine's <see cref="FftEngine.Irfft"/>, so a subclass that overrides <c>Irfft</c> computes the inverse
@@ -20,8 +21,8 @@ namespace NumSharp.Backends
         {
             int nn = n ?? (ShapeAt(a, axis) - 1) * 2;
             string newNorm = SwapDirection(norm);
-            // NumPy calls irfft with out=None here (the hfft `out` argument is not used).
-            return Irfft(a.TensorEngine.Conjugate(a, null, null, null), nn, axis, newNorm, @out: null);
+            // NumPy 2.5's irfft receives the caller's out, so the call returns that out itself.
+            return Irfft(a.TensorEngine.Conjugate(a, null, null, null), nn, axis, newNorm, @out);
         }
 
         /// <inheritdoc/>

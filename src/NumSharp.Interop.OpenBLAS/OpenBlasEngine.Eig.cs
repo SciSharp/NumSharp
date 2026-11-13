@@ -9,7 +9,7 @@ namespace NumSharp.Interop.OpenBLAS
     /// <summary>
     ///     <c>np.linalg.eigh</c> / <c>eigvalsh</c> (LAPACK <c>syevd</c>/<c>heevd</c>) and
     ///     <c>np.linalg.eig</c> / <c>eigvals</c> (LAPACK <c>geev</c>) — a route-for-route port of NumPy
-    ///     2.4.2's <c>eigh_wrapper</c> and <c>eig_wrapper</c> gufuncs (<c>umath_linalg.cpp</c>) calling
+    ///     2.5.4's <c>eigh_wrapper</c> and <c>eig_wrapper</c> gufuncs (<c>umath_linalg.cpp</c>) calling
     ///     the SAME LAPACK the bundled scipy-openblas ships.
     /// </summary>
     /// <remarks>
@@ -29,10 +29,10 @@ namespace NumSharp.Interop.OpenBLAS
     ///     <b>eig / eigvals</b> (<c>geev</c>) ALWAYS produce complex128 outputs at the engine seam — a real
     ///     matrix can carry a complex-conjugate eigenpair, so the dtype is data-dependent and cannot be
     ///     resolved from the input dtype alone. NumPy's gufunc is likewise always-complex
-    ///     (<c>'d->DD'</c>/<c>'D->DD'</c>); the collapse to a real result when every imaginary part is zero
-    ///     is NumPy's PYTHON-layer step (<c>if not isComplexType(t) and all(w.imag == 0)</c>), reproduced
-    ///     in the <c>np.linalg.eig</c> wrapper — which is also where <c>_assert_finite</c> lives (eig /
-    ///     eigvals reject inf/NaN; eigh / eigvalsh do not). For a real operand the real <c>dgeev</c> writes
+    ///     (<c>'d->DD'</c>/<c>'D->DD'</c>), and since NumPy 2.5 so is its Python layer: the
+    ///     <c>np.linalg.eig</c> wrapper keeps the complex result (it no longer collapses an all-real result to
+    ///     a real dtype) and holds <c>_assert_finite</c> (eig / eigvals reject inf/NaN; eigh / eigvalsh do
+    ///     not). For a real operand the real <c>dgeev</c> writes
     ///     split real/imaginary parts that <see cref="AssembleGeevEigenvectors"/> reassembles into complex
     ///     conjugate-pair eigenvectors exactly as NumPy's <c>mk_geev_complex_eigenvectors</c> does.
     ///     </para>
@@ -219,7 +219,7 @@ namespace NumSharp.Interop.OpenBLAS
                 count *= shape.dimensions[i];
 
             // eig ALWAYS produces complex128 at the seam (a real matrix can carry a complex-conjugate
-            // eigenpair). The wrapper collapses to real when every imaginary part is zero.
+            // eigenpair), and NumPy 2.5's wrapper keeps it complex.
             var w = new NDArray(NPTypeCode.Complex, MakeShape1(shape.dimensions, nb, n), fillZeros: false);
             NDArray v = computeVectors ? new NDArray(NPTypeCode.Complex, MakeShape(shape.dimensions, nb, n, n), fillZeros: false) : null;
 

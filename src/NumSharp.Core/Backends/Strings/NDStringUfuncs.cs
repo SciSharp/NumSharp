@@ -724,48 +724,81 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's refusal of a string operand in the BLAS-style products (<c>dot</c>, <c>inner</c>, <c>vdot</c>,
-        ///     <c>tensordot</c>, <c>convolve</c>, <c>correlate</c>): their <c>dotfunc</c> lookup needs a fixed item size, and
-        ///     NumPy's message is <c>data type must provide an itemsize</c> (ValueError).
+        ///     NumPy's refusal of text in <c>PyArray_MatrixProduct2</c> (<c>np.dot</c>, and <c>np.inner</c> /
+        ///     <c>np.tensordot</c> through it) once the result is allocated: a string descriptor has no <c>dotfunc</c>, and the
+        ///     message is <c>dot not available for this type</c> (ValueError).
         /// </summary>
         /// <returns>The exception (not thrown).</returns>
-        internal static ValueError NoItemsize() => new ValueError("data type must provide an itemsize");
+        /// <remarks>NumPy 2.4 failed one step earlier with <c>data type must provide an itemsize</c>: it allocated the
+        ///     result from a bare string type NUMBER, which has no width.</remarks>
+        internal static ValueError DotNotAvailable() => new ValueError("dot not available for this type");
 
         /// <summary>
-        ///     The guard of <c>np.dot</c> / <c>np.inner</c> for a string operand, in NumPy's <c>PyArray_MatrixProduct2</c>
-        ///     order: a 0-d operand makes NumPy compute a plain <c>multiply</c> (its string loops decide); otherwise the
-        ///     contracted lengths must align, then <c>new_array_for_sum</c> either refuses the caller's <c>out=</c> or, with
-        ///     none, fails to allocate a result for the string type number (it carries no item size). Does nothing for two
-        ///     numeric operands.
+        ///     NumPy's refusal of text in <c>_pyarray_correlate</c> (<c>np.correlate</c>, <c>np.convolve</c>,
+        ///     <c>np.polymul</c>) and in <c>array_vdot</c> (<c>np.vdot</c>) once the result is allocated: a string descriptor
+        ///     has no <c>dotfunc</c>, and the message is <c>function not available for this data type</c> (ValueError).
+        /// </summary>
+        /// <returns>The exception (not thrown).</returns>
+        /// <remarks>NumPy 2.4 failed one step earlier with <c>data type must provide an itemsize</c> (see
+        ///     <see cref="DotNotAvailable"/>).</remarks>
+        internal static ValueError FunctionNotAvailable() => new ValueError("function not available for this data type");
+
+        /// <summary>
+        ///     The guard of <c>np.dot</c> / <c>np.inner</c> / <c>np.tensordot</c> for a text operand (<c>S</c>, <c>U</c> or
+        ///     <c>StringDType</c>), in NumPy 2.5's <c>PyArray_MatrixProduct2</c> order: the common descriptor of both operands
+        ///     (<see cref="ProductDescriptor"/>; none means a product over Python objects,
+        ///     <see cref="VStringProductAnswer"/>), each operand's 'safe' conversion into it, then a 0-d operand makes NumPy
+        ///     compute a plain <c>multiply</c> of the CONVERTED pair (no string × string loop); otherwise the contracted
+        ///     lengths must align, <c>new_array_for_sum</c> checks the caller's <c>out=</c> against the descriptor, an empty
+        ///     contraction of empty operands zero-fills the result from a <c>bool</c> False, and the descriptor has no dot
+        ///     function. Does nothing for two numeric operands.
         /// </summary>
         /// <param name="a">The first operand.</param>
         /// <param name="b">The second operand (for <c>np.inner</c>: already transposed, as NumPy passes it).</param>
         /// <param name="out">The <c>out=</c> array of <c>np.dot</c>, or null.</param>
-        /// <exception cref="TypeError">A 0-d operand: <c>multiply</c>'s answer for the operand classes.</exception>
+        /// <exception cref="TypeError">A <c>U</c> operand beside <c>StringDType</c> (<c>Cannot cast array data from
+        ///     dtype('&lt;U1') to StringDType() according to the rule 'safe'</c>; <c>scalar</c> for a 0-d one); a 0-d operand:
+        ///     <c>multiply</c>'s no-loop refusal naming the common descriptor twice (<c>(dtype('&lt;U32'), dtype('&lt;U32'))</c>,
+        ///     or the <c>StringDType</c> class twice); empty operands whose descriptor cannot hold the text <c>False</c>
+        ///     (<c>Cannot cast scalar from dtype('bool') to dtype('&lt;U1') according to the rule 'safe'</c>); or the first
+        ///     element product of an OBJECT product.</exception>
         /// <exception cref="IncorrectShapeException">The contracted lengths differ: <c>shapes (3,) and (4,) not aligned: 3
         ///     (dim 0) != 4 (dim 0)</c> (NumPy's ValueError text; the house type of the alignment error).</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/> beside a 0-d operand (<c>output array is
         ///     read-only</c>, the multiply ufunc's argument check, before its loop answer); otherwise with
         ///     <paramref name="out"/>: <c>output array is not acceptable (must have the right datatype, number of
-        ///     dimensions, and be a C-Array)</c>, <c>output array has wrong dimensions</c>, or — for an acceptable out —
-        ///     <c>dot not available for this type</c>; without: <c>data type must provide an itemsize</c>.</exception>
-        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose product NumPy computes over Python
-        ///     objects (see <see cref="VStringProductAnswer"/>).</exception>
+        ///     dimensions, and be a C-Array)</c> (the datatype must be EQUIVALENT to the common descriptor: the same string
+        ///     class and width), <c>output array has wrong dimensions</c>; and finally <c>dot not available for this
+        ///     type</c>.</exception>
+        /// <exception cref="NotSupportedException">An OBJECT product whose first element product NumPy computes (an int
+        ///     repeating a <c>StringDType</c> text): NumSharp has no object arrays.</exception>
+        /// <remarks>
+        ///     NumPy 2.4 looked up a type NUMBER instead (<c>PyArray_ObjectType</c>): the 0-d branch multiplied each operand
+        ///     in its own width, the <c>out=</c> needed only the result's string class, the result allocation failed for want
+        ///     of an item size, and a <c>StringDType</c> operand was refused outright. With empty operands and an
+        ///     acceptable <paramref name="out"/>, NumPy writes <c>False</c> into the out before it raises, as here.
+        /// </remarks>
         internal static void ThrowIfProduct(NDArray a, NDArray b, NDArray @out = null)
         {
-            // A StringDType operand: PyArray_MatrixProduct2's legacy-descriptor lookup refuses it (or, beside a class it has
-            // no common DType with, makes the product an OBJECT one), before any shape check.
-            if (IsVString(a) || IsVString(b))
-                throw VStringProductAnswer(a, b, @out);
-            if (!IsString(a) && !IsString(b))
+            if (!IsText(a) && !IsText(b))
                 return;
+
+            // PyArray_DTypeFromObject(op1), then (op2): the common descriptor, or OBJECT when the two have none.
+            var typec = ProductDescriptor(a, b);
+            if (typec is null)
+                throw VStringProductAnswer(a, b, @out);
+
+            // PyArray_FromAny(op1, typec, ALIGNED), then op2: the 'safe' conversion into the common descriptor.
+            ThrowIfUnsafeProductCast(a, typec);
+            ThrowIfUnsafeProductCast(b, typec);
+
             if (a.ndim == 0 || b.ndim == 0)
             {
-                // The scalar branch is the multiply ufunc, whose argument parsing refuses a read-only out= before it looks
-                // for a loop (NumPy 2.4.2: np.dot(np.array('ab'), np.array('cd'), out=<a read-only 0-d>) reports "output
-                // array is read-only", not multiply's no-loop TypeError).
+                // The scalar branch is the multiply ufunc over the CONVERTED operands, whose argument parsing refuses a
+                // read-only out= before it looks for a loop (np.dot(np.array('ab'), np.array('cd'), out=<a read-only 0-d>)
+                // reports "output array is read-only", not multiply's no-loop TypeError).
                 ThrowIfOutWhereInvalid(@out, null);
-                throw ScalarProductError(a, b);
+                throw NoLoop("multiply", typec, typec);
             }
 
             // dot_alignment_error: a's last axis against b's second-to-last (its only axis when 1-D).
@@ -776,31 +809,90 @@ namespace NumSharp.Backends.Strings
                     string.Create(CultureInfo.InvariantCulture, $"shapes {a.Shape.ToPythonTuple()} and {b.Shape.ToPythonTuple()} not aligned: {l} (dim {a.ndim - 1}) " +
                     $"!= {b.Shape.dimensions[matchDim]} (dim {matchDim})"));
 
-            if (@out is null)
-                throw NoItemsize();
+            if (@out is not null)
+            {
+                // new_array_for_sum: out must have the result's rank, a descriptor EQUIVALENT to the common one
+                // (PyArray_EquivTypes: no cast between them — the same string class and width; a StringDType out without
+                // an NA object, or with one when the common descriptor has one too), and be a C-array (C-contiguous,
+                // writeable).
+                int nd = a.ndim + b.ndim - 2;
+                if (@out.ndim != nd || !DTypeCasting.EquivTypes(@out.dtype, typec) || !@out.Shape.IsContiguous || !@out.Shape.IsWriteable)
+                    throw new ValueError(
+                        "output array is not acceptable (must have the right datatype, number of dimensions, and be a C-Array)");
 
-            // new_array_for_sum: out must have the result's rank, the result's TYPE NUMBER (any width of the promoted
-            // string class: str when either operand is str, else bytes) and be a C-array (C-contiguous, writeable).
-            int nd = a.ndim + b.ndim - 2;
-            bool unicode = a.dtype.Meta is StringDTypeMeta { IsUnicode: true } || b.dtype.Meta is StringDTypeMeta { IsUnicode: true };
-            bool sameClass = @out.dtype.Meta is StringDTypeMeta outMeta && outMeta.IsUnicode == unicode;
-            if (@out.ndim != nd || !sameClass || !@out.Shape.IsContiguous || !@out.Shape.IsWriteable)
-                throw new ValueError(
-                    "output array is not acceptable (must have the right datatype, number of dimensions, and be a C-Array)");
+                // The result's dimensions: a's leading axes, b's axes but its contracted one.
+                int d = 0;
+                for (int i = 0; i < a.ndim - 1; i++, d++)
+                    if (@out.Shape.dimensions[d] != a.Shape.dimensions[i])
+                        throw new ValueError("output array has wrong dimensions");
+                for (int i = 0; i < b.ndim - 2; i++, d++)
+                    if (@out.Shape.dimensions[d] != b.Shape.dimensions[i])
+                        throw new ValueError("output array has wrong dimensions");
+                if (b.ndim > 1 && @out.Shape.dimensions[d] != b.Shape.dimensions[b.ndim - 1])
+                    throw new ValueError("output array has wrong dimensions");
+            }
 
-            // The result's dimensions: a's leading axes, b's axes but its contracted one.
-            int d = 0;
-            for (int i = 0; i < a.ndim - 1; i++, d++)
-                if (@out.Shape.dimensions[d] != a.Shape.dimensions[i])
-                    throw new ValueError("output array has wrong dimensions");
-            for (int i = 0; i < b.ndim - 2; i++, d++)
-                if (@out.Shape.dimensions[d] != b.Shape.dimensions[i])
-                    throw new ValueError("output array has wrong dimensions");
-            if (b.ndim > 1 && @out.Shape.dimensions[d] != b.Shape.dimensions[b.ndim - 1])
-                throw new ValueError("output array has wrong dimensions");
+            // "Ensure that multiarray.dot(<Nx0>,<0xM>) -> zeros((N,M))": PyArray_AssignZero of the result before the dot
+            // function lookup, when BOTH operands are empty.
+            if (a.size == 0 && b.size == 0)
+                AssignProductZero(@out, typec);
 
             // The string descriptor has no dot function.
-            throw new ValueError("dot not available for this type");
+            throw DotNotAvailable();
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_AssignZero</c> of a product's result over text: a raw <c>bool</c> False assigned under the
+        ///     'safe' rule — refused when the descriptor cannot hold its text (<c>U</c> / <c>S</c> narrower than the five
+        ///     characters of <c>False</c>), else written into every element of the caller's <c>out=</c> (an allocated
+        ///     result is discarded with the error that follows, so only an out shows it).
+        /// </summary>
+        /// <param name="out">The caller's <c>out=</c>, already accepted by <c>new_array_for_sum</c>, or null.</param>
+        /// <param name="typec">The product's common descriptor (the result's, and so the out's equivalent).</param>
+        /// <exception cref="TypeError">The bool cannot be cast safely: <c>Cannot cast scalar from dtype('bool') to
+        ///     dtype('&lt;U1') according to the rule 'safe'</c>.</exception>
+        private static void AssignProductZero(NDArray @out, DType typec)
+        {
+            // PyArray_AssignRawScalar checks the scalar cast against the DESTINATION, which for an out is out's own
+            // descriptor (equivalent to typec, so the same answer) and otherwise the allocated typec result.
+            var dst = @out?.dtype ?? typec;
+            if (!DTypeCasting.CanCastTypeTo(DType.Boolean, dst, NPY_CASTING.NPY_SAFE_CASTING))
+                throw new TypeError($"Cannot cast scalar from dtype('bool') to {dst.ToString(true)} according to the rule 'safe'");
+            // str(False) packed into every element (PyArray_Pack of the bool into S / U / StringDType).
+            if (@out is not null)
+                UnmanagedStorage.FillWithScalar(@out, false);
+        }
+
+        /// <summary>
+        ///     NumPy 2.5's <c>array_vdot</c> for a text operand (<c>S</c>, <c>U</c> or <c>StringDType</c>): the common
+        ///     descriptor (<see cref="ProductDescriptor"/>; none means a product over Python objects,
+        ///     <see cref="VStringVdotAnswer"/>), the first operand converted and flattened, the second converted and
+        ///     flattened to the first's length, the 0-d result allocated, and no dot function for the descriptor.
+        /// </summary>
+        /// <param name="a">The first operand (the one vdot conjugates).</param>
+        /// <param name="b">The second operand.</param>
+        /// <returns>The exception to throw (never null).</returns>
+        /// <exception cref="TypeError">Thrown (not returned) for a <c>U</c> operand beside <c>StringDType</c>: the 'safe'
+        ///     conversion's refusal, the first operand first.</exception>
+        /// <exception cref="IncorrectShapeException">Thrown (not returned) when the sizes differ: NumPy flattens
+        ///     <paramref name="b"/> to <paramref name="a"/>'s length through the dims buffer it reuses (<c>cannot reshape
+        ///     array of size 4 into shape (3,)</c>).</exception>
+        /// <remarks>NumPy 2.4 failed the result allocation for want of an item size (<c>data type must provide an
+        ///     itemsize</c>) and refused a <c>StringDType</c> operand outright; 2.5 converts both operands into the common
+        ///     descriptor, so its answer is <c>function not available for this data type</c>.</remarks>
+        internal static Exception VdotTextAnswer(NDArray a, NDArray b)
+        {
+            var typec = ProductDescriptor(a, b);
+            if (typec is null)
+                return VStringVdotAnswer(a, b);
+            // ap1 = PyArray_FromAny(op1, type) and its reshape to (-1,) (which cannot fail); then ap2 and its reshape to the
+            // resolved (n,): a length mismatch is b's reshape error, raised by the reshape itself.
+            ThrowIfUnsafeProductCast(a, typec);
+            ThrowIfUnsafeProductCast(b, typec);
+            long n = a.size;
+            if (b.size != n)
+                b.reshape(new long[] { n });
+            return FunctionNotAvailable();
         }
 
         /// <summary>
@@ -924,26 +1016,6 @@ namespace NumSharp.Backends.Strings
             Array.Copy(operands, all, operands.Length);
             all[operands.Length] = @out;
             return all;
-        }
-
-        /// <summary>
-        ///     <c>PyArray_MatrixProduct2</c>'s scalar branch: the common type NUMBER of both operands is the string class
-        ///     (<c>U</c> wins over <c>S</c>), each operand is converted to that class by <c>PyArray_FromAny</c> (a string of
-        ///     the class keeps its width, a number or the other class discovers one: int64 → <c>&lt;U21</c>), and the
-        ///     product is <c>multiply</c> of the converted pair, which has no string × string loop.
-        /// </summary>
-        /// <param name="a">The first operand.</param>
-        /// <param name="b">The second operand.</param>
-        /// <returns>The exception (not thrown).</returns>
-        private static Exception ScalarProductError(NDArray a, NDArray b)
-        {
-            DType d1 = a.dtype, d2 = b.dtype;
-            // PyArray_ObjectType keeps the larger type number: StrDType (19) over BytesDType (18).
-            var target = d1.Meta is StringDTypeMeta { IsUnicode: true } || d2.Meta is StringDTypeMeta { IsUnicode: true }
-                ? DTypeRegistry.Str : DTypeRegistry.Bytes;
-            var c1 = d1.Meta == target ? d1 : DTypePromotion.CastDescrToDType(d1, target);
-            var c2 = d2.Meta == target ? d2 : DTypePromotion.CastDescrToDType(d2, target);
-            return NoLoop("multiply", c1, c2);
         }
 
         /// <summary>

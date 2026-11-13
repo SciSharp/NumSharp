@@ -50,9 +50,26 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- NumPy 2.4.2's and PyTorch's answers for every array / tensor state the StateMatrix*Tests cross, written by
-         test/oracle/gen_torch_interop_states.py and committed (no Python at test time). -->
+    <!-- The pinned NumPy's (numpy-version.txt) and PyTorch's answers for every array / tensor state the StateMatrix*Tests
+         cross, written by test/oracle/gen_torch_interop_states.py and committed (no Python at test time). -->
     <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The repository's one NumPy pin (../../numpy-version.txt), compiled in as assembly metadata "NumPyVersion" exactly as
+       NumSharp.Tests.csproj does, and read by NumSharp.Tests' Utilities/NumPyPin.cs, linked below. The fixture-version
+       gate (StateCatalogSyncTests.Fixture_IsThePinnedNumPy) compares the fixture's recorded NumPy against it, so a NumPy
+       bump that leaves this fixture unregenerated fails the gate instead of a literal silently agreeing with the old
+       fixture. A missing or empty pin file fails the build (the Error below), never a test run with an empty version. -->
+  <PropertyGroup>
+    <NumPyPinFile>$(MSBuildThisFileDirectory)..\..\numpy-version.txt</NumPyPinFile>
+    <NumPyVersion Condition="Exists('$(NumPyPinFile)')">$([System.IO.File]::ReadAllText('$(NumPyPinFile)').Trim())</NumPyVersion>
+  </PropertyGroup>
+  <Target Name="CheckNumPyPin" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(NumPyVersion)' == ''" Text="The NumPy pin $(NumPyPinFile) is missing or empty: the fixture-version gate needs the pinned release." />
+  </Target>
+  <ItemGroup>
+    <AssemblyMetadata Include="NumPyVersion" Value="$(NumPyVersion)" />
+    <Compile Include="..\NumSharp.Tests\Utilities\NumPyPin.cs" Link="Utilities\NumPyPin.cs" />
   </ItemGroup>
 
   <ItemGroup>

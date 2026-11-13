@@ -18,25 +18,30 @@ using NumSharp.Backends.Unmanaged.Pooling;
 //   together with the NA handling of each strided loop of stringdtype_ufuncs.cpp. The bodies are called by the IL shell
 //   (ILKernelGenerator.Text.Methods.cs, the V* operations) with the call's VStringMethodAux.
 //
-// NUMPY'S UTF-8 RULES THE PORTS KEEP (probed against 2.4.2; several differ from the S / U loops)
-//   * Lengths and positions are in CODE POINTS, and num_codepoints ignores TRAILING NULs (a T string keeps them:
-//     'ab\0' has length 2).
+// NUMPY'S UTF-8 RULES THE PORTS KEEP (probed against 2.5.4; several differ from the S / U loops)
+//   * Lengths and positions are in CODE POINTS, and a T text is LENGTH-EXPLICIT: every byte is part of it, trailing NULs
+//     included ('ab\0' has length 3). NumPy 2.5.3 (gh-32378) made num_codepoints_for_utf8_bytes stop trimming trailing
+//     NULs, so str_len, the predicates, the search windows, center / ljust / rjust / zfill, expandtabs and _slice all
+//     count them (NumPy 2.4 ignored them: 'ab\0' had length 2 and was alphabetic). The S / U loops still trim their
+//     padding NULs.
 //   * The searches run on the needle's FULL bytes, trailing NULs included (find(T 'xbc\0', T 'bc\0') is -1), except a
 //     one-code-point ASCII needle, which find / rfind search as a single byte; count always searches the full bytes.
-//   * The strip loops start the trailing scan at the LAST BYTE of the buffer (a trailing NUL) while counting code points
-//     without the trailing NULs, so rstrip('a\0\0\0') is 'a\0\0'; the chars form looks a one-byte character up in the
-//     first len(chars) BYTES of the set.
-//   * center / ljust / rjust copy the whole buffer, then step over len(text) code points and pad from there, so a
-//     trailing NUL is overwritten by the right padding ('ab\0'.center(6, '*') is '**ab**\0').
-//   * _slice with step 1 runs to the buffer's END (trailing NULs kept) when the stop passes the code points; another
-//     step selects code points only.
-//   * replace and partition copy the buffers whole (trailing NULs kept); expandtabs writes only the code points.
-//   Each NA rule is the loop's own (the first operand's descriptor decides): see each body.
+//   * The strip loops never strip a NUL of a T text (NumPy 2.5.3: only ASCII whitespace, or the chars; the S / U forms
+//     strip padding NULs too), so rstrip('a\0') is 'a\0'; the chars form looks a one-byte character up in the first
+//     len(chars) BYTES of the set.
+//   * center / ljust / rjust copy the whole buffer, then step over len(text) code points and pad from there; a trailing NUL
+//     is a code point like any other ('ab\0'.center(6, '*') is '*ab\0**').
+//   * _slice with step 1 runs to the buffer's END when the stop passes the code points; another step selects code
+//     points, a trailing NUL among them.
+//   * replace and partition copy the buffers whole; expandtabs writes the code points, trailing NULs included.
+//   The NA rule of a loop over several T operands is the FIRST operand whose descriptor has an NA object (NumPy 2.5.2's
+//   stringdtype_effective_na_descr; NumPy 2.4 read the first operand's): see each body.
 //
 // WHERE NUMPY READS OUT OF BOUNDS (the intended result is kept instead)
 //   * startswith / endswith compare the needle's full bytes, so a needle with trailing NULs reads past the haystack's
 //     text: bytes there read as zero here (a short cell's padding; NumPy reads whatever follows an arena or heap text).
-//   * zfill of an empty text reads the byte after the buffer for a sign: no sign here.
+//   * zfill of an empty text read the byte after the buffer for a sign in NumPy 2.4 (2.5 tests for a sign only in a
+//     non-empty text that got padding): no sign here.
 //   * center / ljust / rjust leave the trailing-NUL tail of the output unwritten (newly allocated memory): zero here.
 //   * replace of an old text that is all NULs sizes its buffer by bytes and writes past it: the exact size here.
 //
@@ -284,7 +289,7 @@ namespace NumSharp.Backends.Strings
                         _ => TextMethodOp.VEndsWith,
                     };
                     bool index = ufunc is "index" or "rindex";
-                    RunLocked(new[] { t1, t2 }, Array.Empty<NDArray>(), t1.dtype, aux =>
+                    RunLocked(new[] { t1, t2 }, Array.Empty<NDArray>(), NDVStringCells.EffectiveNADescr(t1.dtype, t2.dtype), aux =>
                     {
                         var key = new TextMethodKey(vop, 1, Cell, Cell, Extra: index ? 1 : 0);
                         NDTextLoop.Execute(key, new[] { t1, t2, s64, e64, result }, 4, null, (void*)aux, callerOut: false);
@@ -356,7 +361,7 @@ namespace NumSharp.Backends.Strings
                 var result = new NDArray(outDescr, NDStringMethods.UfuncLayout(dims, a, chars), true);
                 try
                 {
-                    RunLocked(new[] { t1, t2 }, new[] { result }, t1.dtype, aux =>
+                    RunLocked(new[] { t1, t2 }, new[] { result }, NDVStringCells.EffectiveNADescr(t1.dtype, t2.dtype), aux =>
                     {
                         var key = new TextMethodKey(TextMethodOp.VStripChars, 1, Cell, Cell, Cell, Extra: type);
                         NDTextLoop.Execute(key, new[] { t1, t2, result }, 2, null, (void*)aux, callerOut: false);
@@ -444,7 +449,7 @@ namespace NumSharp.Backends.Strings
                 var result = new NDArray(outDescr, NDStringMethods.UfuncLayout(dims, a, w64, fillchar), true);
                 try
                 {
-                    RunLocked(new[] { t1, t3 }, new[] { result }, t1.dtype, aux =>
+                    RunLocked(new[] { t1, t3 }, new[] { result }, NDVStringCells.EffectiveNADescr(t1.dtype, t3.dtype), aux =>
                     {
                         var key = new TextMethodKey(TextMethodOp.VPad, 1, Cell, Cell, Cell, Extra: pos);
                         NDTextLoop.Execute(key, new[] { t1, w64, t3, result }, 3, null, (void*)aux, callerOut: false);
@@ -471,6 +476,8 @@ namespace NumSharp.Backends.Strings
         /// <returns>A fresh <c>StringDType</c> result.</returns>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="TypeError">An NA that is neither NaN-like nor a string.</exception>
+        /// <exception cref="OverflowException"><c>Overflow encountered in zfill</c>: the padded size passes int64 (NumPy 2.5's
+        ///     <c>safe_add</c> of the padding and the text's UTF-8 size).</exception>
         /// <exception cref="OutOfMemoryException">A padded size no string can hold.</exception>
         [ArrayWrap("a")]
         internal static NDArray ZFill(NDArray a, NDArray width)
@@ -547,7 +554,7 @@ namespace NumSharp.Backends.Strings
                                          NDStringMethods.UfuncLayout(dims, a, old, @new, c64), true);
                 try
                 {
-                    RunLocked(new[] { t1, t2, t3 }, new[] { result }, t1.dtype, aux =>
+                    RunLocked(new[] { t1, t2, t3 }, new[] { result }, NDVStringCells.EffectiveNADescr(t1.dtype, t2.dtype, t3.dtype), aux =>
                     {
                         var key = new TextMethodKey(TextMethodOp.VReplace, 1, Cell, Cell, Cell, Cell);
                         NDTextLoop.Execute(key, new[] { t1, t2, t3, c64, result }, 4, null, (void*)aux, callerOut: false);
@@ -636,7 +643,7 @@ namespace NumSharp.Backends.Strings
                 o1 = new NDArray(descr, NDStringMethods.UfuncLayout(dims, a, sep), true);
                 o2 = new NDArray(descr, NDStringMethods.UfuncLayout((long[])dims.Clone(), a, sep), true);
                 o3 = new NDArray(descr, NDStringMethods.UfuncLayout((long[])dims.Clone(), a, sep), true);
-                RunLocked(new[] { a, sep }, new[] { o1, o2, o3 }, a.dtype, aux =>
+                RunLocked(new[] { a, sep }, new[] { o1, o2, o3 }, NDVStringCells.EffectiveNADescr(a.dtype, sep.dtype), aux =>
                 {
                     var key = new TextMethodKey(TextMethodOp.VPartition, 1, Cell, Cell, Cell, Cell, Cell, back ? 1 : 0);
                     NDTextLoop.Execute(key, new[] { a, sep, o1, o2, o3 }, 2, null, (void*)aux, callerOut: false);
@@ -750,7 +757,8 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="inputs">The <c>StringDType</c> text inputs, in kernel order (A, B, C).</param>
         /// <param name="outputs">The <c>StringDType</c> outputs (fresh arrays).</param>
-        /// <param name="ruleDescr">The descriptor whose NA rule the loop reads.</param>
+        /// <param name="ruleDescr">The descriptor whose NA rule the loop reads: the input's own for a one-text loop, the
+        ///     effective NA descriptor of several text inputs (<see cref="NDVStringCells.EffectiveNADescr"/>, NumPy 2.5.2).</param>
         /// <param name="run">The pass, given the auxdata pointer.</param>
         /// <param name="ufunc">NumPy's ufunc name for the errors.</param>
         /// <exception cref="Exception">The loop's recorded error (<see cref="Raise"/>).</exception>
@@ -1073,17 +1081,15 @@ namespace NumSharp.Backends.Strings
             return n - cont;
         }
 
-        /// <summary>NumPy's <c>num_codepoints</c> of a UTF-8 buffer: the code points without the trailing NULs.</summary>
+        /// <summary>
+        ///     NumPy's <c>num_codepoints</c> of a UTF-8 buffer: every code point of its bytes, trailing NULs included (NumPy 2.5.3's
+        ///     length-explicit <c>num_codepoints_for_utf8_bytes</c>; NumPy 2.4 trimmed the trailing NULs first).
+        /// </summary>
         /// <param name="s">The text.</param>
         /// <param name="size">Its byte size.</param>
         /// <returns>The code-point count.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static long CodePoints(byte* s, long size)
-        {
-            while (size > 0 && s[size - 1] == 0)
-                size--;
-            return CountLeads(s, size);
-        }
+        internal static long CodePoints(byte* s, long size) => CountLeads(s, size);
 
         /// <summary>
         ///     The address <paramref name="chars"/> code points into a buffer (NumPy's <c>Buffer + n</c> /
@@ -1265,8 +1271,8 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     One element of <c>string_findlike_strided_loop</c> (find / rfind / count / index / rindex): the NA rule of the
-        ///     first operand's descriptor (a string NA reads as its string, any other NA records NumPy's error), then
-        ///     NumPy's UTF-8 search.
+        ///     effective NA descriptor (NumPy 2.5.2: the first operand with an NA object; a string NA reads as its string, any
+        ///     other NA records NumPy's error), then NumPy's UTF-8 search.
         /// </summary>
         /// <param name="a">The searched cell.</param>
         /// <param name="b">The needle cell.</param>
@@ -1509,9 +1515,10 @@ namespace NumSharp.Backends.Strings
             {
                 while (newStop > newStart)
                 {
-                    // NumPy strips a NUL here too (*traverse_buf != 0 && !isspace keeps only a nonzero non-space).
+                    // NumPy 2.5.3's UTF-8 form strips whitespace only (`!isspace && (enc == UTF8 || *traverse_buf != 0)`): a
+                    // NUL is a character of a T text (NumPy 2.4 stripped it too, as the S / U forms still do).
                     uint c = Decode(t);
-                    if (c != 0 && !NDCharArray.IsPyWhitespace(c))
+                    if (!NDCharArray.IsPyWhitespace(c))
                         break;
                     numBytes -= CharBytes(*t);
                     newStop--;
@@ -1658,22 +1665,20 @@ namespace NumSharp.Backends.Strings
                 Fail(aux, VStringMethodError.SliceNull);
                 return;
             }
-            long trimmed = size;
-            while (trimmed > 0 && s[trimmed - 1] == 0)
-                trimmed--;
-            long n = CountLeads(s, trimmed);
+            // NumPy 2.5.3: every byte is part of the text (no trailing-NUL trim before the code points are indexed).
+            long n = CountLeads(s, size);
             long length = NDTextElements.AdjustSliceIndices(n, ref start, ref stop, step);
             if (step == 1)
             {
-                // A bound at or past the code points is the buffer's END (its trailing NULs included).
-                long b0 = start < n ? Advance(s, trimmed, start) - s : size;
-                long b1 = stop < n ? Advance(s, trimmed, stop) - s : size;
+                // A bound at or past the code points is the buffer's END.
+                long b0 = start < n ? Advance(s, size, start) - s : size;
+                long b1 = stop < n ? Advance(s, size, stop) - s : size;
                 WriteCell(o, s + b0, Math.Max(b1 - b0, 0), aux->Out0, aux);
                 return;
             }
             if (length <= 0)
                 return;
-            if (n == trimmed)
+            if (n == size)
             {
                 // ASCII: the code-point offsets are the byte offsets.
                 byte* p = NewString(o, length, aux->Out0, aux);
@@ -1837,8 +1842,15 @@ namespace NumSharp.Backends.Strings
             long ncp = CodePoints(s, size);
             long w = width < ncp ? ncp : width;
             long left = w - ncp;
-            // (width - in_codepoints) + is.size: the leading '0's are one byte each.
-            long outsize = unchecked(left + size);
+            // (width - in_codepoints) + is.size: the leading '0's are one byte each. NumPy 2.5's safe_add refuses a sum past
+            // int64 ("Overflow encountered in zfill": a width near 2^63 over a text of multi-byte characters, whose size
+            // exceeds its code points); NumPy 2.4 handed the wrapped size to the allocator, which raised MemoryError.
+            if (left > long.MaxValue - size)
+            {
+                Fail(aux, VStringMethodError.PadOverflow);
+                return;
+            }
+            long outsize = left + size;
             byte* buf = NewString(o, outsize, aux->Out0, aux);
             if (buf == null)
                 return;
@@ -1861,8 +1873,9 @@ namespace NumSharp.Backends.Strings
         // =============================================================================================================
 
         /// <summary>
-        ///     One element of <c>string_replace_strided_loop</c>: the NA rules, <c>count = min(count == -1 ? MAX : count,
-        ///     found)</c>, then NumPy's UTF-8 <c>string_replace</c> (whole buffers, trailing NULs included).
+        ///     One element of <c>string_replace_strided_loop</c>: the NA rules, <c>count = min(count &lt; 0 ? MAX : count,
+        ///     found)</c> (NumPy 2.5.4: every negative count replaces all; NumPy 2.4 meant only -1 and replaced nothing for
+        ///     -5), then NumPy's UTF-8 <c>string_replace</c> (whole buffers, trailing NULs included).
         /// </summary>
         /// <param name="a">The input cell.</param>
         /// <param name="old">The searched cell.</param>
@@ -1905,7 +1918,7 @@ namespace NumSharp.Backends.Strings
                         Default(aux, out s3, out n3);
                 }
             }
-            long inCount = count == -1 ? long.MaxValue : count;
+            long inCount = count < 0 ? long.MaxValue : count;
             long found = FindCore(s1, n1, s2, n2, 0, long.MaxValue, 2);
             ReplaceCore(s1, n1, s2, n2, s3, n3, Math.Min(inCount, found), o, aux);
         }

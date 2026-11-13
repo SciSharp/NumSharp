@@ -33,7 +33,7 @@ namespace NumSharp.Backends
         // alias an input, which the kernels then overwrite) and writes it into the result afterwards.
         //
         // Which positions are vector positions also depends on the SIMD target and on its stride limits. The answer
-        // pinned here is numpy 2.4.2's win-amd64 wheel on an AVX2 CPU, on EVERY host: that wheel dispatches
+        // pinned here is numpy 2.5.4's win-amd64 wheel (as 2.4.2's) on an AVX2 CPU, on EVERY host: that wheel dispatches
         // loops_minmax to X86_V3 (AVX2, 32-byte vectors: 8 float32 / 4 float64 lanes) and has no AVX-512 target at all
         // (MSVC builds disable X86_V4), and pinning it keeps the answer independent of the machine — a Linux AVX-512 or
         // an ARM NumPy splits at other places, and the corpus comparing ±0 signs runs on all three CI operating systems.

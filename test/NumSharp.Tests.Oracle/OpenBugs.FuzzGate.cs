@@ -13,7 +13,7 @@ namespace NumSharp.Tests
     ///     WS-BUGS): every excuse branch in <see cref="NumSharp.Tests.Fuzz.MisalignedRegistry"/>
     ///     was narrowed from a blanket to its documented (op, dtype, kind) cell, and each REAL bug
     ///     the tightening exposed is either fixed in src (verified by a normal test here) or pinned
-    ///     under [OpenBugs] below. NumPy 2.4.2 is the source of truth for every assertion.
+    ///     under [OpenBugs] below. NumPy (each value probed on 2.4.2) is the source of truth for every assertion.
     /// </summary>
     [TestClass]
     public class FuzzGateRegressionTests

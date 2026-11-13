@@ -4,10 +4,10 @@ Two layers:
 
 * ``SyntheticJoinTests`` builds throwaway corpus trees and pins every resolution rule and every
   problem class, so a rule change fails with a precise message instead of silently moving evidence.
-* ``CommittedCorpusTests`` joins the REAL committed corpora against the real NumPy 2.4.2 catalog
-  (built from NumPy alone, no dotnet inventory): the committed map must resolve every contract with
-  zero problems, a few load-bearing rows are pinned, and the reviewed aliases are cross-checked against
-  the C# oracle gate's own alias classifications so the two cannot drift.
+* ``CommittedCorpusTests`` joins the REAL committed corpora against the real catalog of the pinned
+  NumPy (built from NumPy alone, no dotnet inventory): the committed map must resolve every contract
+  with zero problems, a few load-bearing rows are pinned, and the reviewed aliases are cross-checked
+  against the C# oracle gate's own alias classifications so the two cannot drift.
 
 Run:
     python -m unittest discover -s coverage -p test_oracle_evidence.py
@@ -538,7 +538,8 @@ class CommittedCorpusTests(unittest.TestCase):
         self.assertIsNone(absolute.via, "numpy.absolute has direct contracts")
         self.assertIn("viewflags:absolute", absolute.keys)
         self.assertIn("outflags:absolute", absolute.keys)
-        self.assertEqual("numpy.vstack", self.evidence("numpy.row_stack").via["id"])
+        # numpy.row_stack (vstack's alias) was the example until NumPy 2.5 removed it; numpy.ma keeps its own.
+        self.assertEqual("numpy.ma.vstack", self.evidence("numpy.ma.row_stack").via["id"])
         # np.amax / np.amin were aliases of np.max / np.min until the minmax_kwargs tier (plan api-parameter-parity A4)
         # gated them directly through their own NumPy-shaped overloads.
         for row_id, fn in (("numpy.amax", "amax"), ("numpy.amin", "amin")):

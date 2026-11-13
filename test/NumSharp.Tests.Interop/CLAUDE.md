@@ -133,8 +133,8 @@ Two classes of op:
   3. **the dispatched DYNAMIC_ARCH micro-kernel** (a property of the running CPU).
 
   Byte-parity holds only when all three agree between the two stacks. This project makes them agree:
-  - NumSharp **bundles the scipy-openblas build NumPy 2.4.2 pins** (verified byte-identical), so on a
-    NumPy-2.4.2 host both call the **same binary** (lever 1).
+  - NumSharp **bundles the scipy-openblas build NumPy 2.5.4 pins** (verified byte-identical), so on a
+    NumPy-2.5.4 host both call the **same binary** (lever 1).
   - `PythonSession` enables the backend at **`threads: 1`** (lever 2), and the test matrices are kept
     **small enough that OpenBLAS stays single-threaded on both sides** regardless — so the answer is
     deterministic.
@@ -304,11 +304,13 @@ Conventions the harness encodes (change them only with the reason that put them 
 - Error texts are compared without .NET's `(Parameter '…')` decoration; the class matches numpy's by name (a
   `UFuncTypeError` cast refusal is NumSharp's `TypeError`, its builtin base) or is the documented house convention (a
   shape `ValueError` is `IncorrectShapeException`).
-- NumPy's own bugs are routed around in the numpy expression and named there: `_t2c` (StringDType → complex copies the
-  real part into the imaginary part), `_eager` (numpy's `S → StringDType` cast stores non-UTF-8 bytes and raises only on
-  a read; NumSharp raises at the cast), `np.ascontiguousarray(x)` under `argsort(axis=None)` (a non-contiguous
-  `StringDType` view raises `MemoryError` or misorders in numpy). A Windows numpy's 32-bit C long changes the TEXT of the
-  int64-edge parse cells; those keep the class check only there (LP64 numpy compares them exactly).
+- NumPy's own bugs are routed around in the numpy expression and named there: `np.ascontiguousarray(x)` under
+  `argsort(axis=None)` (a non-contiguous `StringDType` view raises `MemoryError` or misorders in numpy, 2.5.4 too).
+  Two helpers stay from NumPy 2.4.2's bugs and are no-ops on the 2.5.4 pin: `_t2c` (2.4.2's StringDType → complex
+  copied the real part into the imaginary part) and `_eager` (2.4.2's `S → StringDType` cast stored non-UTF-8 bytes and
+  raised only on a read; 2.5 raises the `TypeError` at the cast, as NumSharp does). A Windows numpy's 32-bit C long
+  changes the TEXT of the int64-edge parse cells; those keep the class check only there (LP64 numpy compares them
+  exactly).
 - Adding an op: one `TextOp` line in the right family; a new divergence is pinned in the unit suite and waived here by the
   narrowest `messageGap` (the class still compared), never by dropping the cell.
 
@@ -335,7 +337,7 @@ NUMSHARP_PYTHONNET_REQUIRE_ENGINE=0 dotnet test -f net10.0
 
 Backend discovery honours the usual `NUMSHARP_OPENBLAS_*` knobs (`NUMSHARP_OPENBLAS_LIBRARY` binds one
 specific CBLAS — point it at the numpy wheel's own `libscipy_openblas*` to *guarantee* lever 1 on a
-non-2.4.2 host; `NUMSHARP_OPENBLAS_USE_BUNDLED=0` drops the bundle). CI's interop job builds the
+non-2.5.4 host; `NUMSHARP_OPENBLAS_USE_BUNDLED=0` drops the bundle). CI's interop job builds the
 Python environments below and sets `NUMSHARP_PYTHONNET_REQUIRE_ENGINE`, so a discovery break there
 goes red rather than green-by-skipping.
 
@@ -355,8 +357,8 @@ tracked, exactly-pinned requirement files beside it):
 oracle; then it **verifies** what numpy reports (the pinned release linked to scipy-openblas at the
 manifest's `openblas_version`). Environments land at `<repo>/.venvs/<name>-py<maj><min>/`
 (gitignored) — built from whichever interpreter runs the script, so one machine holds the same
-environment for several Pythons side by side (`py -3.11 make_env.py parity`, `py -3.12 …`; on Linux
-`python3.11 …`). The script prints only the interpreter path on stdout:
+environment for several Pythons side by side (`py -3.12 make_env.py parity`, `py -3.13 …`; on Linux
+`python3.12 …`; NumPy 2.5 publishes no cp311 wheel). The script prints only the interpreter path on stdout:
 
 ```bash
 PY=$(python test/NumSharp.Tests.Interop/python-envs/make_env.py parity)
@@ -391,7 +393,7 @@ complements it where the extra cost of an embedded engine buys something the sna
 
 - **the crossing itself** — numpy computing over NumSharp's *actual exported memory* (proves the
   export's dtype/shape/strides are right, not just that a value matches a recorded byte),
-- **the installed NumPy** — parity against whatever numpy is on the machine, live, not a 2.4.2
+- **the installed NumPy** — parity against whatever numpy is on the machine, live, not a 2.5.4
   snapshot,
 - **round-trip fidelity** — export → numpy kernel → import, end to end.
 

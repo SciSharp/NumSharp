@@ -201,17 +201,18 @@ namespace NumSharp.Interop.PythonNet
         ///     <c>pd.NA</c> — so nothing is coerced to text and no missing-value object is guessed.
         ///     </para>
         ///     <para>
-        ///     A <c>str</c> SUBCLASS is a <c>str</c> too, but numpy's <c>coerce=False</c> refuses it (<c>as_pystring</c> takes
-        ///     only the exact type). When that cast fails and every element is still a <c>str</c> instance, the array goes
-        ///     through numpy's coercing cast instead, which stores <c>str(x)</c> of a subclass element — what
-        ///     <c>np.array(arr, dtype=StringDType())</c> stores, so a subclass that overrides <c>__str__</c> crosses as that
-        ///     text. Nothing that is not a <c>str</c> reaches the coercing cast.
+        ///     A <c>str</c> SUBCLASS is a <c>str</c> too. numpy 2.5 stores its OWN text in both casts, whatever its
+        ///     <c>__str__</c> override says, so the strict cast already takes it. numpy 2.4's <c>coerce=False</c> refused it
+        ///     (<c>as_pystring</c> took only the exact type): when that cast fails and every element is still a <c>str</c>
+        ///     instance, the array goes through numpy's coercing cast instead, which under numpy 2.4 stores <c>str(x)</c> of a
+        ///     subclass element. Either way the copy holds what <c>np.array(arr, dtype=StringDType())</c> stores under the
+        ///     running numpy, and nothing that is not a <c>str</c> reaches the coercing cast.
         ///     </para>
         /// </remarks>
         /// <exception cref="NotSupportedException">An element is not a <c>str</c> (the message names the first one by flat
         ///     C-order index, type and repr), or a <c>str</c> holds a lone surrogate (UTF-8 cannot encode it, so neither
-        ///     numpy nor NumSharp can store it), or a <c>str</c> subclass's <c>__str__</c> raises, or the running numpy has no
-        ///     <c>StringDType</c>.</exception>
+        ///     numpy nor NumSharp can store it), or (numpy 2.4 only) a <c>str</c> subclass's <c>__str__</c> raises, or the
+        ///     running numpy has no <c>StringDType</c>.</exception>
         private static NDArray ImportObjectArrayOfStr(PyObject array)
         {
             NumpyStringApi.EnsureAvailable();
@@ -254,8 +255,9 @@ namespace NumSharp.Interop.PythonNet
         ///     the GIL.
         /// </summary>
         /// <param name="array">The numpy object array.</param>
-        /// <param name="coerce">numpy's <c>coerce</c>: false takes only an exact <c>str</c> or <c>np.str_</c> element; true
-        ///     stores <c>str(x)</c> of anything else.</param>
+        /// <param name="coerce">numpy's <c>coerce</c>: false takes only <c>str</c> elements (numpy 2.5: any <c>str</c>
+        ///     instance, a subclass by its own text; numpy 2.4: an exact <c>str</c> or <c>np.str_</c>); true stores
+        ///     <c>str(x)</c> of anything else (numpy 2.5 keeps a <c>str</c> subclass's own text there too).</param>
         /// <returns>The new numpy <c>StringDType()</c> array (owned by the caller).</returns>
         /// <exception cref="PythonException">numpy refuses an element (its error, unchanged).</exception>
         private static PyObject ObjectArrayAsStringDType(PyObject array, bool coerce)

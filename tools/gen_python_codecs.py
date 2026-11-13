@@ -13,7 +13,7 @@ encoding NAME the way CPython does and reproduces the codecs it implements exact
   decode to one character (``PyUnicode_BuildEncodingMap``); the script verifies that rule against ``str.encode`` over the
   whole BMP for every codec and fails when a codec departs from it.
 
-Run with the CPython the oracles run (3.12, the NumPy 2.4.2 oracle interpreter):  python tools/gen_python_codecs.py
+Run with the CPython the oracles run (3.12, the pinned NumPy's interpreter):  python tools/gen_python_codecs.py
 """
 import codecs
 import importlib

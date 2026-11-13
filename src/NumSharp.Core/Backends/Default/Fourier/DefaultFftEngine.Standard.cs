@@ -45,14 +45,14 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     NumPy's one statement <c>_raw_fftnd(a, s, axes, ifft, norm, out=None)</c>: the provided out is not threaded
-        ///     through the composition.
+        ///     NumPy's one statement <c>_raw_fftnd(a, s, axes, ifft, norm, out=out)</c>: the provided out is threaded through
+        ///     the composition, as for <see cref="Fft2"/> (NumPy 2.5; 2.4 passed <c>out=None</c>).
         /// </remarks>
         [NDScoped]
         public override NDArray Ifft2(NDArray a, int[] s = null, int[] axes = null, string norm = null, NDArray @out = null)
         {
             bool floatPrec = IsSinglePrecision(a);
-            return RawFftNd(a, s, axes ?? new[] { -2, -1 }, (arr, n, ax, nrm, o) => RawFft(arr, n, ax, false, false, nrm, o, "ifft", floatPrec), norm, @out: null);
+            return RawFftNd(a, s, axes ?? new[] { -2, -1 }, (arr, n, ax, nrm, o) => RawFft(arr, n, ax, false, false, nrm, o, "ifft", floatPrec), norm, @out);
         }
 
         /// <inheritdoc/>

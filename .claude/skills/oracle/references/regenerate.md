@@ -1,7 +1,7 @@
 # Regenerating the oracle corpus
 
 All generators are **deterministic** — `gen_oracle.py` uses no RNG; `gen_index_oracle.py` and `fuzz_random.py` use a
-PINNED seed — and require **`numpy==2.4.2`** (the `precision` tier additionally needs `mpmath`). The corpus is
+PINNED seed — and require **`numpy==2.5.4`**, the release in `numpy-version.txt` (the `precision` tier additionally needs `mpmath`). The corpus is
 committed; CI replays it and never runs these. After regenerating, `dotnet build` (in `NumSharp.Tests.Oracle`) copies
 the `.jsonl` into the test output via the csproj glob.
 
@@ -79,7 +79,7 @@ renumbering; the recorded dtypes/shapes/bytes for existing cases are unchanged. 
 ## Verify determinism
 
 Regenerating with the same NumPy version + unchanged generator must produce a byte-identical file (only your new
-cases differ). If a "no-op" regeneration changes existing bytes, your NumPy is not 2.4.2 (or `gen_oracle.py` /
+cases differ). If a "no-op" regeneration changes existing bytes, your NumPy is not 2.5.4 (or `gen_oracle.py` /
 `layout_catalog.py` changed a fixture) — **or you regenerated on a different OS/CPU**, see below.
 
 ## Regenerate on the platform the corpus was authored on
@@ -100,3 +100,32 @@ there, or the diff is a platform artifact rather than a NumSharp change.
   which then FAIL on Windows and are never checked on the platform that made them — so regenerate these on win-amd64.
 
 Details: `test/NumSharp.Tests.Oracle/Fuzz/README.md` → "Host-dependent values".
+
+## Bumping the pinned NumPy
+
+The release is written once, in `numpy-version.txt`. Everything reads that file: `test/oracle/numpy_pin.py` (each
+generator's `require` check), `coverage/generate_coverage.py`, the workflows (`pip install
+"numpy==$(cat numpy-version.txt)"`), and `NumSharp.Tests.csproj`, which compiles it into the `NumPyVersion` assembly
+metadata the corpus-version gates compare against (`Utilities/NumPyPin.cs`).
+
+1. Edit `numpy-version.txt`. Build a Windows venv with that NumPy (plus `mpmath` for `precision`), and the WSL venv
+   `~/np<tag>` (`numpy_pin.LINUX_PYTHON`) for the LP64 tiers (`gen_dtype_oracle.py`, `gen_textio_oracle.py`).
+2. Move `refs/numpy` to the release tag and re-pin the OpenBLAS package to the scipy-openblas build the new wheel ships
+   (`openblas.md`).
+3. Regenerate EVERY corpus with the new NumPy: every `gen_oracle.py` mode and every standalone generator, the
+   matrix-operand and relayout tiers last (they re-emit other tiers' cases). Run them without `python -I`: isolated mode
+   drops the script's folder from `sys.path`, so `import numpy_pin` fails. One fixture needs more than NumPy:
+   `gen_torch_interop_states.py` (the TorchSharp bridge's state matrix) imports torch, so run it with the interop
+   ecosystem venv `test/NumSharp.Tests.Interop/python-envs/make_env.py` builds; its gate
+   `StateCatalogSyncTests.Fixture_IsThePinnedNumPy` reads the same pin. `gen_find_common_type_oracle.py` stays on NumPy
+   1.26.4 (`np.find_common_type` is NumPy 1.x's), so it is not part of a bump.
+4. Regenerate a CONTROL copy under the OLD NumPy from the same tree: it must equal the committed corpus byte for byte,
+   so every case whose bytes differ between the two is a NumPy behavior change (port it) or noise to explain.
+5. Read the release notes and diff, between the two tags, the Python functions NumSharp ports (per function, at the
+   AST level) and the C sources it ports: a change no corpus exercises still needs a port and a unit test.
+6. Replay the unit suite on both TFMs, the oracle (`FuzzMatrix`, then the `[OpenBugs]` `*_KnownGaps`: a carved count
+   must equal what still diverges, so regenerate a gaps file whose carves went stale), the R1/R2 layering gates, the
+   coverage tests, and the interop suite with `NUMSHARP_PYTHONNET_PYTHON` naming the new venv (the default interpreter
+   keeps the old NumPy and fails the live-parity tests).
+7. Re-probe the NumPy defects the generators and docs avoid (each crash or hang in its own process): a defect the new
+   release fixed returns its cases to the corpus, and one it kept is described with the release that still has it.

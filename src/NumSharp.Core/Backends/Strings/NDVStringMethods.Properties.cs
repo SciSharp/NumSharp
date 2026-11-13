@@ -12,8 +12,9 @@ using NumSharp.Backends.Kernels;
 //   Per element: NpyString_load; an NA is False under a NaN-like NA object ("NA values are always falsy"), the descriptor's
 //   default string under a string NA object, and otherwise ValueError "Cannot use the isalpha function with a null that is
 //   not a nan-like value" (also without an NA object: the loop tests has_string_na only after has_nan_na); then the
-//   Buffer<ENCODING::UTF8> predicate of the text (NDTextElements.IsKindUtf8): code points without the trailing NUL bytes,
-//   Python's Unicode rules per code point. The output is bool (resolve_descriptors: NPY_NO_CASTING, no other loop).
+//   Buffer<ENCODING::UTF8> predicate of the text (NDTextElements.IsKindUtf8): every code point, a trailing NUL included
+//   (NumPy 2.5.3's length-explicit UTF-8: 'ab\0' is not alphabetic), Python's Unicode rules per code point. The output is
+//   bool (resolve_descriptors: NPY_NO_CASTING, no other loop).
 //
 // HOW AN ELEMENT IS COMPUTED HERE
 //   A short cell (text in place, at most 15 bytes) is one 16-byte vector masked to its size: ASCII text (every byte below
@@ -112,7 +113,7 @@ namespace NumSharp.Backends.Strings
             int size = ShortSize(cell);
             if (!Avx2.IsSupported)
                 return NDTextElements.IsKindUtf8(cell, size, kind, flags);
-            // end: one past the last nonzero byte (num_codepoints ignores the trailing NULs; an embedded one counts).
+            // end: the text's size (NumPy 2.5.3 counts every byte's code point, a trailing NUL included).
             var v = ShortText(cell, size, out int end, out _);
             return NDTextElements.IsKindUtf8Window(v, end, kind, flags);
         }

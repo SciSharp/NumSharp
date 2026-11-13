@@ -43,22 +43,23 @@ namespace NumSharp.Tests.Fourier
             act.Should().Throw<ValueError>().WithMessage("Invalid number of FFT data points (0) specified.");
         }
 
-        // ---- bad norm : FORWARD has NO space after the first comma; INVERSE / hermitian have one ----
+        // ---- bad norm : every transform's text has the space after the first comma (NumPy 2.5 added it to the FORWARD
+        //      transforms' text, which 2.4 wrote without) ----
 
         [TestMethod]
-        public void Fft_BadNorm_Forward_NoSpaceMessage()
+        public void Fft_BadNorm_Forward_SpacedMessage()
         {
             Action act = () => np.fft.fft(R(4), norm: "bad");
             act.Should().Throw<ValueError>()
-                .WithMessage("Invalid norm value bad; should be \"backward\",\"ortho\" or \"forward\".");
+                .WithMessage("Invalid norm value bad; should be \"backward\", \"ortho\" or \"forward\".");
         }
 
         [TestMethod]
-        public void Rfft_BadNorm_Forward_NoSpaceMessage()
+        public void Rfft_BadNorm_Forward_SpacedMessage()
         {
             Action act = () => np.fft.rfft(R(4), norm: "bad");
             act.Should().Throw<ValueError>()
-                .WithMessage("Invalid norm value bad; should be \"backward\",\"ortho\" or \"forward\".");
+                .WithMessage("Invalid norm value bad; should be \"backward\", \"ortho\" or \"forward\".");
         }
 
         [TestMethod]

@@ -113,9 +113,10 @@ namespace NumSharp
                     }
                     else
                     {
-                        // idx = self.permutation(pop_size)[:size]; idx.shape = shape. A population whose arange length
-                        // falls in NumPy's empty band (see ArangeLength) leaves too few indices, and the shape assignment
-                        // is then NumPy's reshape ValueError (NumSharp's reshape reports it as IncorrectShapeException).
+                        // idx = self.permutation(pop_size)[:size]; idx = idx.reshape(shape) (NumPy 2.5; 2.4 assigned
+                        // idx.shape in place — a view of the slice either way). A population whose arange length falls in
+                        // NumPy's empty band (see ArangeLength) leaves too few indices, and the reshape is then NumPy's
+                        // ValueError (NumSharp's reshape reports it as IncorrectShapeException, so it is raised here).
                         var perm = LegacyPermutation(popExceedsInt64 ? new BigInteger(bigPop) : new BigInteger(popSize));
                         if (perm.size < count)
                             throw new ValueError(string.Create(CultureInfo.InvariantCulture, $"cannot reshape array of size {perm.size} into shape {shape.ToPythonTuple()}"));

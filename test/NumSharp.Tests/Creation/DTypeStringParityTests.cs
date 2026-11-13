@@ -238,7 +238,7 @@ namespace NumSharp.Tests.Creation
         // NumPy types NumSharp doesn't implement → NotSupportedException
         // ---------------------------------------------------------------------
 
-        // The fixed-width string dtypes parse (probed 2.4.2: np.dtype(spelling).str); the unsized forms are the class
+        // The fixed-width string dtypes parse (probed 2.5.4: np.dtype(spelling).str); the unsized forms are the class
         // singletons S0 / U0, which an allocation turns into one character.
         [TestMethod] public void String_S()     => np.dtype("S").str.Should().Be("|S0");
         [TestMethod] public void String_S10()   => np.dtype("S10").str.Should().Be("|S10");
@@ -248,9 +248,17 @@ namespace NumSharp.Tests.Creation
         [TestMethod] public void Unsupported_V()    => ExpectUnsupported("V");
         [TestMethod] public void Unsupported_V16()  => ExpectUnsupported("V16");
         [TestMethod] public void Unsupported_O()    => ExpectUnsupported("O");
-        [TestMethod] public void String_a_IsDeprecatedBytesAlias() => np.dtype("a").str.Should().Be("|S0");
+        /// <summary>
+        ///     NumPy 2.5 removed the bytes alias <c>'a'</c> (deprecated in 2.0, where <c>np.dtype('a')</c> was
+        ///     <c>dtype('S')</c> with a DeprecationWarning): every spelling is NumPy's "not understood" TypeError now.
+        /// </summary>
+        [TestMethod] public void String_a_RemovedBytesAlias_IsNotUnderstood()
+        {
+            new Action(() => np.dtype("a")).Should().Throw<TypeError>().WithMessage("data type 'a' not understood");
+            new Action(() => np.dtype("a0")).Should().Throw<TypeError>().WithMessage("data type 'a0' not understood");
+        }
         // NumPy's PyArray_DescrFromType maps the bare datetime LETTERS to the generic descriptors: np.dtype('M') is
-        // dtype('<M8') and np.dtype('m') is dtype('<m8') (probed 2.4.2).
+        // dtype('<M8') and np.dtype('m') is dtype('<m8') (probed 2.5.4).
         [TestMethod] public void SingleChar_M_GenericDatetime()  => np.dtype("M").Should().Be(np.dtype("M8"));
         [TestMethod] public void SingleChar_m_GenericTimedelta() => np.dtype("m").Should().Be(np.dtype("m8"));
 
@@ -294,7 +302,8 @@ namespace NumSharp.Tests.Creation
             np.dtype("datetime64[ns]").Should().Be(np.dtype("M8[ns]"));
             np.dtype("timedelta64[ms]").str.Should().Be("<m8[ms]");
         }
-        [TestMethod] public void String_a5()       => np.dtype("a5").str.Should().Be("|S5");
+        [TestMethod] public void String_a5_RemovedAlias() => new Action(() => np.dtype("a5")).Should().Throw<TypeError>()
+            .WithMessage("data type 'a5' not understood");
         [TestMethod] public void String_c_IsS1_NotComplex() => np.dtype("c").str.Should().Be("|S1");
         [TestMethod] public void String_str()      => np.dtype("str").str.Should().Be("<U0");
         [TestMethod] public void String_str_()     => np.dtype("str_").str.Should().Be("<U0");

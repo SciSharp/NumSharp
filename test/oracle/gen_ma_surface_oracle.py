@@ -42,7 +42,7 @@ Output (../NumSharp.Tests.Oracle/Fuzz/corpus/):
   gaps/ma_surface_gaps.jsonl    the cases a carve rule (_gap_of) names: NumSharp is known to differ there; replayed by
                                 an [OpenBugs] test that names each gap
 
-Run (needs numpy==2.4.2; deterministic: a rerun is byte-identical):
+Run (needs the pinned NumPy (numpy-version.txt, 2.5.4); deterministic: a rerun is byte-identical):
     python test/oracle/gen_ma_surface_oracle.py [--uncarved DIR]
 """
 import argparse
@@ -54,11 +54,12 @@ import sys
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_ma_surface_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)

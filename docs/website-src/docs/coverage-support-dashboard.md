@@ -686,7 +686,7 @@
     const parts = [];
     if (number(record.contracts)) {
       const sources = Object.entries(record.sources || {}).map(([source, count]) => `${source} ${number(count).toLocaleString()}`).join(" · ");
-      parts.push(`<p><strong>${number(record.contracts).toLocaleString()}</strong> committed NumPy 2.4.2 contracts replayed against NumSharp in CI (${number(record.error_contracts).toLocaleString()} error-message contracts) · ${escapeHtml(sources)}</p>`);
+      parts.push(`<p><strong>${number(record.contracts).toLocaleString()}</strong> committed NumPy oracle contracts replayed against NumSharp in CI (${number(record.error_contracts).toLocaleString()} error-message contracts) · ${escapeHtml(sources)}</p>`);
       const dtypes = record.dtypes || [];
       parts.push(`<p>${dtypes.length} dtype${dtypes.length === 1 ? "" : "s"}${dtypes.length ? `: ${dtypes.map((dtype) => `<code>${escapeHtml(dtype)}</code>`).join(" ")}` : ""} · ${number(record.layouts)} memory layout${number(record.layouts) === 1 ? "" : "s"}</p>`);
       const keys = record.keys || [];

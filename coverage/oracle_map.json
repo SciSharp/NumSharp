@@ -227,7 +227,6 @@
     "numpy.char.translate": {"via": "numpy.strings.translate", "reason": "numpy.char.translate is the very object numpy.strings.translate (numpy.char re-exports it); NumSharp's np.char.translate forwards to np.strings.translate once np.char's TextOperand has coerced the array_like operand. np.char.add has direct contracts (the strchar section) and needs none."},
     "numpy.char.upper": {"via": "numpy.strings.upper", "reason": "numpy.char.upper is the very object numpy.strings.upper (numpy.char re-exports it); NumSharp's np.char.upper forwards to np.strings.upper once np.char's TextOperand has coerced the array_like operand. np.char.add has direct contracts (the strchar section) and needs none."},
     "numpy.char.zfill": {"via": "numpy.strings.zfill", "reason": "numpy.char.zfill is the very object numpy.strings.zfill (numpy.char re-exports it); NumSharp's np.char.zfill forwards to np.strings.zfill once np.char's TextOperand has coerced the array_like operand. np.char.add has direct contracts (the strchar section) and needs none."},
-    "numpy.row_stack": {"via": "numpy.vstack", "reason": "NumPy 2.x row_stack is vstack plus a DeprecationWarning; NumSharp credits it to np.vstack."},
     "numsharp.np.common_type_code": {"via": "numpy.common_type", "reason": "NumSharp-only NPTypeCode twin of np.common_type."},
     "numsharp.ndarray.array_equal": {"via": "numpy.array_equal", "reason": "NumSharp-only instance convenience over np.array_equal."},
     "numsharp.ndarray.convolve": {"via": "numpy.convolve", "reason": "NumSharp-only instance convenience over np.convolve."},
@@ -293,7 +292,7 @@
     "setflags": ["numpy.ndarray.flags", "numpy.ndarray.setflags"]
   },
   "layout": {
-    "note": "test/NumSharp.Tests/Backends/corpus/layout_parity_oracle.jsonl (result strides / OWNDATA / WRITEABLE / base sharing), replayed by LayoutParityOracleTests. Variant = family; reduce keys map by their leading reduction name, copyk keys by their trailing copy/astype word, ufunc keys (a fresh ufunc result's layout, the UF / UF1 tables of test/oracle/gen_layout_parity_oracle.py) by their case name: each maps to the function its generator lambda calls, the operator forms (x + 1.5, x > 7.0, an int32 array * x) to their ufuncs.",
+    "note": "test/NumSharp.Tests/Backends/corpus/layout_parity_oracle.jsonl (result strides / OWNDATA / WRITEABLE / base sharing), replayed by LayoutParityOracleTests. Variant = family; reduce keys map by their leading reduction name, copyk keys by their trailing copy/astype word, ufunc keys by the generator's call name before the source layout (the UF / UF1 tables of gen_layout_parity_oracle.py: a fresh ufunc result's layout, and the functions built on ufuncs or order='K' copies).",
     "reshape": ["numpy.ndarray.reshape"],
     "sort": ["numpy.sort"],
     "argsort": ["numpy.argsort"],

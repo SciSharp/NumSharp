@@ -11,7 +11,7 @@ paths:
 
 # Text I/O: `savetxt`, `loadtxt`, `fromstring`, `fromfile`, `tofile`
 
-Every function is a port of NumPy 2.4.2, its errors and their order included, and every text encoding goes through a
+Every function is a port of NumPy 2.5.4, its errors and their order included, and every text encoding goes through a
 port of CPython 3.12's codec layer. Gates: the committed text I/O oracle tier (`TextIO/corpus/textio_*.jsonl`, category
 `TextIOOracle`, Linux NumPy, zero excuses; `oracle.md`), the string oracle's `tio` section (`StringDType`, the codecs,
 the `%` format matrix through savetxt and tofile), and the unit suites named below.

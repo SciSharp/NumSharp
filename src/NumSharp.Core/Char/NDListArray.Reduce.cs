@@ -197,14 +197,14 @@ namespace NumSharp
         /// <exception cref="ObjectDisposedException">The array or <paramref name="out"/> was disposed.</exception>
         /// <remarks>
         ///     <para>One overload, NumPy's signature.</para>
-        ///     <para><c>PyUFunc_Accumulate</c> takes one of two routes, with different <paramref name="out"/> checks: a 1-D
-        ///     object accumulation into an <paramref name="out"/> that does not overlap the array runs without an iterator —
-        ///     an empty array or an empty <paramref name="out"/> returns <paramref name="out"/> untouched, any other shape
-        ///     than the array's is "the wrong size" —; everything else (two or more dimensions, a <paramref name="dtype"/>
-        ///     cast, an overlapping <paramref name="out"/>) builds NumPy's outer iterator, whose texts are reproduced, and
-        ///     whose <paramref name="out"/> may have MORE axes (the extra ones are read at index 0) or broadcast the array.
-        ///     NumPy 2.4.2 crashes the process for a 0-d <paramref name="out"/> on the first route; NumSharp reports it as
-        ///     the wrong size ([Misaligned]).</para>
+        ///     <para><c>PyUFunc_Accumulate</c> takes one of two routes: a 1-D object accumulation into an
+        ///     <paramref name="out"/> that does not overlap the array runs without an iterator; everything else (two or more
+        ///     dimensions, a <paramref name="dtype"/> cast, an overlapping <paramref name="out"/>) builds NumPy's outer
+        ///     iterator, whose texts are reproduced. On both, NumPy 2.5 then demands the array's exact dimensions ("the
+        ///     wrong size", gh-32709) before an empty array or an empty <paramref name="out"/> returns
+        ///     <paramref name="out"/> untouched — an <paramref name="out"/> with MORE axes or one the array broadcasts
+        ///     against, which NumPy 2.4's iterator accepted, is refused, and so is a 0-d <paramref name="out"/> (which
+        ///     crashed NumPy 2.4).</para>
         /// </remarks>
         public NDListArray cumsum(int? axis = null, DType dtype = null, NDListArray @out = null) => Accumulate(ListFold.Sum, axis, dtype, @out);
 
@@ -1597,20 +1597,20 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>PyUFunc_Accumulate</c>'s checks of an <c>out=</c> array, route by route, and the region of it the
-        ///     accumulation writes. The plain loop (a 1-D object accumulation into an out that does not overlap the input)
-        ///     returns early for an empty input or out and refuses any other shape than the input's; the outer iterator (two
-        ///     or more dimensions, a cast loop, an overlapping out) maps axis k of each operand to iterator axis k, out
-        ///     READWRITE and NO_BROADCAST, the input READONLY, with <c>npyiter_fill_axisdata</c>'s two passes and texts, and
-        ///     returns early for an empty input or out only after them.
+        ///     accumulation writes. The outer iterator (two or more dimensions, a cast loop, an overlapping out) maps axis k
+        ///     of each operand to iterator axis k, out READWRITE and NO_BROADCAST, the input READONLY, with
+        ///     <c>npyiter_fill_axisdata</c>'s two passes and texts; the plain loop (a 1-D object accumulation into an out
+        ///     that does not overlap the input) builds nothing. Then, on both, NumPy 2.5's dimension check (gh-32709) refuses
+        ///     any out whose dimensions are not the input's, and only after it does an empty input or out return early.
         /// </summary>
         /// <param name="outIds">The out's ids.</param>
         /// <param name="source">The ids accumulated (1-D for a flattened or 0-d array).</param>
         /// <param name="ax">The accumulation axis of <paramref name="source"/>.</param>
         /// <param name="castLoop">Whether the loop casts the input (a dtype= of another class: always the iterator).</param>
-        /// <returns>A view of <paramref name="outIds"/> to write (out's extra trailing axes read at index 0, the
-        ///     accumulation axis cut to the input's extent), or null when NumPy returns out untouched.</returns>
+        /// <returns>A view of the whole <paramref name="outIds"/> to write, or null when NumPy returns out
+        ///     untouched.</returns>
         /// <exception cref="ValueError">NumPy's texts: <c>provided out is the wrong size for the accumulation.</c> (also for a
-        ///     0-d out, where NumPy 2.4.2 crashes), <c>Iterator input op_axes[0][0] (==1) is not a valid axis of op[0], which
+        ///     0-d out, which crashed NumPy 2.4), <c>Iterator input op_axes[0][0] (==1) is not a valid axis of op[0], which
         ///     has 1 dimensions </c>, <c>operands could not be broadcast together with remapped shapes
         ///     [original-&gt;remapped]: (3,2)-&gt;(3,2) (2,3)-&gt;(2,3) </c>, <c>non-broadcastable output operand with shape
         ///     (1,3) [remapped to (3,1)] doesn't match the broadcast shape (2,3)</c>.</exception>
@@ -1622,11 +1622,11 @@ namespace NumSharp
             bool iterator = nd > 1 || castLoop || NDMemOverlap.SolveMayShareMemory(outIds, source, 0) != MemOverlap.No;
             if (!iterator)
             {
-                // The plain loop: its zero-size returns come before its size check.
-                if (s[ax] == 0 || outIds.size == 0)
-                    return null;
+                // The plain loop: NumPy 2.5's dimension check first, then its zero-size returns.
                 if (outIds.ndim != 1 || o[0] != s[0])
                     throw new ValueError("provided out is the wrong size for the accumulation.");
+                if (s[ax] == 0 || outIds.size == 0)
+                    return null;
                 return outIds.view();
             }
             // Pass 1 (op_axes 0 .. nd-1): an out with fewer axes has no axis k; the first nd extents broadcast, out first.
@@ -1659,17 +1659,17 @@ namespace NumSharp
                                          $"{new Shape(broadcast, copy: false).ToPythonTuple()}");
                 }
             }
-            // The zero-size returns, after the iterator was built.
+            // NumPy 2.5's dimension check (gh-32709) of the out the iterator accepted: more axes, or the array broadcast
+            // against it, is the wrong size — 2.4's iterator wrote such an out's leading cells.
+            bool same = outIds.ndim == nd;
+            for (int d = 0; same && d < nd; d++)
+                same = o[d] == s[d];
+            if (!same)
+                throw new ValueError("provided out is the wrong size for the accumulation.");
+            // The zero-size returns, after both checks.
             if (s[ax] == 0 || outIds.size == 0)
                 return null;
-            // The written region: the iterator walks out's first nd axes from its data pointer (extra axes at index 0), and
-            // each line runs the input's extent along the axis (an input of extent 1 writes one position).
-            var slices = new Slice[outIds.ndim];
-            for (int d = 0; d < outIds.ndim; d++)
-                slices[d] = d >= nd ? Slice.Index(0) : d == ax && o[d] != s[d] ? new Slice(0, s[d]) : Slice.All;
-            // The storage-level view, not the indexer: when every axis is an extra one (a 0-d input) the index names one
-            // element, which the indexer reads as an item (NumPy's scalar copy) - the written region must be out's memory.
-            return outIds.BasicIndexView(slices);
+            return outIds.view();
         }
 
         /// <summary>

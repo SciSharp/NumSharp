@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-gen_viewflags_oracle.py -- the array-OBJECT oracle: what NumPy 2.4.2 hands back, not only its values.
+gen_viewflags_oracle.py -- the array-OBJECT oracle: what NumPy 2.5.4 hands back, not only its values.
 
 Every other differential tier records a result as (dtype, shape, C-order bytes). That contract cannot see
 three things a NumPy port must still get right, and this generator gates them:
@@ -50,7 +50,7 @@ case, the documented gap NumSharp is known to have there (GAPS). A carved case i
 replay holds every carved case to NumPy and fails while the gap is open. ``--uncarved DIR`` writes the whole
 matrix (the way the carve rules were drawn and how to re-probe after a fix).
 
-Run (needs numpy==2.4.2):
+Run (needs the pinned NumPy (numpy-version.txt, 2.5.4)):
     python test/oracle/gen_viewflags_oracle.py [all|views|out|shapes|arrays] [--uncarved DIR]
 """
 import argparse
@@ -60,11 +60,12 @@ import sys
 import warnings
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 
 np.seterr(all="ignore")
 warnings.simplefilter("ignore")
 
-assert np.__version__ == "2.4.2", f"corpus must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_viewflags_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CORPUS = os.path.normpath(os.path.join(HERE, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
@@ -1811,7 +1812,7 @@ _ARRAY_JOB_NUMPY = {
 # out np.dot refuses (F, stepped, transposed, reversed) is refused and VO01 matches NumPy; its GAPS entry and its rule
 # are dropped and its 4 cases moved back into out_flags.jsonl the same way.
 # 2026-11-04 (parity QA-34, f0a00d4a): np.broadcast_arrays returns an operand that already has the broadcast shape as
-# ITSELF and keeps a read-only operand's views read-only, as NumPy 2.4.2 does, so VF17 matches NumPy; its GAPS entry and
+# ITSELF and keeps a read-only operand's views read-only, as NumPy 2.5.4 does, so VF17 matches NumPy; its GAPS entry and
 # its rule are dropped and its 6 cases moved back into view_flags.jsonl the same way (no regeneration).
 # 2026-11-05 (parity QA-15): np.nansum / np.nanprod are NumPy's statements (np.sum / np.prod of _replace_nan), and their
 # one-element shortcut reads a view from its offset, so VF30 matches NumPy; its GAPS entry and its rule are dropped and its

@@ -463,7 +463,8 @@ namespace NumSharp.Backends.Strings
                 return qShape.Length == 0 ? full.PyArray_Return() : full.view();
             }
             // NumPy's _remove_nan_1d order, not a mask selection: the partition that picks the element sorts what is left,
-            // and texts equal under NpyString_cmp (the same bytes up to a shared NUL) keep the order they arrive in.
+            // and texts equal under NpyString_cmp keep the order they arrive in (byte-identical texts since NumPy 2.5's
+            // memcmp, so the order no longer shows in a value; NumPy 2.4's strncmp tied texts that differed past a NUL).
             using var kept = nans == 0 ? null : RemoveNaN1D(line, nan, nans);
             return QuantileText.Compute(op, kept ?? line, q, qShape, qIsInteger, null, null, method, false, qType: qType);
         }
@@ -473,7 +474,9 @@ namespace NumSharp.Backends.Strings
         ///     first NaN slots are filled, in order, with the non-NaN elements of the last <c>nans</c> slots, cut to its first
         ///     <c>n - nans</c> elements — NOT the NaN-free elements in input order. The order matters wherever ties do: the
         ///     partition that picks a quantile's element sorts this array, and texts equal under <c>NpyString_cmp</c> keep the
-        ///     order they arrive in (probed: a <c>np.nanpercentile(..., method='nearest')</c> over tied texts picks by it).
+        ///     order they arrive in (probed against NumPy 2.4.2, where <c>strncmp</c> tied texts that differed past a shared
+        ///     NUL and <c>np.nanpercentile(..., method='nearest')</c> picked by that order; NumPy 2.5's <c>memcmp</c> ties only
+        ///     byte-identical texts).
         /// </summary>
         /// <param name="line">The 1-D line.</param>
         /// <param name="nan">Its NaN mask (<c>np.isnan(line)</c>).</param>

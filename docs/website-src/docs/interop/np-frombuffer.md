@@ -15,7 +15,7 @@ This page is self-contained. You do not need the rest of the interop documentati
 [Lifetime](#lifetime-who-frees-what) · [The GIL](#the-gil) · [Seven libraries](#seven-libraries-verbatim) ·
 [Troubleshooting](#troubleshooting) · [Claims](#claims-ledger)
 
-> Verified on CPython 3.12.12 · numpy 2.4.2 · pythonnet 3.0.5 · net8.0/net10.0.
+> Verified on CPython 3.12.12 · numpy 2.5.4 · pythonnet 3.0.5 · net8.0/net10.0.
 > Every claim below is reproduced by a test in `NumSharp.Tests.Interop`.
 
 ---

@@ -75,11 +75,11 @@ namespace NumSharp.Tests.IO
         }
 
         /// <summary>
-        ///     Pins a text <c>tofile</c> of non-ASCII text: NumPy 2.4.2 calls <c>PyUnicode_AsASCIIString</c> without a NULL
-        ///     check and CRASHES the process; NumSharp raises the <c>UnicodeEncodeError</c> CPython's call reports.
+        ///     Pins a text <c>tofile</c> of non-ASCII text: the <c>UnicodeEncodeError</c> CPython's call reports, NumPy
+        ///     2.5.4's answer. NumPy 2.4 called <c>PyUnicode_AsASCIIString</c> without a NULL check and CRASHED the process, so
+        ///     this was a <c>[Misaligned]</c> pin of NumSharp's answer until the bump.
         /// </summary>
         [TestMethod]
-        [Misaligned]
         public void ToFile_Text_NonAscii_RaisesInsteadOfCrashing()
         {
             Action act = () => ToFileText(np.array(new[] { "ab", "dé" }), ",");

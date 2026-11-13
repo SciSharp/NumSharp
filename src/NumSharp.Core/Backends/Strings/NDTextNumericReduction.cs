@@ -90,7 +90,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="loop">The loop's descriptor (a numeric dtype).</param>
         /// <returns><paramref name="out"/> itself.</returns>
         /// <exception cref="IncorrectShapeException">The iterator's shape errors (an out with too few dimensions, a shape
-        ///     that does not broadcast, an out that would have to broadcast).</exception>
+        ///     that does not broadcast, an out that would have to broadcast), then NumPy 2.5's dimension check of any other
+        ///     out the iterator accepts (<c>provided out is the wrong size for the accumulation.</c>, ahead of the empty
+        ///     exits).</exception>
         /// <exception cref="ValueError">The out's text, then the input's, does not parse into the loop dtype (NumPy copies the
         ///     out first: its error wins).</exception>
         /// <exception cref="OverflowError">An integer text outside the loop's integer type.</exception>
@@ -113,17 +115,17 @@ namespace NumSharp.Backends.Strings
             // A cast always takes PyUFunc_Accumulate's outer iterator: its op_axes / broadcast / no-broadcast checks first.
             if (NDVStringReduction.AccumulateIteratorShapeError(@out, input) is { } shapeError)
                 throw shapeError;
+            // NumPy 2.5 (gh-32709) then compares the out's dimensions with the input's, before the empty exits: an out the
+            // iterator accepted with other dimensions (a longer one, one the input broadcasts against) is refused.
+            if (!SameDims(@out, input))
+                throw new IncorrectShapeException("provided out is the wrong size for the accumulation.");
             long count = input.Shape.dimensions[ax];
             if (count == 0 || @out.size == 0)
                 return @out;
 
-            // The cells the iterator walks: the out's leading input-rank axes (a longer out's trailing axes stay at index 0)
-            // and, along the axis, as many as the input has.
-            NDArray outView = NDVStringReduction.LeadingAxesView(@out, input.ndim);
-            NDArray target = outView.Shape.dimensions[ax] == count ? outView : NDVStringReduction.AxisPrefixView(outView, ax, count);
+            // The out has the input's dimensions: the accumulation writes it whole.
+            NDArray target = @out;
             NDArray src = input;
-            if (!SameDims(target, input))
-                src = NDArray.broadcast_to(input, new Shape(target.Shape.dimensions, copy: false));
 
             // UPDATEIFCOPY: the out's cells are converted into the loop dtype BEFORE the input (NpyIter allocates its
             // operands in order) — '' does not parse, so NumPy's zeros-initialized text outs refuse here. The converted

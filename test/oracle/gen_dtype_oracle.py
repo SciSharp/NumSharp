@@ -1,4 +1,4 @@
-"""numpy.dtype / DType-class (DTypeMeta) differential oracle — NumPy 2.4.2 is the source of truth.
+"""numpy.dtype / DType-class (DTypeMeta) differential oracle — NumPy 2.5.4 (the pin) is the source of truth.
 
 Emits test/NumSharp.Tests/DTypes/corpus/dtype_oracle.<model>.jsonl, one JSON object per line, where <model> is the C
 `long` model of the host NumPy runs on: `llp64` (Windows, C long is 32 bits) or `lp64` (Linux / macOS, 64 bits). The
@@ -6,8 +6,8 @@ two files differ only where NumPy itself does — the type numbers and character
 which class the C-name aliases (IntDType, LongDType, LongLongDType, ...) are — and DTypeOracleTests.cs replays the
 file of its own host's model, so every platform CI runs on is gated in full. Refresh both:
 
-    python test/oracle/gen_dtype_oracle.py                                   (Windows NumPy 2.4.2 -> llp64)
-    wsl -d Ubuntu -- ~/np242/bin/python test/oracle/gen_dtype_oracle.py      (Linux NumPy 2.4.2 -> lp64)
+    python test/oracle/gen_dtype_oracle.py                                   (Windows NumPy 2.5.4 -> llp64)
+    wsl -d Ubuntu -- ~/np254/bin/python test/oracle/gen_dtype_oracle.py      (Linux NumPy 2.5.4 -> lp64)
 
 The DType class's C names (PyArray_DTypeMeta's fields, NPY_DType_Slots, the NEP 42 slot ids, the NPY_DT_* flags) are
 read from NumPy's own headers: refs/numpy of this repository, or the source root named by NUMPY_SRC.
@@ -57,7 +57,7 @@ What is left out on purpose: Linux's long double pair (NumPy's is the 16-byte x8
 double — its descriptors differ by design, see UNMODELLED_CLASSES); every dtype NumSharp has no storage for
 (complex64, strings, bytes, void, object); and the metadata=None TypeError (C#'s null means "not given").
 
-Regenerate:  python test/oracle/gen_dtype_oracle.py   (requires numpy==2.4.2)
+Regenerate:  python test/oracle/gen_dtype_oracle.py   (requires the pinned NumPy (numpy-version.txt, 2.5.4))
 """
 import ast
 import itertools
@@ -68,9 +68,10 @@ import re
 import sys
 
 import numpy as np
+import numpy_pin  # noqa: E402  (test/oracle/numpy_pin.py: the one NumPy pin)
 from numpy._core._multiarray_umath import _get_castingimpl
 
-assert np.__version__ == "2.4.2", f"oracle must be generated with numpy 2.4.2, got {np.__version__}"
+numpy_pin.require(np, "gen_dtype_oracle.py")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -523,9 +524,16 @@ def promotions():
 # ---------------------------------------------------------------------------------------------------------------------
 
 def classes():
-    """Every public numpy.dtypes class: its Python surface and the class call."""
+    """Every public numpy.dtypes class: its Python surface and the class call.
+
+    Only the CLASSES of the module: NumPy 2.5 added a function there (``register_dlpack_dtype``), which the ``members``
+    record still lists among ``dtypes_module`` (the replay names it absent, with its reason), but it has no class
+    surface to record.
+    """
     for name in sorted(a for a in dir(np.dtypes) if not a.startswith("_")):
         cls = getattr(np.dtypes, name)
+        if not isinstance(cls, type):
+            continue
         try:
             inst = cls()
             call = {"repr": repr(inst), "is_singleton": inst is cls()}

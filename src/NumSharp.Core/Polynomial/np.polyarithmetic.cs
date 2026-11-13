@@ -30,7 +30,7 @@ namespace NumSharp
         /// <param name="a2">The second polynomial's coefficients.</param>
         /// <returns>The product's coefficients.</returns>
         /// <exception cref="ValueError">An input of rank above 1 (<c>Polynomial must be 1d only.</c>, the first input's
-        ///     first); with a text input otherwise, <c>data type must provide an itemsize</c>.</exception>
+        ///     first); with a text input otherwise, <c>function not available for this data type</c> (np.convolve's refusal).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polymul.html</remarks>
         [NDScoped]
         public static NDArray polymul(NDArray a1, NDArray a2)

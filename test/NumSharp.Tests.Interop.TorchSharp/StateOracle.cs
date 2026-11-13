@@ -7,7 +7,8 @@ using System.Text.Json;
 namespace NumSharp.Tests.Interop.TorchSharp
 {
     /// <summary>
-    ///     The answers NumPy 2.4.2 and PyTorch gave for every array and tensor state the state-matrix suites cross, read from
+    ///     The answers the pinned NumPy (<c>numpy-version.txt</c>) and PyTorch gave for every array and tensor state the
+    ///     state-matrix suites cross, read from
     ///     <c>Fixtures/torch_interop_states.json</c> (written by <c>test/oracle/gen_torch_interop_states.py</c>, committed, so
     ///     no Python runs at test time).
     /// </summary>

@@ -2,7 +2,7 @@
 fuzz_random.py — seeded random differential fuzzer (offline).
 
 Draws random operands (random ndim<=4, dims, stride permutations/signs/offsets), random
-dtypes, and random ops across all tiers, computes the NumPy 2.4.2 result, and writes a
+dtypes, and random ops across all tiers, computes the pinned NumPy's (2.5.4) result, and writes a
 committed corpus the C# harness replays bit-exact. A fixed seed => identical corpus, so a
 mismatch found in a nightly soak is reproducible and can be shrunk into corpus/regressions/.
 

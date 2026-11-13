@@ -230,7 +230,8 @@ namespace NumSharp.Tests.Interop
         ///     <c>argsort(axis=None)</c> of a NON-contiguous <c>StringDType</c> array raises
         ///     <c>MemoryError: Failed to load string in string comparison</c> (transposed) or returns a wrong permutation
         ///     (reversed rows), where the same call over the contiguous copy — the definition of the flattened argsort —
-        ///     is right. NumSharp gives the contiguous copy's answer for every layout;
+        ///     is right; 2.5.4 still returns wrong permutations for transposed, reversed and stepped views of arena texts
+        ///     (probed). NumSharp gives the contiguous copy's answer for every layout;
         ///     <c>StringDTypeOrderTests.ArgSort_NonContiguousView_AxisNone_SortsLikeItsCopy</c> (<c>[Misaligned]</c>, the unit
         ///     suite) pins it.
         /// </remarks>
