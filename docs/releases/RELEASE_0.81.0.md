@@ -10,7 +10,7 @@ An NDArray now shares its memory with TorchSharp tensors, in both directions.
 - **Fresh results laid out as NumPy's** - ufunc results take NumPy's trivial-loop C / F or NpyIter K layout down to the strides of length-1 axes, keepdims reductions and `np.median` lay out as NumPy's, and every zero-size array has NumPy's all-zero strides.
 - **NumSharp on phones** - proven end to end on two Android phones with ONNX Runtime's CPU, XNNPACK and NNAPI providers: an XNNPACK session's outputs now import without a copy, and float-to-int casts on Mono run 4.5-5.7x faster with NumPy's bytes.
 - **New documentation** - the TorchSharp, Exceptions and NumPy Scalars pages, and a diagram of NumSharp's 18 released integrations opening the README and the Interoperability page.
-- **36 NumPy-parity, memory-safety and tooling fixes**, **2 measured speedups** and **20 breaking changes**, across the release's 238 commits.
+- **36 NumPy-parity, memory-safety and tooling fixes**, **2 measured speedups** and **20 breaking changes**, across the release's 243 commits.
 - **1 new NuGet package** - **NumSharp.Interop.TorchSharp**.
 - **1,122,248 NumPy 2.5.4 oracle test cases** (0.80.0: 1,119,305 NumPy 2.4.2 cases) and 21,115 test methods (0.80.0: 20,506).
 
@@ -32,7 +32,7 @@ One optional companion package ships for the first time, co-versioned with **Num
   - Dtypes - the ten dtypes both sides share cross as themselves; uint16 / uint32 / uint64 / char / decimal export by NumPy's NEP 50 promotion (int32 / int64 / float64 / int32 / float64), and an explicit `dtype` converts under NumPy's casting rule (`same_kind` by default); complex64 and bfloat16 tensors import widened exactly under `Auto` / `Copy`; a reversed view, a read-only array, a sparse, conjugated or non-CPU tensor copies under `Auto`; text arrays and quantized or meta tensors are refused in every mode.
   - Checks - `MayShareMemory` tells whether a result shares the source's memory, `ToScalarType` / `ToDType` map the dtypes, and live export / import counters help leak checks.
   - Proven - a state matrix holds 45 array states x the ten shared dtypes x the three modes to NumPy 2.5.4's flags and `torch.from_numpy`'s layout, and 24 tensor states to `Tensor.numpy()`, with the deliberate differences asserted (read-only, misaligned and off-16-byte complex128 arrays copy where `from_numpy` shares).
-  - Depends - [TorchSharp](https://www.nuget.org/packages/TorchSharp) 0.100.0 or later, the managed package only, with no upper bound (tested on 0.100.0 and 0.107.0); you reference the libtorch flavour you run (`TorchSharp-cpu` or a CUDA package).
+  - Depends - [TorchSharp](https://www.nuget.org/packages/TorchSharp) 0.100.0 or later, the managed package only, with no upper bound (tested on 0.100.0 and 0.107.0); you reference the libtorch flavour you run (`TorchSharp-cpu` or a CUDA package), and on macOS install Homebrew's OpenMP first (`brew install libomp`), which libtorch links by Homebrew's path.
 
 ### 📊 Dashboards & Docs
 
