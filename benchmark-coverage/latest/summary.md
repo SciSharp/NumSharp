@@ -3,14 +3,14 @@
 Generated from the compiled NumPy 2.4.2 API inventory and the official benchmark sources.
 A covered alias shares the exact compiled NumSharp target with a directly measured API.
 
-Headline benchmark coverage: **87.3%** (452 covered of 518 benchmarkable APIs; 19 reviewed exclusions).
+Headline benchmark coverage: **84.8%** (441 covered of 520 benchmarkable APIs; 19 reviewed exclusions).
 
 | Surface | Covered | Blocked | Excluded | Missing | Benchmarkable | Coverage |
 |---|---:|---:|---:|---:|---:|---:|
 | fft | 18 | 0 | 0 | 0 | 18 | 100.0% |
 | linalg | 31 | 0 | 0 | 0 | 31 | 100.0% |
 | ndarray | 52 | 0 | 15 | 0 | 52 | 100.0% |
-| np | 298 | 0 | 1 | 61 | 359 | 83.0% |
+| np | 287 | 0 | 1 | 74 | 361 | 79.5% |
 | polynomial | 10 | 0 | 0 | 0 | 10 | 100.0% |
 | random | 43 | 0 | 3 | 5 | 48 | 89.6% |
 
@@ -18,7 +18,7 @@ Headline benchmark coverage: **87.3%** (452 covered of 518 benchmarkable APIs; 1
 
 | Route | APIs | Meaning |
 |---|---:|---|
-| managed | 498 | NumSharp.Core managed code only. |
+| managed | 500 | NumSharp.Core managed code only. |
 | openblas_optional | 10 | Direct product hook with managed fallback. |
 | openblas_optional_composed | 4 | Composition can reach an accelerated product. |
 | openblas_optional_sliding_dot | 2 | Long eligible correlate/convolve regions only. |
@@ -44,17 +44,26 @@ retain a managed fallback; required routes throw when no suitable LAPACK backend
 
 | API | Surface | Kind | Category | Backend route |
 |---|---|---|---|---|
+| `numpy.acos` | np | ufunc | Trigonometric functions | managed |
 | `numpy.apply_along_axis` | np | function | Shape manipulation | managed |
 | `numpy.apply_over_axes` | np | function | Shape manipulation | managed |
 | `numpy.array_equiv` | np | function | Logic & comparison | managed |
+| `numpy.asin` | np | ufunc | Trigonometric functions | managed |
+| `numpy.atan` | np | ufunc | Trigonometric functions | managed |
+| `numpy.atan2` | np | ufunc | Trigonometric functions | managed |
 | `numpy.bartlett` | np | function | Window functions | managed |
 | `numpy.base_repr` | np | function | Text & formatting | managed |
 | `numpy.binary_repr` | np | function | Text & formatting | managed |
 | `numpy.bitwise_count` | np | ufunc | Bitwise operations | managed |
+| `numpy.bitwise_invert` | np | ufunc | Bitwise operations | managed |
+| `numpy.bitwise_left_shift` | np | ufunc | Bitwise operations | managed |
+| `numpy.bitwise_right_shift` | np | ufunc | Bitwise operations | managed |
 | `numpy.blackman` | np | function | Window functions | managed |
 | `numpy.bmat` | np | function | Linear algebra | managed |
 | `numpy.broadcast_shapes` | np | function | Shape manipulation | managed |
 | `numpy.copysign` | np | ufunc | Floating-point handling | managed |
+| `numpy.cumulative_prod` | np | function | Reductions | managed |
+| `numpy.cumulative_sum` | np | function | Reductions | managed |
 | `numpy.datetime_data` | np | function | Date & time | managed |
 | `numpy.divmod` | np | ufunc | Math | managed |
 | `numpy.fabs` | np | ufunc | Math | managed |
@@ -62,6 +71,8 @@ retain a managed fallback; required routes throw when no suitable LAPACK backend
 | `numpy.float_power` | np | ufunc | Math | managed |
 | `numpy.fmod` | np | ufunc | Math | managed |
 | `numpy.frexp` | np | ufunc | Floating-point handling | managed |
+| `numpy.fromfunction` | np | function | Array creation | managed |
+| `numpy.fromiter` | np | function | Array creation | managed |
 | `numpy.frompyfunc` | np | function | Function utilities | managed |
 | `numpy.gcd` | np | ufunc | Math | managed |
 | `numpy.geomspace` | np | function | Array creation | managed |
@@ -89,9 +100,11 @@ retain a managed fallback; required routes throw when no suitable LAPACK backend
 | `numpy.nan_to_num` | np | function | Floating-point handling | managed |
 | `numpy.nancumprod` | np | function | Reductions | managed |
 | `numpy.nancumsum` | np | function | Reductions | managed |
+| `numpy.ndim` | np | function | Shape manipulation | managed |
 | `numpy.nextafter` | np | ufunc | Floating-point handling | managed |
 | `numpy.packbits` | np | function | Bitwise operations | managed |
 | `numpy.piecewise` | np | function | Math | managed |
+| `numpy.pow` | np | ufunc | Math | managed |
 | `numpy.put_along_axis` | np | function | Indexing & selection | managed |
 | `numpy.putmask` | np | function | Indexing & selection | managed |
 | `numpy.random.bytes` | random | function | Random | managed |

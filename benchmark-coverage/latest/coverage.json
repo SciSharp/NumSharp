@@ -3,21 +3,20 @@
   "summary": {
     "schema_version": 1,
     "api_inventory": "coverage/generated/coverage.json",
-    "total_available_or_partial": 537,
-    "measured_or_aliased": 452,
+    "total_available_or_partial": 539,
+    "measured_or_aliased": 441,
     "excluded": 19,
-    "missing": 66,
+    "missing": 79,
     "blocked": 0,
-    "coverage_percent": 87.3,
+    "coverage_percent": 84.8,
     "by_status": {
-      "covered_alias": 11,
       "excluded": 19,
-      "missing": 66,
+      "missing": 79,
       "op_matrix": 419,
       "subsystem": 22
     },
     "by_backend_route": {
-      "managed": 498,
+      "managed": 500,
       "openblas_hybrid": 3,
       "openblas_optional": 10,
       "openblas_optional_composed": 4,
@@ -51,12 +50,12 @@
         "coverage_percent": 100.0
       },
       "np": {
-        "total": 360,
-        "measured_or_aliased": 298,
+        "total": 362,
+        "measured_or_aliased": 287,
         "excluded": 1,
-        "missing": 61,
+        "missing": 74,
         "blocked": 0,
-        "coverage_percent": 83.0
+        "coverage_percent": 79.5
       },
       "polynomial": {
         "total": 10,
@@ -123,15 +122,11 @@
       "kind": "ufunc",
       "category": "Trigonometric functions",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.arccos"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.acosh",
@@ -835,15 +830,11 @@
       "kind": "ufunc",
       "category": "Trigonometric functions",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.arcsin"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.asinh",
@@ -907,15 +898,11 @@
       "kind": "ufunc",
       "category": "Trigonometric functions",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.arctan"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.atan2",
@@ -924,15 +911,11 @@
       "kind": "ufunc",
       "category": "Trigonometric functions",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.arctan2"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.atanh",
@@ -1126,15 +1109,11 @@
       "kind": "ufunc",
       "category": "Bitwise operations",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.invert"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.bitwise_left_shift",
@@ -1143,15 +1122,11 @@
       "kind": "ufunc",
       "category": "Bitwise operations",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.left_shift"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.bitwise_not",
@@ -1198,15 +1173,11 @@
       "kind": "ufunc",
       "category": "Bitwise operations",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.right_shift"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.bitwise_xor",
@@ -1823,16 +1794,12 @@
       "name": "cumulative_prod",
       "kind": "function",
       "category": "Reductions",
-      "api_status": "partial",
-      "coverage_status": "covered_alias",
+      "api_status": "available",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.cumprod"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.cumulative_sum",
@@ -1840,16 +1807,12 @@
       "name": "cumulative_sum",
       "kind": "function",
       "category": "Reductions",
-      "api_status": "partial",
-      "coverage_status": "covered_alias",
+      "api_status": "available",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.cumsum"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.datetime_data",
@@ -3038,6 +3001,32 @@
           "path": "benchmark/NumSharp.Benchmark.CSharp/Benchmarks/ApiSurface/IoBenchmarks.cs"
         }
       ],
+      "notes": ""
+    },
+    {
+      "id": "numpy.fromfunction",
+      "surface": "np",
+      "name": "fromfunction",
+      "kind": "function",
+      "category": "Array creation",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "numpy.fromiter",
+      "surface": "np",
+      "name": "fromiter",
+      "kind": "function",
+      "category": "Array creation",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
       "notes": ""
     },
     {
@@ -6569,6 +6558,19 @@
       "notes": ""
     },
     {
+      "id": "numpy.ndim",
+      "surface": "np",
+      "name": "ndim",
+      "kind": "function",
+      "category": "Shape manipulation",
+      "api_status": "available",
+      "coverage_status": "missing",
+      "backend_route": "managed",
+      "backend_notes": "Runs in NumSharp.Core managed code.",
+      "evidence": [],
+      "notes": ""
+    },
+    {
       "id": "numpy.negative",
       "surface": "np",
       "name": "negative",
@@ -7030,15 +7032,11 @@
       "kind": "ufunc",
       "category": "Math",
       "api_status": "available",
-      "coverage_status": "covered_alias",
+      "coverage_status": "missing",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.power"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
+      "evidence": [],
+      "notes": ""
     },
     {
       "id": "numpy.power",
@@ -8507,23 +8505,6 @@
       "notes": ""
     },
     {
-      "id": "numpy.row_stack",
-      "surface": "np",
-      "name": "row_stack",
-      "kind": "function",
-      "category": "Shape manipulation",
-      "api_status": "available",
-      "coverage_status": "covered_alias",
-      "backend_route": "managed",
-      "backend_notes": "Runs in NumSharp.Core managed code.",
-      "evidence": [
-        {
-          "covered_by": "numpy.vstack"
-        }
-      ],
-      "notes": "Shares the exact compiled NumSharp target with a directly covered API."
-    },
-    {
       "id": "numpy.save",
       "surface": "np",
       "name": "save",
@@ -8713,7 +8694,7 @@
       "name": "shape",
       "kind": "function",
       "category": "Shape manipulation",
-      "api_status": "partial",
+      "api_status": "available",
       "coverage_status": "excluded",
       "backend_route": "managed",
       "backend_notes": "Runs in NumSharp.Core managed code.",
