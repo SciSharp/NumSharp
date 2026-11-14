@@ -5,10 +5,13 @@
 // `options()` hook (docfx.min.js -> import('./main.js')). This is the
 // supported way to add site JavaScript without forking docfx.min.js.
 //
-// Beyond the navbar icon links, this adds ONE behavior: it remembers which
+// Beyond the navbar icon links, this adds two behaviors: it remembers which
 // #toc sections the reader expanded/collapsed and restores them on the next
-// page, for a 48h window that slides forward on every visit. See
-// installTocStatePersistence below.
+// page, for a 48h window that slides forward on every visit (see
+// installTocStatePersistence below), and it runs the home page's editor and
+// Copy button (see home.js, which does nothing on any other page).
+
+import { installHomePage } from './home.js'
 
 /**
  * How long a remembered TOC layout survives with no visits, in milliseconds
@@ -403,6 +406,9 @@ export default {
     // Remember TOC expand/collapse state for 48h (sliding window). See
     // installTocStatePersistence above.
     installTocStatePersistence()
+    // The home page's Copy button and "Crazier" editor; returns at once on
+    // every other page. See home.js.
+    installHomePage()
   },
 
   // Customize syntax highlighting (highlight.js)

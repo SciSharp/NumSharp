@@ -18,12 +18,17 @@ echo "Output: $OUTPUT_DIR"
 # ============================================================================
 extract_description() {
     local file="$1"
-    # Skip YAML frontmatter, get first non-empty paragraph
+    # A frontmatter `description:` wins: a page built from HTML (the home page)
+    # has no Markdown paragraph to quote, and its first lines would be tags.
+    # Otherwise skip the frontmatter and take the first non-empty paragraph.
     awk '
         BEGIN { in_frontmatter=0; found=0 }
         /^---$/ {
             if (NR==1) { in_frontmatter=1; next }
             else { in_frontmatter=0; next }
+        }
+        in_frontmatter && /^description:[ \t]*[^ \t]/ {
+            sub(/^description:[ \t]*/, ""); print; exit
         }
         in_frontmatter { next }
         /^[ \t]*#/ { next }  # Skip headers (with optional leading whitespace)

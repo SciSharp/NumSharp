@@ -84,260 +84,849 @@ pre code {
   }
 }
 
-/* Homepage */
+/* ==========================================================================
+   Home page (index.md, `_layout: landing`)
+
+   Three bands: the hero (headline, install, and a split editor that shows a
+   NumPy program beside its C# translation, with the "Crazier" button that
+   steps through ten wilder pairs), the integrations picture on its own night
+   ground with a link layer over every octagon, and the documentation map.
+   Colors come from the logo (an N of array cells: lavender faces, a cyan edge,
+   plum depth) and from the picture (its night ground and neon ecosystem
+   colors). The hero and the map follow the site theme; the picture's band is
+   night in both themes because the picture itself is.
+   ========================================================================== */
+
+/* The landing layout keeps DocFX's container (up to 1768px wide, 12px gutters,
+   1.6rem/2rem vertical padding). The home page draws full-width bands, so it
+   takes the whole width and sets its own column (.ns-wrap) inside each band.
+   :has() scopes this to the home page, so any other landing page keeps
+   DocFX's container. */
+body[data-layout="landing"] > main:has(.ns-home) {
+  max-width: none;
+  padding: 0;
+}
+
 .ns-home {
-  --ns-ink: #172033;
-  --ns-muted: #5f6b7a;
-  --ns-border: rgba(95, 107, 122, 0.22);
-  --ns-surface: #ffffff;
-  --ns-soft: #f6f8fb;
-  --ns-blue: #2563eb;
-  --ns-green: #0f8a6c;
-  --ns-amber: #b7791f;
-  color: var(--ns-ink);
+  --ns-mono: 'JetBrains Mono', 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
+  /* The logo's three colors. */
+  --ns-plum: #661f76;
+  --ns-lavender: #865fc5;
+  --ns-cyan: #3fc6ee;
+  /* The picture's ground and its NumSharp purple. */
+  --ns-night: #0b0720;
+  --ns-night-deep: #07051a;
+  --ns-cell: #2b1f5c;
+  --ns-neon: #b47cff;
+  --ns-pale: #d8c2ff;
+  --ns-mist: #f1e9ff;
+  --ns-mist-muted: #c3b6ec;
+  /* Theme-following surfaces of the editor and the install box. */
+  --ns-paper: #f8f6fd;
+  --ns-paper-line: #e6e0f3;
+  --ns-gutter: #a59cbd;
+  --ns-accent: #5b2f9e;
+  --ns-tok-keyword: #7a3fd0;
+  --ns-tok-string: #0b7fa8;
+  --ns-tok-number: #b4237a;
+  --ns-tok-comment: #8a8499;
+  --ns-row-hover: rgba(134, 95, 197, 0.12);
 }
 
 [data-bs-theme="dark"] .ns-home {
-  --ns-ink: #eef3f8;
-  --ns-muted: #b7c1cf;
-  --ns-border: rgba(183, 193, 207, 0.24);
-  --ns-surface: #151b24;
-  --ns-soft: #101720;
-  --ns-blue: #7aa7ff;
-  --ns-green: #5bd0af;
-  --ns-amber: #f0be63;
+  --ns-paper: #1b1f24;
+  --ns-paper-line: #343a40;
+  --ns-gutter: #6c7480;
+  --ns-accent: #d8c2ff;
+  --ns-tok-keyword: #c79dff;
+  --ns-tok-string: #5fd3f3;
+  --ns-tok-number: #ffa8e4;
+  --ns-tok-comment: #8b8fa3;
+  --ns-row-hover: rgba(180, 124, 255, 0.12);
 }
 
-.ns-home a {
-  text-decoration: none;
+/* Bootstrap colors inline code pink at 0.875em and gives pre a bottom margin;
+   inside the home page, code is set by the editor and the install box. */
+.ns-home code,
+.ns-home pre {
+  color: inherit;
+  font-family: var(--ns-mono);
+  font-size: inherit;
+  word-wrap: normal;
 }
 
-.ns-home-intro {
-  padding: 56px 0 32px;
-  border-bottom: 1px solid var(--ns-border);
+.ns-home pre {
+  margin: 0;
+  overflow: visible;
 }
 
-.ns-home-kicker {
-  margin: 0 0 10px;
-  color: var(--ns-green);
-  font-size: 0.86rem;
-  font-weight: 700;
-  text-transform: uppercase;
+.ns-wrap {
+  max-width: 1188px;
+  margin-inline: auto;
+  padding-inline: 24px;
 }
 
-.ns-home-title-row {
+/* ---- Hero --------------------------------------------------------------- */
+
+.ns-hero {
+  padding-top: 60px;
+  padding-bottom: 76px;
+}
+
+.ns-brand {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
+  margin: 0 0 18px;
+  color: var(--bs-emphasis-color);
+  font: 700 1.3rem var(--ns-mono);
 }
 
-.ns-home-logo {
-  width: 58px;
-  height: 58px;
-  display: block;
-  flex: 0 0 auto;
+.ns-brand img {
+  width: 40px;
+  height: 40px;
 }
 
 .ns-home h1 {
   margin: 0;
-  font-size: 3rem;
-  line-height: 1.05;
-  letter-spacing: 0;
+  color: var(--bs-emphasis-color);
+  font-size: clamp(2.6rem, 5.4vw, 4.6rem);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
 }
 
-.ns-home-lede {
-  max-width: 760px;
-  margin: 18px 0 0;
-  color: var(--ns-muted);
-  font-size: 1.16rem;
+.ns-hero-sub {
+  display: grid;
+  grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+  gap: 56px;
+  align-items: start;
+  margin-top: 26px;
+}
+
+.ns-lede {
+  margin: 0;
+  color: var(--bs-secondary-color);
+  font-size: 1.12rem;
   line-height: 1.6;
 }
 
-.ns-home-actions {
+.ns-actions {
   display: flex;
   flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ns-install {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  height: 44px;
+  padding: 0 5px 0 14px;
+  border: 1px solid var(--ns-paper-line);
+  border-radius: 8px;
+  background: var(--ns-paper);
+  font-size: 14.5px;
+}
+
+.ns-install code {
+  color: var(--bs-emphasis-color);
+  white-space: nowrap;
+}
+
+.ns-copy {
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--bs-emphasis-color);
+  background: var(--ns-paper-line);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ns-home .ns-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--ns-paper-line);
+  border-radius: 8px;
+  color: var(--bs-emphasis-color);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.ns-home .ns-btn:hover {
+  border-color: var(--ns-lavender);
+}
+
+.ns-home .ns-btn-primary {
+  border-color: var(--ns-plum);
+  color: #ffffff;
+  background: var(--ns-plum);
+}
+
+.ns-home .ns-btn-primary:hover {
+  border-color: #7d2a90;
+  background: #7d2a90;
+}
+
+[data-bs-theme="dark"] .ns-home .ns-btn-primary {
+  border-color: var(--ns-pale);
+  color: #1a0f2e;
+  background: var(--ns-pale);
+}
+
+[data-bs-theme="dark"] .ns-home .ns-btn-primary:hover {
+  border-color: #e6d7ff;
+  background: #e6d7ff;
+}
+
+.ns-home .ns-btn:focus-visible,
+.ns-copy:focus-visible {
+  outline: 2px solid var(--ns-lavender);
+  outline-offset: 2px;
+}
+
+/* ---- The split editor --------------------------------------------------- */
+
+.ns-editor {
+  margin-top: 30px;
+}
+
+/* The caption sits on the editor's top-left; it names the shown pair and is a
+   polite live region, so a screen reader hears each new rung's title. */
+.ns-ed-caption {
+  margin: 0 0 22px;
+  color: var(--bs-secondary-color);
+  font-size: 0.98rem;
+}
+
+.ns-ed-caption b {
+  margin-right: 0.4em;
+  color: var(--ns-accent);
+  font-family: var(--ns-mono);
+}
+
+/* The stage, not the frame, positions the button: the frame clips its rounded
+   corners with overflow:hidden, which would also clip a button that straddles
+   its top edge. */
+.ns-ed-stage {
+  position: relative;
+}
+
+.ns-ed-frame {
+  overflow: hidden;
+  border: 1px solid var(--ns-paper-line);
+  border-radius: 12px;
+  background: var(--ns-paper);
+  font-family: var(--ns-mono);
+  /* home.js fits this to the longest line of the shown pair. */
+  font-size: var(--ns-ed-font, 15px);
+  line-height: 1.75;
+}
+
+.ns-ed-tabs,
+.ns-ed-row,
+.ns-ed-run {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.ns-ed-tabs > * + *,
+.ns-ed-row > * + *,
+.ns-ed-run > * + * {
+  border-left: 1px solid var(--ns-paper-line);
+}
+
+.ns-ed-tabs > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--ns-paper-line);
+  color: var(--bs-emphasis-color);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.ns-ed-tabs small {
+  margin-left: auto;
+  color: var(--bs-secondary-color);
+  font-family: var(--bs-font-sans-serif);
+  font-size: 13px;
+}
+
+/* The "Crazier" button floats over the middle of the tab bar: keep each tab's
+   text out from under it (half the button's width plus a margin). */
+.ns-ed-tabs > :first-child {
+  padding-right: 96px;
+}
+
+.ns-ed-tabs > :last-child {
+  padding-left: 96px;
+}
+
+.ns-ed-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.ns-ed-dot-py {
+  background: linear-gradient(135deg, #3776ab 50%, #ffd43b 50%);
+}
+
+.ns-ed-dot-cs {
+  background: var(--ns-lavender);
+}
+
+/* Each language numbers its own cells. Side by side the numbers agree row for
+   row (a row holds one line of each, an empty cell included); stacked on a
+   narrow screen, each program still counts from 1. The counters live on the
+   frame and the cells, which always generate boxes, because the narrow layout
+   turns the rows into display:contents. */
+.ns-ed-frame {
+  counter-reset: ns-py ns-cs;
+}
+
+.ns-ed-row > :first-child {
+  counter-increment: ns-py;
+}
+
+.ns-ed-row > :last-child {
+  counter-increment: ns-cs;
+}
+
+.ns-ed-body {
+  padding: 10px 0;
+}
+
+.ns-ed-row:hover {
+  background: var(--ns-row-hover);
+}
+
+.ns-ed-row code {
+  display: block;
+  min-width: 0;
+  padding-right: 16px;
+  color: var(--bs-emphasis-color);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* The gutter is 3ch plus a 1.2ch gap: home.js counts those 4.2 characters
+   when it fits the font (GUTTER_CH), so change both together. */
+.ns-ed-row code::before {
+  content: counter(ns-py);
+  display: inline-block;
+  width: 3ch;
+  margin-right: 1.2ch;
+  color: var(--ns-gutter);
+  text-align: right;
+}
+
+.ns-ed-row code:last-child::before {
+  content: counter(ns-cs);
+}
+
+.ns-ed-run {
+  color: #ebe5ff;
+  background: var(--ns-night);
+}
+
+.ns-ed-run > div {
+  min-width: 0;
+  padding: 12px 20px 14px;
+}
+
+.ns-ed-run > div + div {
+  border-left-color: var(--ns-cell);
+}
+
+.ns-ed-cmd {
+  display: block;
+  color: #8d7fc0;
+}
+
+/* home.js sizes the printed result on its own (--ns-ed-out-font, never above
+   the code's size), so one wide result line does not shrink the code. */
+.ns-ed-run pre {
+  color: #ffffff;
+  font-size: var(--ns-ed-out-font, 1em);
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.ns-tok-k { color: var(--ns-tok-keyword); }
+.ns-tok-s { color: var(--ns-tok-string); }
+.ns-tok-n { color: var(--ns-tok-number); }
+.ns-tok-c { color: var(--ns-tok-comment); }
+
+/* A new rung fades in from just below, so the reader sees the code change. */
+.ns-ed-swap .ns-ed-body,
+.ns-ed-swap .ns-ed-run pre {
+  animation: ns-swap 0.24s ease-out;
+}
+
+@keyframes ns-swap {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* "Crazier": a cell of the logo (lavender face, cyan edge, plum depth) that
+   floats on the editor's top edge between the two panes and breathes until the
+   pointer reaches it. The meter under its label fills one cell per rung.
+   Placement uses the translate property and the breathing the scale property,
+   so a narrow screen can move the button without touching the animation. */
+.ns-crazier {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 2;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 24px 9px;
+  border: 0;
+  border-radius: 10px;
+  color: #ffffff;
+  background: var(--ns-lavender);
+  box-shadow: inset -7px 0 0 var(--ns-cyan), 4px 4px 0 var(--ns-plum);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  translate: -50% -50%;
+  animation: ns-breathe 2.4s ease-in-out infinite;
+}
+
+.ns-crazier:hover,
+.ns-crazier:focus-visible {
+  background: #7a52b8;
+  animation-play-state: paused;
+}
+
+.ns-crazier:focus-visible {
+  outline: 2px solid var(--ns-cyan);
+  outline-offset: 4px;
+}
+
+.ns-crazier-meter {
+  display: flex;
+  gap: 2px;
+}
+
+.ns-crazier-meter i {
+  width: 7px;
+  height: 4px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.ns-crazier-meter i.on {
+  background: var(--ns-cyan);
+}
+
+@keyframes ns-breathe {
+  0%,
+  100% {
+    scale: 1;
+  }
+
+  50% {
+    scale: 1.09;
+  }
+}
+
+/* ---- The integrations picture ------------------------------------------- */
+
+/* The band continues the picture's own ground (its color, its center glow and
+   its 10 x 20 px dot grid), so the picture sits in the page instead of on it. */
+.ns-band {
+  padding: 72px 0 64px;
+  color: var(--ns-mist);
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 62%, rgba(29, 17, 69, 0.95), rgba(29, 17, 69, 0) 72%),
+    radial-gradient(circle, var(--ns-cell) 0.75px, transparent 1.25px) 0 0 / 10px 20px,
+    var(--ns-night);
+}
+
+.ns-band-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: end;
+}
+
+.ns-home .ns-band h2 {
+  margin: 0;
+  color: var(--ns-mist);
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.ns-band-head p {
+  margin: 0;
+  color: var(--ns-mist-muted);
+  font-size: 1.02rem;
+}
+
+.ns-band-head a {
+  color: var(--ns-pale);
+}
+
+/* The link layer is positioned in percentages of this box, so the box must be
+   exactly the picture: no padding, and the side margins come from its width. */
+.ns-picture {
+  position: relative;
+  width: calc(100% - 48px);
+  max-width: 1324px;
+  margin: 40px auto 0;
+}
+
+.ns-picture-link {
+  display: block;
+  border-radius: 16px;
+}
+
+.ns-picture-link:focus-visible {
+  outline: 2px solid var(--ns-pale);
+  outline-offset: 4px;
+}
+
+.ns-picture img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Written by tools/gen_integrations_diagram.py: one .ns-hot per octagon, in
+   percentages of the picture. The layer lets clicks between octagons through
+   to the picture's own link (the Interoperability guide). */
+.ns-hot-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ns-hot {
+  --ns-eco: #b47cff;
+  position: absolute;
+  pointer-events: auto;
+}
+
+.ns-hot-py { --ns-eco: #ffd43b; }
+.ns-hot-net { --ns-eco: #3fc6ee; }
+.ns-hot-native { --ns-eco: #3dff9e; }
+.ns-hot-file { --ns-eco: #ff5fd7; }
+.ns-hot-core { --ns-eco: #b47cff; }
+
+.ns-hot:hover,
+.ns-hot:focus-within {
+  z-index: 2;
+}
+
+.ns-hot-box {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* The outline is the octagon the picture draws, in the hotspot's own
+   coordinates; non-scaling-stroke keeps the ring 2.5px at any picture width. */
+.ns-hot-box svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ns-hot-box polygon {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.14s ease, stroke 0.14s ease;
+}
+
+.ns-hot:hover polygon,
+.ns-hot:focus-within polygon {
+  fill: rgba(255, 255, 255, 0.07);
+  stroke: #ffffff;
+}
+
+.ns-hot:hover svg,
+.ns-hot:focus-within svg {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.7));
+}
+
+/* The two buttons under an octagon. The menu's top padding is the bridge the
+   pointer crosses from the octagon, so moving down to a button never leaves
+   the hover. Hidden by opacity rather than display, so the buttons stay in the
+   tab order and :focus-within can reveal them for keyboard readers. */
+.ns-hot-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--ns-eco) 55%, transparent));
+  transition: opacity 0.14s ease;
+}
+
+/* Under the side columns the buttons align with the octagon's outer edge, so
+   they never hang past the picture. */
+.ns-hot-left .ns-hot-menu {
+  left: 0;
+  transform: none;
+}
+
+.ns-hot-right .ns-hot-menu {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.ns-hot:hover .ns-hot-menu,
+.ns-hot:focus-within .ns-hot-menu {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Drawn like the picture's octagons: a chamfered box, a stroke and text in the
+   ecosystem's color on the night fill. The stroke is the button's own
+   background showing around an inset layer, because clip-path would cut a real
+   border off at the chamfers. */
+.ns-home .ns-hot-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  color: var(--ns-eco);
+  background: var(--ns-eco);
+  font: 700 12.5px/1 var(--ns-mono);
+  white-space: nowrap;
+  text-decoration: none;
+  clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px),
+                     calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
+}
+
+.ns-home .ns-hot-btn::before {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  background: var(--ns-night-deep);
+  clip-path: polygon(6.4px 0, calc(100% - 6.4px) 0, 100% 6.4px, 100% calc(100% - 6.4px),
+                     calc(100% - 6.4px) 100%, 6.4px 100%, 0 calc(100% - 6.4px), 0 6.4px);
+}
+
+/* The label, and DocFX's external-link mark (a.external::after on "Open
+   Library"), paint above the inset fill only when positioned. */
+.ns-home .ns-hot-btn > span,
+.ns-home .ns-hot-btn::after {
+  position: relative;
+}
+
+.ns-home .ns-hot-btn:hover::before {
+  background: #1d1145;
+}
+
+.ns-home .ns-hot-btn:focus-visible {
+  outline: none;
+  background: #ffffff;
+}
+
+/* ---- Documentation map -------------------------------------------------- */
+
+.ns-docs {
+  padding-top: 72px;
+  padding-bottom: 88px;
+}
+
+.ns-home .ns-docs h2 {
+  margin: 0;
+  color: var(--bs-emphasis-color);
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.ns-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 40px;
   margin-top: 28px;
 }
 
-.ns-home-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 0 16px;
-  border: 1px solid var(--ns-border);
-  border-radius: 8px;
-  color: var(--ns-ink);
-  background: var(--ns-surface);
+.ns-home .ns-groups h3 {
+  margin: 0 0 4px;
+  color: var(--ns-lavender);
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+[data-bs-theme="dark"] .ns-home .ns-groups h3 {
+  color: var(--ns-pale);
+}
+
+.ns-groups ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ns-groups li {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.ns-groups a {
+  color: var(--bs-emphasis-color);
+  font-size: 1.04rem;
   font-weight: 650;
+  text-decoration: none;
 }
 
-.ns-home-button-label {
-  text-align: center;
-  line-height: 1.15;
+.ns-groups a:hover {
+  color: var(--ns-accent);
+  text-decoration: underline;
 }
 
-.ns-home-button:hover,
-.ns-home-button:focus-visible {
-  border-color: var(--ns-blue);
-  color: var(--ns-blue);
+.ns-groups p {
+  margin: 2px 0 0;
+  color: var(--bs-secondary-color);
+  font-size: 0.95rem;
+  line-height: 1.5;
 }
 
-.ns-home-button-primary {
-  background: var(--ns-blue);
-  border-color: var(--ns-blue);
-  color: #ffffff;
-}
-
-.ns-home-button-primary:hover,
-.ns-home-button-primary:focus-visible {
-  color: #ffffff;
-  background: #1d4ed8;
-}
-
-.ns-home-code,
-.ns-home-section {
-  padding: 34px 0;
-  border-bottom: 1px solid var(--ns-border);
-}
-
-.ns-home-code-head,
-.ns-home-section-head {
-  max-width: 820px;
-  margin-bottom: 18px;
-}
-
-.ns-home h2 {
-  margin: 0;
-  font-size: 1.55rem;
-  line-height: 1.25;
-  letter-spacing: 0;
-}
-
-.ns-home-code-head p,
-.ns-home-section-head p {
-  margin: 8px 0 0;
-  color: var(--ns-muted);
-}
-
-.ns-code-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.35fr);
-  gap: 14px;
-}
-
-.ns-code-grid pre {
-  margin: 0;
-  min-height: 100%;
-  border: 1px solid var(--ns-border);
-  border-radius: 8px;
-  background: var(--ns-soft);
-}
-
-.ns-card-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.ns-doc-card {
-  min-width: 0;
-  min-height: 178px;
-  padding: 18px;
-  border: 1px solid var(--ns-border);
-  border-radius: 8px;
-  color: var(--ns-ink);
-  background: var(--ns-surface);
-}
-
-.ns-doc-card:hover,
-.ns-doc-card:focus-visible {
-  border-color: var(--ns-blue);
-  color: var(--ns-ink);
-}
-
-.ns-doc-card span {
-  display: block;
-  margin-bottom: 12px;
-  color: var(--ns-amber);
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.ns-doc-card strong {
-  display: block;
-  font-size: 1.08rem;
-  line-height: 1.35;
-}
-
-.ns-doc-card p {
-  margin: 10px 0 0;
-  color: var(--ns-muted);
-  line-height: 1.55;
-}
-
-.ns-feature-list {
-  display: grid;
-  gap: 12px;
-}
-
-.ns-feature-list div {
-  padding: 16px 18px;
-  border-left: 4px solid var(--ns-green);
-  background: var(--ns-soft);
-}
-
-.ns-feature-list strong {
-  display: block;
-  line-height: 1.35;
-}
-
-.ns-feature-list p {
-  margin: 6px 0 0;
-  color: var(--ns-muted);
-}
-
-.ns-home-links {
+.ns-elsewhere {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  padding: 28px 0 10px;
-}
-
-.ns-home-links a {
-  color: var(--ns-blue);
+  gap: 24px;
+  margin: 36px 0 0;
   font-weight: 650;
 }
 
+/* ---- Narrow screens and reduced motion ---------------------------------- */
+
 @media (max-width: 991.98px) {
-  .ns-home h1 {
-    font-size: 2.45rem;
-  }
-
-  .ns-code-grid,
-  .ns-card-grid {
+  .ns-hero-sub,
+  .ns-band-head,
+  .ns-groups {
     grid-template-columns: 1fr;
+    gap: 28px;
   }
 
+  /* The panes stack as two whole programs: the Python tab, its lines and its
+     output, then the same for C#. The rows hold one line of each language, so
+     the tabs, body, rows and run strip dissolve (display:contents) and every
+     cell becomes a flex item of the frame, ordered by language and part. */
+  .ns-ed-frame {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ns-ed-tabs,
+  .ns-ed-body,
+  .ns-ed-row,
+  .ns-ed-run {
+    display: contents;
+  }
+
+  .ns-ed-tabs > :first-child { order: 1; }
+  .ns-ed-row > :first-child { order: 2; }
+  .ns-ed-run > :first-child { order: 3; }
+  .ns-ed-tabs > :last-child { order: 4; }
+  .ns-ed-row > :last-child { order: 5; }
+  .ns-ed-run > :last-child { order: 6; }
+
+  .ns-ed-tabs > * + *,
+  .ns-ed-row > * + *,
+  .ns-ed-run > * + * {
+    border-left: 0;
+  }
+
+  /* The body's padding dissolved with it: space the code from its tab and
+     from its output instead. The tabs no longer meet under the button, so
+     they drop the room they kept for it (the same selectors as the wide rule,
+     which would otherwise win on specificity). */
+  .ns-ed-tabs > div {
+    margin-bottom: 8px;
+  }
+
+  .ns-ed-tabs > :first-child,
+  .ns-ed-tabs > :last-child {
+    padding-inline: 20px;
+  }
+
+  /* Stacked panes leave no middle to float over: the button takes its own
+     line above the editor, centered, and keeps breathing. */
+  .ns-crazier {
+    position: relative;
+    top: auto;
+    left: auto;
+    display: flex;
+    width: max-content;
+    margin: 0 auto 16px;
+    translate: none;
+  }
+
+  .ns-ed-run > div {
+    margin-top: 8px;
+    color: #ebe5ff;
+    background: var(--ns-night);
+  }
 }
 
 @media (max-width: 575.98px) {
-  .ns-home-intro {
-    padding-top: 34px;
+  .ns-hero {
+    padding-top: 36px;
   }
 
-  .ns-home h1 {
-    font-size: 2.1rem;
+  .ns-install {
+    font-size: 13px;
   }
 
-  .ns-home-lede {
-    font-size: 1rem;
+  /* An octagon is a few millimeters wide on a phone: the picture opens the
+     Interoperability guide as a whole instead. */
+  .ns-hot-layer {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ns-crazier,
+  .ns-ed-swap .ns-ed-body,
+  .ns-ed-swap .ns-ed-run pre {
+    animation: none;
   }
 
-  .ns-home-button {
-    width: 100%;
+  .ns-hot-box polygon,
+  .ns-hot-menu {
+    transition: none;
   }
-
 }
