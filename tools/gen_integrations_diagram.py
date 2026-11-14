@@ -29,13 +29,23 @@ short group of bright dots followed by a gap longer than the cable; a CSS animat
 fifty elements animate instead of one per dot. Readers who ask for reduced motion (prefers-reduced-motion) see the still
 picture.
 
-To change the picture, edit ITEMS (what an octagon says) and SIDES (where it sits; each side lists its octagons in
-reading order and the four sides keep each ecosystem on one arc of the ring), then run the script and commit the SVG. The
-script refuses a layout whose octagons overlap or leave the canvas.
+The docs home page (docs/website-src/index.md) shows the picture too, with a layer of links over it: hovering an octagon
+(or tabbing to it) rings it in white and opens two buttons in its color under it, "Open Library" (the library's own site)
+and "Open Docs" (its NumSharp docs page, which a click on the octagon itself also opens), and NumSharp's own octagon offers
+the repository and the Interoperability guide. An <img> cannot carry links, so that layer is plain HTML positioned in
+percentages of the picture; the script writes it between the INTEGRATIONS_LINKS markers of the home page from the same
+layout that draws the octagons, so a box can never drift away from the octagon it covers. The links come from each
+item's docs and site fields; DocFX resolves the .md paths and reports a page that disappears.
+
+To change the picture, edit ITEMS (what an octagon says and where its buttons go) and SIDES (where it sits; each side
+lists its octagons in reading order and the four sides keep each ecosystem on one arc of the ring), then run the script
+and commit both the SVG and the home page. The script refuses a layout whose octagons overlap or leave the canvas, and a
+home page whose markers are missing or repeated.
 
 Run with any Python 3.8 or newer (standard library only):
-    python tools/gen_integrations_diagram.py            write the SVG
-    python tools/gen_integrations_diagram.py --check    exit 1 when the committed SVG differs from a fresh render
+    python tools/gen_integrations_diagram.py            write the SVG and the home page's link layer
+    python tools/gen_integrations_diagram.py --check    exit 1 when the committed SVG or link layer differs from a fresh
+                                                        render
 """
 import html
 import math
@@ -48,6 +58,12 @@ from dataclasses import dataclass
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 OUT = os.path.join(ROOT, "docs", "website-src", "images", "integrations.svg")
 LOGO = os.path.join(ROOT, "docs", "website-src", "images", "numsharp.icon.svg")
+HOME = os.path.join(ROOT, "docs", "website-src", "index.md")
+
+# The home page's link layer lives between these two lines of index.md; everything between them is rewritten on each run.
+# Each marker must stand on a line of its own, exactly once, inside the picture's container (see render_links()).
+INTEGRATIONS_LINKS_BEGIN = "<!-- integrations-links:begin -->"
+INTEGRATIONS_LINKS_END = "<!-- integrations-links:end -->"
 
 # ------------------------------------------------------------------------------------------------------------------------
 # Geometry and type
@@ -85,34 +101,63 @@ class Item:
         caption: How an NDArray crosses into it, in at most about 25 characters (a longer one widens the octagon and can
             push it into its neighbours, which the layout check then refuses).
         eco: The ecosystem key into ECOSYSTEMS; it decides the color, the icon and the legend entry.
+        docs: The NumSharp docs page for it, relative to docs/website-src, as the home page links it ("Open Docs" and a
+            click on the octagon). A .md path, optionally with a #heading anchor: DocFX turns it into the .html address
+            and warns when the page is gone, which a hard-coded .html link would hide.
+        site: The library's own website ("Open Library"); DocFX opens it in a new tab with its external-link mark.
     """
     key: str
     name: str
     caption: str
     eco: str
+    docs: str
+    site: str
 
 
 ITEMS = [
-    Item("numpy", "NumPy", "zero-copy, both ways", "py"),
-    Item("torch", "PyTorch", "zero-copy CPU tensors", "py"),
-    Item("pandas", "pandas", "DataFrame · Series", "py"),
-    Item("scipy", "SciPy", "signal · optimize", "py"),
-    Item("sklearn", "scikit-learn", "fit · predict", "py"),
-    Item("mpl", "Matplotlib", "plots · pixel buffer", "py"),
-    Item("pillow", "Pillow", "Image.frombuffer", "py"),
-    Item("opencv", "OpenCV", "draws in place", "py"),
-    Item("arrow", "PyArrow", "zero-copy buffers", "py"),
-    Item("polars", "polars", "zero-copy Series", "py"),
-    Item("ort", "ONNX Runtime", "OrtValue · Run()", "net"),
-    Item("mlnet", "ML.NET", "IDataView", "net"),
-    Item("tensors", "System.Numerics.Tensors", "Tensor<T> · TensorSpan<T>", "net"),
-    Item("torchsharp", "TorchSharp", "zero-copy torch.Tensor", "net"),
-    Item("drawing", "System.Drawing", "Bitmap ⇄ NDArray", "net"),
-    Item("numpynet", "Numpy.NET", "PyObject handoff", "net"),
-    Item("openblas", "OpenBLAS", "BLAS · LAPACK", "native"),
-    Item("npy", ".npy / .npz", "byte-exact np.save", "file"),
+    Item("numpy", "NumPy", "zero-copy, both ways", "py",
+         "docs/interop/pythonnet-numpy.md", "https://numpy.org/"),
+    Item("torch", "PyTorch", "zero-copy CPU tensors", "py",
+         "docs/interop/pytorch.md", "https://pytorch.org/"),
+    Item("pandas", "pandas", "DataFrame · Series", "py",
+         "docs/interop/pandas.md", "https://pandas.pydata.org/"),
+    Item("scipy", "SciPy", "signal · optimize", "py",
+         "docs/interop/pythonnet-numpy.md", "https://scipy.org/"),
+    Item("sklearn", "scikit-learn", "fit · predict", "py",
+         "docs/interop/pythonnet-numpy.md", "https://scikit-learn.org/"),
+    Item("mpl", "Matplotlib", "plots · pixel buffer", "py",
+         "docs/interop/pythonnet-numpy.md", "https://matplotlib.org/"),
+    Item("pillow", "Pillow", "Image.frombuffer", "py",
+         "docs/interop/np-frombuffer.md#pillow", "https://python-pillow.org/"),
+    Item("opencv", "OpenCV", "draws in place", "py",
+         "docs/interop/np-frombuffer.md#opencv", "https://opencv.org/"),
+    Item("arrow", "PyArrow", "zero-copy buffers", "py",
+         "docs/interop/np-frombuffer.md#pyarrow", "https://arrow.apache.org/docs/python/"),
+    Item("polars", "polars", "zero-copy Series", "py",
+         "docs/interop/np-frombuffer.md#seven-libraries-verbatim", "https://pola.rs/"),
+    Item("ort", "ONNX Runtime", "OrtValue · Run()", "net",
+         "docs/interop/onnxruntime.md", "https://onnxruntime.ai/"),
+    Item("mlnet", "ML.NET", "IDataView", "net",
+         "docs/interop/mlnet.md", "https://dotnet.microsoft.com/apps/ai/ml-dotnet"),
+    Item("tensors", "System.Numerics.Tensors", "Tensor<T> · TensorSpan<T>", "net",
+         "docs/interop/system-numerics-tensors.md", "https://www.nuget.org/packages/System.Numerics.Tensors"),
+    Item("torchsharp", "TorchSharp", "zero-copy torch.Tensor", "net",
+         "docs/interop/torchsharp.md", "https://github.com/dotnet/TorchSharp"),
+    Item("drawing", "System.Drawing", "Bitmap ⇄ NDArray", "net",
+         "docs/extensions/bitmap.md", "https://learn.microsoft.com/dotnet/api/system.drawing"),
+    Item("numpynet", "Numpy.NET", "PyObject handoff", "net",
+         "docs/interop/numpy-net.md", "https://github.com/SciSharp/Numpy.NET"),
+    Item("openblas", "OpenBLAS", "BLAS · LAPACK", "native",
+         "docs/interop/openblas.md", "https://www.openblas.net/"),
+    Item("npy", ".npy / .npz", "byte-exact np.save", "file",
+         "docs/fundamentals/io.md", "https://numpy.org/doc/stable/reference/generated/numpy.lib.format.html"),
 ]
 BY_KEY = {item.key: item for item in ITEMS}
+
+# NumSharp's own octagon on the home page: "Open Library" is the repository, "Open Docs" (and a click on the octagon) the
+# Interoperability guide, which introduces every box around it.
+CORE = Item("numsharp", "NumSharp", "NumPy for .NET", "core",
+            "docs/interop/index.md", "https://github.com/SciSharp/NumSharp")
 
 # Each side in reading order (top and bottom left to right, left and right top to bottom). Going round the ring
 # clockwise, Python fills the bottom-left, the left column and the top-left; native, .NET and files follow on the right.
@@ -671,35 +716,137 @@ def render(layout):
     return "\n".join(out) + "\n"
 
 
+def render_links(layout):
+    """The home page's link layer over the picture: one hotspot per octagon, NumSharp's included, as HTML.
+
+    Each hotspot is a box positioned in percentages of the picture, so it scales with the <img> under it at any width.
+    It holds a link that covers the octagon (a click opens the docs page; it stays out of the tab order and away from
+    screen readers because "Open Docs" repeats it) with an SVG outline of the same octagon, which the stylesheet rings
+    on hover, and the two buttons "Open Library" and "Open Docs", which the stylesheet shows under the octagon on hover
+    or when a button has the keyboard focus. Each button's visually hidden suffix names the library, so a screen reader
+    hears "Open Docs PyTorch" instead of eighteen identical "Open Docs".
+
+    The side class tells the stylesheet where the buttons fit: under the left column they start at the octagon's left
+    edge and under the right column they end at its right edge, so they never leave the picture; elsewhere they are
+    centered.
+
+    Args:
+        layout: Where everything goes (make_layout()); the same layout render() draws, so the boxes match the octagons.
+
+    Returns:
+        The HTML lines between the markers, without the markers, ending in a newline; the same bytes for one input.
+    """
+    width, height = COLS * CW + 2 * PAD, layout.rows * CH + 2 * PAD
+    sides = {key: side for side, keys in SIDES.items() for key in keys}
+    entries = [(CORE, layout.center, "center")] + [(BY_KEY[key], box, sides[key]) for key, box in layout.sats.items()]
+
+    def pct(value, whole):
+        """A CSS percentage of the picture, to four decimals without trailing zeros.
+
+        Four decimals place a box within 0.06 px on the 1324 px picture; trimming the zeros keeps the generated lines
+        short and the output byte-stable (17.145% stays 17.145%, not 17.1450%).
+
+        Args:
+            value: A length or position in the picture's px.
+            whole: The picture's width or height in px.
+
+        Returns:
+            The value as a percentage string such as "17.145%".
+        """
+        return f"{value / whole * 100:.4f}".rstrip("0").rstrip(".") + "%"
+
+    lines = ["<!-- Generated by tools/gen_integrations_diagram.py from its ITEMS and layout; edit the script, then run it. -->",
+             '<div class="ns-hot-layer">']
+    for item, box, side in entries:
+        # The octagon's outline exactly as octagon_points() draws it, moved by the card's margin and expressed in the
+        # hotspot's own coordinates (its top-left corner is the octagon's left and top sides).
+        x0, x1 = PAD + (box.col + 0.5) * CW, PAD + (box.col + box.w - 0.5) * CW
+        y0, y1 = PAD + (box.row + 0.5) * CH, PAD + (box.row + box.h - 0.5) * CH
+        w, h, k = x1 - x0, y1 - y0, CW
+        points = [(0, k), (k, 0), (w - k, 0), (w, k), (w, h - k), (w - k, h), (k, h), (0, h - k)]
+        outline = " ".join(f"{px:g},{py:g}" for px, py in points)
+        style = f"left:{pct(x0, width)};top:{pct(y0, height)};width:{pct(w, width)};height:{pct(h, height)}"
+        name = html.escape(item.name)
+        docs, site = html.escape(item.docs), html.escape(item.site)
+        lines.append(
+            f'<div class="ns-hot ns-hot-{item.eco} ns-hot-{side}" style="{style}">'
+            f'<a class="ns-hot-box" href="{docs}" tabindex="-1" aria-hidden="true">'
+            f'<svg viewBox="0 0 {w:g} {h:g}" preserveAspectRatio="none" focusable="false"><polygon points="{outline}"/></svg></a>'
+            f'<span class="ns-hot-menu">'
+            f'<a class="ns-hot-btn" href="{site}"><span>Open Library</span><span class="visually-hidden"> {name}</span></a>'
+            f'<a class="ns-hot-btn" href="{docs}"><span>Open Docs</span><span class="visually-hidden"> {name}</span></a>'
+            f'</span></div>')
+    lines.append("</div>")
+    return "\n".join(lines) + "\n"
+
+
+def splice_home(text, block):
+    """The home page with its link layer replaced by a fresh one.
+
+    Args:
+        text: The home page's current Markdown (docs/website-src/index.md).
+        block: The new layer (render_links()), which goes between the two marker lines.
+
+    Returns:
+        The home page with everything between the markers replaced; the rest of the file is untouched.
+
+    Raises:
+        ValueError: When a marker is missing or appears more than once, or the end marker comes first: rewriting a
+            guess would destroy hand-written content, so the script stops instead.
+    """
+    begin, end = text.count(INTEGRATIONS_LINKS_BEGIN), text.count(INTEGRATIONS_LINKS_END)
+    if begin != 1 or end != 1:
+        raise ValueError(f"{os.path.relpath(HOME, ROOT)} must hold {INTEGRATIONS_LINKS_BEGIN} and "
+                         f"{INTEGRATIONS_LINKS_END} exactly once each (found {begin} and {end})")
+    head, rest = text.split(INTEGRATIONS_LINKS_BEGIN)
+    old, tail = rest.split(INTEGRATIONS_LINKS_END)
+    if not old.startswith("\n"):
+        raise ValueError(f"{INTEGRATIONS_LINKS_BEGIN} must end its line in {os.path.relpath(HOME, ROOT)}")
+    return f"{head}{INTEGRATIONS_LINKS_BEGIN}\n{block}{INTEGRATIONS_LINKS_END}{tail}"
+
+
 def main(argv):
-    """Writes the SVG, or with --check compares the committed one to a fresh render.
+    """Writes the SVG and the home page's link layer, or with --check compares the committed ones to a fresh render.
 
     Args:
         argv: The command-line arguments after the script name.
 
     Returns:
-        The process exit code: 0 on success, 1 when --check finds the committed SVG out of date.
+        The process exit code: 0 on success, 1 when --check finds the committed SVG or link layer out of date.
 
     Raises:
-        ValueError: From make_layout() or numsharp_logo() when the layout or the logo is unusable.
-        OSError: When the logo cannot be read or the SVG cannot be written.
+        ValueError: From make_layout() or numsharp_logo() when the layout or the logo is unusable, or from splice_home()
+            when the home page's markers are missing or repeated.
+        OSError: When the logo or the home page cannot be read, or a file cannot be written.
     """
-    svg = render(make_layout())
+    layout = make_layout()
+    svg = render(layout)
+    with open(HOME, encoding="utf-8", newline="") as f:
+        home = f.read()
+    # newline="" keeps the home page's own line endings: a CRLF checkout must compare and write back byte-identical
+    # outside the generated block, and the block itself uses the file's ending so the file never mixes the two.
+    eol = "\r\n" if "\r\n" in home else "\n"
+    new_home = splice_home(home, render_links(layout).replace("\n", eol))
     if "--check" in argv:
         try:
             with open(OUT, encoding="utf-8") as f:
                 current = f.read()
         except FileNotFoundError:
             current = None
-        if current != svg:
-            print(f"{os.path.relpath(OUT, ROOT)} is out of date: run python tools/gen_integrations_diagram.py")
+        stale = [path for path, fresh, now in ((OUT, svg, current), (HOME, new_home, home)) if fresh != now]
+        for path in stale:
+            print(f"{os.path.relpath(path, ROOT)} is out of date: run python tools/gen_integrations_diagram.py")
+        if stale:
             return 1
-        print(f"{os.path.relpath(OUT, ROOT)} is up to date")
+        print(f"{os.path.relpath(OUT, ROOT)} and the link layer of {os.path.relpath(HOME, ROOT)} are up to date")
         return 0
     # newline="\n": the same bytes on every OS, so --check holds across machines
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         f.write(svg)
-    print(f"wrote {os.path.relpath(OUT, ROOT)} ({len(svg.encode('utf-8')):,} bytes, {len(ITEMS)} integrations)")
+    with open(HOME, "w", encoding="utf-8", newline="") as f:
+        f.write(new_home)
+    print(f"wrote {os.path.relpath(OUT, ROOT)} ({len(svg.encode('utf-8')):,} bytes, {len(ITEMS)} integrations) and the "
+          f"link layer of {os.path.relpath(HOME, ROOT)} ({len(ITEMS) + 1} hotspots)")
     return 0
 
 
