@@ -96,6 +96,14 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
   link after it had pushed it 23-29 px off that axis, so the link is out of flow (still shown on hover).
   `tools/gen_integrations_diagram.py --check` passes (the link layer is untouched).
 
+## Final verification
+
+A clean docfx 2.78.4 build of master after phase 5 (`0ed98b11`), served over HTTP, in an isolated headless
+Chromium: walking every topic through every example at 1920 / 1440 / 1024 px leaves no code line overflowing (code
+9.2-12.8 px); docs/intro.html and docs/interop/index.html keep their 282.6 px menu at 1440 and have no picker (no
+other page uses the home page's classes); under `prefers-reduced-motion: reduce` the ring is complete 60 ms after
+the hover; no console error on any page or step.
+
 ## Open for rediscussion
 
 Collected while executing; the owner reviews them all after phase 5.
