@@ -16,7 +16,7 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
 | 1 | The docs side menu on the home page, narrower | done: 252 px, sticky; phone drawer from the action bar |
 | 2 | The NumPy / C# editor 20% smaller | done: 912 px (was 1140), code at most 12.8 px (was 16) |
 | 3 | The example title centered above the button | done: centers equal (x 846 at 1440), gap 10 px |
-| 4 | "Pick": six topic buttons around the button, then "Crazier" inside the picked topic | pending |
+| 4 | "Pick": six topic buttons around the button, then "Crazier" inside the picked topic | done: mouse, keyboard, touch verified |
 | 5 | The integrations picture 30% smaller, "Integrations" centered above the section | pending |
 
 ## Phase 1: the side menu
@@ -71,6 +71,16 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
   Text, Random, Linear algebra, Signals, Simulations.
 - Keyboard: Tab reaches the ring while it is open, Escape closes it and returns focus to the center button. Touch:
   a tap on "Pick" opens the ring; "Crazier" advances.
+- Done. Markup: `.ns-pick` (the button plus `.ns-pick-ring`) replaces the lone button; home.js creates one
+  `.ns-pick-opt` per topic. The ring sits on its own soft panel (the hover bridge between options, and legibility
+  over the code); options fly out of the button, staggered; the topic on show wears the button's face (lavender,
+  cyan edge); the caption fades out while the ring is open (its top corners cover it). "Pick" opens on hover at
+  once, "Crazier" after resting 350 ms (so repeated clicks never flash the ring), and a click on "Crazier" keeps it
+  closed until the pointer leaves. Measured in headless Chromium: the six options in two columns beside the button
+  (top / middle / bottom rows), Pick -> Random 1/2 (label Crazier, meter 10) -> Random 2/2 (label Pick, meter 11);
+  resting on Crazier is closed at 150 ms and open at 750 ms with the topic marked; keyboard Tab / Enter / Escape
+  path and touch tap / tap-outside path as designed; ring fits 1440, 1024, 800 (stacked) and 390 px; dark theme;
+  no console errors.
 
 ## Phase 5: integrations
 
@@ -93,3 +103,15 @@ Collected while executing; the owner reviews them all after phase 5.
 4. FizzBuzz's printed line (72 characters) still scrolls in its terminal at 1280 px and below, at the smallest
    output size (9.2 px); master's design scrolls a line that cannot fit (journey5 wraps it instead). Placeholder
    content, so it may go away with the owner's picks.
+5. "The picked gets replaced by the Crazier" was read as the center button: "Pick" becomes "Crazier" after a pick,
+   and the picked topic stays in the ring, marked. The other reading (the picked topic's own slot turns into
+   "Crazier") is a small change in `sync()`.
+6. At a topic's last example the button says "Pick" again (the old ladder said "Start over"); picking the same
+   topic restarts it.
+7. Hover timing: "Pick" opens the ring at once, "Crazier" after 350 ms of rest (HOVER_INTENT_MS), and the ring
+   closes 220 ms after the pointer leaves (CLOSE_DELAY_MS).
+8. Placeholder topics (the owner picks the examples next): Arrays (the hero again, broadcast table), Text (argsort,
+   FizzBuzz), Random (seed 42, Monte Carlo pi), Linear algebra (einsum distances, Markov chain), Signals (FFT, the
+   only one-example topic), Simulations (Game of Life, Mandelbrot). Topic names are the button labels.
+9. On touch screens there is no hover: "Pick" opens the ring on tap, "Crazier" only steps, and the ring comes back
+   at a topic's end ("Pick").

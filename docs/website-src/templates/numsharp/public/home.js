@@ -10,8 +10,9 @@
 //   2. The split editor: syntax colors for both languages, a font size that
 //      fits the longest line of the shown pair into the narrower pane (within
 //      bounds the stylesheet's --ns-ed-scale shrinks with the editor), and the
-//      "Crazier" button that steps through ten wilder pairs (each verified to
-//      print exactly what NumPy prints) and back to the first.
+//      picker: a "Pick" button that opens a ring of up to six topics around
+//      itself, then says "Crazier" and steps through the picked topic's pairs
+//      (each verified to print exactly what NumPy prints).
 //   3. Nothing for the integrations picture: its link layer is plain HTML and
 //      CSS written by tools/gen_integrations_diagram.py.
 
@@ -73,6 +74,32 @@ const GUTTER_CH = 4.2
  * @type {number}
  */
 const COPY_FEEDBACK_MS = 1600
+
+/**
+ * The ring's slots, in the order topics fill them: the page's topics, in the
+ * document order of their first template, take the top row (left, right), the
+ * button's row (left, right), then the bottom row. The stylesheet places each
+ * slot (`.ns-pick-opt[data-slot]`); a seventh topic has no slot and is not
+ * offered.
+ * @type {string[]}
+ */
+const RING_SLOTS = ['tl', 'tr', 'l', 'r', 'bl', 'br']
+
+/**
+ * How long the pointer must rest on "Crazier" before the ring opens, in ms.
+ * Long enough that clicking "Crazier" again and again never flashes the ring
+ * over the code; short enough to read as hovering. "Pick" opens at once,
+ * because the ring is the only thing it does.
+ * @type {number}
+ */
+const HOVER_INTENT_MS = 350
+
+/**
+ * How long the ring stays open after the pointer leaves the picker, in ms, so
+ * a pointer that overshoots an option or cuts a corner does not close it.
+ * @type {number}
+ */
+const CLOSE_DELAY_MS = 220
 
 /**
  * Escape text for insertion as HTML element content.
@@ -296,20 +323,65 @@ function fitEditorFont(frame) {
 /**
  * One pair the editor can show.
  * @typedef {object} EditorExample
- * @property {string} title what the pair does, for the caption (empty for the
- *   first pair, which has its own caption).
- * @property {Node[]} rows the `.ns-ed-row` elements, uncolored.
+ * @property {string} title what the pair does, for the caption.
+ * @property {Node[]} rows the `.ns-ed-row` elements, uncolored; shown as
+ *   clones, so the template's own nodes are never moved or colored.
  * @property {string} output what both programs print.
  */
 
 /**
- * Wire the split editor and its "Crazier" button.
+ * One topic the ring offers: its button's label and its pairs, mildest first.
+ * @typedef {object} EditorTopic
+ * @property {string} name the label, from the templates' `data-topic`.
+ * @property {EditorExample[]} examples the topic's pairs in document order;
+ *   "Crazier" steps through them in this order.
+ */
+
+/**
+ * Read the page's topics from its `<template data-ns-example>` elements.
+ *
+ * A template's `data-topic` names the topic it belongs to; topics keep the
+ * document order of their first template, and each topic's pairs keep their
+ * own document order. A template without `data-topic` belongs to no topic and
+ * is unreachable, so it is skipped rather than guessed into one.
+ * @param {HTMLElement} editor the `[data-ns-editor]` element.
+ * @returns {EditorTopic[]} at most {@link RING_SLOTS}.length topics (the ring
+ *   has no slot for more); empty when the page has no topic templates.
+ */
+function collectTopics(editor) {
+  /** @type {Map<string, EditorTopic>} */
+  const byName = new Map()
+  for (const template of editor.querySelectorAll('template[data-ns-example]')) {
+    const name = (template.dataset.topic || '').trim()
+    if (!name) continue
+    let topic = byName.get(name)
+    if (!topic) {
+      topic = { name, examples: [] }
+      byName.set(name, topic)
+    }
+    const out = template.content.querySelector('[data-ns-out]')
+    topic.examples.push({
+      title: template.dataset.title || '',
+      rows: Array.from(template.content.querySelectorAll('.ns-ed-row')),
+      output: out ? out.textContent : ''
+    })
+  }
+  return Array.from(byName.values()).slice(0, RING_SLOTS.length)
+}
+
+/**
+ * Wire the split editor and its picker: the "Pick" button and the ring of
+ * topics around it.
  *
  * The first pair is whatever the page renders inside `[data-ns-body]`, so it
- * shows without JavaScript; the wilder pairs are inert `<template
- * data-ns-example>` elements. The button walks the ladder one rung per click
- * and, on the last rung, offers "Start over" back to the first pair. The button
- * stays hidden (its `hidden` attribute) when the page has no templates, so it
+ * shows without JavaScript; every other pair is an inert `<template
+ * data-ns-example data-topic>`. The button says "Pick": hovering it (with a
+ * mouse or pen), focusing it from the keyboard, or clicking it opens the ring
+ * of up to six topics. Picking one shows its first pair, and the button says
+ * "Crazier" for as long as the topic has a wilder pair left; on the last one it
+ * says "Pick" again. Resting on "Crazier" opens the ring too, with the topic on
+ * show marked, so the reader can change topic at any rung. The picker stays
+ * hidden (its `hidden` attribute) when the page has no topic templates, so it
  * never offers an action that does nothing.
  * @param {HTMLElement} editor the `[data-ns-editor]` element.
  * @returns {void}
@@ -319,27 +391,12 @@ function installEditor(editor) {
   const body = editor.querySelector('[data-ns-body]')
   const outputs = Array.from(editor.querySelectorAll('.ns-ed-run [data-ns-out]'))
   const caption = editor.querySelector('[data-ns-caption]')
+  const picker = editor.querySelector('[data-ns-pick]')
   const button = editor.querySelector('[data-ns-crazier]')
   const label = editor.querySelector('[data-ns-crazier-label]')
   const meter = editor.querySelector('[data-ns-meter]')
+  const ring = editor.querySelector('[data-ns-ring]')
   if (!frame || !body || outputs.length === 0) return
-
-  /** @type {EditorExample[]} */
-  const examples = [{
-    title: '',
-    rows: Array.from(body.querySelectorAll('.ns-ed-row')).map(row => row.cloneNode(true)),
-    output: outputs[0].textContent
-  }]
-  for (const template of editor.querySelectorAll('template[data-ns-example]')) {
-    const out = template.content.querySelector('[data-ns-out]')
-    examples.push({
-      title: template.dataset.title || '',
-      rows: Array.from(template.content.querySelectorAll('.ns-ed-row')),
-      output: out ? out.textContent : ''
-    })
-  }
-  const firstCaption = caption ? caption.innerHTML : ''
-  const top = examples.length - 1
 
   highlightBody(body)
   fitEditorFont(frame)
@@ -348,41 +405,178 @@ function installEditor(editor) {
   new ResizeObserver(() => fitEditorFont(frame)).observe(frame)
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitEditorFont(frame))
 
-  if (!button || !label || !meter || top < 1) return
+  const topics = collectTopics(editor)
+  if (!picker || !button || !label || !meter || !ring || topics.length === 0) return
 
-  // One cell per rung, filled up to the current one.
-  meter.replaceChildren(...examples.slice(1).map(() => document.createElement('i')))
+  /** @type {EditorTopic|null} the topic on show; null until the first pick. */
+  let current = null
+  /** Index of the pair on show within {@link current}'s examples. */
   let level = 0
+  /** Whether the ring is open (mirrored to `data-open` and `aria-expanded`). */
+  let open = false
+  /** Pending hover-intent open, and pending delayed close (timer ids). */
+  let openTimer = 0
+  let closeTimer = 0
+  /**
+   * Set by a click on "Crazier" until the pointer leaves the picker: the
+   * reader is stepping through the topic, and a ring opening under the
+   * resting pointer would cover the code they just asked for.
+   */
+  let hoverSuppressed = false
+
+  // One option per topic, in its slot. Each option keeps its place in the
+  // ring as --i, which staggers the options' flight out of the button.
+  const options = topics.map((topic, index) => {
+    const option = document.createElement('button')
+    option.type = 'button'
+    option.className = 'ns-pick-opt'
+    option.dataset.slot = RING_SLOTS[index]
+    option.style.setProperty('--i', String(index))
+    option.textContent = topic.name
+    option.setAttribute('aria-current', 'false')
+    option.addEventListener('click', () => choose(topic))
+    return option
+  })
+  ring.replaceChildren(...options)
 
   /**
-   * Show one rung: its rows, its output in both terminals, the caption, the
-   * meter and the button's next action.
-   * @param {number} next the index into `examples`.
+   * Whether the button's next click steps to a wilder pair (true) or opens
+   * the ring (false: before the first pick, and on a topic's last pair).
+   * @returns {boolean}
+   */
+  function canStep() {
+    return current !== null && level < current.examples.length - 1
+  }
+
+  /**
+   * Open or close the ring. Cancels any pending hover-intent open or delayed
+   * close, so the latest decision wins.
+   * @param {boolean} next true to open, false to close.
    * @returns {void}
    */
-  function show(next) {
-    level = next
-    const example = examples[level]
+  function setOpen(next) {
+    clearTimeout(openTimer)
+    clearTimeout(closeTimer)
+    if (open === next) return
+    open = next
+    picker.toggleAttribute('data-open', open)
+    button.setAttribute('aria-expanded', String(open))
+  }
+
+  /**
+   * Bring the button's label and meter, and the options' current-topic mark,
+   * in line with {@link current} and {@link level}.
+   * @returns {void}
+   */
+  function sync() {
+    label.textContent = canStep() ? 'Crazier' : 'Pick'
+    // One meter cell per pair of the topic, lit up to the one on show; no
+    // topic, no cells (the stylesheet hides the empty meter).
+    meter.replaceChildren(...(current ? current.examples.map((_, index) => {
+      const cell = document.createElement('i')
+      if (index <= level) cell.className = 'on'
+      return cell
+    }) : []))
+    options.forEach((option, index) => option.setAttribute('aria-current', String(topics[index] === current)))
+  }
+
+  /**
+   * Show the pair at {@link level} of {@link current}: its rows, its output in
+   * both terminals and the caption "<topic> k/n <title>", then refit the font
+   * and replay the swap animation.
+   * @returns {void}
+   */
+  function show() {
+    const example = current.examples[level]
     body.replaceChildren(...example.rows.map(row => row.cloneNode(true)))
     highlightBody(body)
     for (const pre of outputs) pre.textContent = example.output
     if (caption) {
-      caption.innerHTML = level === 0
-        ? firstCaption
-        : `<b>Crazy ${level}/${top}</b> ${escapeHtml(example.title)}`
+      caption.innerHTML = `<b>${escapeHtml(current.name)} ${level + 1}/${current.examples.length}</b> ${escapeHtml(example.title)}`
     }
-    meter.querySelectorAll('i').forEach((cell, index) => cell.classList.toggle('on', index < level))
-    label.textContent = level === top ? 'Start over' : 'Crazier'
     fitEditorFont(frame)
     // Restart the swap animation: removing the class, forcing a style flush,
     // and adding it again replays it even on two quick clicks.
     frame.classList.remove('ns-ed-swap')
     void frame.offsetWidth
     frame.classList.add('ns-ed-swap')
+    sync()
   }
 
-  button.hidden = false
-  button.addEventListener('click', () => show(level === top ? 0 : level + 1))
+  /**
+   * Pick a topic: show its first pair and close the ring. Focus moves to the
+   * button, so a keyboard reader goes on with Enter ("Crazier") and the
+   * option, about to be hidden, does not drop focus to the page.
+   * @param {EditorTopic} topic the topic of the clicked option.
+   * @returns {void}
+   */
+  function choose(topic) {
+    current = topic
+    level = 0
+    show()
+    setOpen(false)
+    button.focus({ preventScroll: true })
+  }
+
+  button.addEventListener('click', event => {
+    if (canStep()) {
+      level++
+      show()
+      setOpen(false)
+      hoverSuppressed = true
+      return
+    }
+    // "Pick" opens the ring (a click never closes it: a hover may have opened
+    // it a moment before). From the keyboard (a click with detail 0), focus
+    // moves into the ring, onto the topic on show or the first one.
+    setOpen(true)
+    if (event.detail === 0) options[Math.max(0, topics.indexOf(current))].focus()
+  })
+
+  // Hover: only a mouse or pen hovers; a touch's pointerenter comes with its
+  // tap, which the click handler already answers.
+  picker.addEventListener('pointerenter', event => {
+    clearTimeout(closeTimer)
+    if (event.pointerType === 'touch' || hoverSuppressed || open) return
+    clearTimeout(openTimer)
+    openTimer = setTimeout(() => setOpen(true), canStep() ? HOVER_INTENT_MS : 0)
+  })
+  picker.addEventListener('pointerleave', () => {
+    clearTimeout(openTimer)
+    hoverSuppressed = false
+    // A keyboard reader inside the ring keeps it open whatever the mouse does.
+    const focused = document.activeElement
+    if (focused instanceof HTMLElement && picker.contains(focused) && focused.matches(':focus-visible')) return
+    closeTimer = setTimeout(() => setOpen(false), CLOSE_DELAY_MS)
+  })
+
+  // Keyboard: Tab onto the button opens the ring so the next Tab reaches the
+  // options; focus leaving the picker closes it; Escape closes it and returns
+  // to the button. A mouse click also focuses the button, but without
+  // :focus-visible, so it does not open the ring a second way.
+  picker.addEventListener('focusin', event => {
+    clearTimeout(closeTimer)
+    if (event.target === button && !picker.contains(event.relatedTarget) && button.matches(':focus-visible')) {
+      setOpen(true)
+    }
+  })
+  picker.addEventListener('focusout', event => {
+    if (!picker.contains(event.relatedTarget)) setOpen(false)
+  })
+  picker.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !open) return
+    event.stopPropagation()
+    setOpen(false)
+    button.focus()
+  })
+  // A tap or click anywhere else closes the ring (a touch reader has no
+  // pointer to move away).
+  document.addEventListener('pointerdown', event => {
+    if (open && !picker.contains(event.target)) setOpen(false)
+  })
+
+  sync()
+  picker.hidden = false
 }
 
 /**

@@ -19,7 +19,7 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 <div class="ns-editor" data-ns-editor>
 <p class="ns-ed-caption" data-ns-caption aria-live="polite">Same names, same slicing, same output.</p>
 <div class="ns-ed-stage">
-<button type="button" class="ns-crazier" data-ns-crazier hidden><span class="ns-crazier-label" data-ns-crazier-label>Crazier</span><span class="ns-crazier-meter" data-ns-meter aria-hidden="true"></span></button>
+<div class="ns-pick" data-ns-pick hidden><button type="button" class="ns-crazier" data-ns-crazier aria-expanded="false" aria-controls="ns-pick-ring"><span class="ns-crazier-label" data-ns-crazier-label>Pick</span><span class="ns-crazier-meter" data-ns-meter aria-hidden="true"></span></button><div class="ns-pick-ring" id="ns-pick-ring" role="group" aria-label="Pick what the examples show" data-ns-ring></div></div>
 <div class="ns-ed-frame" role="table" aria-label="The same program in Python and in C#">
 <div class="ns-ed-tabs" role="row"><div role="columnheader"><span class="ns-ed-dot ns-ed-dot-py"></span>example.py<small>Python with NumPy</small></div><div role="columnheader"><span class="ns-ed-dot ns-ed-dot-cs"></span>Program.cs<small>C# with NumSharp</small></div></div>
 <div class="ns-ed-body" data-ns-body>
@@ -32,7 +32,19 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 <div class="ns-ed-run" role="row"><div role="cell"><span class="ns-ed-cmd">&gt; python example.py</span><pre data-ns-out>[108  15  18  21]</pre></div><div role="cell"><span class="ns-ed-cmd">&gt; dotnet run</span><pre data-ns-out>[108  15  18  21]</pre></div></div>
 </div>
 </div>
-<template data-ns-example data-title="A multiplication table by broadcasting">
+<!-- The "Pick" ring: each template's data-topic is the label of its button around "Pick". Topics take the ring's
+     slots in document order (top-left, top-right, left, right, bottom-left, bottom-right; six at most), and
+     "Crazier" steps through one topic's templates in document order. The topics below are placeholders until the
+     owner picks the examples. -->
+<template data-ns-example data-topic="Arrays" data-title="A slice is a view that writes through">
+<div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">a = np.arange(12).reshape(3, 4)</code><code role="cell">var a = np.arange(12).reshape(3, 4);</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">v = a[1:, ::2]  # a view, no copy</code><code role="cell">var v = a["1:, ::2"];  // a view, no copy</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">v[0, 0] = 100   # writes through to a</code><code role="cell">v[0, 0] = 100;         // writes through to a</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">print(a.sum(axis=0))</code><code role="cell">Console.WriteLine(a.sum(axis: 0));</code></div>
+<pre data-ns-out>[108  15  18  21]</pre>
+</template>
+<template data-ns-example data-topic="Arrays" data-title="A multiplication table by broadcasting">
 <div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">row = np.arange(1, 10)</code><code role="cell">var row = np.arange(1, 10);</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">table = row[:, np.newaxis] * row</code><code role="cell">var table = row[":, np.newaxis"] * row;</code></div>
@@ -41,14 +53,14 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
  [56 64 72]
  [63 72 81]]</pre>
 </template>
-<template data-ns-example data-title="Rank names by score with argsort">
+<template data-ns-example data-topic="Text" data-title="Rank names by score with argsort">
 <div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">names = np.array(["Ada", "Bo", "Cy", "Di", "Ed"])</code><code role="cell">var names = np.array(["Ada", "Bo", "Cy", "Di", "Ed"]);</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">scores = np.array([88, 92, 79, 95, 60])</code><code role="cell">var scores = np.array([88, 92, 79, 95, 60]);</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">print(names[np.argsort(-scores)][:3])</code><code role="cell">Console.WriteLine(names[np.argsort(-scores)][":3"]);</code></div>
 <pre data-ns-out>['Di' 'Bo' 'Ada']</pre>
 </template>
-<template data-ns-example data-title="FizzBuzz without a loop">
+<template data-ns-example data-topic="Text" data-title="FizzBuzz without a loop">
 <div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">n = np.arange(1, 16)</code><code role="cell">var n = np.arange(1, 16);</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">fb = n.astype(str)</code><code role="cell">var fb = n.astype(np.str_);</code></div>
@@ -59,7 +71,24 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 <pre data-ns-out>['1' '2' 'Fizz' '4' 'Buzz' 'Fizz' '7' '8' 'Fizz' 'Buzz' '11' 'Fizz' '13'
  '14' 'FizzBuzz']</pre>
 </template>
-<template data-ns-example data-title="Every pairwise distance from one einsum">
+<template data-ns-example data-topic="Random" data-title="Seed 42 draws NumPy's exact numbers">
+<div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">np.random.seed(42)</code><code role="cell">np.random.seed(42);</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">hands = np.array(["rock", "paper", "scissors"])</code><code role="cell">var hands = np.array(["rock", "paper", "scissors"]);</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">print(np.random.randint(0, 100, size=8))</code><code role="cell">Console.WriteLine(np.random.randint(0, 100, size: 8));</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">print(np.random.choice(hands, 4))</code><code role="cell">Console.WriteLine(np.random.choice(hands, 4));</code></div>
+<pre data-ns-out>[51 92 14 71 60 20 82 86]
+['scissors' 'scissors' 'rock' 'scissors']</pre>
+</template>
+<template data-ns-example data-topic="Random" data-title="A million random points, the same π">
+<div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">np.random.seed(7)</code><code role="cell">np.random.seed(7);</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">xy = np.random.rand(2, 1_000_000)</code><code role="cell">var xy = np.random.rand(2, 1_000_000);</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">inside = np.square(xy).sum(axis=0) &lt;= 1</code><code role="cell">var inside = np.square(xy).sum(axis: 0) &lt;= 1;</code></div>
+<div class="ns-ed-row" role="row"><code role="cell">print(4 * inside.mean())</code><code role="cell">Console.WriteLine(4 * inside.mean());</code></div>
+<pre data-ns-out>3.139796</pre>
+</template>
+<template data-ns-example data-topic="Linear algebra" data-title="Every pairwise distance from one einsum">
 <div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">pts = np.array([[0, 0], [3, 4], [6, 8]])</code><code role="cell">var pts = np.array(new[,] { { 0, 0 }, { 3, 4 }, { 6, 8 } });</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">d = pts[:, np.newaxis] - pts</code><code role="cell">var d = pts[":, np.newaxis"] - pts;</code></div>
@@ -69,24 +98,7 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
  [ 5.  0.  5.]
  [10.  5.  0.]]</pre>
 </template>
-<template data-ns-example data-title="Seed 42 draws NumPy's exact numbers">
-<div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
-<div class="ns-ed-row" role="row"><code role="cell">np.random.seed(42)</code><code role="cell">np.random.seed(42);</code></div>
-<div class="ns-ed-row" role="row"><code role="cell">hands = np.array(["rock", "paper", "scissors"])</code><code role="cell">var hands = np.array(["rock", "paper", "scissors"]);</code></div>
-<div class="ns-ed-row" role="row"><code role="cell">print(np.random.randint(0, 100, size=8))</code><code role="cell">Console.WriteLine(np.random.randint(0, 100, size: 8));</code></div>
-<div class="ns-ed-row" role="row"><code role="cell">print(np.random.choice(hands, 4))</code><code role="cell">Console.WriteLine(np.random.choice(hands, 4));</code></div>
-<pre data-ns-out>[51 92 14 71 60 20 82 86]
-['scissors' 'scissors' 'rock' 'scissors']</pre>
-</template>
-<template data-ns-example data-title="A million random points, the same π">
-<div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
-<div class="ns-ed-row" role="row"><code role="cell">np.random.seed(7)</code><code role="cell">np.random.seed(7);</code></div>
-<div class="ns-ed-row" role="row"><code role="cell">xy = np.random.rand(2, 1_000_000)</code><code role="cell">var xy = np.random.rand(2, 1_000_000);</code></div>
-<div class="ns-ed-row" role="row"><code role="cell">inside = np.square(xy).sum(axis=0) &lt;= 1</code><code role="cell">var inside = np.square(xy).sum(axis: 0) &lt;= 1;</code></div>
-<div class="ns-ed-row" role="row"><code role="cell">print(4 * inside.mean())</code><code role="cell">Console.WriteLine(4 * inside.mean());</code></div>
-<pre data-ns-out>3.139796</pre>
-</template>
-<template data-ns-example data-title="The long-run weather of a Markov chain">
+<template data-ns-example data-topic="Linear algebra" data-title="The long-run weather of a Markov chain">
 <div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
 <div class="ns-ed-row" role="row"><code role="cell"># today sunny or rainy -&gt; odds for tomorrow</code><code role="cell">// today sunny or rainy -&gt; odds for tomorrow</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">P = np.array([[0.9, 0.1],</code><code role="cell">var P = np.array(new[,] { { 0.9, 0.1 },</code></div>
@@ -94,7 +106,7 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 <div class="ns-ed-row" role="row"><code role="cell">print(np.linalg.matrix_power(P, 64)[0])</code><code role="cell">Console.WriteLine(np.linalg.matrix_power(P, 64)[0]);</code></div>
 <pre data-ns-out>[0.83333333 0.16666667]</pre>
 </template>
-<template data-ns-example data-title="Find two tones in a signal with an FFT">
+<template data-ns-example data-topic="Signals" data-title="Find two tones in a signal with an FFT">
 <div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">t = np.arange(512) / 512</code><code role="cell">var t = np.arange(512) / 512;</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">wave = (np.sin(2 * np.pi * 50 * t)</code><code role="cell">var wave = np.sin(2 * np.pi * 50 * t)</code></div>
@@ -104,7 +116,7 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 <div class="ns-ed-row" role="row"><code role="cell">print(np.sort(top2))</code><code role="cell">Console.WriteLine(np.sort(top2));</code></div>
 <pre data-ns-out>[ 50 120]</pre>
 </template>
-<template data-ns-example data-title="A glider crosses the Game of Life">
+<template data-ns-example data-topic="Simulations" data-title="A glider crosses the Game of Life">
 <div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp;</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">b = np.zeros((6, 6), dtype=int)</code><code role="cell">var b = np.zeros((6, 6), np.int64);</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">np.put(b, [1, 8, 12, 13, 14], 1)</code><code role="cell">np.put(b, new[] { 1, 8, 12, 13, 14 }, 1);</code></div>
@@ -122,7 +134,7 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
  [0 0 0 0 0 0]
  [0 0 0 0 0 0]]</pre>
 </template>
-<template data-ns-example data-title="The Mandelbrot set in complex128">
+<template data-ns-example data-topic="Simulations" data-title="The Mandelbrot set in complex128">
 <div class="ns-ed-row" role="row"><code role="cell">import numpy as np</code><code role="cell">using NumSharp; using System.Numerics;</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">x = np.linspace(-2.0, 0.5, 26)</code><code role="cell">var x = np.linspace(-2.0, 0.5, 26);</code></div>
 <div class="ns-ed-row" role="row"><code role="cell">y = np.linspace(-1.0, 1.0, 9)[:, np.newaxis]</code><code role="cell">var y = np.linspace(-1.0, 1.0, 9)[":, np.newaxis"];</code></div>

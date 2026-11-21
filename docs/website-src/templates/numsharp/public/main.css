@@ -89,9 +89,10 @@ pre code {
 
    The docs pages' side menu on the left, and beside it three bands: the hero
    (headline, install, and a split editor that shows a NumPy program beside
-   its C# translation, with the "Crazier" button that steps through ten wilder
-   pairs), the integrations picture on its own night ground with a link layer
-   over every octagon, and the documentation map.
+   its C# translation, with the "Pick" button whose ring of topics leads to
+   "Crazier", stepping through the picked topic's pairs), the integrations
+   picture on its own night ground with a link layer over every octagon, and
+   the documentation map.
    Colors come from the logo (an N of array cells: lavender faces, a cyan edge,
    plum depth) and from the picture (its night ground and neon ecosystem
    colors). The hero and the map follow the site theme; the picture's band is
@@ -393,6 +394,7 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   color: var(--bs-secondary-color);
   font-size: 0.98rem;
   text-align: center;
+  transition: opacity 0.16s ease;
 }
 
 .ns-ed-caption b {
@@ -451,8 +453,9 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   font-size: calc(13px * var(--ns-ed-scale));
 }
 
-/* The "Crazier" button floats over the middle of the tab bar: keep each tab's
-   text out from under it (half the button's width plus a margin). */
+/* The picker's button floats over the middle of the tab bar: keep each tab's
+   text out from under it (half the button's width plus a margin). The open
+   ring covers the tabs on purpose, on its own panel. */
 .ns-ed-tabs > :first-child {
   padding-right: calc(96px * var(--ns-ed-scale));
 }
@@ -578,19 +581,46 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   }
 }
 
-/* "Crazier": a cell of the logo (lavender face, cyan edge, plum depth) that
-   floats on the editor's top edge between the two panes and breathes until the
-   pointer reaches it. The meter under its label fills one cell per rung.
-   Placement uses the translate property and the breathing the scale property,
-   so a narrow screen can move the button without touching the animation. */
-.ns-crazier {
+/* ---- Pick: the button and its ring of topics ---------------------------- */
+
+/* The picker is the button plus its ring, floating on the editor's top edge
+   between the two panes (the stage positions it, because the frame clips its
+   own corners). Its box is exactly the button's (display:flex, so no line box
+   adds a descender gap), and the ring's slots hang off the button's edges.
+   Placement uses the translate property here, the breathing the button's
+   scale property and the options' flight their transform, so none of the
+   three overrides another, and a narrow screen can move the picker without
+   touching the animations. */
+.ns-pick {
+  /* The ring's geometry, scaled with the editor: an option's smallest box,
+     the gap between the button and the two option columns, and the gap
+     between the button's row and the corner rows. */
+  --ns-opt-w: calc(136px * var(--ns-ed-scale));
+  --ns-opt-h: calc(34px * var(--ns-ed-scale));
+  --ns-ring-gap-x: calc(14px * var(--ns-ed-scale));
+  --ns-ring-gap-y: calc(8px * var(--ns-ed-scale));
   position: absolute;
   top: 0;
   left: 50%;
+  z-index: 3;
+  display: flex;
+  translate: -50% -50%;
+}
+
+/* The button: a cell of the logo (lavender face, cyan edge, plum depth) that
+   breathes until the pointer reaches it. It says "Pick" until a topic is
+   picked, then "Crazier" while the topic has a wilder example left; the meter
+   under its label fills one cell per example of the topic. It stays above the
+   ring (z-index) so the ring's panel never takes its clicks, and its minimum
+   width keeps the ring still when the label changes. */
+.ns-crazier {
+  position: relative;
   z-index: 2;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  min-width: calc(104px * var(--ns-ed-scale));
   gap: calc(6px * var(--ns-ed-scale));
   padding: calc(10px * var(--ns-ed-scale)) calc(24px * var(--ns-ed-scale)) calc(9px * var(--ns-ed-scale));
   border: 0;
@@ -603,12 +633,12 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
-  translate: -50% -50%;
   animation: ns-breathe 2.4s ease-in-out infinite;
 }
 
 .ns-crazier:hover,
-.ns-crazier:focus-visible {
+.ns-crazier:focus-visible,
+.ns-pick[data-open] .ns-crazier {
   background: #7a52b8;
   animation-play-state: paused;
 }
@@ -632,6 +662,152 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 
 .ns-crazier-meter i.on {
   background: var(--ns-cyan);
+}
+
+/* Before the first pick there is no topic to measure: the empty meter would
+   still take the label's gap. */
+.ns-crazier-meter:empty {
+  display: none;
+}
+
+/* The ring's box is the button's; the options hang off its edges. Closed, it
+   takes no pointer events, so it never blocks the code under it. */
+.ns-pick-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Open, a soft panel spreads behind the six options. It keeps their labels
+   legible over the code, and it is the hover bridge: the pointer crosses the
+   gaps between options without leaving the picker, so the ring stays open.
+   Its extent is an option's smallest box plus the gaps and a margin, so an
+   option whose label outgrows --ns-opt-w may reach past it. */
+.ns-pick-ring::before {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * (var(--ns-opt-h) + var(--ns-ring-gap-y) + 12px))
+         calc(-1 * (var(--ns-opt-w) + var(--ns-ring-gap-x) + 14px));
+  border: 1px solid var(--ns-paper-line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bs-body-bg) 74%, transparent);
+  box-shadow: 0 12px 32px rgba(43, 31, 92, 0.22);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.ns-pick[data-open] .ns-pick-ring {
+  pointer-events: auto;
+}
+
+.ns-pick[data-open] .ns-pick-ring::before {
+  opacity: 1;
+}
+
+/* An option: a smaller logo cell, a paper face with a lavender rim and the
+   plum depth, so it reads as the button's satellite. Closed, it waits by the
+   button, scaled down and transparent, and visibility:hidden keeps it away
+   from the pointer, the tab order and screen readers (after the 0.18s fade,
+   so it can animate out). Open, it flies to its slot, staggered by --i (its
+   place in the ring, set by home.js). */
+.ns-pick-opt {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--ns-opt-w);
+  height: var(--ns-opt-h);
+  padding: 0 calc(14px * var(--ns-ed-scale));
+  border: 1.5px solid var(--ns-lavender);
+  border-radius: calc(9px * var(--ns-ed-scale));
+  color: var(--ns-accent);
+  background: var(--ns-paper);
+  box-shadow: calc(3px * var(--ns-ed-scale)) calc(3px * var(--ns-ed-scale)) 0 var(--ns-plum);
+  font-size: calc(14px * var(--ns-ed-scale));
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(var(--ns-fly-x, 0), var(--ns-fly-y, 0)) scale(0.6);
+  transition: opacity 0.14s ease, transform 0.18s ease, visibility 0s linear 0.18s;
+}
+
+.ns-pick[data-open] .ns-pick-opt {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.18s ease calc(var(--i, 0) * 30ms),
+              transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.35) calc(var(--i, 0) * 30ms),
+              visibility 0s;
+}
+
+/* The six slots: the four corners of a box around the button (diagonal from
+   it) and its two sides (level with it), in two columns whose inner edges
+   face the button. --ns-fly-x / --ns-fly-y is where an option starts its
+   flight: beside the button, on its own side. */
+.ns-pick-opt[data-slot="tl"],
+.ns-pick-opt[data-slot="l"],
+.ns-pick-opt[data-slot="bl"] {
+  --ns-fly-x: calc(40px * var(--ns-ed-scale));
+  right: calc(100% + var(--ns-ring-gap-x));
+}
+
+.ns-pick-opt[data-slot="tr"],
+.ns-pick-opt[data-slot="r"],
+.ns-pick-opt[data-slot="br"] {
+  --ns-fly-x: calc(-40px * var(--ns-ed-scale));
+  left: calc(100% + var(--ns-ring-gap-x));
+}
+
+.ns-pick-opt[data-slot="tl"],
+.ns-pick-opt[data-slot="tr"] {
+  --ns-fly-y: calc(24px * var(--ns-ed-scale));
+  bottom: calc(100% + var(--ns-ring-gap-y));
+}
+
+.ns-pick-opt[data-slot="l"],
+.ns-pick-opt[data-slot="r"] {
+  top: 50%;
+  translate: 0 -50%;
+}
+
+.ns-pick-opt[data-slot="bl"],
+.ns-pick-opt[data-slot="br"] {
+  --ns-fly-y: calc(-24px * var(--ns-ed-scale));
+  top: calc(100% + var(--ns-ring-gap-y));
+}
+
+.ns-pick-opt:hover,
+.ns-pick-opt:focus-visible {
+  border-color: transparent;
+  color: #ffffff;
+  background: #7a52b8;
+}
+
+/* The topic on show wears the button's own face: lavender, the cyan edge. */
+.ns-pick-opt[aria-current="true"] {
+  border-color: transparent;
+  color: #ffffff;
+  background: var(--ns-lavender);
+  box-shadow: inset calc(-5px * var(--ns-ed-scale)) 0 0 var(--ns-cyan),
+              calc(3px * var(--ns-ed-scale)) calc(3px * var(--ns-ed-scale)) 0 var(--ns-plum);
+}
+
+.ns-pick-opt:focus-visible {
+  outline: 2px solid var(--ns-cyan);
+  outline-offset: 3px;
+}
+
+/* The ring's top corners rise over the caption; while it is open the caption
+   fades out instead of colliding with them. Fully: a long title is wider than
+   the ring's panel, and any trace of it showed as stray letters at the
+   panel's edges. */
+.ns-editor:has(.ns-pick[data-open]) .ns-ed-caption {
+  opacity: 0;
 }
 
 @keyframes ns-breathe {
@@ -986,13 +1162,13 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
     margin-bottom: 14px;
   }
 
-  /* Stacked panes leave no middle to float over: the button takes its own
-     line above the editor, centered, and keeps breathing. */
-  .ns-crazier {
+  /* Stacked panes leave no middle to float over: the picker takes its own
+     line above the editor, centered; the button keeps breathing and the ring
+     opens around it there. */
+  .ns-pick {
     position: relative;
     top: auto;
     left: auto;
-    display: flex;
     width: max-content;
     margin: 0 auto 16px;
     translate: none;
@@ -1014,6 +1190,20 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
     font-size: 13px;
   }
 
+  /* A phone's column is about 340px: the two option columns and the button
+     must fit it side by side (two 106px options with their 8px gaps and the
+     104px button make 332px), so the options shrink to their labels. */
+  .ns-pick {
+    --ns-opt-w: 92px;
+    --ns-opt-h: 32px;
+    --ns-ring-gap-x: 8px;
+  }
+
+  .ns-pick-opt {
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
   /* An octagon is a few millimeters wide on a phone: the picture opens the
      Interoperability guide as a whole instead. */
   .ns-hot-layer {
@@ -1026,6 +1216,14 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   .ns-ed-swap .ns-ed-body,
   .ns-ed-swap .ns-ed-run pre {
     animation: none;
+  }
+
+  /* The ring appears and disappears in place: no flight, no fades. */
+  .ns-pick-opt,
+  .ns-pick[data-open] .ns-pick-opt,
+  .ns-pick-ring::before,
+  .ns-ed-caption {
+    transition: none;
   }
 
   .ns-hot-box polygon,
