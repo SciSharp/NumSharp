@@ -13,7 +13,7 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
 | Phase | Ask | State |
 |-------|-----|-------|
 | 0 | Plan, baseline build and screenshots | done: docs pages' menu 283 px at 1440, 360 px at 1920 |
-| 1 | The docs side menu on the home page, narrower | done: 252 px, sticky; phone drawer from the action bar |
+| 1 | The docs side menu on the home page, narrower | redone: two static 252 px copies beside the first and last areas; band full width |
 | 2 | The NumPy / C# editor 20% smaller | done: 912 px (was 1140), code at most 12.8 px (was 16) |
 | 3 | The example title centered above the button | done: centers equal (x 846 at 1440), gap 10 px |
 | 4 | "Pick": six topic buttons around the button, then "Crazier" inside the picked topic | done: mouse, keyboard, touch verified |
@@ -35,6 +35,27 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
   390 px, the drawer opens at 390. Side effect fixed: beside the menu a 1024 px window leaves the hero 772 px, where
   the install box (its command cannot wrap) overran the editor's right edge by 13 px; its grid column now has a
   `min-content` floor, and both edges meet at 1024 / 1280 / 1440.
+- Redone the same day. The owner: "The sidemenu should ONLY exist on the first and last areas of 'Write NumPy in
+  C#.' maybe even static two copies will do better." The sticky column ran beside every band, so the integrations
+  band lost its full width. Now:
+  - Two areas, `.ns-area` grids of [menu column | band column]: the hero with a copy beside it, the integrations
+    band at the whole width, the documentation map with a second copy beside it. DocFX's real table stays hidden
+    in `#toc` (and is still the phone drawer).
+  - The copies are static: in the flow at their whole height, no scrolling of their own. With the docs pages'
+    1.6rem top padding the default table (Interoperability open: 633 px of entries) fits beside the hero's own
+    716 px (it grew 1 px); an opened section lengthens the area. Beside the map the filter box is level with the
+    "Documentation" title (72 px).
+  - home.js `installSideMenus` mirrors the real table into each copy (a MutationObserver re-clones the list after
+    every DocFX render) and forwards what the reader does: an expand arrow or a section toggle clicks the real
+    entry at the same path (marked `MIRRORED_TOC_CLICK`, so main.js's 48 h memory records it); typing in a copy's
+    filter box sets the real box and fires its `input`. Both copies and the docs pages therefore share one state.
+  - Measured (headless Chromium): at 1440 / 1920 / 1024 px the band spans the window; each copy lists the real
+    table's 60 entries, entry for entry, "Home" active, with no hidden entry; opening "Fundamentals and usage" in
+    the top copy opens it in both copies, and docs/intro.html opened next shows it open; typing "torch" in the
+    bottom copy filters both copies and the real table to 3 entries while keeping focus; Shift+Tab from the hero
+    reaches the top copy's last link; at 390 px the copies are gone and the drawer opens; docs/intro.html keeps its
+    282.6 px menu; no console errors. With the band at full width again, phase 5's picture measures 927 / 927 /
+    862 / 683 px at 1920 / 1440 / 1280 / 1024, the title still on its axis.
 
 ## Phase 2: the editor 20% smaller
 
@@ -109,10 +130,11 @@ the hover; no console error on any page or step.
 Collected while executing; the owner reviews them all after phase 5.
 
 1. Side menu width 252 px (fits every top-level entry on one line on Windows); narrower makes "The absolute basics
-   for beginners" wrap. The menu hugs the window's left edge at any width, while docs pages center their container
-   (at 1920 their menu starts at x = 88).
-2. Between 768 and 991 px the menu stays a column, as on docs pages; the hero then has 516-739 px and uses its
-   stacked (narrow) layout.
+   for beginners" wrap. The copies hug the window's left edge at any width, while docs pages center their
+   container (at 1920 their menu starts at x = 88). The hero and the map are centered beside their copies, so their
+   axis is half a menu (126 px) right of the full-width band's.
+2. Between 768 and 991 px the copies stay columns; the hero then has 516-739 px and uses its stacked (narrow)
+   layout. The two copies share one state (open sections, filter text) with each other and with the docs pages.
 3. The 20% applies to the editor's width and everything inside it (code, tabs, output, button), not to the caption
    above it. The editor is centered in the hero column, under the left-aligned headline.
 4. FizzBuzz's printed line (72 characters) still scrolls in its terminal at 1280 px and below, at the smallest

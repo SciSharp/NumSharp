@@ -5,6 +5,8 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 ---
 
 <div class="ns-home">
+<div class="ns-area ns-area-hero">
+<nav class="ns-side" data-ns-side aria-label="Documentation"></nav>
 <section class="ns-hero ns-wrap" aria-labelledby="ns-hero-title">
 <p class="ns-brand"><img src="images/numsharp.icon.svg" alt="">NumSharp</p>
 <h1 id="ns-hero-title"><span>Write NumPy in&nbsp;C#.</span></h1>
@@ -157,6 +159,7 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 </template>
 </div>
 </section>
+</div>
 <section class="ns-band" aria-labelledby="ns-band-title">
 <h2 class="ns-wrap ns-band-title" id="ns-band-title"><span>Integrations</span></h2>
 <div class="ns-wrap ns-band-head">
@@ -191,6 +194,8 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 <!-- integrations-links:end -->
 </div>
 </section>
+<div class="ns-area ns-area-docs">
+<nav class="ns-side" data-ns-side aria-label="Documentation, again"></nav>
 <section class="ns-docs ns-wrap" aria-labelledby="ns-docs-title">
 <h2 id="ns-docs-title"><span>Documentation</span></h2>
 <div class="ns-groups">
@@ -227,4 +232,5 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 </div>
 <p class="ns-elsewhere"><a href="https://github.com/SciSharp/NumSharp">Source on GitHub</a><a href="https://www.nuget.org/packages/NumSharp">Package on NuGet</a></p>
 </section>
+</div>
 </div>

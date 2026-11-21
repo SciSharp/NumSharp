@@ -8,10 +8,11 @@
 // Beyond the navbar icon links, this adds two behaviors: it remembers which
 // #toc sections the reader expanded/collapsed and restores them on the next
 // page, for a 48h window that slides forward on every visit (see
-// installTocStatePersistence below), and it runs the home page's editor and
-// Copy button (see home.js, which does nothing on any other page).
+// installTocStatePersistence below; a toggle made in one of the home page's
+// side-menu copies counts too), and it runs the home page's side menus, editor
+// and Copy button (see home.js, which does nothing on any other page).
 
-import { installHomePage } from './home.js'
+import { installHomePage, MIRRORED_TOC_CLICK } from './home.js'
 
 /**
  * How long a remembered TOC layout survives with no visits, in milliseconds
@@ -299,8 +300,10 @@ function installTocStatePersistence() {
   // queued in capture can run BEFORE the target handler for native user input.
   const toggles = new WeakMap()
   toc.addEventListener('click', event => {
-    // Ignore our restore clicks (untrusted) and any stray untrusted events.
-    if (applyingRestore || !event.isTrusted) {
+    // Ignore our restore clicks (untrusted) and any stray untrusted events,
+    // except a toggle the home page's side menus forward on the reader's
+    // behalf: synthetic too, but marked with MIRRORED_TOC_CLICK (home.js).
+    if (applyingRestore || (!event.isTrusted && event[MIRRORED_TOC_CLICK] !== true)) {
       return
     }
     const target = event.target

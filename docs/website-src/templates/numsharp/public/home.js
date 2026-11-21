@@ -2,10 +2,12 @@
 //
 // main.js imports this module and calls installHomePage() from the modern
 // template's start hook on every page; it returns at once on pages without the
-// home page's editor, so other pages pay one querySelector.
+// home page's side menus and editor, so other pages pay two querySelectors.
 //
-// Three behaviors, all progressive: without JavaScript the page still shows the
+// Four behaviors, all progressive: without JavaScript the page still shows the
 // install command, the first Python/C# pair with its output, and every link.
+//   0. The two side menus: copies of DocFX's table of contents beside the
+//      page's first and last areas, kept in step with the real one.
 //   1. The Copy button next to `dotnet add package NumSharp`.
 //   2. The split editor: syntax colors for both languages, a font size that
 //      fits the longest line of the shown pair into the narrower pane (within
@@ -102,6 +104,16 @@ const HOVER_INTENT_MS = 350
 const CLOSE_DELAY_MS = 220
 
 /**
+ * The property home.js sets to true on a click it forwards from a side-menu
+ * copy to DocFX's real table of contents. The forwarded click is synthetic
+ * (`isTrusted` false), so main.js's expand/collapse memory would discard it
+ * like its own restore clicks; main.js checks this property and records the
+ * toggle as the reader's choice, which it is.
+ * @type {string}
+ */
+export const MIRRORED_TOC_CLICK = 'nsMirroredTocClick'
+
+/**
  * Escape text for insertion as HTML element content.
  * @param {string} text raw source text.
  * @returns {string} the text with `&`, `<` and `>` replaced by entities.
@@ -146,6 +158,163 @@ function highlightBody(body) {
     if (python) python.innerHTML = highlightLine(python.textContent, 'python')
     if (csharp) csharp.innerHTML = highlightLine(csharp.textContent, 'csharp')
   }
+}
+
+/**
+ * Where an entry sits in a rendered table of contents: the index of each `li`
+ * among its list's entries, from the top level down. Two renderings of the
+ * same table state (DocFX's and a copy of it) have the same entry at the same
+ * path, which is how a copy finds the real entry it stands for.
+ * @param {Element|null} li the entry.
+ * @param {Element} root the element whose `:scope > ul` is the top level (a
+ *   table's `.flex-fill` list holder).
+ * @returns {number[]} the indices, outermost first; empty when `li` is null or
+ *   not inside `root`.
+ */
+function liPath(li, root) {
+  const path = []
+  for (let item = li; item && item !== root && root.contains(item); item = item.parentElement.closest('li')) {
+    path.unshift(Array.prototype.indexOf.call(item.parentElement.children, item))
+  }
+  return path
+}
+
+/**
+ * The entry at a {@link liPath} path in a rendering of a table of contents.
+ * @param {Element} root the element whose `:scope > ul` is the top level.
+ * @param {number[]} path the indices, outermost first.
+ * @returns {Element|null} the `li`, or null for an empty path or when this
+ *   rendering has no entry there (it changed since the path was taken).
+ */
+function liAt(root, path) {
+  let scope = root
+  for (const index of path) {
+    const list = scope.querySelector(':scope > ul')
+    const item = list ? list.children[index] : null
+    if (!item) return null
+    scope = item
+  }
+  return path.length > 0 ? scope : null
+}
+
+/**
+ * Turn a `[data-ns-side]` element into a copy of DocFX's table of contents.
+ *
+ * The copy is a `.toc` (so DocFX's stylesheet draws it exactly as the docs
+ * pages' menu) holding a filter box and a list. The list is re-cloned from the
+ * real table at every {@link SideMenu.sync}; the filter box is cloned once and
+ * kept, so typing in it never loses focus to a re-render. Nothing in the copy
+ * has DocFX's handlers, so the copy forwards what the reader does to the real
+ * table, whose re-render then reaches every copy:
+ *   - a click on an expand arrow or on a section without a page of its own
+ *     (`a[href="#"]`) becomes a click on the real table's same entry, marked
+ *     with {@link MIRRORED_TOC_CLICK} so main.js remembers the toggle;
+ *   - typing in the filter box sets the real box and fires its `input` event,
+ *     DocFX's own filter (which also stores the text for the docs pages).
+ * Page links are plain links in the copy and need nothing forwarded.
+ * @param {HTMLElement} host the `[data-ns-side]` element; its children are
+ *   replaced.
+ * @param {HTMLElement} toc DocFX's `#toc`, the real table.
+ * @returns {SideMenu} the copy's update hook.
+ */
+function createSideMenu(host, toc) {
+  const root = document.createElement('div')
+  root.className = 'toc'
+  const list = document.createElement('div')
+  list.className = 'flex-fill overflow-y-auto'
+  root.append(list)
+  host.replaceChildren(root)
+  /** @type {HTMLInputElement|null} the copy's filter box, once DocFX has rendered its own. */
+  let input = null
+
+  /**
+   * Bring the copy in line with the real table: its filter box (created on
+   * the first call that finds DocFX's), its filter text (unless the reader is
+   * typing in this copy) and its list. Keyboard focus on an entry survives
+   * the list's replacement: the entry at the same path takes it back.
+   * @returns {void}
+   */
+  function sync() {
+    const realList = toc.querySelector(':scope > .flex-fill')
+    // DocFX renders after fetching toc.json; the observer calls again then.
+    if (!realList) return
+    const realInput = toc.querySelector(':scope > form.filter input')
+    if (realInput && realInput.form && !input) {
+      // A copy of DocFX's form, whose placeholder and label come from the
+      // page's localization metadata. A form with one text box submits on
+      // Enter, which would reload the page.
+      const form = /** @type {HTMLFormElement} */ (realInput.form.cloneNode(true))
+      input = form.querySelector('input')
+      form.addEventListener('submit', event => event.preventDefault())
+      input.addEventListener('input', () => {
+        realInput.value = input.value
+        realInput.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      root.prepend(form)
+    }
+    if (input && realInput && document.activeElement !== input) input.value = realInput.value
+
+    const focused = list.contains(document.activeElement) ? document.activeElement.closest('li') : null
+    const path = focused ? liPath(focused, list) : null
+    list.replaceChildren(...realList.cloneNode(true).childNodes)
+    if (path) {
+      const entry = liAt(list, path)
+      const link = entry && entry.querySelector(':scope > a')
+      if (link) link.focus({ preventScroll: true })
+    }
+  }
+
+  list.addEventListener('click', event => {
+    const target = event.target instanceof Element ? event.target.closest('.expand-stub, a[href="#"]') : null
+    if (!target || !list.contains(target)) return
+    // A section toggle: never let its '#' link scroll the page to the top.
+    event.preventDefault()
+    const realList = toc.querySelector(':scope > .flex-fill')
+    const entry = realList && liAt(realList, liPath(target.closest('li'), list))
+    const real = entry && entry.querySelector(target.matches('.expand-stub') ? ':scope > .expand-stub' : ':scope > a')
+    if (!real) return
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true, view: window })
+    click[MIRRORED_TOC_CLICK] = true
+    real.dispatchEvent(click)
+  })
+
+  return { sync }
+}
+
+/**
+ * A side-menu copy's update hook.
+ * @typedef {object} SideMenu
+ * @property {() => void} sync re-render the copy from the real table.
+ */
+
+/**
+ * Mirror DocFX's table of contents into the home page's side menus.
+ *
+ * The real table lives in `#toc`, which the landing layout hides on wide
+ * screens and phones open as a drawer; its model (expanded sections, the
+ * title filter, the active entry) is DocFX's private state, rendered with
+ * lit-html, so a copy cannot share it and instead follows its rendering: one
+ * MutationObserver on `#toc` re-syncs every copy after each DocFX render
+ * (its first, a toggle, a filter keystroke, main.js restoring the reader's
+ * remembered sections). Mutations inside the copies are not observed, so a
+ * sync never triggers itself. Does nothing when the page has no `#toc`
+ * (a template without DocFX's table): the copies' columns stay empty.
+ * @param {HTMLElement[]} hosts the `[data-ns-side]` elements.
+ * @returns {void}
+ */
+function installSideMenus(hosts) {
+  const toc = document.getElementById('toc')
+  if (!toc || hosts.length === 0) return
+  const menus = hosts.map(host => createSideMenu(host, toc))
+  /**
+   * Re-render every copy from the real table; the observer's callback, and the
+   * first sync for a table DocFX rendered before this ran.
+   * @returns {void}
+   */
+  const syncAll = () => { for (const menu of menus) menu.sync() }
+  new MutationObserver(syncAll).observe(toc, { childList: true, subtree: true, attributes: true, characterData: true })
+  // DocFX may have rendered before this ran.
+  syncAll()
 }
 
 /**
@@ -584,6 +753,8 @@ function installEditor(editor) {
  * @returns {void}
  */
 export function installHomePage() {
+  const sides = Array.from(document.querySelectorAll('[data-ns-side]'))
+  if (sides.length > 0) installSideMenus(sides)
   const editor = document.querySelector('[data-ns-editor]')
   if (!editor) return
   for (const button of document.querySelectorAll('[data-ns-copy]')) installCopyButton(button)
