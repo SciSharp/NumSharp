@@ -87,10 +87,11 @@ pre code {
 /* ==========================================================================
    Home page (index.md, `_layout: landing`)
 
-   Three bands: the hero (headline, install, and a split editor that shows a
-   NumPy program beside its C# translation, with the "Crazier" button that
-   steps through ten wilder pairs), the integrations picture on its own night
-   ground with a link layer over every octagon, and the documentation map.
+   The docs pages' side menu on the left, and beside it three bands: the hero
+   (headline, install, and a split editor that shows a NumPy program beside
+   its C# translation, with the "Crazier" button that steps through ten wilder
+   pairs), the integrations picture on its own night ground with a link layer
+   over every octagon, and the documentation map.
    Colors come from the logo (an N of array cells: lavender faces, a cyan edge,
    plum depth) and from the picture (its night ground and neon ecosystem
    colors). The hero and the map follow the site theme; the picture's band is
@@ -98,13 +99,79 @@ pre code {
    ========================================================================== */
 
 /* The landing layout keeps DocFX's container (up to 1768px wide, 12px gutters,
-   1.6rem/2rem vertical padding). The home page draws full-width bands, so it
-   takes the whole width and sets its own column (.ns-wrap) inside each band.
+   1.6rem/2rem vertical padding). The home page draws its bands across the
+   whole width beside the docs side menu, so it takes the whole width and sets
+   its own column (.ns-wrap) inside each band.
    :has() scopes this to the home page, so any other landing page keeps
    DocFX's container. */
 body[data-layout="landing"] > main:has(.ns-home) {
   max-width: none;
   padding: 0;
+  /* The side menu's width: its 12px gutter, the 0.85rem entry indent, the
+     longest top-level entry of docs/toc.yml ("The absolute basics for
+     beginners": 207px in Segoe UI at the menu's 14px, so 237px of column on
+     Windows, which wraps it at 236) and room for the wider system fonts of
+     macOS and Linux. The docs pages give the same menu flex 0.35 (283px at a
+     1440px window, 360px at most); the home page keeps that room for its
+     bands. A longer nested entry wraps, as on docs pages. */
+  --ns-side-width: 252px;
+}
+
+/* ---- The docs side menu ------------------------------------------------- */
+
+/* The home page shows the docs pages' table of contents. DocFX renders it
+   into #toc on every page whose docfx:tocrel names a TOC (the home page's
+   names docs/toc.html, which lists the page as "Home"), and the landing layout
+   only hides its column (body > main > :not(.content)). From 768px up the
+   column comes back as on the docs pages: sticky under the 60px navbar,
+   scrolling on its own. Below 768px it is the docs pages' slide-in drawer,
+   opened by the action bar's menu button; the breadcrumb beside that button
+   stays hidden, because the home page is the root. */
+body[data-layout="landing"] > main:has(.ns-home) > .content {
+  /* DocFX sizes the content column width:100%; beside a fixed menu it must
+     take the remainder instead, and min-width:0 lets the editor's
+     non-wrapping code lines scroll rather than widen the page. */
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  body[data-layout="landing"] > main:has(.ns-home) > .toc-offcanvas {
+    display: block;
+    position: sticky;
+    top: 60px;
+    flex: 0 0 var(--ns-side-width);
+    align-self: flex-start;
+    box-sizing: border-box;
+    height: calc(100vh - 60px);
+    padding: 1.6rem 4px 0 12px;
+    overflow: hidden;
+  }
+
+  /* The list scrolls inside #toc (.toc is height:100%), which needs a definite
+     height all the way down, as the docs pages' rule gives it. */
+  body[data-layout="landing"] > main:has(.ns-home) > .toc-offcanvas .offcanvas-md,
+  body[data-layout="landing"] > main:has(.ns-home) > .toc-offcanvas .offcanvas-body {
+    height: 100%;
+  }
+}
+
+@media (max-width: 767.98px) {
+  /* The drawer is position:fixed; its column only has to be displayed for
+     Bootstrap's offcanvas to slide it in, and takes no width. */
+  body[data-layout="landing"] > main:has(.ns-home) > .toc-offcanvas {
+    display: block;
+    flex: 0 0 0;
+  }
+
+  body[data-layout="landing"] > main:has(.ns-home) > .content > .actionbar {
+    display: flex;
+    padding: 8px 12px 0;
+  }
+
+  body[data-layout="landing"] > main:has(.ns-home) > .content > .actionbar > #breadcrumb {
+    display: none;
+  }
 }
 
 .ns-home {
@@ -198,7 +265,10 @@ body[data-layout="landing"] > main:has(.ns-home) {
 
 .ns-hero-sub {
   display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+  /* The right column never drops below its min-content: the install command
+     cannot wrap, and beside the side menu a 1024px window leaves the hero
+     772px, where 5fr (303px) would let the box overrun the editor's edge. */
+  grid-template-columns: minmax(0, 6fr) minmax(min-content, 5fr);
   gap: 56px;
   align-items: start;
   margin-top: 26px;

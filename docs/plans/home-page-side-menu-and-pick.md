@@ -13,7 +13,7 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
 | Phase | Ask | State |
 |-------|-----|-------|
 | 0 | Plan, baseline build and screenshots | done: docs pages' menu 283 px at 1440, 360 px at 1920 |
-| 1 | The docs side menu on the home page, narrower | pending |
+| 1 | The docs side menu on the home page, narrower | done: 252 px, sticky; phone drawer from the action bar |
 | 2 | The NumPy / C# editor 20% smaller | pending |
 | 3 | The example title centered above the button | pending |
 | 4 | "Pick": six topic buttons around the button, then "Crazier" inside the picked topic | pending |
@@ -29,6 +29,12 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
   the home page's own content keeps its room.
 - Phones (< 768 px): the docs pages open the menu from a button in the action bar; the home page shows that bar's
   button too (the breadcrumb stays hidden).
+- Done: `--ns-side-width: 252px`. The longest top-level entry ("The absolute basics for beginners", 207 px of
+  Segoe UI at 14 px) needs 237 px of column on Windows and wrapped at 236; 252 leaves room for macOS / Linux fonts.
+  Measured: sticky at `top: 60px` after scrolling, "Home" active, no horizontal scroll at 1920 / 1440 / 1024 /
+  390 px, the drawer opens at 390. Side effect fixed: beside the menu a 1024 px window leaves the hero 772 px, where
+  the install box (its command cannot wrap) overran the editor's right edge by 13 px; its grid column now has a
+  `min-content` floor, and both edges meet at 1024 / 1280 / 1440.
 
 ## Phase 2: the editor 20% smaller
 
@@ -65,3 +71,9 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
 ## Open for rediscussion
 
 Collected while executing; the owner reviews them all after phase 5.
+
+1. Side menu width 252 px (fits every top-level entry on one line on Windows); narrower makes "The absolute basics
+   for beginners" wrap. The menu hugs the window's left edge at any width, while docs pages center their container
+   (at 1920 their menu starts at x = 88).
+2. Between 768 and 991 px the menu stays a column, as on docs pages; the hero then has 516-739 px and uses its
+   stacked (narrow) layout.
