@@ -8,9 +8,10 @@
 // install command, the first Python/C# pair with its output, and every link.
 //   1. The Copy button next to `dotnet add package NumSharp`.
 //   2. The split editor: syntax colors for both languages, a font size that
-//      fits the longest line of the shown pair, and the "Crazier" button that
-//      steps through ten wilder pairs (each verified to print exactly what
-//      NumPy prints) and back to the first.
+//      fits the longest line of the shown pair into the narrower pane (within
+//      bounds the stylesheet's --ns-ed-scale shrinks with the editor), and the
+//      "Crazier" button that steps through ten wilder pairs (each verified to
+//      print exactly what NumPy prints) and back to the first.
 //   3. Nothing for the integrations picture: its link layer is plain HTML and
 //      CSS written by tools/gen_integrations_diagram.py.
 
@@ -41,12 +42,22 @@ const CSHARP_TOKENS = /(\/\/.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(\d[\d_
 const TOKEN_CLASSES = ['', 'c', 's', 'n', 'k']
 
 /**
- * The editor never sets code smaller or larger than these sizes, in px. Below
- * the minimum a long line scrolls inside its pane instead of shrinking into
- * illegibility; above the maximum the code would outgrow the hero's type.
+ * The editor never sets code smaller or larger than these sizes, in px, at
+ * full scale. Below the minimum a long line scrolls inside its pane instead of
+ * shrinking into illegibility; above the maximum the code would outgrow the
+ * hero's type. Both bounds are multiplied by the editor's scale
+ * ({@link editorScale}), so a smaller editor also caps its code smaller.
  * @type {{min: number, max: number}}
  */
 const EDITOR_FONT_PX = { min: 11.5, max: 16 }
+
+/**
+ * How many times {@link fitSize} may step the size down before it settles. Each
+ * step scales by the measured overshoot, so two usually suffice; the cap only
+ * bounds a pathological font.
+ * @type {number}
+ */
+const FIT_STEPS = 6
 
 /**
  * Line-number gutter width plus the gap after it, in character widths. It must
@@ -156,59 +167,130 @@ function installCopyButton(button) {
 }
 
 /**
+ * The editor's size factor: the stylesheet's `--ns-ed-scale`, set on
+ * `.ns-editor` and inherited by the frame. It also scales the editor's width
+ * and fixed sizes, and the stylesheet resets it to 1 where the panes stack, so
+ * reading it at every fit keeps the code bounds in step with the layout the
+ * reader is looking at.
+ * @param {HTMLElement} frame the `.ns-ed-frame` element.
+ * @returns {number} the factor; 1 when the property is missing or not a
+ *   positive number, which is full size.
+ */
+function editorScale(frame) {
+  const value = parseFloat(getComputedStyle(frame).getPropertyValue('--ns-ed-scale'))
+  return value > 0 ? value : 1
+}
+
+/**
+ * The widest of some lines as the browser renders them in a host element's
+ * font, at a given size.
+ *
+ * Measuring the rendered text, not a character count times a measured
+ * advance, is what keeps a fitted line inside its pane: at some sizes a
+ * browser rounds each glyph's advance to a whole pixel, and sixty glyphs then
+ * outgrow the arithmetic by a few pixels, a scrollbar under the line.
+ * @param {HTMLElement} host the element whose font family and weight the text
+ *   takes (a code cell, or an output block for the bold result).
+ * @param {string[]} lines the lines to measure.
+ * @param {number} px the font size to measure at.
+ * @returns {number} the widest line's width in px (0 for no lines).
+ */
+function widestLine(host, lines, px) {
+  const probe = document.createElement('span')
+  probe.textContent = lines.join('\n')
+  // Absolutely positioned, the probe sizes to its widest line without
+  // touching the cell's layout; it is removed before the browser paints.
+  probe.style.cssText = `position:absolute;left:0;top:0;visibility:hidden;white-space:pre;text-indent:0;font-size:${px}px`
+  host.appendChild(probe)
+  const width = probe.getBoundingClientRect().width
+  probe.remove()
+  return width
+}
+
+/**
+ * The largest size within some bounds at which the widest of some lines, plus
+ * a gutter, fits a width.
+ *
+ * Starts at the upper bound and scales down by the measured overshoot,
+ * measuring again after each step, so the result is checked against the real
+ * rendering rather than predicted. At the lower bound it stops even if the
+ * lines still do not fit: the cell then scrolls that line.
+ * @param {HTMLElement} host the element whose font the lines take.
+ * @param {string[]} lines the lines that must fit.
+ * @param {number} gutterCh extra width before every line, in character widths
+ *   (the line-number gutter for code, 0 for output).
+ * @param {number} available the width the widest line plus its gutter may use, in px.
+ * @param {{min: number, max: number}} bounds the smallest and largest size
+ *   allowed, in px (the scaled {@link EDITOR_FONT_PX}).
+ * @returns {number} the size to apply, in px, a multiple of a tenth.
+ */
+function fitSize(host, lines, gutterCh, available, bounds) {
+  let size = bounds.max
+  for (let step = 0; step < FIT_STEPS; step++) {
+    // A fixed-pitch font makes ten identical glyphs exactly ten advances wide.
+    const charWidth = widestLine(host, ['0000000000'], size) / 10
+    const needed = widestLine(host, lines, size) + gutterCh * charWidth
+    if (needed <= available || size <= bounds.min) break
+    // Scale by the overshoot, but always move by at least a tenth so a width
+    // that rounds the same way twice cannot stall the loop.
+    const scaled = Math.floor(size * (available / needed) * 10) / 10
+    size = Math.max(bounds.min, Math.min(scaled, Math.round((size - 0.1) * 10) / 10))
+  }
+  return size
+}
+
+/**
  * Size the editor's code so the longest line of the shown pair fits its pane,
  * and the printed result so its longest line fits its terminal.
  *
  * One code size serves both panes, so a line and its translation always share
  * a size. The result gets its own size (`--ns-ed-out-font`), never larger than
  * the code's, because a wide printed array (FizzBuzz's 73 characters) would
- * otherwise shrink programs whose lines are short. The character width is
- * measured in the font the browser actually picked from the monospace stack,
- * because the fallbacks differ (Consolas is narrower than JetBrains Mono).
+ * otherwise shrink programs whose lines are short. Every width is measured in
+ * the font the browser actually picked from the monospace stack, because the
+ * fallbacks differ (Consolas is narrower than JetBrains Mono).
  * @param {HTMLElement} frame the `.ns-ed-frame` element.
  * @returns {void}
  */
 function fitEditorFont(frame) {
-  const cell = frame.querySelector('.ns-ed-row code')
-  const output = frame.querySelector('[data-ns-out]')
-  if (!cell || !output) return
+  const cells = Array.from(frame.querySelectorAll('.ns-ed-row code'))
+  const outputs = Array.from(frame.querySelectorAll('[data-ns-out]'))
+  if (cells.length === 0 || outputs.length === 0) return
 
-  // Measure one character at a known size; a fixed-pitch font makes ten
-  // identical glyphs exactly ten advances wide.
-  const probe = document.createElement('span')
-  probe.textContent = '0000000000'
-  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font-size:100px'
-  cell.appendChild(probe)
-  const charPerPx = probe.getBoundingClientRect().width / 10 / 100
-  probe.remove()
-  if (!(charPerPx > 0)) return
-
-  let codeChars = 0
-  for (const code of frame.querySelectorAll('.ns-ed-row code')) {
-    codeChars = Math.max(codeChars, code.textContent.length)
+  const scale = editorScale(frame)
+  // Bounds on whole tenths, the grid fitSize steps on, so a size never lands a
+  // hair under the lower bound and loops once more for nothing.
+  const bounds = {
+    min: Math.round(EDITOR_FONT_PX.min * scale * 10) / 10,
+    max: Math.round(EDITOR_FONT_PX.max * scale * 10) / 10
   }
-  let outputChars = 0
-  for (const pre of frame.querySelectorAll('[data-ns-out]')) {
-    for (const line of pre.textContent.split('\n')) outputChars = Math.max(outputChars, line.length)
-  }
+  const codeLines = cells.map(code => code.textContent)
+  const outLines = outputs.flatMap(pre => pre.textContent.split('\n'))
 
-  // Available text width: the cell's content box (padding excluded) for code,
-  // the output block's content box for the printed result.
-  const style = getComputedStyle(cell)
-  const codeWidth = cell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-  const outStyle = getComputedStyle(output)
-  const outWidth = output.clientWidth - parseFloat(outStyle.paddingLeft) - parseFloat(outStyle.paddingRight)
   /**
-   * Keep a fitted size within {@link EDITOR_FONT_PX} and round it down to a
-   * tenth of a pixel, so a fit never overshoots its pane by a rounding error.
-   * @param {number} px the size that would exactly fit, in px.
-   * @returns {number} the size to apply, in px.
+   * An element's content-box width: its client width without its own padding.
+   * @param {HTMLElement} element a code cell or an output block.
+   * @returns {number} the width text may use, in px.
    */
-  const clamp = px => Math.floor(Math.max(EDITOR_FONT_PX.min, Math.min(EDITOR_FONT_PX.max, px)) * 10) / 10
-  const codeSize = clamp(codeWidth / ((codeChars + GUTTER_CH) * charPerPx))
-  const outSize = outputChars > 0 ? clamp(Math.min(codeSize, outWidth / (outputChars * charPerPx))) : codeSize
-  frame.style.setProperty('--ns-ed-font', `${codeSize}px`)
-  frame.style.setProperty('--ns-ed-out-font', `${outSize}px`)
+  const inner = element => {
+    const style = getComputedStyle(element)
+    return element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  }
+  // The two panes are not equally wide (the grid splits an odd width and the
+  // divider takes a pixel from the right one), so the narrowest cell decides,
+  // and one pixel more absorbs subpixel rounding: fitting the first (Python)
+  // cell let the C# twin of a line overflow into a scrollbar.
+  const codeWidth = Math.min(...cells.map(inner)) - 1
+  const outWidth = Math.min(...outputs.map(inner)) - 1
+  const codeSize = fitSize(cells[0], codeLines, GUTTER_CH, codeWidth, bounds)
+  const outSize = Math.min(codeSize, fitSize(outputs[0], outLines, 0, outWidth, bounds))
+
+  // Setting an unchanged value would still notify the ResizeObserver through
+  // the reflow it starts; skipping it ends the observe-fit-observe cycle.
+  const code = `${codeSize}px`
+  const out = `${outSize}px`
+  if (frame.style.getPropertyValue('--ns-ed-font') !== code) frame.style.setProperty('--ns-ed-font', code)
+  if (frame.style.getPropertyValue('--ns-ed-out-font') !== out) frame.style.setProperty('--ns-ed-out-font', out)
 }
 
 /**

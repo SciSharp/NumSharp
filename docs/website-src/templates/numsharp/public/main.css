@@ -365,8 +365,22 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 
 /* ---- The split editor --------------------------------------------------- */
 
+/* --ns-ed-scale sizes the whole editor with one factor: its width (a share of
+   the hero column, centered), every fixed size of the frame, its tabs and its
+   button below, and the code's font bounds, which home.js reads from this
+   property (editorScale), so the editor keeps its proportions at any factor.
+   0.8 is the owner's "20% smaller" of 2026-11-21. Narrow screens, where the
+   editor stacks its two programs, reset it to 1: there the code is already at
+   its smallest legible size.
+   The width never drops under --ns-ed-min-width (or the whole column, when
+   that is narrower): side by side, each pane must hold a 60-character line at
+   the smallest code size, and beside the side menu a 1024px window leaves a
+   724px column whose 80% (579px) made most rungs' lines scroll. */
 .ns-editor {
-  margin-top: 30px;
+  --ns-ed-scale: 0.8;
+  --ns-ed-min-width: 760px;
+  width: max(calc(100% * var(--ns-ed-scale)), min(100%, var(--ns-ed-min-width)));
+  margin: 30px auto 0;
 }
 
 /* The caption sits on the editor's top-left; it names the shown pair and is a
@@ -393,11 +407,12 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 .ns-ed-frame {
   overflow: hidden;
   border: 1px solid var(--ns-paper-line);
-  border-radius: 12px;
+  border-radius: calc(12px * var(--ns-ed-scale));
   background: var(--ns-paper);
   font-family: var(--ns-mono);
-  /* home.js fits this to the longest line of the shown pair. */
-  font-size: var(--ns-ed-font, 15px);
+  /* home.js fits this to the longest line of the shown pair; the fallback is
+     for the moment before it runs (and for readers without JavaScript). */
+  font-size: var(--ns-ed-font, calc(15px * var(--ns-ed-scale)));
   line-height: 1.75;
 }
 
@@ -417,11 +432,11 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 .ns-ed-tabs > div {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 20px;
+  gap: calc(10px * var(--ns-ed-scale));
+  padding: calc(12px * var(--ns-ed-scale)) calc(20px * var(--ns-ed-scale));
   border-bottom: 1px solid var(--ns-paper-line);
   color: var(--bs-emphasis-color);
-  font-size: 14px;
+  font-size: calc(14px * var(--ns-ed-scale));
   line-height: 1.4;
 }
 
@@ -429,24 +444,24 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   margin-left: auto;
   color: var(--bs-secondary-color);
   font-family: var(--bs-font-sans-serif);
-  font-size: 13px;
+  font-size: calc(13px * var(--ns-ed-scale));
 }
 
 /* The "Crazier" button floats over the middle of the tab bar: keep each tab's
    text out from under it (half the button's width plus a margin). */
 .ns-ed-tabs > :first-child {
-  padding-right: 96px;
+  padding-right: calc(96px * var(--ns-ed-scale));
 }
 
 .ns-ed-tabs > :last-child {
-  padding-left: 96px;
+  padding-left: calc(96px * var(--ns-ed-scale));
 }
 
 .ns-ed-dot {
   flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: calc(10px * var(--ns-ed-scale));
+  height: calc(10px * var(--ns-ed-scale));
+  border-radius: calc(3px * var(--ns-ed-scale));
 }
 
 .ns-ed-dot-py {
@@ -475,7 +490,7 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 }
 
 .ns-ed-body {
-  padding: 10px 0;
+  padding: calc(10px * var(--ns-ed-scale)) 0;
 }
 
 .ns-ed-row:hover {
@@ -485,7 +500,7 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 .ns-ed-row code {
   display: block;
   min-width: 0;
-  padding-right: 16px;
+  padding-right: calc(16px * var(--ns-ed-scale));
   color: var(--bs-emphasis-color);
   white-space: pre;
   overflow-x: auto;
@@ -513,7 +528,7 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 
 .ns-ed-run > div {
   min-width: 0;
-  padding: 12px 20px 14px;
+  padding: calc(12px * var(--ns-ed-scale)) calc(20px * var(--ns-ed-scale)) calc(14px * var(--ns-ed-scale));
 }
 
 .ns-ed-run > div + div {
@@ -572,14 +587,15 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 10px 24px 9px;
+  gap: calc(6px * var(--ns-ed-scale));
+  padding: calc(10px * var(--ns-ed-scale)) calc(24px * var(--ns-ed-scale)) calc(9px * var(--ns-ed-scale));
   border: 0;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--ns-ed-scale));
   color: #ffffff;
   background: var(--ns-lavender);
-  box-shadow: inset -7px 0 0 var(--ns-cyan), 4px 4px 0 var(--ns-plum);
-  font-size: 15px;
+  box-shadow: inset calc(-7px * var(--ns-ed-scale)) 0 0 var(--ns-cyan),
+              calc(4px * var(--ns-ed-scale)) calc(4px * var(--ns-ed-scale)) 0 var(--ns-plum);
+  font-size: calc(15px * var(--ns-ed-scale));
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -600,12 +616,12 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 
 .ns-crazier-meter {
   display: flex;
-  gap: 2px;
+  gap: calc(2px * var(--ns-ed-scale));
 }
 
 .ns-crazier-meter i {
-  width: 7px;
-  height: 4px;
+  width: calc(7px * var(--ns-ed-scale));
+  height: calc(4px * var(--ns-ed-scale));
   border-radius: 1px;
   background: rgba(255, 255, 255, 0.35);
 }
@@ -909,6 +925,13 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   .ns-groups {
     grid-template-columns: 1fr;
     gap: 28px;
+  }
+
+  /* Stacked, each program has the whole column to itself and its code fits at
+     the editor's full-size bounds; at 0.8 a phone's code would drop below the
+     smallest legible size. */
+  .ns-editor {
+    --ns-ed-scale: 1;
   }
 
   /* The panes stack as two whole programs: the Python tab, its lines and its

@@ -14,7 +14,7 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
 |-------|-----|-------|
 | 0 | Plan, baseline build and screenshots | done: docs pages' menu 283 px at 1440, 360 px at 1920 |
 | 1 | The docs side menu on the home page, narrower | done: 252 px, sticky; phone drawer from the action bar |
-| 2 | The NumPy / C# editor 20% smaller | pending |
+| 2 | The NumPy / C# editor 20% smaller | done: 912 px (was 1140), code at most 12.8 px (was 16) |
 | 3 | The example title centered above the button | pending |
 | 4 | "Pick": six topic buttons around the button, then "Crazier" inside the picked topic | pending |
 | 5 | The integrations picture 30% smaller, "Integrations" centered above the section | pending |
@@ -40,6 +40,13 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
 
 - One knob, `--ns-ed-scale: 0.8` on `.ns-editor`: the frame's width, its fixed sizes (tabs, paddings, the button)
   and the font-fitting bounds in `home.js` (`EDITOR_FONT_PX`) all scale by it, so the editor looks as before, at 80%.
+- Done. The editor is centered in the hero column at 80% of its width, never under `--ns-ed-min-width: 760px` (or
+  the whole column when that is narrower): beside the side menu a 1024 px window leaves a 724 px column, whose 80%
+  (579 px) made most rungs' lines scroll at the smallest size. Narrow screens (stacked panes) keep scale 1.
+- The fitter now measures rendered lines against the narrower pane minus a pixel (the measuring part of journey5
+  `ba338276`, adapted to master's inline gutter; not its layout changes). On the live code, rung 4's C# line
+  overflows into a scrollbar at 1440 px (the owner's "one of the crazier side's lines got a scrollbar"); now no
+  code line of any rung overflows at 1920 / 1440 / 1280 / 1200 / 1100 / 1024 px (fonts 9.2-12.8 px).
 
 ## Phase 3: the title centered above the button
 
@@ -77,3 +84,8 @@ Collected while executing; the owner reviews them all after phase 5.
    (at 1920 their menu starts at x = 88).
 2. Between 768 and 991 px the menu stays a column, as on docs pages; the hero then has 516-739 px and uses its
    stacked (narrow) layout.
+3. The 20% applies to the editor's width and everything inside it (code, tabs, output, button), not to the caption
+   above it. The editor is centered in the hero column, under the left-aligned headline.
+4. FizzBuzz's printed line (72 characters) still scrolls in its terminal at 1280 px and below, at the smallest
+   output size (9.2 px); master's design scrolls a line that cannot fit (journey5 wraps it instead). Placeholder
+   content, so it may go away with the owner's picks.
