@@ -383,12 +383,16 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   margin: 30px auto 0;
 }
 
-/* The caption sits on the editor's top-left; it names the shown pair and is a
-   polite live region, so a screen reader hears each new rung's title. */
+/* The caption is the shown pair's title, centered over the editor and so
+   directly above the button that floats between the two panes. Its bottom
+   margin clears the half of the button that rises above the frame (about 19px
+   at scale 0.8, breathing included) plus a gap, and scales with the editor.
+   It is a polite live region, so a screen reader hears each new title. */
 .ns-ed-caption {
-  margin: 0 0 22px;
+  margin: 0 0 calc(34px * var(--ns-ed-scale));
   color: var(--bs-secondary-color);
   font-size: 0.98rem;
+  text-align: center;
 }
 
 .ns-ed-caption b {
@@ -974,6 +978,12 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   .ns-ed-tabs > :first-child,
   .ns-ed-tabs > :last-child {
     padding-inline: 20px;
+  }
+
+  /* The button no longer rises above the frame, so the caption needs only a
+     gap above the button's own line. */
+  .ns-ed-caption {
+    margin-bottom: 14px;
   }
 
   /* Stacked panes leave no middle to float over: the button takes its own

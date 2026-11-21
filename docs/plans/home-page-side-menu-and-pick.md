@@ -15,7 +15,7 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
 | 0 | Plan, baseline build and screenshots | done: docs pages' menu 283 px at 1440, 360 px at 1920 |
 | 1 | The docs side menu on the home page, narrower | done: 252 px, sticky; phone drawer from the action bar |
 | 2 | The NumPy / C# editor 20% smaller | done: 912 px (was 1140), code at most 12.8 px (was 16) |
-| 3 | The example title centered above the button | pending |
+| 3 | The example title centered above the button | done: centers equal (x 846 at 1440), gap 10 px |
 | 4 | "Pick": six topic buttons around the button, then "Crazier" inside the picked topic | pending |
 | 5 | The integrations picture 30% smaller, "Integrations" centered above the section | pending |
 
@@ -52,6 +52,10 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
 
 - The caption (`.ns-ed-caption`: the hero's line, then "<topic> k/n <title>") is centered over the stage, so it
   sits directly above the button, with room for the button's breathing scale.
+- Done: `text-align: center`, bottom margin `calc(34px * scale)` (the button rises about 19 px above the frame at
+  0.8); on narrow screens, where the button has its own line, 14 px. Measured: the caption's text center equals the
+  button's center (x = 846 at 1440 px, 195 at 390 px), the gap is 10 px on desktop (11 px on a longer title), 14 px
+  on a phone.
 
 ## Phase 4: Pick
 
