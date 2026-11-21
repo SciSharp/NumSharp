@@ -91,8 +91,8 @@ pre code {
    (headline, install, and a split editor that shows a NumPy program beside
    its C# translation, with the "Pick" button whose ring of topics leads to
    "Crazier", stepping through the picked topic's pairs), the integrations
-   picture on its own night ground with a link layer over every octagon, and
-   the documentation map.
+   picture under its "Integrations" title on its own night ground with a link
+   layer over every octagon, and the documentation map.
    Colors come from the logo (an N of array cells: lavender faces, a cyan edge,
    plum depth) and from the picture (its night ground and neon ecosystem
    colors). The hero and the map follow the site theme; the picture's band is
@@ -841,7 +841,30 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   align-items: end;
 }
 
-.ns-home .ns-band h2 {
+/* "Integrations": the band's title, centered on the picture's axis (the wrap
+   and the picture are both centered in the band) above the heading-and-text
+   row, with a little of the picture's neon glow. */
+.ns-home .ns-band .ns-band-title {
+  position: relative;
+  margin: 0 auto 28px;
+  color: var(--ns-mist);
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  text-align: center;
+  text-shadow: 0 0 28px rgba(180, 124, 255, 0.55);
+}
+
+/* DocFX's anchor.js appends a "#" link (about 49px with its padding) to every
+   heading with an id. In flow it widened the centered line and pushed the
+   title half of that off the picture's axis; out of flow it keeps its place
+   right after the title and still appears there on hover. */
+.ns-home .ns-band-title .anchorjs-link {
+  position: absolute;
+}
+
+.ns-home .ns-band-head h3 {
   margin: 0;
   color: var(--ns-mist);
   font-size: clamp(1.8rem, 3vw, 2.5rem);
@@ -861,11 +884,20 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 }
 
 /* The link layer is positioned in percentages of this box, so the box must be
-   exactly the picture: no padding, and the side margins come from its width. */
+   exactly the picture: no padding, and the side margins come from its width.
+   --ns-picture-scale is the picture's share of the band: 0.7 is the owner's
+   "30% smaller" of 2026-11-21, applied to the width rather than with zoom.
+   Measured: zoom 0.7 shrank only the max-width (a 1324px picture to 927px at
+   a 1920px window, but a 1140px one also to 927px at 1440, 19% smaller, and
+   at 1024 it grew from 724 to 738px, its 48px margin zoomed and 100% not),
+   and it set the octagons' "Open Library" / "Open Docs" text at 8.75px. The
+   width is 70% at every desktop size, the buttons keep their size, and the
+   link layer follows either way. Narrow screens reset it to 1. */
 .ns-picture {
+  --ns-picture-scale: 0.7;
   position: relative;
-  width: calc(100% - 48px);
-  max-width: 1324px;
+  width: calc((100% - 48px) * var(--ns-picture-scale));
+  max-width: calc(1324px * var(--ns-picture-scale));
   margin: 40px auto 0;
 }
 
@@ -1112,6 +1144,11 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
      smallest legible size. */
   .ns-editor {
     --ns-ed-scale: 1;
+  }
+
+  /* Its octagons are already small at the column's full width. */
+  .ns-picture {
+    --ns-picture-scale: 1;
   }
 
   /* The panes stack as two whole programs: the Python tab, its lines and its

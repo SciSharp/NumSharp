@@ -158,8 +158,9 @@ description: NumSharp brings NumPy's API to .NET - the same functions, dtypes, b
 </div>
 </section>
 <section class="ns-band" aria-labelledby="ns-band-title">
+<h2 class="ns-wrap ns-band-title" id="ns-band-title"><span>Integrations</span></h2>
 <div class="ns-wrap ns-band-head">
-<h2 id="ns-band-title"><span>Where an NDArray can go</span></h2>
+<h3><span>Where an NDArray can go</span></h3>
 <p>Each box names a library and how an NDArray crosses into it; its color names the NumSharp package that brings it. Hover a box to open the library's own site or its page in these docs. <a href="docs/interop/index.md">Read the interoperability guide</a></p>
 </div>
 <div class="ns-picture">

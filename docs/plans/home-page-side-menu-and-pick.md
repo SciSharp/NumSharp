@@ -17,7 +17,7 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
 | 2 | The NumPy / C# editor 20% smaller | done: 912 px (was 1140), code at most 12.8 px (was 16) |
 | 3 | The example title centered above the button | done: centers equal (x 846 at 1440), gap 10 px |
 | 4 | "Pick": six topic buttons around the button, then "Crazier" inside the picked topic | done: mouse, keyboard, touch verified |
-| 5 | The integrations picture 30% smaller, "Integrations" centered above the section | pending |
+| 5 | The integrations picture 30% smaller, "Integrations" centered above the section | done: 70% width at every desktop size; title on the picture's axis |
 
 ## Phase 1: the side menu
 
@@ -88,6 +88,13 @@ served over HTTP, screenshots and DOM measurements from an isolated headless Chr
   follows.
 - "Integrations" as the band's heading (h2), centered on the picture's axis above "Where an NDArray can go" (which
   keeps its look and becomes h3).
+- Done, on the width instead of zoom (`--ns-picture-scale: 0.7`). Measured: `zoom: 0.7` shrank only the max-width
+  (1324 -> 927 px at a 1920 px window, but 1140 -> 927 at 1440, 19% smaller, and at 1024 it GREW 724 -> 738: its
+  48 px margin was zoomed and the 100% was not) and set the octagons' "Open Library" / "Open Docs" text at 8.75 px.
+  The width gives 927 / 798 / 507 px at 1920 / 1440 / 1024 (70% each) and keeps the buttons at 30 px; narrow
+  screens keep the full width. The title's center equals the picture's (x 1086 / 846 / 638); DocFX's anchor.js "#"
+  link after it had pushed it 23-29 px off that axis, so the link is out of flow (still shown on hover).
+  `tools/gen_integrations_diagram.py --check` passes (the link layer is untouched).
 
 ## Open for rediscussion
 
@@ -115,3 +122,10 @@ Collected while executing; the owner reviews them all after phase 5.
    only one-example topic), Simulations (Game of Life, Mandelbrot). Topic names are the button labels.
 9. On touch screens there is no hover: "Pick" opens the ring on tap, "Crazier" only steps, and the ring comes back
    at a topic's end ("Pick").
+10. The picture shrinks by width, not zoom (measurements above). Trade-off: the octagons sit closer together, and
+    a box's full-size "Open Library" / "Open Docs" pair now reaches over its neighbor box (ONNX Runtime's over
+    ML.NET); zoom would shrink the buttons with the picture but to 8.75 px text, and would not shrink the picture
+    at all below about 1500 px.
+11. "Integrations" is a large centered title (51 px at 1920, with a soft neon glow) over the existing heading row,
+    so the band now has two big headings; an alternative is a small centered label, or dropping "Where an NDArray
+    can go" into the paragraph.
