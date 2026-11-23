@@ -1,0 +1,120 @@
+{
+  "schema_version": 2,
+  "generator": "test/inventory/generate_test_inventory.py",
+  "generator_version": "1.3.3",
+  "numpy_version": "2.5.4",
+  "assembly_versions": {
+    "NumSharp.Tests": "0.81.0.0",
+    "NumSharp.Tests.Interop": "0.81.0.0",
+    "NumSharp.Tests.Oracle": "0.81.0.0"
+  },
+  "artifact_files": [
+    "tests-oracle-report.json",
+    "tests-oracle-report.csv",
+    "summary.md",
+    "tests-oracle-manifest.json"
+  ],
+  "summary": {
+    "tests": {
+      "methods": 21115,
+      "declaredInvocations": 25141,
+      "dataRows": 4208,
+      "dataRowMethods": 182,
+      "dynamicMethods": 34,
+      "sourceLocated": 21115,
+      "oracleMethods": 1295,
+      "fuzzMatrixMethods": 242,
+      "npyOracleMethods": 19,
+      "statuses": {
+        "active": 20786,
+        "ignored": 8,
+        "manual": 8,
+        "open_bug": 242,
+        "platform": 71
+      },
+      "categories": {
+        "Explicit": 2,
+        "Fixed": 20,
+        "FuzzMatrix": 242,
+        "HighMemory": 55,
+        "KarpathyByteParity": 22,
+        "KarpathyShortRun": 7,
+        "KarpathySourceIntegrity": 1,
+        "Layering": 7,
+        "LongIndexing": 6,
+        "Misaligned": 108,
+        "NpyOracle": 19,
+        "OpenBugs": 242,
+        "ScopeAudit": 33,
+        "StringOracle": 72,
+        "TextIOOracle": 8,
+        "WindowsOnly": 83
+      },
+      "projects": {
+        "NumSharp.Tests": 19883,
+        "NumSharp.Tests.Interop": 802,
+        "NumSharp.Tests.Oracle": 430
+      },
+      "suites": 48,
+      "oracleTestClasses": 31
+    },
+    "oracle": {
+      "corpusFiles": 160,
+      "serializedRows": 838513,
+      "corpusRows": 838505,
+      "metadataRows": 8,
+      "unmappedContractRows": 0,
+      "opMappedContractRows": 838505,
+      "numpyRows": 823769,
+      "hostSensitiveRows": 1301,
+      "advancedIndexRows": 12426,
+      "decimalRows": 1009,
+      "hostPinRecords": 8,
+      "charRows": 16182,
+      "opKeys": 1455,
+      "layouts": 34572,
+      "errorRows": 83286,
+      "resultKinds": {
+        "array": 551640,
+        "dtype": 968,
+        "masked": 110185,
+        "masked_tuple": 2055,
+        "random_api": 24210,
+        "scalar": 15514,
+        "text": 23213,
+        "tuple": 110720
+      },
+      "dtypeRows": {
+        "bool": 161747,
+        "char": 16182,
+        "complex128": 100265,
+        "complex64": 1465,
+        "decimal": 1009,
+        "float16": 96195,
+        "float32": 97098,
+        "float64": 280210,
+        "int16": 31744,
+        "int32": 70039,
+        "int64": 106487,
+        "int8": 46908,
+        "uint16": 31527,
+        "uint32": 26034,
+        "uint64": 37718,
+        "uint8": 52800
+      },
+      "dtypeContractLinks": 1157428,
+      "flagsOracleRows": 1245,
+      "layoutOracleRows": 568,
+      "npyOracleCases": 404,
+      "stringOracleCases": 281526,
+      "stringOraclePhase2Cases": 13350,
+      "specializedOracleCases": 283743,
+      "totalSerializedContracts": 1122248,
+      "thinOpLabels": 88,
+      "singleLayoutOpLabels": 148,
+      "singleDtypeOpLabels": 36,
+      "opLabelsWithErrors": 650,
+      "opLabelsWithoutErrors": 805
+    }
+  }
+}
