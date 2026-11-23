@@ -98,6 +98,9 @@ pre code {
    plum depth) and from the picture (its night ground and neon ecosystem
    colors). The hero and the map follow the site theme; the picture's band is
    night in both themes because the picture itself is.
+   The picture with its link layer is not the home page's alone: the
+   Interoperability guide includes the same file, so its rules ("The
+   integrations picture" below) are scoped to .ns-picture, not .ns-home.
    ========================================================================== */
 
 /* The landing layout keeps DocFX's container (up to 1768px wide, 12px gutters,
@@ -189,18 +192,27 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   }
 }
 
-.ns-home {
+/* The tokens the integrations picture's link layer needs (the buttons' font
+   and night fill, the picture link's focus ring on the band), on the home page
+   and on every other page that includes the picture: the Interoperability
+   guide shows .ns-picture without the rest of the home page
+   (includes/integrations-picture.md). */
+.ns-home,
+.ns-picture {
   --ns-mono: 'JetBrains Mono', 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
+  --ns-night-deep: #07051a;
+  --ns-pale: #d8c2ff;
+}
+
+.ns-home {
   /* The logo's three colors. */
   --ns-plum: #661f76;
   --ns-lavender: #865fc5;
   --ns-cyan: #3fc6ee;
   /* The picture's ground and its NumSharp purple. */
   --ns-night: #0b0720;
-  --ns-night-deep: #07051a;
   --ns-cell: #2b1f5c;
   --ns-neon: #b47cff;
-  --ns-pale: #d8c2ff;
   --ns-mist: #f1e9ff;
   --ns-mist-muted: #c3b6ec;
   /* Theme-following surfaces of the editor and the install box. */
@@ -897,9 +909,20 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   color: var(--ns-pale);
 }
 
-/* The link layer is positioned in percentages of this box, so the box must be
-   exactly the picture: no padding, and the side margins come from its width.
-   --ns-picture-scale is the picture's share of the band: 0.7 is the owner's
+/* The picture is one file that two pages include
+   (includes/integrations-picture.md): the home page's band and the
+   Interoperability guide. These rules style it wherever it appears; only its
+   size and its focus ring's color depend on the page around it.
+   The link layer is positioned in percentages of this box, so the box must be
+   exactly the picture: no padding, and any side margins come from its width.
+   On a docs page it fills the article column (the picture is already about
+   two-thirds of its 1324px there); the band sizes it below. */
+.ns-picture {
+  position: relative;
+  margin: 1.5rem 0;
+}
+
+/* --ns-picture-scale is the picture's share of the band: 0.7 is the owner's
    "30% smaller" of 2026-11-21, applied to the width rather than with zoom.
    Measured: zoom 0.7 shrank only the max-width (a 1324px picture to 927px at
    a 1920px window, but a 1140px one also to 927px at 1440, 19% smaller, and
@@ -907,9 +930,8 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
    and it set the octagons' "Open Library" / "Open Docs" text at 8.75px. The
    width is 70% at every desktop size, the buttons keep their size, and the
    link layer follows either way. Narrow screens reset it to 1. */
-.ns-picture {
+.ns-band .ns-picture {
   --ns-picture-scale: 0.7;
-  position: relative;
   width: calc((100% - 48px) * var(--ns-picture-scale));
   max-width: calc(1324px * var(--ns-picture-scale));
   margin: 40px auto 0;
@@ -920,9 +942,17 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
   border-radius: 16px;
 }
 
+/* The ring sits 4px outside the picture, on the page's own ground: the
+   theme's link color on a docs page (the picture's pale purple measures about
+   1.6:1 on the light theme's white), the picture's pale purple on the band's
+   night ground. */
 .ns-picture-link:focus-visible {
-  outline: 2px solid var(--ns-pale);
+  outline: 2px solid var(--bs-link-color);
   outline-offset: 4px;
+}
+
+.ns-band .ns-picture-link:focus-visible {
+  outline-color: var(--ns-pale);
 }
 
 .ns-picture img {
@@ -933,7 +963,8 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 
 /* Written by tools/gen_integrations_diagram.py: one .ns-hot per octagon, in
    percentages of the picture. The layer lets clicks between octagons through
-   to the picture's own link (the Interoperability guide). */
+   to the picture's own link (the Interoperability guide; on the guide itself,
+   the picture at full size in a new tab, which picture.js sets). */
 .ns-hot-layer {
   position: absolute;
   inset: 0;
@@ -1031,8 +1062,10 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 /* Drawn like the picture's octagons: a chamfered box, a stroke and text in the
    ecosystem's color on the night fill. The stroke is the button's own
    background showing around an inset layer, because clip-path would cut a real
-   border off at the chamfers. */
-.ns-home .ns-hot-btn {
+   border off at the chamfers. Scoped to the picture, not the home page, so a
+   docs page's link rules (Bootstrap's underline and link color) never reach
+   the buttons: two classes outrank them. */
+.ns-picture .ns-hot-btn {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -1047,7 +1080,7 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
                      calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
 }
 
-.ns-home .ns-hot-btn::before {
+.ns-picture .ns-hot-btn::before {
   content: "";
   position: absolute;
   inset: 1.5px;
@@ -1058,16 +1091,16 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
 
 /* The label, and DocFX's external-link mark (a.external::after on "Open
    Library"), paint above the inset fill only when positioned. */
-.ns-home .ns-hot-btn > span,
-.ns-home .ns-hot-btn::after {
+.ns-picture .ns-hot-btn > span,
+.ns-picture .ns-hot-btn::after {
   position: relative;
 }
 
-.ns-home .ns-hot-btn:hover::before {
+.ns-picture .ns-hot-btn:hover::before {
   background: #1d1145;
 }
 
-.ns-home .ns-hot-btn:focus-visible {
+.ns-picture .ns-hot-btn:focus-visible {
   outline: none;
   background: #ffffff;
 }
@@ -1160,8 +1193,10 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
     --ns-ed-scale: 1;
   }
 
-  /* Its octagons are already small at the column's full width. */
-  .ns-picture {
+  /* Its octagons are already small at the column's full width. The selector
+     repeats the band rule's, so this later rule wins on order: a plain
+     .ns-picture would lose to .ns-band .ns-picture on specificity. */
+  .ns-band .ns-picture {
     --ns-picture-scale: 1;
   }
 
@@ -1255,8 +1290,9 @@ body[data-layout="landing"] > main:has(.ns-home) > .content {
     font-size: 12px;
   }
 
-  /* An octagon is a few millimeters wide on a phone: the picture opens the
-     Interoperability guide as a whole instead. */
+  /* An octagon is a few millimeters wide on a phone: the picture's own link
+     takes the tap instead (the Interoperability guide, or on the guide itself
+     the picture at full size). */
   .ns-hot-layer {
     display: none;
   }

@@ -53,8 +53,9 @@ included), and the shipped XML docs and README of every released package: a rele
 point at a bridge nobody can install.
 To release it: delete its `IsPackable` property, write its page and add its `toc.yml` entry and its `interop/index.md`
 row and "See also" link (the two packages released for 0.80.0 got theirs back from git history), and give it an octagon
-in the integrations picture that the README and `interop/index.md` show (`ITEMS` and `SIDES` in
-`tools/gen_integrations_diagram.py`; run the script and commit `docs/website-src/images/integrations.svg`). CI needs no
+in the integrations picture that the README, the docs home page and `interop/index.md` show (`ITEMS` and `SIDES` in
+`tools/gen_integrations_diagram.py`; run the script and commit `docs/website-src/images/integrations.svg` and
+`docs/website-src/includes/integrations-picture.md`, the interactive copy both docs pages include). CI needs no
 edit, but the package is a NEW id on nuget.org: check before the tag that the Trusted Publishing policy may push new
 packages (`ci-release.md`).
 

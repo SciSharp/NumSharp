@@ -1,8 +1,10 @@
 """Generates docs/website-src/images/integrations.svg: NumSharp in the middle, a neon data stream out to every integration.
 
-The README's "Integrations" section and the top of the docs' Interoperability page (docs/website-src/docs/interop/index.md)
-show this picture. Each integration sits in an octagon with the icon of its ecosystem, its name and one line that says how
-an NDArray crosses into it; a dotted cable runs from NumSharp to it, and a burst of light runs out along every cable.
+The README's "Integrations" section, the docs home page's integrations band (docs/website-src/index.md) and the top of
+the docs' Interoperability page (docs/website-src/docs/interop/index.md) show this picture; the two docs pages show it
+interactive, from one shared file (PICTURE, below). Each integration sits in an octagon with the icon of its ecosystem,
+its name and one line that says how an NDArray crosses into it; a dotted cable runs from NumSharp to it, and a burst of
+light runs out along every cable.
 
 What belongs in the picture: an integration that is RELEASED (its package is published), DOCUMENTED (the Interoperability
 pages describe it) and GATED (a test or an example's asserted run exercises it). A merged but unreleased bridge stays out,
@@ -29,21 +31,32 @@ short group of bright dots followed by a gap longer than the cable; a CSS animat
 fifty elements animate instead of one per dot. Readers who ask for reduced motion (prefers-reduced-motion) see the still
 picture.
 
-The docs home page (docs/website-src/index.md) shows the picture too, with a layer of links over it: hovering an octagon
-(or tabbing to it) rings it in white and opens two buttons in its color under it, "Open Library" (the library's own site)
-and "Open Docs" (its NumSharp docs page, which a click on the octagon itself also opens), and NumSharp's own octagon offers
-the repository and the Interoperability guide. An <img> cannot carry links, so that layer is plain HTML positioned in
-percentages of the picture; the script writes it between the INTEGRATIONS_LINKS markers of the home page from the same
-layout that draws the octagons, so a box can never drift away from the octagon it covers. The links come from each
-item's docs and site fields; DocFX resolves the .md paths and reports a page that disappears.
+On the docs site the picture is interactive, with a layer of links over it: hovering an octagon (or tabbing to it) rings
+it in white and opens two buttons in its color under it, "Open Library" (the library's own site) and "Open Docs" (its
+NumSharp docs page, which a click on the octagon itself also opens), and NumSharp's own octagon offers the repository
+and the Interoperability guide. An <img> cannot carry links, so that layer is plain HTML positioned in percentages of
+the picture; the script writes it between the INTEGRATIONS_LINKS markers of PICTURE from the same layout that draws the
+octagons, so a box can never drift away from the octagon it covers. The links come from each item's docs and site
+fields; DocFX resolves the .md paths and reports a page that disappears.
+
+PICTURE is the one copy of the interactive picture (the picture's link, the <img> and the link layer). Two pages include
+it with DocFX's [!include] - the home page's integrations band (docs/website-src/index.md) and the Interoperability
+guide (docs/website-src/docs/interop/index.md) - so a change to it, or to the stylesheet's .ns-picture rules, shows on
+both. DocFX resolves a raw-HTML link of an included file from the page that INCLUDES it, not from the included file
+(measured with docfx 2.78.4: "../docs/interop/pytorch.md" in the include resolved to docs/docs/interop/pytorch.md from
+the guide), so every link in PICTURE is written from the site's root ("~/docs/interop/pytorch.md"), the one form DocFX
+resolves for each page that includes it ("docs/interop/pytorch.html" from the home page, "pytorch.html" from the guide).
+On the guide, the links that lead to the guide itself are turned elsewhere by the site's picture.js (the picture's own
+link to the picture at full size, NumSharp's "Open Docs" to the docs home page), because a link to the page the reader
+is on only reloads it.
 
 To change the picture, edit ITEMS (what an octagon says and where its buttons go) and SIDES (where it sits; each side
 lists its octagons in reading order and the four sides keep each ecosystem on one arc of the ring), then run the script
-and commit both the SVG and the home page. The script refuses a layout whose octagons overlap or leave the canvas, and a
-home page whose markers are missing or repeated.
+and commit both the SVG and PICTURE. The script refuses a layout whose octagons overlap or leave the canvas, and a
+PICTURE whose markers are missing or repeated.
 
 Run with any Python 3.8 or newer (standard library only):
-    python tools/gen_integrations_diagram.py            write the SVG and the home page's link layer
+    python tools/gen_integrations_diagram.py            write the SVG and the link layer of the shared picture
     python tools/gen_integrations_diagram.py --check    exit 1 when the committed SVG or link layer differs from a fresh
                                                         render
 """
@@ -58,9 +71,15 @@ from dataclasses import dataclass
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 OUT = os.path.join(ROOT, "docs", "website-src", "images", "integrations.svg")
 LOGO = os.path.join(ROOT, "docs", "website-src", "images", "numsharp.icon.svg")
-HOME = os.path.join(ROOT, "docs", "website-src", "index.md")
+# The interactive picture's one copy, which the home page and the Interoperability guide include (see the module
+# docstring). docfx.json keeps the includes folder out of its content, so this file is never built as a page of its own.
+PICTURE = os.path.join(ROOT, "docs", "website-src", "includes", "integrations-picture.md")
 
-# The home page's link layer lives between these two lines of index.md; everything between them is rewritten on each run.
+# The prefix of every docs link the link layer writes: DocFX's "from the folder of docfx.json" form, the one form that
+# resolves on every page that includes PICTURE (a path relative to the include or to either page breaks on the other).
+SITE_ROOT_LINK = "~/"
+
+# The link layer lives between these two lines of PICTURE; everything between them is rewritten on each run.
 # Each marker must stand on a line of its own, exactly once, inside the picture's container (see render_links()).
 INTEGRATIONS_LINKS_BEGIN = "<!-- integrations-links:begin -->"
 INTEGRATIONS_LINKS_END = "<!-- integrations-links:end -->"
@@ -101,8 +120,9 @@ class Item:
         caption: How an NDArray crosses into it, in at most about 25 characters (a longer one widens the octagon and can
             push it into its neighbours, which the layout check then refuses).
         eco: The ecosystem key into ECOSYSTEMS; it decides the color, the icon and the legend entry.
-        docs: The NumSharp docs page for it, relative to docs/website-src, as the home page links it ("Open Docs" and a
-            click on the octagon). A .md path, optionally with a #heading anchor: DocFX turns it into the .html address
+        docs: The NumSharp docs page for it ("Open Docs" and a click on the octagon), relative to docs/website-src; the
+            link layer writes it from the site's root (SITE_ROOT_LINK + docs), which DocFX resolves for each page that
+            includes the picture. A .md path, optionally with a #heading anchor: DocFX turns it into the .html address
             and warns when the page is gone, which a hard-coded .html link would hide.
         site: The library's own website ("Open Library"); DocFX opens it in a new tab with its external-link mark.
     """
@@ -154,8 +174,10 @@ ITEMS = [
 ]
 BY_KEY = {item.key: item for item in ITEMS}
 
-# NumSharp's own octagon on the home page: "Open Library" is the repository, "Open Docs" (and a click on the octagon) the
-# Interoperability guide, which introduces every box around it.
+# NumSharp's own octagon: "Open Library" is the repository, "Open Docs" (and a click on the octagon) the
+# Interoperability guide, which introduces every box around it. On the guide itself that link would only reload the
+# page, so the site's picture.js points it at the docs home page there; the generated link stays the guide on both
+# pages.
 CORE = Item("numsharp", "NumSharp", "NumPy for .NET", "core",
             "docs/interop/index.md", "https://github.com/SciSharp/NumSharp")
 
@@ -717,9 +739,11 @@ def render(layout):
 
 
 def render_links(layout):
-    """The home page's link layer over the picture: one hotspot per octagon, NumSharp's included, as HTML.
+    """The link layer over the shared picture (PICTURE): one hotspot per octagon, NumSharp's included, as HTML.
 
     Each hotspot is a box positioned in percentages of the picture, so it scales with the <img> under it at any width.
+    Every docs link is written from the site's root (SITE_ROOT_LINK), because the same lines appear on every page that
+    includes the picture and DocFX resolves an included link from the including page.
     It holds a link that covers the octagon (a click opens the docs page; it stays out of the tab order and away from
     screen readers because "Open Docs" repeats it) with an SVG outline of the same octagon, which the stylesheet rings
     on hover, and the two buttons "Open Library" and "Open Docs", which the stylesheet shows under the octagon on hover
@@ -767,7 +791,7 @@ def render_links(layout):
         outline = " ".join(f"{px:g},{py:g}" for px, py in points)
         style = f"left:{pct(x0, width)};top:{pct(y0, height)};width:{pct(w, width)};height:{pct(h, height)}"
         name = html.escape(item.name)
-        docs, site = html.escape(item.docs), html.escape(item.site)
+        docs, site = html.escape(SITE_ROOT_LINK + item.docs), html.escape(item.site)
         lines.append(
             f'<div class="ns-hot ns-hot-{item.eco} ns-hot-{side}" style="{style}">'
             f'<a class="ns-hot-box" href="{docs}" tabindex="-1" aria-hidden="true">'
@@ -780,15 +804,16 @@ def render_links(layout):
     return "\n".join(lines) + "\n"
 
 
-def splice_home(text, block):
-    """The home page with its link layer replaced by a fresh one.
+def splice_picture(text, block):
+    """The shared picture's Markdown with its link layer replaced by a fresh one.
 
     Args:
-        text: The home page's current Markdown (docs/website-src/index.md).
+        text: PICTURE's current Markdown (docs/website-src/includes/integrations-picture.md).
         block: The new layer (render_links()), which goes between the two marker lines.
 
     Returns:
-        The home page with everything between the markers replaced; the rest of the file is untouched.
+        PICTURE with everything between the markers replaced; the rest of the file (its comment, the picture's own link,
+        the <img> and its alt text, all hand-written) is untouched.
 
     Raises:
         ValueError: When a marker is missing or appears more than once, or the end marker comes first: rewriting a
@@ -796,17 +821,17 @@ def splice_home(text, block):
     """
     begin, end = text.count(INTEGRATIONS_LINKS_BEGIN), text.count(INTEGRATIONS_LINKS_END)
     if begin != 1 or end != 1:
-        raise ValueError(f"{os.path.relpath(HOME, ROOT)} must hold {INTEGRATIONS_LINKS_BEGIN} and "
+        raise ValueError(f"{os.path.relpath(PICTURE, ROOT)} must hold {INTEGRATIONS_LINKS_BEGIN} and "
                          f"{INTEGRATIONS_LINKS_END} exactly once each (found {begin} and {end})")
     head, rest = text.split(INTEGRATIONS_LINKS_BEGIN)
     old, tail = rest.split(INTEGRATIONS_LINKS_END)
     if not old.startswith("\n"):
-        raise ValueError(f"{INTEGRATIONS_LINKS_BEGIN} must end its line in {os.path.relpath(HOME, ROOT)}")
+        raise ValueError(f"{INTEGRATIONS_LINKS_BEGIN} must end its line in {os.path.relpath(PICTURE, ROOT)}")
     return f"{head}{INTEGRATIONS_LINKS_BEGIN}\n{block}{INTEGRATIONS_LINKS_END}{tail}"
 
 
 def main(argv):
-    """Writes the SVG and the home page's link layer, or with --check compares the committed ones to a fresh render.
+    """Writes the SVG and the shared picture's link layer, or with --check compares the committed ones to a render.
 
     Args:
         argv: The command-line arguments after the script name.
@@ -815,38 +840,38 @@ def main(argv):
         The process exit code: 0 on success, 1 when --check finds the committed SVG or link layer out of date.
 
     Raises:
-        ValueError: From make_layout() or numsharp_logo() when the layout or the logo is unusable, or from splice_home()
-            when the home page's markers are missing or repeated.
-        OSError: When the logo or the home page cannot be read, or a file cannot be written.
+        ValueError: From make_layout() or numsharp_logo() when the layout or the logo is unusable, or from
+            splice_picture() when PICTURE's markers are missing or repeated.
+        OSError: When the logo or PICTURE cannot be read, or a file cannot be written.
     """
     layout = make_layout()
     svg = render(layout)
-    with open(HOME, encoding="utf-8", newline="") as f:
-        home = f.read()
-    # newline="" keeps the home page's own line endings: a CRLF checkout must compare and write back byte-identical
+    with open(PICTURE, encoding="utf-8", newline="") as f:
+        picture = f.read()
+    # newline="" keeps the shared picture's own line endings: a CRLF checkout must compare and write back byte-identical
     # outside the generated block, and the block itself uses the file's ending so the file never mixes the two.
-    eol = "\r\n" if "\r\n" in home else "\n"
-    new_home = splice_home(home, render_links(layout).replace("\n", eol))
+    eol = "\r\n" if "\r\n" in picture else "\n"
+    new_picture = splice_picture(picture, render_links(layout).replace("\n", eol))
     if "--check" in argv:
         try:
             with open(OUT, encoding="utf-8") as f:
                 current = f.read()
         except FileNotFoundError:
             current = None
-        stale = [path for path, fresh, now in ((OUT, svg, current), (HOME, new_home, home)) if fresh != now]
+        stale = [path for path, fresh, now in ((OUT, svg, current), (PICTURE, new_picture, picture)) if fresh != now]
         for path in stale:
             print(f"{os.path.relpath(path, ROOT)} is out of date: run python tools/gen_integrations_diagram.py")
         if stale:
             return 1
-        print(f"{os.path.relpath(OUT, ROOT)} and the link layer of {os.path.relpath(HOME, ROOT)} are up to date")
+        print(f"{os.path.relpath(OUT, ROOT)} and the link layer of {os.path.relpath(PICTURE, ROOT)} are up to date")
         return 0
     # newline="\n": the same bytes on every OS, so --check holds across machines
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         f.write(svg)
-    with open(HOME, "w", encoding="utf-8", newline="") as f:
-        f.write(new_home)
+    with open(PICTURE, "w", encoding="utf-8", newline="") as f:
+        f.write(new_picture)
     print(f"wrote {os.path.relpath(OUT, ROOT)} ({len(svg.encode('utf-8')):,} bytes, {len(ITEMS)} integrations) and the "
-          f"link layer of {os.path.relpath(HOME, ROOT)} ({len(ITEMS) + 1} hotspots)")
+          f"link layer of {os.path.relpath(PICTURE, ROOT)} ({len(ITEMS) + 1} hotspots)")
     return 0
 
 

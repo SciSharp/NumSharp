@@ -15,8 +15,11 @@
 //      picker: a "Pick" button that opens a ring of up to six topics around
 //      itself, then says "Crazier" and steps through the picked topic's pairs
 //      (each verified to print exactly what NumPy prints).
-//   3. Nothing for the integrations picture: its link layer is plain HTML and
-//      CSS written by tools/gen_integrations_diagram.py.
+//   3. Nothing for the integrations picture: it is one file the home page
+//      shares with the Interoperability guide
+//      (includes/integrations-picture.md, its link layer written by
+//      tools/gen_integrations_diagram.py), its hover layer is plain HTML and
+//      CSS, and picture.js handles its links on both pages.
 
 /**
  * Python tokens the editor colors, as one global, multiline regex whose

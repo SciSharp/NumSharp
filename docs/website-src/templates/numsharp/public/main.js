@@ -5,14 +5,17 @@
 // `options()` hook (docfx.min.js -> import('./main.js')). This is the
 // supported way to add site JavaScript without forking docfx.min.js.
 //
-// Beyond the navbar icon links, this adds two behaviors: it remembers which
+// Beyond the navbar icon links, this adds three behaviors: it remembers which
 // #toc sections the reader expanded/collapsed and restores them on the next
 // page, for a 48h window that slides forward on every visit (see
 // installTocStatePersistence below; a toggle made in one of the home page's
-// side-menu copies counts too), and it runs the home page's side menus, editor
-// and Copy button (see home.js, which does nothing on any other page).
+// side-menu copies counts too), it runs the home page's side menus, editor
+// and Copy button (see home.js, which does nothing on any other page), and it
+// fixes the integrations picture's links on each page that includes the
+// picture (see picture.js: the home page and the Interoperability guide).
 
 import { installHomePage, MIRRORED_TOC_CLICK } from './home.js'
+import { installPictures } from './picture.js'
 
 /**
  * How long a remembered TOC layout survives with no visits, in milliseconds
@@ -412,6 +415,10 @@ export default {
     // The home page's Copy button and "Crazier" editor; returns at once on
     // every other page. See home.js.
     installHomePage()
+    // The shared integrations picture: on the page a link of it leads to (the
+    // guide), that link would only reload the page, so it is pointed
+    // elsewhere; returns at once on pages without the picture. See picture.js.
+    installPictures()
   },
 
   // Customize syntax highlighting (highlight.js)
