@@ -55,25 +55,40 @@ NumSharp focuses on:
 
 ## Features
 
+### The array
+
 - **NumPy-style `NDArray`** - N-dimensional arrays with shape, strides, offsets,
   slicing, and view semantics. Start with [NDArray fundamentals](https://scisharp.github.io/NumSharp/docs/intro.html)
   and [NDArray](https://scisharp.github.io/NumSharp/docs/NDArray.html).
 - **Broadcasting** - NumPy-style shape expansion without materializing repeated
   values. See [Broadcasting](https://scisharp.github.io/NumSharp/docs/broadcasting.html).
+- **NumPy's memory layouts** - C and Fortran order throughout (`order: 'C'`, `'F'`, `'A'`,
+  `'K'`), and ufunc and reduction results come back with the strides NumPy gives them. See
+  [Memory layout](https://scisharp.github.io/NumSharp/docs/compliance.html#memory-layout-strides-and-views).
 - **Dtype-aware operations** - 15 core dtypes with NumPy-oriented promotion and
   conversion behavior. See [Dtypes](https://scisharp.github.io/NumSharp/docs/dtypes.html) and
   [NumPy compliance](https://scisharp.github.io/NumSharp/docs/compliance.html).
 - **Strings and character arrays** - NumPy's fixed-width `S` / `U` and variable-width
   `StringDType` arrays with missing values, all of `np.strings`, the `np.@char` module and
   `chararray` (`NDCharArray`). See [Strings, bytes and chararrays](https://scisharp.github.io/NumSharp/docs/fundamentals/strings-and-bytes.html).
-- **Broad `np.*` API surface** - Creation, manipulation, math, reductions,
-  comparisons, logic, random sampling, I/O, and formatting. Browse the
-  [API reference](https://scisharp.github.io/NumSharp/api/index.html).
+
+### NumPy's modules
+
+- **96% of NumPy 2.x** - Browse the [coverage dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html)
+  and the [API reference](https://scisharp.github.io/NumSharp/api/index.html).
+- **Linear algebra, FFT, polynomials and more** - `np.linalg` (its factorizations through
+  [NumSharp.Interop.OpenBLAS](https://scisharp.github.io/NumSharp/docs/interop/openblas.html)), all 18 functions of `np.fft`,
+  `np.polynomial` with its six bases and series classes, `np.einsum` with `np.einsum_path`,
+  `np.matrix` as `NDMatrix`, and NumPy's index tricks and grids (`np.r_`, `np.c_`, `np.ix_`,
+  `np.s_`, `np.mgrid`, `np.ogrid`, `np.meshgrid`).
+
+### Speed
+
 - **Generated IL and SIMD kernels** - Runtime-specialized kernels for supported
-  dtype and layout combinations. See [IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html).
-- **Iterator and fusion infrastructure** - NDIter-style execution and fused
-  `np.evaluate` expressions for reducing intermediate allocations. See
-  [NDIter](https://scisharp.github.io/NumSharp/docs/NDIter.html).
+  dtype and layout combinations, powered by CPU acceleration. See [IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html).
+- **Fused expressions** - `np.evaluate((NDExpr)a * b + 2)` runs a whole expression, reductions
+  included, as one pass over the data with no temporary arrays, with NumPy's dtypes and values.
+  It runs on NDIter, NumPy's iterator design. See [NDIter](https://scisharp.github.io/NumSharp/docs/NDIter.html).
 - **Tracked performance reports** - Release snapshots with dashboard summaries,
   raw reports, and subsystem matrices. See the
   [benchmark dashboard](https://scisharp.github.io/NumSharp/docs/benchmarks-dashboard.html).
@@ -87,6 +102,10 @@ pages document every bridge: what crosses as a view, what crosses as a copy, and
 
 <p align="center">
   <a href="https://scisharp.github.io/NumSharp/docs/interop/index.html"><img alt="NumSharp at the center of its integrations: NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow and polars through NumSharp.Interop.pythonnet; ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp, System.Drawing and Numpy.NET in .NET; OpenBLAS; .npy and .npz files" src="docs/website-src/images/integrations.svg"></a>
+</p>
+
+<p align="center">
+  <a href="https://scisharp.github.io/NumSharp/docs/interop/index.html">See all interoperabilities</a>
 </p>
 
 ## Features Support and Implementation Map
