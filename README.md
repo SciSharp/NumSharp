@@ -38,7 +38,7 @@ learning infrastructure, and projects that want NumPy-style array operations in
 ordinary .NET code.
 
 NumSharp's edge is utilizing the power of [C#'s dynamic IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html) and [fused kernels](https://scisharp.github.io/NumSharp/docs/NDIter.html) translating to assembly generated with [JIT optimizations](https://learn.microsoft.com/en-us/dotnet/standard/managed-execution-process#compilation-by-the-jit-compiler) and [SIMD CPU acceleration](https://en.wikipedia.org/wiki/Hardware_acceleration).
-This edge leads the design of NumSharp's backend and by that to higher performance mark than NumPy on many functions as can be seen in [Performance](#performance).
+This edge leads the design of NumSharp's backend and by that to higher performance mark than NumPy on many functions as can be seen in [Performance](#performance-1).
 
 NumSharp focuses on:
 
@@ -74,7 +74,8 @@ NumSharp focuses on:
 
 ### NumPy's modules
 
-- **96% of NumPy 2.x** - Browse the [coverage dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html)
+- **96% of NumPy 2.x** - 538 of the 559 APIs in NumPy 2.5.4's catalog: creation, manipulation,
+  math, reductions, statistics, sorting, sets, logic, I/O and formatting. Browse the [coverage dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html)
   and the [API reference](https://scisharp.github.io/NumSharp/api/index.html).
 - **Linear algebra, FFT, polynomials and more** - `np.linalg` (its factorizations through
   [NumSharp.Interop.OpenBLAS](https://scisharp.github.io/NumSharp/docs/interop/openblas.html)), all 18 functions of `np.fft`,
@@ -82,10 +83,10 @@ NumSharp focuses on:
   `np.matrix` as `NDMatrix`, and NumPy's index tricks and grids (`np.r_`, `np.c_`, `np.ix_`,
   `np.s_`, `np.mgrid`, `np.ogrid`, `np.meshgrid`).
 
-### Speed
+### Performance
 
-- **Generated IL and SIMD kernels** - Runtime-specialized kernels for supported
-  dtype and layout combinations, powered by CPU acceleration. See [IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html).
+- **Generated IL and SIMD kernels** - Runtime-specialized kernels, powered by CPU acceleration,
+  for supported dtype and layout combinations. See [IL generation](https://scisharp.github.io/NumSharp/docs/il-generation.html).
 - **Fused expressions** - `np.evaluate((NDExpr)a * b + 2)` runs a whole expression, reductions
   included, as one pass over the data with no temporary arrays, with NumPy's dtypes and values.
   It runs on NDIter, NumPy's iterator design. See [NDIter](https://scisharp.github.io/NumSharp/docs/NDIter.html).
@@ -101,11 +102,11 @@ integration, and the [Interoperability](https://scisharp.github.io/NumSharp/docs
 pages document every bridge: what crosses as a view, what crosses as a copy, and who frees the memory.
 
 <p align="center">
-  <a href="https://scisharp.github.io/NumSharp/docs/interop/index.html"><img alt="NumSharp at the center of its integrations: NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow and polars through NumSharp.Interop.pythonnet; ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp, System.Drawing and Numpy.NET in .NET; OpenBLAS; .npy and .npz files" src="docs/website-src/images/integrations.svg"></a>
+  <a href="https://scisharp.github.io/NumSharp/docs/interop/index.html">See all interoperabilities</a>
 </p>
 
 <p align="center">
-  <a href="https://scisharp.github.io/NumSharp/docs/interop/index.html">See all interoperabilities</a>
+  <a href="https://scisharp.github.io/NumSharp/docs/interop/index.html"><img alt="NumSharp at the center of its integrations: NumPy, PyTorch, pandas, SciPy, scikit-learn, Matplotlib, Pillow, OpenCV, PyArrow and polars through NumSharp.Interop.pythonnet; ONNX Runtime, ML.NET, System.Numerics.Tensors, TorchSharp, System.Drawing and Numpy.NET in .NET; OpenBLAS; .npy and .npz files" src="docs/website-src/images/integrations.svg"></a>
 </p>
 
 ## Features Support and Implementation Map
